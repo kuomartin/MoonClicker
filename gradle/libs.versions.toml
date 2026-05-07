@@ -18,6 +18,8 @@ hiddenapibypass = "+"
 lifecycle = "2.10.0"
 
 timber = "5.0.1"
+mockk = "1.13.12"
+koroutines = "1.9.0"
 material3 = "1.4.0"
 
 [libraries]
@@ -52,6 +54,8 @@ androidx-lifecycle-viewmodel-compose = { group = "androidx.lifecycle", name = "l
 
 # Timber
 timber = { group = "com.jakewharton.timber", name = "timber", version.ref = "timber" }
+mockk = { group = "io.mockk", name = "mockk", version.ref = "mockk" }
+kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "koroutines" }
 
 # material3 & material-icons
 androidx-material3 = { group = "androidx.compose.material3", name = "material3", version.ref = "material3" }
@@ -64,4 +68,3 @@ kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "ko
 android-library = { id = "com.android.library", version.ref = "agp" }
 
 rikka-refine = { id = "dev.rikka.tools.refine", version.ref = "rikka-refine" }
-
