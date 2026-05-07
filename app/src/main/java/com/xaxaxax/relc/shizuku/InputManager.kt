@@ -2,13 +2,23 @@ package com.xaxaxax.relc.shizuku
 
 import android.content.Context
 import android.hardware.input.IInputManager
+import android.os.Build
 import android.os.SystemClock
 import android.view.InputDevice
 import android.view.MotionEvent
+import android.view.MotionEventHidden
+import dev.rikka.tools.refine.Refine
+import org.lsposed.hiddenapibypass.LSPass
 import rikka.shizuku.ShizukuBinderWrapper
 import rikka.shizuku.SystemServiceHelper
 
 object InputManager {
+    init {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            LSPass.addHiddenApiExemptions("Landroid/view/MotionEvent")
+        }
+    }
+
     private var INSTANCE: IInputManager? = null
     private const val INJECT_INPUT_EVENT_MODE_ASYNC = 0
     fun getInstance(): IInputManager = INSTANCE ?: run {
@@ -18,6 +28,7 @@ object InputManager {
         IInputManager.Stub.asInterface(binder).also { INSTANCE = it }
     }
 
+    // TODO: Add multi-finger support
     fun touchDown(x: Int, y: Int, pointerId: Int, displayId: Int) {
         val now = SystemClock.uptimeMillis()
         val event = MotionEvent.obtain(
@@ -76,6 +87,7 @@ object InputManager {
         )
         event.apply {
             source = InputDevice.SOURCE_TOUCHSCREEN
+            Refine.unsafeCast<MotionEventHidden>(event).setDisplayId(displayId)
         }
         getInstance().injectInputEvent(event, INJECT_INPUT_EVENT_MODE_ASYNC)
         event.recycle()

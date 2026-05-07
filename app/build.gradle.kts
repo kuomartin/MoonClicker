@@ -65,6 +65,7 @@ dependencies {
     implementation(libs.rikka.shizuku.provider)
     compileOnly(project(":hidden-api"))
     implementation(libs.rikka.refine.runtime)
+    implementation(libs.hiddenapibypass)
     // material.icons
     implementation(libs.androidx.material.icons.core)
     implementation(libs.androidx.material.icons.extended)

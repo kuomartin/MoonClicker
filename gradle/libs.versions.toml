@@ -13,6 +13,7 @@ material = "1.13.0"
 
 shizuku = "13.1.5"
 rikka-refine = "4.4.0"
+hiddenapibypass = "+"
 
 lifecycle = "2.10.0"
 
@@ -44,6 +45,7 @@ rikka-shizuku-provider = { group = "dev.rikka.shizuku", name = "provider", versi
 rikka-refine-annotation-processor = { group = "dev.rikka.tools.refine", name = "annotation-processor", version.ref = "rikka-refine" }
 rikka-refine-annotation = { group = "dev.rikka.tools.refine", name = "annotation", version.ref = "rikka-refine" }
 rikka-refine-runtime = { group = "dev.rikka.tools.refine", name = "runtime", version.ref = "rikka-refine" }
+hiddenapibypass = { group = "org.lsposed.hiddenapibypass", name = "hiddenapibypass", version.ref = "hiddenapibypass" }
 
 # viewModel
 androidx-lifecycle-viewmodel-compose = { group = "androidx.lifecycle", name = "lifecycle-viewmodel-compose", version.ref = "lifecycle" }

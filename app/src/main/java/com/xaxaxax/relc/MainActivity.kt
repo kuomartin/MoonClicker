@@ -284,6 +284,9 @@ fun Settings(viewModel: MainViewModel, modifier: Modifier) {
         ) {
             Text("grantPermissionByShizuku")
         }
+        Button(onClick = { viewModel.testI() }) {
+            Text("Test Input")
+        }
     }
 }
 

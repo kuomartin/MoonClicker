@@ -12,12 +12,15 @@ import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.xaxaxax.relc.shizuku.InputManager
 import com.xaxaxax.relc.shizuku.ShizukuManager
 import com.xaxaxax.relc.shizuku.ShizukuUserService
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import timber.log.Timber
+import kotlin.time.Duration.Companion.milliseconds
 
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -147,6 +150,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
             handle.unbind()
             refreshPermissionStatus()
+        }
+    }
+
+    fun testI() {
+        val im = InputManager
+
+        viewModelScope.launch {
+
+            delay(500.milliseconds)
+            im.touchDown(
+                500, 700, 0, 0
+            )
+            delay(500.milliseconds)
+            im.touchMove(
+                1000, 700, 0, 0
+            )
+            delay(500.milliseconds)
+            im.touchUp(
+                1500, 700, 0, 0
+            )
         }
     }
 }
