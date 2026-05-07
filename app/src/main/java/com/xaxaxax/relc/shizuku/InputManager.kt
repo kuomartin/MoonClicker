@@ -45,6 +45,7 @@ object InputManager {
         )
         event.apply {
             source = InputDevice.SOURCE_TOUCHSCREEN
+            Refine.unsafeCast<MotionEventHidden>(event).setDisplayId(displayId)
         }
         getInstance().injectInputEvent(event, INJECT_INPUT_EVENT_MODE_ASYNC)
         event.recycle()
@@ -66,6 +67,7 @@ object InputManager {
         )
         event.apply {
             source = InputDevice.SOURCE_TOUCHSCREEN
+            Refine.unsafeCast<MotionEventHidden>(event).setDisplayId(displayId)
         }
         getInstance().injectInputEvent(event, INJECT_INPUT_EVENT_MODE_ASYNC)
         event.recycle()

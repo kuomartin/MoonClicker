@@ -153,22 +153,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun testI() {
+    fun testI(displayId: Int) {
         val im = InputManager
 
         viewModelScope.launch {
 
             delay(500.milliseconds)
             im.touchDown(
-                500, 700, 0, 0
+                500, 700, 0, displayId
             )
             delay(500.milliseconds)
             im.touchMove(
-                1000, 700, 0, 0
+                1000, 700, 0, displayId
             )
             delay(500.milliseconds)
             im.touchUp(
-                1500, 700, 0, 0
+                100, 1000, 0, displayId
             )
         }
     }
