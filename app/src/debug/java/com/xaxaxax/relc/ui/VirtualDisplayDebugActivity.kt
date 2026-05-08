@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
@@ -18,16 +19,20 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.xaxaxax.relc.ui.theme.ReLCTheme
+import timber.log.Timber
 
 /**
  * Debug-only Activity for integration testing VirtualDisplayController.
@@ -36,6 +41,8 @@ import com.xaxaxax.relc.ui.theme.ReLCTheme
 class VirtualDisplayDebugActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Timber.plant(Timber.DebugTree())
+        Timber.d("Timber is here~~")
         enableEdgeToEdge()
         setContent {
             ReLCTheme {
@@ -51,8 +58,8 @@ class VirtualDisplayDebugActivity : ComponentActivity() {
 
 @Composable
 private fun VirtualDisplayDebugScreen(
-    vm: VirtualDisplayDebugViewModel = viewModel(),
     modifier: Modifier = Modifier,
+    vm: VirtualDisplayDebugViewModel = viewModel(),
 ) {
     val state by vm.uiState.collectAsState()
 
@@ -67,6 +74,7 @@ private fun VirtualDisplayDebugScreen(
         Text("State: ${state.controllerState}  DisplayId: ${state.displayId}")
 
         HorizontalDivider()
+        TestArea(openAppFunction = { p, d -> vm.openApp(p, d) })
 
         // ── Create VD ──────────────────────────────────────────────────────
         Text("Create VirtualDisplay", style = MaterialTheme.typography.titleMedium)
@@ -115,5 +123,35 @@ private fun VirtualDisplayDebugScreen(
             text = state.log.takeLast(20).joinToString("\n"),
             style = MaterialTheme.typography.bodySmall,
         )
+    }
+}
+
+@Composable
+fun TestArea(openAppFunction: (packageName: String, displayId: Int) -> Unit) {
+    var packageName: String by remember { mutableStateOf("com.google.android.youtube") }
+    var displayId: Int by remember { mutableIntStateOf(0) }
+    var text: String by remember { mutableStateOf("") }
+    Column {
+        TextField(
+            value = text,
+            onValueChange = { newText: String ->
+                // Basic validation: only allow digits
+                if (newText.all { it.isDigit() }) {
+                    text = newText
+                    displayId = text.toIntOrNull() ?: 0
+                }
+            },
+            label = { Text("Enter Number") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+        )
+        TextField(
+            value = packageName,
+            onValueChange = { packageName = it },
+            label = { Text("Enter package name") }
+        )
+
+        Button(onClick = { openAppFunction(packageName, displayId) }) {
+            Text("Test Input to Display#$displayId")
+        }
     }
 }

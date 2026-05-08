@@ -8,12 +8,15 @@ import com.xaxaxax.relc.RelcShizukuService
 import com.xaxaxax.relc.core.DisplayConfig
 import com.xaxaxax.relc.display.NoOpSink
 import com.xaxaxax.relc.display.VirtualDisplayController
+import com.xaxaxax.relc.shizuku.InputManager
 import com.xaxaxax.relc.shizuku.ShizukuUserService
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import timber.log.Timber
+import kotlin.time.Duration.Companion.milliseconds
 
 data class DebugUiState(
     val controllerState: VirtualDisplayController.State = VirtualDisplayController.State.IDLE,
@@ -31,6 +34,7 @@ class VirtualDisplayDebugViewModel(app: Application) : AndroidViewModel(app) {
     val uiState = _uiState.asStateFlow()
 
     private var serviceHandle: ShizukuUserService.Handle<IRelcShizukuService>? = null
+
     private var controller: VirtualDisplayController? = null
 
     private val defaultConfig = DisplayConfig(
@@ -69,15 +73,53 @@ class VirtualDisplayDebugViewModel(app: Application) : AndroidViewModel(app) {
         }
     }.onFailure { log("destroy error: ${it.message}") }
 
+    fun openApp(packageName: String, displayId: Int) {
+        withService { service ->
+            val result = service.launchInDisplay(packageName, displayId)
+
+            Timber.d("openApp: $result")
+        }
+    }
+
+    fun testInput(displayId: Int) {
+        val im = InputManager
+
+        viewModelScope.launch {
+            delay(500.milliseconds)
+            im.touchDown(
+                500, 700, 0, displayId
+            )
+            delay(500.milliseconds)
+            im.touchMove(
+                1000, 700, 0, displayId
+            )
+            delay(500.milliseconds)
+            im.touchUp(
+                100, 1000, 0, displayId
+            )
+        }
+    }
+
+
     // ─── Helpers ──────────────────────────────────────────────────────────────
 
     private fun withService(block: (IRelcShizukuService) -> Unit) {
         viewModelScope.launch {
             runCatching {
-                val handle = serviceHandle ?: ShizukuUserService.connect<IRelcShizukuService>(
-                    serviceClass = RelcShizukuService::class,
-                    asInterface = IRelcShizukuService.Stub::asInterface,
-                ).also { serviceHandle = it }
+                val handle = serviceHandle ?: run {
+                    val ctx = getApplication<Application>()
+                    // 使用 lastUpdateTime 作為版本：每次重裝都會改變，
+                    // 即使 versionCode 沒有更新也會讓 Shizuku 重啟 UserService 進程。
+                    val installVersion = ctx.packageManager
+                        .getPackageInfo(ctx.packageName, 0)
+                        .lastUpdateTime
+                        .toInt()
+                    ShizukuUserService.connect<IRelcShizukuService>(
+                        serviceClass = RelcShizukuService::class,
+                        asInterface = IRelcShizukuService.Stub::asInterface,
+                        version = installVersion,
+                    )
+                }.also { serviceHandle = it }
                 block(handle.service)
             }.onFailure {
                 Timber.e(it)

@@ -23,6 +23,14 @@ object ShizukuUserService {
         processNameSuffix: String = I::class.java.simpleName,
         tag: String = processNameSuffix,
         timeoutMs: Long = 5_000,
+        /**
+         * 用來讓 Shizuku 判斷是否要 kill 舊 UserService 並重啟。
+         * 預設使用 [BuildConfig.VERSION_CODE]，但建議傳入
+         * `context.packageManager.getPackageInfo(context.packageName, 0).lastUpdateTime.toInt()`，
+         * 這樣每次重新安裝（即使 versionCode 沒有改變）都會讓 Shizuku 重啟 service 進程，
+         * 確保新程式碼生效。
+         */
+        version: Int = BuildConfig.VERSION_CODE,
         crossinline asInterface: (IBinder) -> I?
     ): Handle<I> {
         require(Shizuku.pingBinder()) { "Shizuku not running" }
@@ -37,7 +45,7 @@ object ShizukuUserService {
             .processNameSuffix(processNameSuffix)
             .tag(tag)
             .debuggable(BuildConfig.DEBUG)
-            .version(BuildConfig.VERSION_CODE)
+            .version(version)
 
         val deferred = CompletableDeferred<I>()
 
@@ -62,9 +70,12 @@ object ShizukuUserService {
             }
         }
 
-        if (Shizuku.peekUserService(args, conn) == -1) {
-            Shizuku.bindUserService(args, conn)
-        }
+        // 一律呼叫 bindUserService：
+        // - 若 service 尚未運行 → 啟動並連線
+        // - 若 service 已運行且版本相同 → 直接連線（不重啟）
+        // - 若 service 已運行但版本不同 → Shizuku 會 kill 舊進程並重啟
+        // 不使用 peekUserService 做條件判斷，避免重新安裝後仍連到舊版 service 進程。
+        Shizuku.bindUserService(args, conn)
 
         val service = try {
             withTimeout(timeoutMs.milliseconds) { deferred.await() }

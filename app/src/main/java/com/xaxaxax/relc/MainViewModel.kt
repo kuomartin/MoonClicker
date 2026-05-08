@@ -135,9 +135,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (!shizukuAvailable.value or !hasShizukuPermission.value) return
         viewModelScope.launch {
             val context: Context = getApplication()
+            // 使用 lastUpdateTime 作為版本：每次重裝都會改變，
+            // 即使 versionCode 沒有更新也會讓 Shizuku 重啟 UserService 進程。
+            val installVersion = context.packageManager
+                .getPackageInfo(context.packageName, 0)
+                .lastUpdateTime
+                .toInt()
             val handle = ShizukuUserService.connect<IRelcShizukuService>(
                 serviceClass = RelcShizukuService::class,
-                asInterface = IRelcShizukuService.Stub::asInterface
+                asInterface = IRelcShizukuService.Stub::asInterface,
+                version = installVersion,
             )
             handle.service.setOverlayAllowed(context.packageName)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
