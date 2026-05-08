@@ -6,9 +6,11 @@ import androidx.lifecycle.viewModelScope
 import com.xaxaxax.relc.IRelcShizukuService
 import com.xaxaxax.relc.RelcShizukuService
 import com.xaxaxax.relc.core.DisplayConfig
+import com.xaxaxax.relc.display.H264EncoderSink
 import com.xaxaxax.relc.display.NoOpSink
 import com.xaxaxax.relc.display.VirtualDisplayController
-import com.xaxaxax.relc.shizuku.InputManager
+import com.xaxaxax.relc.input.InputController
+import com.xaxaxax.relc.script.ScriptEngine
 import com.xaxaxax.relc.shizuku.ShizukuUserService
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -75,9 +77,21 @@ class VirtualDisplayDebugViewModel(app: Application) : AndroidViewModel(app) {
         syncState(ctrl, showSurface = true)
     }
 
-    fun createWithH264() {
-        log("H264Sink not implemented yet")
+    fun createWithH264() = withService { service ->
+        val ctrl = VirtualDisplayController(service)
+        val h264Sink = H264EncoderSink(defaultConfig) { buffer, info ->
+            // 這裡處理編碼後的數據，例如：
+            // 1. 透過 WebSocket 發送給前端
+            // 2. 寫入檔案
+            log("Encoded frame size: ${info.size}")
+            // TODO: LocalSocket send
+        }
+        ctrl.create(defaultConfig, h264Sink)
+        controller = ctrl
+        log("Created VD with H264EncoderSink")
+        syncState(ctrl, showSurface = false) // H264 模式通常不需要在手機端預覽 SurfaceView
     }
+
 
     fun destroy() = runCatching {
         controller?.let { ctrl ->
@@ -97,21 +111,41 @@ class VirtualDisplayDebugViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun testInput(displayId: Int) {
-        val im = InputManager
+        withService { service ->
+            val ic = InputController(service)
+            viewModelScope.launch {
+                log("Testing input on display $displayId...")
+                delay(1000.milliseconds)
+                ic.tap(500, 500, displayId)
+                delay(500.milliseconds)
+                ic.swipe(200, 1000, 800, 1000, 500, displayId)
+                log("Input test done")
+            }
+        }
+    }
 
-        viewModelScope.launch {
-            delay(500.milliseconds)
-            im.touchDown(
-                500, 700, 0, displayId
-            )
-            delay(500.milliseconds)
-            im.touchMove(
-                1000, 700, 0, displayId
-            )
-            delay(500.milliseconds)
-            im.touchUp(
-                100, 1000, 0, displayId
-            )
+    fun runTestScript(displayId: Int) {
+        withService { service ->
+            val engine = ScriptEngine(service) { msg -> log(msg) }
+            val script = """
+                log("Script started on display $displayId")
+                display.launch("moe.shizuku.privileged.api", $displayId)
+                sleep(2000)
+                log("Tapping...")
+                input.tap(500, 500, $displayId)
+                sleep(1000)
+                log("Swiping...")
+                input.swipe(200, 1500, 200, 500, 500, $displayId)
+                log("Script finished")
+            """.trimIndent()
+
+            viewModelScope.launch {
+                runCatching {
+                    engine.execute(script)
+                }.onFailure {
+                    log("Script Error: ${it.message}")
+                }
+            }
         }
     }
 

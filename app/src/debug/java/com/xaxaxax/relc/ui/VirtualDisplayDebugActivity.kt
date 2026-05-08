@@ -76,7 +76,11 @@ private fun VirtualDisplayDebugScreen(
         Text("State: ${state.controllerState}  DisplayId: ${state.displayId}")
 
         HorizontalDivider()
-        TestArea(openAppFunction = { p, d -> vm.openApp(p, d) })
+        TestArea(
+            openAppFunction = { p, d -> vm.openApp(p, d) },
+            testInputFunction = { d -> vm.testInput(d) },
+            runScriptFunction = { d -> vm.runTestScript(d) }
+        )
 
         // ── Create VD ──────────────────────────────────────────────────────
         Text("Create VirtualDisplay", style = MaterialTheme.typography.titleMedium)
@@ -133,11 +137,15 @@ private fun VirtualDisplayDebugScreen(
 }
 
 @Composable
-fun TestArea(openAppFunction: (packageName: String, displayId: Int) -> Unit) {
+fun TestArea(
+    openAppFunction: (packageName: String, displayId: Int) -> Unit,
+    testInputFunction: (displayId: Int) -> Unit,
+    runScriptFunction: (displayId: Int) -> Unit,
+) {
     var packageName: String by remember { mutableStateOf("moe.shizuku.privileged.api") }
     var displayId: Int by remember { mutableIntStateOf(0) }
     var text: String by remember { mutableStateOf("") }
-    Column {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         TextField(
             value = text,
             onValueChange = { newText: String ->
@@ -147,17 +155,27 @@ fun TestArea(openAppFunction: (packageName: String, displayId: Int) -> Unit) {
                     displayId = text.toIntOrNull() ?: 0
                 }
             },
-            label = { Text("Enter Number") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+            label = { Text("Enter Display ID") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier.fillMaxWidth()
         )
         TextField(
             value = packageName,
             onValueChange = { packageName = it },
-            label = { Text("Enter package name") }
+            label = { Text("Enter package name") },
+            modifier = Modifier.fillMaxWidth()
         )
 
-        Button(onClick = { openAppFunction(packageName, displayId) }) {
-            Text("Launch app in Display#$displayId")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { openAppFunction(packageName, displayId) }) {
+                Text("Launch App")
+            }
+            Button(onClick = { testInputFunction(displayId) }) {
+                Text("Test Input")
+            }
+        }
+        Button(onClick = { runScriptFunction(displayId) }, modifier = Modifier.fillMaxWidth()) {
+            Text("Run Test Script (Lua)")
         }
     }
 }

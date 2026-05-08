@@ -71,4 +71,7 @@ dependencies {
     // material.icons
     implementation(libs.androidx.material.icons.core)
     implementation(libs.androidx.material.icons.extended)
+
+    // LuaJ
+    implementation(libs.luaj)
 }

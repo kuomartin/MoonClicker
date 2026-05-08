@@ -15,13 +15,18 @@ import android.content.pm.PackageManagerHidden
 import android.hardware.display.DisplayManager
 import android.hardware.display.DisplayManagerHidden
 import android.hardware.display.VirtualDisplay
+import android.hardware.input.IInputManager
 import android.os.Build
 import android.os.Bundle
 import android.os.UserHandle
+import android.view.KeyEvent
+import android.view.MotionEvent
+import android.view.MotionEventHidden
 import android.view.Surface
 import androidx.annotation.Keep
 import dev.rikka.tools.refine.Refine
 import org.lsposed.hiddenapibypass.LSPass
+import rikka.shizuku.SystemServiceHelper
 import timber.log.Timber
 
 @Keep
@@ -40,6 +45,10 @@ class RelcShizukuService(private val context: Context) : IRelcShizukuService.Stu
         Timber.plant(Timber.DebugTree())
         Timber.d("Service started with UID: ${android.os.Process.myUid()}")
         Timber.d("Shizuku is here~~")
+    }
+
+    private val inputManager: IInputManager by lazy {
+        IInputManager.Stub.asInterface(SystemServiceHelper.getSystemService(Context.INPUT_SERVICE))
     }
 
     private val vdStore = mutableMapOf<Int, VirtualDisplay>()
@@ -90,12 +99,16 @@ class RelcShizukuService(private val context: Context) : IRelcShizukuService.Stu
         height: Int,
         densityDpi: Int,
         surface: Surface?,
+        destroyContent: Boolean,
     ): Int {
         var flags =
             DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_PUBLIC or
                     DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_PRESENTATION or
                     DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_SUPPORTS_TOUCH or
                     DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_ROTATES_WITH_CONTENT
+
+        if (destroyContent)
+            flags = flags or DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_DESTROY_CONTENT_ON_REMOVAL
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             flags = flags or
@@ -170,6 +183,25 @@ class RelcShizukuService(private val context: Context) : IRelcShizukuService.Stu
             true
         } catch (t: Throwable) {
             Timber.e(t, "launchInDisplay failed: $packageName on display $displayId")
+            false
+        }
+    }
+
+    override fun injectMotionEvent(event: MotionEvent, displayId: Int): Boolean {
+        return try {
+            Refine.unsafeCast<MotionEventHidden>(event).setDisplayId(displayId)
+            inputManager.injectInputEvent(event, 0) // INJECT_INPUT_EVENT_MODE_ASYNC
+        } catch (t: Throwable) {
+            Timber.e(t, "injectMotionEvent failed")
+            false
+        }
+    }
+
+    override fun injectKeyEvent(event: KeyEvent, displayId: Int): Boolean {
+        return try {
+            inputManager.injectInputEvent(event, 0) // INJECT_INPUT_EVENT_MODE_ASYNC
+        } catch (t: Throwable) {
+            Timber.e(t, "injectKeyEvent failed")
             false
         }
     }

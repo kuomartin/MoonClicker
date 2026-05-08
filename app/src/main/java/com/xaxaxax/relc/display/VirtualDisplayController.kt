@@ -23,7 +23,7 @@ class VirtualDisplayController(private val service: IRelcShizukuService) {
         this.sink = sink
         displayId = service.createVirtualDisplay(
             config.name, config.width, config.height, config.densityDpi,
-            sink.acquireSurface()
+            sink.acquireSurface(), false
         )
         check(displayId != Display.INVALID_DISPLAY) {
             "createVirtualDisplay returned INVALID_DISPLAY"

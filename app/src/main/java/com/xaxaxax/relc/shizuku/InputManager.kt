@@ -15,7 +15,7 @@ import rikka.shizuku.SystemServiceHelper
 object InputManager {
     init {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            LSPass.addHiddenApiExemptions("Landroid/view/MotionEvent")
+            LSPass.addHiddenApiExemptions("")
         }
     }
 
