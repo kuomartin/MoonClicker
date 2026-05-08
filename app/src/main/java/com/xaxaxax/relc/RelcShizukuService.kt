@@ -1,18 +1,20 @@
 package com.xaxaxax.relc
 
 import android.annotation.SuppressLint
+import android.app.ActivityManagerHidden
 import android.app.ActivityOptions
 import android.app.ActivityOptionsHidden
+import android.app.ActivityTaskManager
 import android.app.AppOpsManager
 import android.app.AppOpsManagerHidden
 import android.content.ActivityNotFoundException
 import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
 import android.content.pm.PackageManagerHidden
 import android.hardware.display.DisplayManager
 import android.hardware.display.DisplayManagerHidden
 import android.hardware.display.VirtualDisplay
-import android.os.Binder
 import android.os.Build
 import android.os.Bundle
 import android.os.UserHandle
@@ -41,6 +43,11 @@ class RelcShizukuService(private val context: Context) : IRelcShizukuService.Stu
     }
 
     private val vdStore = mutableMapOf<Int, VirtualDisplay>()
+    private val fakeDisplayContext = object : ContextWrapper(context) {
+        override fun getPackageName(): String = "com.android.shell"
+        override fun getOpPackageName(): String = "com.android.shell"
+        override fun getApplicationContext(): Context = this
+    }
 
     // ─── Permissions ─────────────────────────────────────────────────────────
 
@@ -103,8 +110,14 @@ class RelcShizukuService(private val context: Context) : IRelcShizukuService.Stu
                     DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_OWN_FOCUS or
                     DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_DEVICE_DISPLAY_GROUP
         }
-        val dm = context.getSystemService(DisplayManager::class.java)
-        val vd = dm.createVirtualDisplay(name, width, height, densityDpi, surface, flags)
+
+        val dm = buildDisplayManagerForVirtualDisplay()
+        val vd = run {
+            Timber.d(
+                "createVD: callingUid=${getCallingUid()} serviceUid=${android.os.Process.myUid()} fakePkg=${fakeDisplayContext.packageName}"
+            )
+            dm.createVirtualDisplay(name, width, height, densityDpi, surface, flags)
+        }
 
         val displayId = vd.display?.displayId ?: return -1
         vdStore[displayId] = vd
@@ -131,7 +144,7 @@ class RelcShizukuService(private val context: Context) : IRelcShizukuService.Stu
 
     override fun launchInDisplay(packageName: String, displayId: Int): Boolean {
         return try {
-            withOwnCallingIdentity {
+            run {
                 val intent = context.packageManager.getLaunchIntentForPackage(packageName)
                     ?: return false.also { Timber.w("launchInDisplay: no launcher intent for $packageName") }
 
@@ -173,62 +186,56 @@ class RelcShizukuService(private val context: Context) : IRelcShizukuService.Stu
      *   startActivity(IApplicationThread, String, Intent, String,
      *                 IBinder, String, int, int, ProfilerInfo, Bundle)
      */
-    @SuppressLint("PrivateApi", "BlockedPrivateApi")
     private fun startActivityViaAtm(intent: Intent, options: Bundle?) {
-        // IActivityTaskManager service (API 29+) / IActivityManager (API 28)
-        val (serviceObj, paramCount) = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val atm = Class.forName("android.app.ActivityTaskManager")
-                .getDeclaredMethod("getService")
-                .apply { isAccessible = true }
-                .invoke(null) ?: error("IActivityTaskManager is null")
-            // callingFeatureId added in API 30 → 11 params; API 29 → 10
-            atm to if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) 11 else 10
-        } else {
-            // API 28: use IActivityManager
-            val am = Class.forName("android.app.ActivityManager")
-                .getDeclaredMethod("getService")
-                .apply { isAccessible = true }
-                .invoke(null) ?: error("IActivityManager is null")
-            am to 10
-        }
-
-        val method = serviceObj.javaClass.methods
-            .filter { it.name == "startActivity" && it.parameterCount == paramCount }
-            .also {
-                Timber.d(
-                    "IActivityTaskManager.startActivity candidates " +
-                            "(paramCount=$paramCount): ${it.size} found"
+        val result = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val am = ActivityTaskManager.getService()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                am.startActivity(
+                    null, // IApplicationThread
+                    "com.android.shell",
+                    null, // callingFeatureId
+                    intent,
+                    null, // resolvedType
+                    null, // resultTo
+                    null, // resultWho
+                    0,    // requestCode
+                    0,    // flags
+                    null, // ProfilerInfo
+                    options
+                )
+            } else {
+                am.startActivity(
+                    null, // IApplicationThread
+                    "com.android.shell",
+                    intent,
+                    null, // resolvedType
+                    null, // resultTo
+                    null, // resultWho
+                    0,    // requestCode
+                    0,    // flags
+                    null, // ProfilerInfo
+                    options
                 )
             }
-            .firstOrNull() ?: error("startActivity($paramCount params) not found")
+        } else {
+            val am = ActivityManagerHidden.getService()
+            am.startActivity(
+                null, // IApplicationThread
+                "com.android.shell",
+                intent,
+                null, // resolvedType
+                null, // resultTo
+                null, // resultWho
+                0,    // requestCode
+                0,    // flags
+                null, // ProfilerInfo
+                options
+            )
 
-        Timber.d(
-            "Invoking ${method.declaringClass.simpleName}.${method.name} " +
-                    "with callingPackage=com.android.shell"
-        )
-
-        // Build the arg array:
-        //   [0] IApplicationThread caller  → null (no real thread)
-        //   [1] String callingPackage      → "com.android.shell"
-        //   [2] String callingFeatureId    → null  (API 30+ only)
-        //   [?] Intent                     → intent
-        //   remaining                      → null / 0
-        val args = arrayOfNulls<Any>(paramCount)
-        args[0] = null                    // IApplicationThread
-        args[1] = "com.android.shell"    // callingPackage
-        val intentIdx = if (paramCount == 11) 3 else 2
-        args[intentIdx] = intent
-        args[paramCount - 1] = options   // Bundle (last param)
-        // int params default to 0 via null — but primitives need explicit values
-        method.parameterTypes.forEachIndexed { i, type ->
-            if (type == Int::class.javaPrimitiveType && args[i] == null) args[i] = 0
         }
-
-        val result = method.invoke(serviceObj, *args) as? Int
-            ?: error("startActivity returned unexpected type")
-
-        Timber.d("IActivityTaskManager.startActivity result = $result")
+        Timber.d("IActivityTaskManager.startActivityWithFeature result = $result")
         checkStartActivityResult(result, intent)
+        return
     }
 
     /**
@@ -239,28 +246,35 @@ class RelcShizukuService(private val context: Context) : IRelcShizukuService.Stu
         if (result >= 1) return  // ActivityManager.START_SUCCESS and other non-error codes
         when (result) {
             -1, -2 -> throw ActivityNotFoundException(
-                "No Activity found to handle $intent")
-            -4     -> throw SecurityException(
-                "Not allowed to start activity $intent")
-            -5     -> throw IllegalArgumentException(
-                "PendingIntent is not an activity")
-            -6     -> throw RuntimeException(
-                "Activity could not be started for $intent")
-            -7     -> throw SecurityException(
-                "Starting under voice control not allowed for: $intent")
-            else   -> if (result < 0) throw RuntimeException(
-                "Unknown error code $result when starting $intent")
+                "No Activity found to handle $intent"
+            )
+
+            -4 -> throw SecurityException(
+                "Not allowed to start activity $intent"
+            )
+
+            -5 -> throw IllegalArgumentException(
+                "PendingIntent is not an activity"
+            )
+
+            -6 -> throw RuntimeException(
+                "Activity could not be started for $intent"
+            )
+
+            -7 -> throw SecurityException(
+                "Starting under voice control not allowed for: $intent"
+            )
+
+            else -> if (result < 0) throw RuntimeException(
+                "Unknown error code $result when starting $intent"
+            )
         }
     }
 
     // ─── Utils ────────────────────────────────────────────────────────────────
-
-    private inline fun <T> withOwnCallingIdentity(block: () -> T): T {
-        val token = Binder.clearCallingIdentity()
-        return try {
-            block()
-        } finally {
-            Binder.restoreCallingIdentity(token)
-        }
+    private fun buildDisplayManagerForVirtualDisplay(): DisplayManager {
+        val ctor = DisplayManager::class.java.getDeclaredConstructor(Context::class.java)
+        ctor.isAccessible = true
+        return ctor.newInstance(fakeDisplayContext)
     }
 }

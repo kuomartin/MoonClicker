@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -16,7 +15,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
@@ -92,23 +90,6 @@ private fun VirtualDisplayDebugScreen(
 
         HorizontalDivider()
 
-        // ── Launch App ─────────────────────────────────────────────────────
-        Text("Launch App in Display", style = MaterialTheme.typography.titleMedium)
-        var packageName by remember { mutableStateOf("com.android.settings") }
-        OutlinedTextField(
-            value = packageName,
-            onValueChange = { packageName = it },
-            label = { Text("Package name") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-        )
-        Button(
-            onClick = { vm.launch(packageName) },
-            enabled = state.canLaunch,
-        ) { Text("Launch") }
-
-        HorizontalDivider()
-
         // ── Destroy VD ─────────────────────────────────────────────────────
         Button(
             onClick = { vm.destroy() },
@@ -128,7 +109,7 @@ private fun VirtualDisplayDebugScreen(
 
 @Composable
 fun TestArea(openAppFunction: (packageName: String, displayId: Int) -> Unit) {
-    var packageName: String by remember { mutableStateOf("com.google.android.youtube") }
+    var packageName: String by remember { mutableStateOf("moe.shizuku.privileged.api") }
     var displayId: Int by remember { mutableIntStateOf(0) }
     var text: String by remember { mutableStateOf("") }
     Column {
@@ -137,7 +118,7 @@ fun TestArea(openAppFunction: (packageName: String, displayId: Int) -> Unit) {
             onValueChange = { newText: String ->
                 // Basic validation: only allow digits
                 if (newText.all { it.isDigit() }) {
-                    text = newText
+                    text = newText.trimStart('0')
                     displayId = text.toIntOrNull() ?: 0
                 }
             },
@@ -151,7 +132,7 @@ fun TestArea(openAppFunction: (packageName: String, displayId: Int) -> Unit) {
         )
 
         Button(onClick = { openAppFunction(packageName, displayId) }) {
-            Text("Test Input to Display#$displayId")
+            Text("Launch app in Display#$displayId")
         }
     }
 }
