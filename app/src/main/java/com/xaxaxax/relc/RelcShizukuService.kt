@@ -94,7 +94,6 @@ class RelcShizukuService(private val context: Context) : IRelcShizukuService.Stu
         var flags =
             DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_PUBLIC or
                     DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_PRESENTATION or
-                    DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY or
                     DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_SUPPORTS_TOUCH or
                     DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_ROTATES_WITH_CONTENT
 
@@ -114,7 +113,7 @@ class RelcShizukuService(private val context: Context) : IRelcShizukuService.Stu
         val dm = buildDisplayManagerForVirtualDisplay()
         val vd = run {
             Timber.d(
-                "createVD: callingUid=${getCallingUid()} serviceUid=${android.os.Process.myUid()} fakePkg=${fakeDisplayContext.packageName}"
+                "createVD: callingUid=${getCallingUid()} serviceUid=${android.os.Process.myUid()} fakePkg=${fakeDisplayContext.packageName} surfaceValid=${surface?.isValid}"
             )
             dm.createVirtualDisplay(name, width, height, densityDpi, surface, flags)
         }
@@ -128,6 +127,7 @@ class RelcShizukuService(private val context: Context) : IRelcShizukuService.Stu
     override fun setVirtualDisplaySurface(displayId: Int, surface: Surface?): Boolean {
         val vd = vdStore[displayId]
             ?: return false.also { Timber.w("setVirtualDisplaySurface: display $displayId not found") }
+        Timber.d("setVirtualDisplaySurface: display $displayId surfaceValid=${surface?.isValid}")
         vd.surface = surface
         return true
     }

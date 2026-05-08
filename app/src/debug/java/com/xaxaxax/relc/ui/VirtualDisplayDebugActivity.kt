@@ -4,10 +4,13 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -26,6 +29,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -83,12 +87,33 @@ private fun VirtualDisplayDebugScreen(
             ) { Text("NoOpSink") }
 
             Button(
+                onClick = { vm.createWithDirectSink() },
+                enabled = state.canCreate,
+            ) { Text("DirectSink") }
+
+            Button(
                 onClick = { vm.createWithH264() },
                 enabled = state.canCreate,
             ) { Text("H264Sink (TODO)") }
         }
 
         HorizontalDivider()
+        // ── SurfaceView 預覽區（DirectSink 模式）──────────────────────────────
+        if (state.showSurface) {
+            val ctrl by vm.controllerState.collectAsState()
+            ctrl?.let { controller ->
+                Text("VirtualDisplay Preview", style = MaterialTheme.typography.titleMedium)
+                VirtualDisplaySurfaceView(
+                    controller = controller,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(9f / 16f)   // 對應 1080×1920
+                        .background(Color.Black),
+                )
+            }
+
+            HorizontalDivider()
+        }
 
         // ── Destroy VD ─────────────────────────────────────────────────────
         Button(
