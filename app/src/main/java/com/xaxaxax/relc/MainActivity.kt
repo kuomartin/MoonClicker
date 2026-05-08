@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DesktopWindows
@@ -34,20 +33,14 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults.topAppBarColors
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.xaxaxax.relc.ui.theme.ReLCTheme
 import timber.log.Timber
@@ -291,9 +284,6 @@ fun Settings(viewModel: MainViewModel, modifier: Modifier) {
         ) {
             Text("grantPermissionByShizuku")
         }
-        TestArea {
-            viewModel.testI(it)
-        }
     }
 }
 
@@ -330,27 +320,5 @@ private fun SettingsSection(
         }
 
         Spacer(modifier = Modifier.height(16.dp))
-    }
-}
-
-@Composable
-fun TestArea(testFunction: (Int) -> Unit) {
-    var displayId: Int by remember { mutableIntStateOf(0) }
-    var text: String by remember { mutableStateOf("") }
-    TextField(
-        value = text,
-        onValueChange = { newText: String ->
-            // Basic validation: only allow digits
-            if (newText.all { it.isDigit() }) {
-                text = newText
-                displayId = text.toIntOrNull() ?: 0
-            }
-        },
-        label = { Text("Enter Number") },
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-    )
-
-    Button(onClick = { testFunction(displayId) }) {
-        Text("Test Input to Display#$displayId")
     }
 }
