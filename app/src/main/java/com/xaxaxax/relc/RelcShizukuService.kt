@@ -16,6 +16,7 @@ import android.hardware.display.DisplayManager
 import android.hardware.display.DisplayManagerHidden
 import android.hardware.display.VirtualDisplay
 import android.hardware.input.IInputManager
+import android.os.Binder
 import android.os.Build
 import android.os.Bundle
 import android.os.UserHandle
@@ -101,9 +102,11 @@ class RelcShizukuService(private val context: Context) : IRelcShizukuService.Stu
         surface: Surface?,
         destroyContent: Boolean,
     ): Int {
+        // PUBLIC 會讓 system_server 自動 OR 上 AUTO_MIRROR；須加 OWN_CONTENT_ONLY 才能只做「第二螢幕渲染」而非鏡像桌面（後者要 CAPTURE_* / MediaProjection）。
         var flags =
             DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_PUBLIC or
                     DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_PRESENTATION or
+                    DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY or
                     DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_SUPPORTS_TOUCH or
                     DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_ROTATES_WITH_CONTENT
 
@@ -304,6 +307,17 @@ class RelcShizukuService(private val context: Context) : IRelcShizukuService.Stu
     }
 
     // ─── Utils ────────────────────────────────────────────────────────────────
+
+    private inline fun <T> withOwnCallingUid(block: () -> T): T {
+        val orig = Binder.clearCallingIdentity()
+        return try {
+            block()
+        } finally {
+            Binder.restoreCallingIdentity(orig)
+        }
+
+    }
+
     private fun buildDisplayManagerForVirtualDisplay(): DisplayManager {
         val ctor = DisplayManager::class.java.getDeclaredConstructor(Context::class.java)
         ctor.isAccessible = true
