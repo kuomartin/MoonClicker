@@ -7,6 +7,8 @@ import android.app.ActivityOptionsHidden
 import android.app.ActivityTaskManager
 import android.app.AppOpsManager
 import android.app.AppOpsManagerHidden
+import android.app.RunningTaskInfoHidden
+import android.app.RunningTaskInfoHidden_API_27
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.ContextWrapper
@@ -46,6 +48,15 @@ class RelcShizukuService(private val context: Context) : IRelcShizukuService.Stu
         Timber.plant(Timber.DebugTree())
         Timber.d("Service started with UID: ${android.os.Process.myUid()}")
         Timber.d("Shizuku is here~~")
+    }
+
+    private fun initTree() {
+        val treeCount = Timber.treeCount
+
+        Timber.plant(Timber.DebugTree())
+        Timber.d("Service started with UID: ${android.os.Process.myUid()}")
+        Timber.d("Shizuku is here~~")
+        Timber.d("TreeCount = $treeCount")
     }
 
     private val inputManager: IInputManager by lazy {
@@ -93,7 +104,6 @@ class RelcShizukuService(private val context: Context) : IRelcShizukuService.Stu
 
     // ─── VirtualDisplay ───────────────────────────────────────────────────────
 
-    @SuppressLint("WrongConstant")
     override fun createVirtualDisplay(
         name: String,
         width: Int,
@@ -102,7 +112,6 @@ class RelcShizukuService(private val context: Context) : IRelcShizukuService.Stu
         surface: Surface?,
         destroyContent: Boolean,
     ): Int {
-        // PUBLIC 會讓 system_server 自動 OR 上 AUTO_MIRROR；須加 OWN_CONTENT_ONLY 才能只做「第二螢幕渲染」而非鏡像桌面（後者要 CAPTURE_* / MediaProjection）。
         var flags =
             DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_PUBLIC or
                     DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_PRESENTATION or
@@ -116,7 +125,7 @@ class RelcShizukuService(private val context: Context) : IRelcShizukuService.Stu
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             flags = flags or
                     DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_TRUSTED or
-                    DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP or
+                    //  DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP or
                     DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_ALWAYS_UNLOCKED or
                     DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_TOUCH_FEEDBACK_DISABLED
         }
@@ -131,6 +140,7 @@ class RelcShizukuService(private val context: Context) : IRelcShizukuService.Stu
             Timber.d(
                 "createVD: callingUid=${getCallingUid()} serviceUid=${android.os.Process.myUid()} fakePkg=${fakeDisplayContext.packageName} surfaceValid=${surface?.isValid}"
             )
+            @SuppressLint("WrongConstant")
             dm.createVirtualDisplay(name, width, height, densityDpi, surface, flags)
         }
 
@@ -188,6 +198,54 @@ class RelcShizukuService(private val context: Context) : IRelcShizukuService.Stu
             Timber.e(t, "launchInDisplay failed: $packageName on display $displayId")
             false
         }
+    }
+
+
+    override fun moveToDisplay(packageName: String, displayId: Int): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            launchInDisplay(packageName, displayId)
+        } else {
+            runCatching {
+                val am = ActivityManagerHidden.getService()
+                val task = am.getTasks(50, 0).find {
+                    it.baseActivity?.packageName == packageName
+                }
+                val hiddenApi27 = Refine.unsafeCast<RunningTaskInfoHidden_API_27>(task)
+                am.moveStackToDisplay(hiddenApi27.stackId, displayId)
+            }.isSuccess
+        }
+    }
+
+
+    override fun debug(input: String?): String {
+        val out = StringBuilder()
+        // API Level 27
+        // 1. 找 Task
+        val tasks = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val am = ActivityTaskManager.getInstance()
+            am.getTasks(50)
+        } else {
+            val am = ActivityManagerHidden.getService()
+            am.getTasks(50, 0)
+        }
+        tasks.forEach {
+            val (id, stackId, numRunning) = try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    val taskHidden = Refine.unsafeCast<RunningTaskInfoHidden>(it)
+                    Triple(taskHidden.id, taskHidden.displayId, taskHidden.numRunning)
+                } else {
+                    val taskHidden = Refine.unsafeCast<RunningTaskInfoHidden_API_27>(it)
+                    Triple(taskHidden.id, taskHidden.stackId, taskHidden.numRunning)
+                }
+            } catch (t: Throwable) {
+                Triple(null, null, null)
+            }
+
+            it.baseActivity?.packageName?.also { name ->
+                out.append("Task [$id] stack/display=$stackId pkg=$name, num=$numRunning\n")
+            }
+        }
+        return out.toString()
     }
 
     override fun injectMotionEvent(event: MotionEvent, displayId: Int): Boolean {
@@ -268,7 +326,7 @@ class RelcShizukuService(private val context: Context) : IRelcShizukuService.Stu
             )
 
         }
-        Timber.d("IActivityTaskManager.startActivityWithFeature result = $result")
+        Timber.d("IActivityTaskManager.startActivity result = $result")
         checkStartActivityResult(result, intent)
         return
     }

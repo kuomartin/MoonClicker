@@ -43,8 +43,11 @@ import timber.log.Timber
 class VirtualDisplayDebugActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        Timber.plant(Timber.DebugTree())
-        Timber.d("Timber is here~~")
+
+        if (Timber.treeCount == 0) {
+            Timber.plant(Timber.DebugTree())
+            Timber.d("Timber is here~~")
+        }
         enableEdgeToEdge()
         setContent {
             ReLCTheme {
@@ -77,10 +80,16 @@ private fun VirtualDisplayDebugScreen(
 
         HorizontalDivider()
         TestArea(
+            moveApp = { p, d -> vm.testMove(p, d) },
             openAppFunction = { p, d -> vm.openApp(p, d) },
             testInputFunction = { d -> vm.testInput(d) },
             runScriptFunction = { d -> vm.runTestScript(d) }
         )
+
+        Button(
+            onClick = { vm.debug("") },
+        ) { Text("Debug") }
+
 
         // ── Create VD ──────────────────────────────────────────────────────
         Text("Create VirtualDisplay", style = MaterialTheme.typography.titleMedium)
@@ -138,6 +147,7 @@ private fun VirtualDisplayDebugScreen(
 
 @Composable
 fun TestArea(
+    moveApp: (packageName: String, displayId: Int) -> Unit,
     openAppFunction: (packageName: String, displayId: Int) -> Unit,
     testInputFunction: (displayId: Int) -> Unit,
     runScriptFunction: (displayId: Int) -> Unit,
@@ -167,6 +177,10 @@ fun TestArea(
         )
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { moveApp(packageName, displayId) }) {
+                Text("Move App")
+            }
+
             Button(onClick = { openAppFunction(packageName, displayId) }) {
                 Text("Launch App")
             }

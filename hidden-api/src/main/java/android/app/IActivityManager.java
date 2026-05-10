@@ -4,6 +4,8 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.os.IBinder;
 
+import java.util.List;
+
 /**
  * Compile-time stub for the @hide IActivityManager Binder interface.
  * <p>
@@ -23,4 +25,8 @@ public interface IActivityManager {
             ProfilerInfo profilerInfo,
             Bundle options
     );
+
+    void moveStackToDisplay(int stackId, int displayId);
+
+    public List<ActivityManager.RunningTaskInfo> getTasks(int maxNum, int flags);
 }
