@@ -43,7 +43,6 @@ class RelcShizukuService(private val context: Context) : IRelcShizukuService.Stu
         Timber.d("Shizuku is here~~")
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-//            LSPass.addHiddenApiExemptions("")
             LSPass.addHiddenApiExemptions(
                 "Landroid/app/ActivityManager",
                 "Landroid/app/ActivityOptions",
@@ -124,7 +123,7 @@ class RelcShizukuService(private val context: Context) : IRelcShizukuService.Stu
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             flags = flags or
                     DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_TRUSTED or
-                    //  DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP or
+//                    DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP or
                     DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_ALWAYS_UNLOCKED or
                     DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_TOUCH_FEEDBACK_DISABLED
         }
