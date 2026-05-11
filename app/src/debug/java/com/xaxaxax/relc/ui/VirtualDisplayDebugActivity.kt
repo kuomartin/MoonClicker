@@ -80,7 +80,6 @@ private fun VirtualDisplayDebugScreen(
 
         HorizontalDivider()
         TestArea(
-            moveApp = { p, d -> vm.testMove(p, d) },
             openAppFunction = { p, d -> vm.openApp(p, d) },
             testInputFunction = { d -> vm.testInput(d) },
             runScriptFunction = { d -> vm.runTestScript(d) }
@@ -147,7 +146,6 @@ private fun VirtualDisplayDebugScreen(
 
 @Composable
 fun TestArea(
-    moveApp: (packageName: String, displayId: Int) -> Unit,
     openAppFunction: (packageName: String, displayId: Int) -> Unit,
     testInputFunction: (displayId: Int) -> Unit,
     runScriptFunction: (displayId: Int) -> Unit,
@@ -177,9 +175,6 @@ fun TestArea(
         )
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { moveApp(packageName, displayId) }) {
-                Text("Move App")
-            }
 
             Button(onClick = { openAppFunction(packageName, displayId) }) {
                 Text("Launch App")

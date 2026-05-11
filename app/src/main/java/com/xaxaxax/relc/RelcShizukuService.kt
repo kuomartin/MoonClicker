@@ -1,5 +1,6 @@
 package com.xaxaxax.relc
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.app.ActivityManagerHidden
 import android.app.ActivityOptions
@@ -17,50 +18,48 @@ import android.content.pm.PackageManagerHidden
 import android.hardware.display.DisplayManager
 import android.hardware.display.DisplayManagerHidden
 import android.hardware.display.VirtualDisplay
-import android.hardware.input.IInputManager
-import android.os.Binder
+import android.hardware.input.InputManager
+import android.hardware.input.InputManagerHidden
 import android.os.Build
-import android.os.Bundle
+import android.os.Process
 import android.os.UserHandle
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.MotionEventHidden
 import android.view.Surface
 import androidx.annotation.Keep
+import androidx.annotation.RequiresApi
+import androidx.core.content.getSystemService
 import dev.rikka.tools.refine.Refine
 import org.lsposed.hiddenapibypass.LSPass
-import rikka.shizuku.SystemServiceHelper
 import timber.log.Timber
 
 @Keep
 class RelcShizukuService(private val context: Context) : IRelcShizukuService.Stub() {
 
     init {
+        Timber.plant(Timber.DebugTree())
+        Timber.d("Service started with UID: ${Process.myUid()}")
+        Timber.d("Shizuku is here~~")
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            LSPass.addHiddenApiExemptions("")
-//            LSPass.addHiddenApiExemptions(
-//                "Landroid/app/ActivityOptions",
-//                "Landroid/view/MotionEvent",
-//                "Landroid/app/ActivityOptions",
-//            )
+//            LSPass.addHiddenApiExemptions("")
+            LSPass.addHiddenApiExemptions(
+                "Landroid/app/ActivityManager",
+                "Landroid/app/ActivityOptions",
+                "Landroid/app/ActivityTaskManager",
+                "Landroid/app/AppOpsManager",
+                "Landroid/content/pm/PackageManager",
+                "Landroid/hardware/input/InputManager",
+                "Landroid/view/MotionEvent",
+            )
         }
-
-        Timber.plant(Timber.DebugTree())
-        Timber.d("Service started with UID: ${android.os.Process.myUid()}")
-        Timber.d("Shizuku is here~~")
     }
 
-    private fun initTree() {
-        val treeCount = Timber.treeCount
-
-        Timber.plant(Timber.DebugTree())
-        Timber.d("Service started with UID: ${android.os.Process.myUid()}")
-        Timber.d("Shizuku is here~~")
-        Timber.d("TreeCount = $treeCount")
-    }
-
-    private val inputManager: IInputManager by lazy {
-        IInputManager.Stub.asInterface(SystemServiceHelper.getSystemService(Context.INPUT_SERVICE))
+    private val inputManager: InputManagerHidden by lazy {
+        val im = context.getSystemService<InputManager>()
+            ?: throw IllegalStateException("Can not get InputManager")
+        Refine.unsafeCast(im)
     }
 
     private val vdStore = mutableMapOf<Int, VirtualDisplay>()
@@ -89,7 +88,7 @@ class RelcShizukuService(private val context: Context) : IRelcShizukuService.Stu
     override fun setOverlayAllowed(packageName: String): Boolean {
         return try {
             val uid = context.packageManager.getPackageUid(packageName, 0)
-            val op = AppOpsManager.permissionToOp(android.Manifest.permission.SYSTEM_ALERT_WINDOW)
+            val op = AppOpsManager.permissionToOp(Manifest.permission.SYSTEM_ALERT_WINDOW)
             val appOps = context.getSystemService(AppOpsManager::class.java)
             val code = AppOpsManagerHidden.strOpToOp(op)
             Refine.unsafeCast<AppOpsManagerHidden>(appOps).setMode(
@@ -138,7 +137,7 @@ class RelcShizukuService(private val context: Context) : IRelcShizukuService.Stu
         val dm = buildDisplayManagerForVirtualDisplay()
         val vd = run {
             Timber.d(
-                "createVD: callingUid=${getCallingUid()} serviceUid=${android.os.Process.myUid()} fakePkg=${fakeDisplayContext.packageName} surfaceValid=${surface?.isValid}"
+                "createVD: callingUid=${getCallingUid()} serviceUid=${Process.myUid()} fakePkg=${fakeDisplayContext.packageName} surfaceValid=${surface?.isValid}"
             )
             @SuppressLint("WrongConstant")
             dm.createVirtualDisplay(name, width, height, densityDpi, surface, flags)
@@ -169,83 +168,113 @@ class RelcShizukuService(private val context: Context) : IRelcShizukuService.Stu
     // ─── Launch ───────────────────────────────────────────────────────────────
 
     override fun launchInDisplay(packageName: String, displayId: Int): Boolean {
-        return try {
-            run {
-                val intent = context.packageManager.getLaunchIntentForPackage(packageName)
-                    ?: return false.also { Timber.w("launchInDisplay: no launcher intent for $packageName") }
-
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-
-                // setLaunchDisplayId is @hide — access via Refine + LSPass
-                val options = ActivityOptions.makeBasic()
-                Refine.unsafeCast<ActivityOptionsHidden>(options).setLaunchDisplayId(displayId)
-
-                // Context.startActivity() → ContextImpl.startActivity()
-                //   → execStartActivity(getOuterContext(), ...)
-                // getOuterContext() is ContextImpl.mOuterContext — a reference set at
-                // context-creation time that bypasses every ContextWrapper layer we add.
-                // So callingPackage always leaks as "com.xaxaxax.relc" regardless of
-                // any shellContext wrapper, causing START_PERMISSION_DENIED (UID mismatch).
-                //
-                // Fix: call IActivityTaskManager.startActivity() directly so we control
-                // callingPackage = "com.android.shell" explicitly.
-                startActivityViaAtm(intent, options.toBundle())
-            }
-
-            Timber.d("launchInDisplay: launched $packageName on display $displayId")
-            true
-        } catch (t: Throwable) {
-            Timber.e(t, "launchInDisplay failed: $packageName on display $displayId")
-            false
-        }
-    }
-
-
-    override fun moveToDisplay(packageName: String, displayId: Int): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            launchInDisplay(packageName, displayId)
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            launchAppViaATM(packageName, displayId)
         } else {
-            runCatching {
-                val am = ActivityManagerHidden.getService()
-                val task = am.getTasks(50, 0).find {
-                    it.baseActivity?.packageName == packageName
-                }
-                val hiddenApi27 = Refine.unsafeCast<RunningTaskInfoHidden_API_27>(task)
-                am.moveStackToDisplay(hiddenApi27.stackId, displayId)
-            }.isSuccess
+            launchAppViaIAM(packageName, displayId)
         }
     }
 
+    @RequiresApi(Build.VERSION_CODES.R)
+    private fun launchAppViaATM(packageName: String, displayId: Int) = runCatching {
+        // Whether the application are running or not, ATM will handle everything.
+
+        val intent = context.packageManager.getLaunchIntentForPackage(packageName)
+            ?: throw IllegalArgumentException("launchInDisplay: no launcher intent for $packageName")
+                .also { Timber.w(it) }
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+        // setLaunchDisplayId is @hide — access via Refine + LSPass
+        val options = ActivityOptions.makeBasic()
+        Refine.unsafeCast<ActivityOptionsHidden>(options).setLaunchDisplayId(displayId)
+
+        val atm = ActivityTaskManager.getService()
+        val result = atm.startActivity(
+            null, // IApplicationThread
+            "com.android.shell",
+            null, // callingFeatureId
+            intent,
+            null, // resolvedType
+            null, // resultTo
+            null, // resultWho
+            0,    // requestCode
+            0,    // flags
+            null, // ProfilerInfo
+            options.toBundle()
+        )
+        Timber.d("IActivityTaskManager.startActivity result = $result")
+        checkStartActivityResult(result, intent)
+    }.isSuccess
+
+
+    private fun launchAppViaIAM(packageName: String, displayId: Int) = runCatching {
+        // Used for API 29 and below
+
+        val iam = ActivityManagerHidden.getService()
+        val tasks = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
+            iam.getTasks(50)
+        else
+            iam.getTasks(50, 0)
+        val task = tasks.find { it.baseActivity?.packageName == packageName }
+        if (task != null) {
+            // if app is running, move it
+            val hiddenInfo = Refine.unsafeCast<RunningTaskInfoHidden_API_27>(task)
+            Timber.d("moveToDisplay (API <= 29): taskId=${hiddenInfo.id} pkg=$packageName to displayId=$displayId")
+            // To move only one task, we create a new stack on the target display and move the task to it.
+            val newStackId = iam.createStackOnDisplay(displayId)
+            Timber.d("Created stack $newStackId on display $displayId")
+            iam.moveTaskToStack(hiddenInfo.id, newStackId, true)
+        } else {
+            // start app by IAM
+            val intent = context.packageManager.getLaunchIntentForPackage(packageName)
+                ?: throw IllegalArgumentException("launchInDisplay: no launcher intent for $packageName")
+                    .also { Timber.w(it) }
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+            // setLaunchDisplayId is @hide — access via Refine + LSPass
+            val options = ActivityOptions.makeBasic()
+            Refine.unsafeCast<ActivityOptionsHidden>(options).setLaunchDisplayId(displayId)
+
+            val result = iam.startActivity(
+                null, // IApplicationThread
+                "com.android.shell",
+                intent,
+                null, // resolvedType
+                null, // resultTo
+                null, // resultWho
+                0,    // requestCode
+                0,    // flags
+                null, // ProfilerInfo
+                options.toBundle()
+            )
+            Timber.d("IActivityTaskManager.startActivity result = $result")
+            checkStartActivityResult(result, intent)
+        }
+    }.onFailure {
+        Timber.e(it)
+    }.isSuccess
 
     override fun debug(input: String?): String {
-        val out = StringBuilder()
         // API Level 27
         // 1. 找 Task
-        val tasks = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val am = ActivityTaskManager.getInstance()
-            am.getTasks(50)
-        } else {
+        return runCatching {
             val am = ActivityManagerHidden.getService()
-            am.getTasks(50, 0)
-        }
-        tasks.forEach {
-            val (id, stackId, numRunning) = try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    val taskHidden = Refine.unsafeCast<RunningTaskInfoHidden>(it)
-                    Triple(taskHidden.id, taskHidden.displayId, taskHidden.numRunning)
-                } else {
-                    val taskHidden = Refine.unsafeCast<RunningTaskInfoHidden_API_27>(it)
-                    Triple(taskHidden.id, taskHidden.stackId, taskHidden.numRunning)
+            return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                am.getTasks(50).map {
+                    val hidden = Refine.unsafeCast<RunningTaskInfoHidden>(it)
+                    hidden.id to hidden.baseActivity.packageName
                 }
-            } catch (t: Throwable) {
-                Triple(null, null, null)
-            }
-
-            it.baseActivity?.packageName?.also { name ->
-                out.append("Task [$id] stack/display=$stackId pkg=$name, num=$numRunning\n")
+            } else {
+                am.getTasks(50, 0).map {
+                    val hidden = Refine.unsafeCast<RunningTaskInfoHidden_API_27>(it)
+                    hidden.id to hidden.baseActivity.packageName
+                }
+            }.joinToString("\n") { (id, pkg) ->
+                "Task [$id] pkg=$pkg"
             }
         }
-        return out.toString()
+            .onFailure { Timber.e(it) }
+            .getOrElse { it.message ?: "" }
     }
 
     override fun injectMotionEvent(event: MotionEvent, displayId: Int): Boolean {
@@ -265,70 +294,6 @@ class RelcShizukuService(private val context: Context) : IRelcShizukuService.Stu
             Timber.e(t, "injectKeyEvent failed")
             false
         }
-    }
-
-    /**
-     * Calls IActivityTaskManager.startActivity() directly with
-     * callingPackage="com.android.shell", bypassing Context.startActivity()
-     * which would leak the real package name via ContextImpl.getOuterContext().
-     *
-     * Signature (API 30+):
-     *   startActivity(IApplicationThread, String, String, Intent, String,
-     *                 IBinder, String, int, int, ProfilerInfo, Bundle)
-     * Signature (API 28-29):
-     *   startActivity(IApplicationThread, String, Intent, String,
-     *                 IBinder, String, int, int, ProfilerInfo, Bundle)
-     */
-    private fun startActivityViaAtm(intent: Intent, options: Bundle?) {
-        val result = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val am = ActivityTaskManager.getService()
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                am.startActivity(
-                    null, // IApplicationThread
-                    "com.android.shell",
-                    null, // callingFeatureId
-                    intent,
-                    null, // resolvedType
-                    null, // resultTo
-                    null, // resultWho
-                    0,    // requestCode
-                    0,    // flags
-                    null, // ProfilerInfo
-                    options
-                )
-            } else {
-                am.startActivity(
-                    null, // IApplicationThread
-                    "com.android.shell",
-                    intent,
-                    null, // resolvedType
-                    null, // resultTo
-                    null, // resultWho
-                    0,    // requestCode
-                    0,    // flags
-                    null, // ProfilerInfo
-                    options
-                )
-            }
-        } else {
-            val am = ActivityManagerHidden.getService()
-            am.startActivity(
-                null, // IApplicationThread
-                "com.android.shell",
-                intent,
-                null, // resolvedType
-                null, // resultTo
-                null, // resultWho
-                0,    // requestCode
-                0,    // flags
-                null, // ProfilerInfo
-                options
-            )
-
-        }
-        Timber.d("IActivityTaskManager.startActivity result = $result")
-        checkStartActivityResult(result, intent)
-        return
     }
 
     /**
@@ -364,17 +329,8 @@ class RelcShizukuService(private val context: Context) : IRelcShizukuService.Stu
         }
     }
 
+
     // ─── Utils ────────────────────────────────────────────────────────────────
-
-    private inline fun <T> withOwnCallingUid(block: () -> T): T {
-        val orig = Binder.clearCallingIdentity()
-        return try {
-            block()
-        } finally {
-            Binder.restoreCallingIdentity(orig)
-        }
-
-    }
 
     private fun buildDisplayManagerForVirtualDisplay(): DisplayManager {
         val ctor = DisplayManager::class.java.getDeclaredConstructor(Context::class.java)

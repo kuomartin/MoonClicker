@@ -149,18 +149,9 @@ class VirtualDisplayDebugViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun testMove(packageName: String, displayId: Int) {
-        withService { service ->
-            val result = service.moveToDisplay(packageName, displayId)
-
-            Timber.d("moveApp: $result")
-        }
-    }
-
     fun debug(input: String) {
         withService { service ->
             val result = service.debug(input)
-
             Timber.d("Debug: $result")
         }
     }

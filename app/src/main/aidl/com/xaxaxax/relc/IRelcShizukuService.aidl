@@ -12,7 +12,6 @@ interface IRelcShizukuService {
     boolean destroyVirtualDisplay(int displayId);
     // 在指定 Display 中啟動 App
     boolean launchInDisplay(String packageName, int displayId);
-    boolean moveToDisplay(String packageName, int displayId);
 
     // Input 注入
     boolean injectMotionEvent(in MotionEvent event, int displayId);
