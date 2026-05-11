@@ -1,6 +1,7 @@
 package com.xaxaxax.relc.ui
 
 import android.app.Application
+import android.content.res.Resources
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.xaxaxax.relc.IRelcShizukuService
@@ -48,12 +49,20 @@ class VirtualDisplayDebugViewModel(app: Application) : AndroidViewModel(app) {
         }
 
 
-    private val defaultConfig = DisplayConfig(
-        name = "ReLC-Debug",
-        width = 1080,
-        height = 1920,
-        densityDpi = 320,
-    )
+    val defaultConfig by lazy {
+        val width = Resources.getSystem().displayMetrics.widthPixels
+        val height = Resources.getSystem().displayMetrics.heightPixels
+        val density = Resources.getSystem().displayMetrics.densityDpi
+        DisplayConfig(
+            name = "ReLC-Debug",
+            width = width,
+            height = height,
+            densityDpi = density,
+        )
+    }
+
+    var inputController: InputController? = null
+        private set
 
     // ─── Actions ──────────────────────────────────────────────────────────────
 
@@ -61,6 +70,7 @@ class VirtualDisplayDebugViewModel(app: Application) : AndroidViewModel(app) {
         val ctrl = VirtualDisplayController(service)
         ctrl.create(defaultConfig, NoOpSink())
         controller = ctrl
+        inputController = InputController(service)
         log("Created VD with NoOpSink, displayId=${ctrl.displayId}")
         syncState(ctrl, showSurface = false)
     }
@@ -73,6 +83,7 @@ class VirtualDisplayDebugViewModel(app: Application) : AndroidViewModel(app) {
         val ctrl = VirtualDisplayController(service)
         ctrl.create(defaultConfig, NoOpSink())   // 先用 NoOpSink，等 Surface 準備好再換
         controller = ctrl
+        inputController = InputController(service)
         log("Created VD (waiting for SurfaceView...), displayId=${ctrl.displayId}")
         syncState(ctrl, showSurface = true)
     }
@@ -88,6 +99,7 @@ class VirtualDisplayDebugViewModel(app: Application) : AndroidViewModel(app) {
         }
         ctrl.create(defaultConfig, h264Sink)
         controller = ctrl
+        inputController = InputController(service)
         log("Created VD with H264EncoderSink")
         syncState(ctrl, showSurface = false) // H264 模式通常不需要在手機端預覽 SurfaceView
     }

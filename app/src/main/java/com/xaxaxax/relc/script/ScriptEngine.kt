@@ -63,6 +63,32 @@ class ScriptEngine(
                 return NIL
             }
         })
+        inputLib.set("down", object : VarArgFunction() {
+            override fun invoke(args: org.luaj.vm2.Varargs): org.luaj.vm2.Varargs {
+                val id = args.arg(1).toint()
+                val x = args.arg(2).tofloat()
+                val y = args.arg(3).tofloat()
+                val displayId = args.arg(4).toint()
+                inputController.script.down(id, x, y, displayId)
+                return NIL
+            }
+        })
+        inputLib.set("move", object : VarArgFunction() {
+            override fun invoke(args: org.luaj.vm2.Varargs): org.luaj.vm2.Varargs {
+                val id = args.arg(1).toint()
+                val x = args.arg(2).tofloat()
+                val y = args.arg(3).tofloat()
+                val displayId = args.arg(4).toint()
+                inputController.script.move(id, x, y, displayId)
+                return NIL
+            }
+        })
+        inputLib.set("up", object : TwoArgFunction() {
+            override fun call(arg1: LuaValue, arg2: LuaValue): LuaValue {
+                inputController.script.up(arg1.toint(), arg2.toint())
+                return NIL
+            }
+        })
         globals.set("input", inputLib)
 
         // --- utils ---

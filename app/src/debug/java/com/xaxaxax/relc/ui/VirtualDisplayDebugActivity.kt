@@ -113,13 +113,19 @@ private fun VirtualDisplayDebugScreen(
         // ── SurfaceView 預覽區（DirectSink 模式）──────────────────────────────
         if (state.showSurface) {
             val ctrl by vm.controllerState.collectAsState()
-            ctrl?.let { controller ->
-                Text("VirtualDisplay Preview", style = MaterialTheme.typography.titleMedium)
+            val inputController = vm.inputController
+            if (ctrl != null && inputController != null) {
+                Text(
+                    "VirtualDisplay Preview (Touch Forwarding Enabled)",
+                    style = MaterialTheme.typography.titleMedium
+                )
                 VirtualDisplaySurfaceView(
-                    controller = controller,
+                    controller = ctrl!!,
+                    inputController = inputController,
+                    config = vm.defaultConfig,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .aspectRatio(9f / 16f)   // 對應 1080×1920
+                        .aspectRatio(vm.defaultConfig.width.toFloat() / vm.defaultConfig.height)   // 對應 1080×1920
                         .background(Color.Black),
                 )
             }
