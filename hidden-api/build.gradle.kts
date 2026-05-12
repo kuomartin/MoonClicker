@@ -1,15 +1,16 @@
 plugins {
     alias(libs.plugins.android.library)
+    alias(libs.plugins.ksp)
 }
 
 android {
     namespace = "com.xaxaxax.hidden_api"
     compileSdk {
-        version = release(37)
+        version = release(libs.versions.targetSdk.get().toInt())
     }
 
     defaultConfig {
-        minSdk = 27
+        minSdk = libs.versions.minSdk.get().toInt()
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

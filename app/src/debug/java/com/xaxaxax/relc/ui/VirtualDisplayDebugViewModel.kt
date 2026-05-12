@@ -1,8 +1,8 @@
 package com.xaxaxax.relc.ui
 
-import android.app.Application
+import android.content.Context
 import android.content.res.Resources
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.xaxaxax.relc.IRelcShizukuService
 import com.xaxaxax.relc.RelcShizukuService
@@ -13,12 +13,15 @@ import com.xaxaxax.relc.display.VirtualDisplayController
 import com.xaxaxax.relc.input.InputController
 import com.xaxaxax.relc.script.ScriptEngine
 import com.xaxaxax.relc.shizuku.ShizukuUserService
+import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import timber.log.Timber
+import javax.inject.Inject
 import kotlin.time.Duration.Companion.milliseconds
 
 data class DebugUiState(
@@ -28,11 +31,13 @@ data class DebugUiState(
     val log: List<String> = emptyList(),
 ) {
     val canCreate get() = controllerState == VirtualDisplayController.State.IDLE
-    val canLaunch get() = controllerState == VirtualDisplayController.State.CREATED
     val canDestroy get() = controllerState == VirtualDisplayController.State.CREATED
 }
 
-class VirtualDisplayDebugViewModel(app: Application) : AndroidViewModel(app) {
+@HiltViewModel
+class VirtualDisplayDebugViewModel @Inject constructor(
+    @ApplicationContext private val context: Context
+) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DebugUiState())
     val uiState = _uiState.asStateFlow()
@@ -175,11 +180,10 @@ class VirtualDisplayDebugViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             runCatching {
                 val handle = serviceHandle ?: run {
-                    val ctx = getApplication<Application>()
                     // 使用 lastUpdateTime 作為版本：每次重裝都會改變，
                     // 即使 versionCode 沒有更新也會讓 Shizuku 重啟 UserService 進程。
-                    val installVersion = ctx.packageManager
-                        .getPackageInfo(ctx.packageName, 0)
+                    val installVersion = context.packageManager
+                        .getPackageInfo(context.packageName, 0)
                         .lastUpdateTime
                         .toInt()
                     ShizukuUserService.connect<IRelcShizukuService>(

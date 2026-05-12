@@ -1,3 +1,8 @@
 <resources>
     <string name="app_name">ReLC</string>
+    <string name="virtual_display_title">Virtual Displays</string>
+    <string name="scripts_title">Scripts</string>
+    <string name="settings_title">Settings</string>
+    <string name="tasks_header_image_content_description">Tasks header image</string>
+    <string name="navigation_view_header_title">ReLC</string>
 </resources>

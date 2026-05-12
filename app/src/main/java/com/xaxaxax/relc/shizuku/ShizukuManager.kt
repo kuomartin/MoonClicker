@@ -5,13 +5,16 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import rikka.shizuku.Shizuku
 import timber.log.Timber
+import javax.inject.Inject
+import javax.inject.Singleton
 
 /**
  * Shizuku 連線與權限管理類別。
  * * 負責檢查 Shizuku 服務的可用性、管理權限請求與狀態。
  * 採用 Coroutine Flow 來更有效地管理狀態。
  */
-class ShizukuManager {
+@Singleton
+class ShizukuManager @Inject constructor() {
 
     private val _isShizukuAvailable = MutableStateFlow(Shizuku.pingBinder())
     val isShizukuAvailable = _isShizukuAvailable.asStateFlow()

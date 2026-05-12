@@ -32,14 +32,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.xaxaxax.relc.ui.theme.ReLCTheme
+import dagger.hilt.android.AndroidEntryPoint
 import timber.log.Timber
 
 /**
  * Debug-only Activity for integration testing VirtualDisplayController.
  * Only exists in debug builds — declared in src/debug/AndroidManifest.xml.
  */
+@AndroidEntryPoint
 class VirtualDisplayDebugActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -64,7 +66,7 @@ class VirtualDisplayDebugActivity : ComponentActivity() {
 @Composable
 private fun VirtualDisplayDebugScreen(
     modifier: Modifier = Modifier,
-    vm: VirtualDisplayDebugViewModel = viewModel(),
+    vm: VirtualDisplayDebugViewModel = hiltViewModel(),
 ) {
     val state by vm.uiState.collectAsState()
 

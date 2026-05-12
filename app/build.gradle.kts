@@ -2,21 +2,25 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.rikka.refine)
+    alias(libs.plugins.serialization)
+    alias(libs.plugins.ksp)
+    alias(libs.plugins.hilt)
 }
 
 android {
     namespace = "com.xaxaxax.relc"
     compileSdk {
-        version = release(37)
+        version = release(libs.versions.targetSdk.get().toInt())
     }
 
     defaultConfig {
         applicationId = "com.xaxaxax.relc"
-        minSdk = 27
+        minSdk = libs.versions.minSdk.get().toInt()
         versionCode = 1
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        targetSdk = libs.versions.targetSdk.get().toInt()
     }
 
     buildTypes {
@@ -37,10 +41,16 @@ android {
     }
 }
 
+kotlin {
+    compilerOptions {
+        freeCompilerArgs.addAll("-XXLanguage:+PropertyParamAnnotationDefaultTargetMode")
+    }
+}
 dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.compose.material3.adaptive.navigation.suite)
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
@@ -67,11 +77,27 @@ dependencies {
     implementation(libs.rikka.shizuku.provider)
     compileOnly(project(":hidden-api"))
     implementation(libs.rikka.refine.runtime)
+    ksp(libs.rikka.refine.annotation.processor)
     implementation(libs.hiddenapibypass)
     // material.icons
     implementation(libs.androidx.material.icons.core)
     implementation(libs.androidx.material.icons.extended)
 
+    // nav compose
+    implementation(libs.androidx.navigation.compose)
+
     // LuaJ
     implementation(libs.luaj)
+
+
+    // Hilt
+    implementation(libs.hilt.android.core)
+    implementation(libs.androidx.hilt.navigation.compose)
+    ksp(libs.hilt.compiler)
+    // AndroidX Test - Hilt testing
+    androidTestImplementation(libs.hilt.android.testing)
+    kspAndroidTest(libs.hilt.compiler)
+    // JVM tests - Hilt
+    testImplementation(libs.hilt.android.testing)
+    kspTest(libs.hilt.compiler)
 }
