@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -42,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.xaxaxax.relc.R
 import com.xaxaxax.relc.ui.theme.ReLCTheme
+import com.xaxaxax.relc.ui.component.Section
 
 typealias HealthCheckActions = List<Pair<String, () -> Unit>>
 
@@ -89,7 +91,9 @@ private fun SettingsScreenContent(
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        modifier = Modifier
+            .fillMaxSize()
+            .nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             MediumTopAppBar(
                 title = { Text("Settings") },
@@ -102,7 +106,7 @@ private fun SettingsScreenContent(
             modifier = Modifier.fillMaxWidth()
         ) {
             item {
-                SettingSection("Health Check") {
+                Section("Health Check") {
                     val hasAnyFailure = !uiState.isShizukuAvailable ||
                             !uiState.hasShizukuPermission ||
                             !uiState.hasOverlayPermission ||
@@ -186,7 +190,7 @@ private fun SettingsScreenContent(
             }
 
             item {
-                SettingSection(name = "General") {
+                Section(name = "General") {
 //                    ToggleSettingItem(
 //                        name = "Dark Mode",
 //                        description = "Enable dark theme across the app",
@@ -196,27 +200,6 @@ private fun SettingsScreenContent(
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun SettingSection(
-    name: String,
-    content: @Composable () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-    ) {
-        Text(
-            text = name,
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
-        content()
     }
 }
 

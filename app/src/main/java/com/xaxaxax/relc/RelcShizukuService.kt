@@ -33,6 +33,7 @@ import androidx.core.content.getSystemService
 import dev.rikka.tools.refine.Refine
 import org.lsposed.hiddenapibypass.LSPass
 import timber.log.Timber
+import kotlin.system.exitProcess
 
 @Keep
 class RelcShizukuService(private val context: Context) : IRelcShizukuService.Stub() {
@@ -101,6 +102,9 @@ class RelcShizukuService(private val context: Context) : IRelcShizukuService.Stu
     }
 
     // ─── VirtualDisplay ───────────────────────────────────────────────────────
+    override fun getVirtualDisplays(): IntArray {
+        return vdStore.keys.sorted().toIntArray()
+    }
 
     override fun createVirtualDisplay(
         name: String,
@@ -326,6 +330,15 @@ class RelcShizukuService(private val context: Context) : IRelcShizukuService.Stu
                 "Unknown error code $result when starting $intent"
             )
         }
+    }
+
+    override fun destroy() {
+        Timber.i("Closing service")
+        Timber.i("Close existing ${vdStore.size} virtualDisplays.")
+        vdStore.forEach { (_, display) ->
+            display.release()
+        }
+        exitProcess(0)
     }
 
 
