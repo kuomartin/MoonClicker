@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -14,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -21,8 +23,10 @@ import androidx.compose.material3.MediumTopAppBar
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -31,10 +35,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import com.xaxaxax.relc.ui.theme.ReLCTheme
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun DisplaysScreen(
     onNavigateToDetail: (String) -> Unit,
@@ -42,15 +48,38 @@ fun DisplaysScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
-    LaunchedEffect(Unit) {
-        viewModel.refreshDisplays()
-    }
+    DisplaysScreenContent(
+        uiState = uiState,
+        onNavigateToDetail = onNavigateToDetail,
+        onPullRefresh = { viewModel.refreshDisplays(true) },
+        onFabClick = {
+            if (uiState.isShizukuAvailable and uiState.hasShizukuPermission)
+                viewModel.createDisplay()
+            else {
+                Toast.makeText(
+                    context,
+                    "Shizuku permission required for create display",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+internal fun DisplaysScreenContent(
+    uiState: DisplaysUiState,
+    onNavigateToDetail: (String) -> Unit,
+    onPullRefresh: () -> Unit,
+    onFabClick: () -> Unit,
+) {
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val pullRefreshState = rememberPullToRefreshState()
 
     Scaffold(
-        modifier = Modifier
-            .nestedScroll(scrollBehavior.nestedScrollConnection),
+        modifier = Modifier,
         topBar = {
             MediumTopAppBar(
                 title = { Text("Displays") },
@@ -59,17 +88,7 @@ fun DisplaysScreen(
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = {
-                    if (uiState.isShizukuAvailable and uiState.hasShizukuPermission)
-                        viewModel.createDisplay()
-                    else {
-                        Toast.makeText(
-                            context,
-                            "Shizuku permission required for create display",
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    }
-                },
+                onClick = onFabClick,
                 containerColor = MaterialTheme.colorScheme.primaryContainer,
                 contentColor = MaterialTheme.colorScheme.onPrimaryContainer
             ) {
@@ -77,37 +96,70 @@ fun DisplaysScreen(
             }
         }
     ) { innerPadding ->
-        LazyColumn(
-            contentPadding = innerPadding,
-            modifier = Modifier.fillMaxWidth()
+        PullToRefreshBox(
+            isRefreshing = uiState.isRefreshing,
+            onRefresh = onPullRefresh,
+            state = pullRefreshState,
+            indicator = {
+                PullToRefreshDefaults.LoadingIndicator(
+                    state = pullRefreshState,
+                    isRefreshing = uiState.isRefreshing,
+                    modifier = Modifier.align(Alignment.TopCenter),
+                )
+            },
+            enabled = uiState.isShizukuAvailable and uiState.hasShizukuPermission,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
         ) {
-            if (uiState.displayIds.isEmpty()) {
-                item {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(32.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "No displays created",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .nestedScroll(scrollBehavior.nestedScrollConnection),
+            ) {
+                if (uiState.displayIds.isEmpty()) {
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(32.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "No displays created",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
-            }
 
-
-            itemsIndexed(
-                uiState.displayIds
-            ) { i, id ->
-                DisplayItem(
-                    id = id,
-                    onClick = { onNavigateToDetail(id.toString()) }
-                )
+                itemsIndexed(uiState.displayIds) { _, id ->
+                    DisplayItem(
+                        id = id,
+                        onClick = { onNavigateToDetail(id.toString()) }
+                    )
+                }
             }
         }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@Preview(showBackground = true)
+@Composable
+private fun PreviewDisplaysScreen() {
+    ReLCTheme {
+        DisplaysScreenContent(
+            uiState = DisplaysUiState(
+                displayIds = listOf(1, 42),
+                isShizukuAvailable = true,
+                hasShizukuPermission = true,
+            ),
+            onNavigateToDetail = {},
+            onPullRefresh = {},
+            onFabClick = {},
+        )
     }
 }
 

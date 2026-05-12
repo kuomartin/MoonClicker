@@ -12,6 +12,7 @@ import com.xaxaxax.relc.shizuku.ShizukuManager
 import com.xaxaxax.relc.shizuku.ShizukuUserService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -20,12 +21,14 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
+import kotlin.time.Duration.Companion.milliseconds
 
 data class DisplaysUiState(
     val displayIds: List<Int> = emptyList(),
     val isShizukuAvailable: Boolean = false,
     val hasShizukuPermission: Boolean = false,
-    val isLoading: Boolean = false
+    val isLoading: Boolean = false,
+    val isRefreshing: Boolean = false
 )
 
 @HiltViewModel
@@ -33,8 +36,10 @@ class DisplaysViewModel @Inject constructor(
     private val shizukuManager: ShizukuManager,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
-    private val _displayIds = MutableStateFlow<List<Int>>(emptyList())
-    private val _isLoading = MutableStateFlow(false)
+    private val displayIds = MutableStateFlow<List<Int>>(emptyList())
+    private val isLoading = MutableStateFlow(false)
+    private val isRefreshing = MutableStateFlow(false)
+    private val refreshingDelay = 1000.milliseconds
     private var serviceHandle: ShizukuUserService.Handle<IRelcShizukuService>? = null
 
     val defaultConfig by lazy {
@@ -50,16 +55,18 @@ class DisplaysViewModel @Inject constructor(
     }
 
     val uiState: StateFlow<DisplaysUiState> = combine(
-        _displayIds,
+        displayIds,
         shizukuManager.isShizukuAvailable,
         shizukuManager.hasPermission,
-        _isLoading
-    ) { ids, available, permission, loading ->
+        isLoading,
+        isRefreshing
+    ) { ids, available, permission, loading, refreshing ->
         DisplaysUiState(
             displayIds = ids,
             isShizukuAvailable = available,
             hasShizukuPermission = permission,
-            isLoading = loading
+            isLoading = loading,
+            isRefreshing = refreshing
         )
     }.stateIn(
         scope = viewModelScope,
@@ -71,22 +78,26 @@ class DisplaysViewModel @Inject constructor(
         refreshDisplays()
     }
 
-    fun refreshDisplays() {
+    fun refreshDisplays(fromPullToRefresh: Boolean = false) {
         if (!shizukuManager.isShizukuAvailable.value || !shizukuManager.hasPermission.value) {
             return
         }
 
         viewModelScope.launch {
-            _isLoading.value = true
+            isLoading.value = true
+            if (fromPullToRefresh)
+                isRefreshing.value = true
             try {
                 withService { service ->
                     val ids = service.virtualDisplays.toList()
-                    _displayIds.value = ids
+                    displayIds.value = ids
                 }
-            } catch (e: Exception) {
-                Timber.e(e, "Failed to refresh displays")
             } finally {
-                _isLoading.value = false
+                isLoading.value = false
+                if (fromPullToRefresh) {
+                    delay(refreshingDelay)
+                    isRefreshing.value = false
+                }
             }
         }
     }
@@ -96,41 +107,30 @@ class DisplaysViewModel @Inject constructor(
             withService { service ->
                 val ctrl = VirtualDisplayController(service)
                 ctrl.create(config)
-                refreshDisplays()
             }
+            refreshDisplays()
         }
     }
 
     // ─── Utils ────────────────────────────────────────────────────────────────
-    private fun syncState(
-        displayIds: List<Int>? = null,
-        isLoading: Boolean? = null
-    ) {
-        displayIds?.let { _displayIds.value = it }
-        isLoading?.let { _isLoading.value = it }
-    }
-
-    private fun withService(block: (IRelcShizukuService) -> Unit) {
-        viewModelScope.launch {
-            runCatching {
-                val handle = serviceHandle ?: run {
-                    // 使用 lastUpdateTime 作為版本：每次重裝都會改變，
-                    // 即使 versionCode 沒有更新也會讓 Shizuku 重啟 UserService 進程。
-                    val installVersion = context.packageManager
-                        .getPackageInfo(context.packageName, 0)
-                        .lastUpdateTime
-                        .toInt()
-                    ShizukuUserService.connect<IRelcShizukuService>(
-                        serviceClass = RelcShizukuService::class,
-                        asInterface = IRelcShizukuService.Stub::asInterface,
-                        version = installVersion,
-                    )
-                }.also { serviceHandle = it }
-                block(handle.service)
-            }.onFailure {
-                Timber.e(it)
-            }
-            syncState(isLoading = false)
+    private suspend fun withService(block: (IRelcShizukuService) -> Unit) {
+        runCatching {
+            val handle = serviceHandle ?: run {
+                // 使用 lastUpdateTime 作為版本：每次重裝都會改變，
+                // 即使 versionCode 沒有更新也會讓 Shizuku 重啟 UserService 進程。
+                val installVersion = context.packageManager
+                    .getPackageInfo(context.packageName, 0)
+                    .lastUpdateTime
+                    .toInt()
+                ShizukuUserService.connect<IRelcShizukuService>(
+                    serviceClass = RelcShizukuService::class,
+                    asInterface = IRelcShizukuService.Stub::asInterface,
+                    version = installVersion,
+                )
+            }.also { serviceHandle = it }
+            block(handle.service)
+        }.onFailure {
+            Timber.e(it)
         }
     }
 
