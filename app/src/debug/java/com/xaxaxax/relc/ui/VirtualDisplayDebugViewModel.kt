@@ -12,7 +12,8 @@ import com.xaxaxax.relc.display.NoOpSink
 import com.xaxaxax.relc.display.VirtualDisplayController
 import com.xaxaxax.relc.input.InputController
 import com.xaxaxax.relc.script.ScriptEngine
-import com.xaxaxax.relc.shizuku.ShizukuUserService
+import com.xaxaxax.relc.shizuku.UserService
+import com.xaxaxax.relc.shizuku.runWhenAlive
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.delay
@@ -42,9 +43,14 @@ class VirtualDisplayDebugViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(DebugUiState())
     val uiState = _uiState.asStateFlow()
 
-    private var serviceHandle: ShizukuUserService.Handle<IRelcShizukuService>? = null
-
-    // Compose 透過此 StateFlow 取得 controller 來建立 SurfaceView binding
+    // Compose 透過此 Flow 來建立 SurfaceView binding
+    private val serviceFlow by lazy {
+        UserService.create(
+            viewModelScope,
+            RelcShizukuService::class,
+            IRelcShizukuService.Stub::asInterface
+        )
+    }
     private val _controllerState = MutableStateFlow<VirtualDisplayController?>(null)
     val controllerState = _controllerState.asStateFlow()
     private var controller: VirtualDisplayController?
@@ -65,48 +71,53 @@ class VirtualDisplayDebugViewModel @Inject constructor(
             densityDpi = density,
         )
     }
-
     var inputController: InputController? = null
         private set
 
     // ─── Actions ──────────────────────────────────────────────────────────────
 
-    fun createWithNoOp() = withService { service ->
-        val ctrl = VirtualDisplayController(service)
-        ctrl.create(defaultConfig, NoOpSink())
-        controller = ctrl
-        inputController = InputController(service)
-        log("Created VD with NoOpSink, displayId=${ctrl.displayId}")
-        syncState(ctrl, showSurface = false)
+    fun createWithNoOp() = viewModelScope.launch {
+        serviceFlow.runWhenAlive { service ->
+            val ctrl = VirtualDisplayController(service)
+            ctrl.create(defaultConfig, NoOpSink())
+            controller = ctrl
+            inputController = InputController(service)
+            log("Created VD with NoOpSink, displayId=${ctrl.displayId}")
+            syncState(ctrl, showSurface = false)
+        }
     }
 
     /**
      * 用 NoOpSink 建立 VD，然後顯示 SurfaceView。
      * SurfaceView ready 後 VirtualDisplaySurfaceView 會自動 replaceSink(DirectSink)。
      */
-    fun createWithDirectSink() = withService { service ->
-        val ctrl = VirtualDisplayController(service)
-        ctrl.create(defaultConfig, NoOpSink())   // 先用 NoOpSink，等 Surface 準備好再換
-        controller = ctrl
-        inputController = InputController(service)
-        log("Created VD (waiting for SurfaceView...), displayId=${ctrl.displayId}")
-        syncState(ctrl, showSurface = true)
+    fun createWithDirectSink() = viewModelScope.launch {
+        serviceFlow.runWhenAlive { service ->
+            val ctrl = VirtualDisplayController(service)
+            ctrl.create(defaultConfig, NoOpSink())   // 先用 NoOpSink，等 Surface 準備好再換
+            controller = ctrl
+            inputController = InputController(service)
+            log("Created VD (waiting for SurfaceView...), displayId=${ctrl.displayId}")
+            syncState(ctrl, showSurface = true)
+        }
     }
 
-    fun createWithH264() = withService { service ->
-        val ctrl = VirtualDisplayController(service)
-        val h264Sink = H264EncoderSink(defaultConfig) { buffer, info ->
-            // 這裡處理編碼後的數據，例如：
-            // 1. 透過 WebSocket 發送給前端
-            // 2. 寫入檔案
-            log("Encoded frame size: ${info.size}")
-            // TODO: LocalSocket send
+    fun createWithH264() = viewModelScope.launch {
+        serviceFlow.runWhenAlive { service ->
+            val ctrl = VirtualDisplayController(service)
+            val h264Sink = H264EncoderSink(defaultConfig) { buffer, info ->
+                // 這裡處理編碼後的數據，例如：
+                // 1. 透過 WebSocket 發送給前端
+                // 2. 寫入檔案
+                log("Encoded frame size: ${info.size}")
+                // TODO: LocalSocket send
+            }
+            ctrl.create(defaultConfig, h264Sink)
+            controller = ctrl
+            inputController = InputController(service)
+            log("Created VD with H264EncoderSink")
+            syncState(ctrl, showSurface = false) // H264 模式通常不需要在手機端預覽 SurfaceView
         }
-        ctrl.create(defaultConfig, h264Sink)
-        controller = ctrl
-        inputController = InputController(service)
-        log("Created VD with H264EncoderSink")
-        syncState(ctrl, showSurface = false) // H264 模式通常不需要在手機端預覽 SurfaceView
     }
 
 
@@ -120,31 +131,36 @@ class VirtualDisplayDebugViewModel @Inject constructor(
     }.onFailure { log("destroy error: ${it.message}") }
 
     fun openApp(packageName: String, displayId: Int) {
-        withService { service ->
-            val result = service.launchInDisplay(packageName, displayId)
+        viewModelScope.launch {
+            serviceFlow.runWhenAlive { service ->
+                val result = service.launchInDisplay(packageName, displayId)
 
-            Timber.d("openApp: $result")
+                Timber.d("openApp: $result")
+            }
         }
     }
 
     fun testInput(displayId: Int) {
-        withService { service ->
-            val ic = InputController(service)
-            viewModelScope.launch {
-                log("Testing input on display $displayId...")
-                delay(1000.milliseconds)
-                ic.tap(500, 500, displayId)
-                delay(500.milliseconds)
-                ic.swipe(200, 1000, 800, 1000, 500, displayId)
-                log("Input test done")
+        viewModelScope.launch {
+            serviceFlow.runWhenAlive { service ->
+                val ic = InputController(service)
+                viewModelScope.launch {
+                    log("Testing input on display $displayId...")
+                    delay(1000.milliseconds)
+                    ic.tap(500, 500, displayId)
+                    delay(500.milliseconds)
+                    ic.swipe(200, 1000, 800, 1000, 500, displayId)
+                    log("Input test done")
+                }
             }
         }
     }
 
     fun runTestScript(displayId: Int) {
-        withService { service ->
-            val engine = ScriptEngine(service) { msg -> log(msg) }
-            val script = """
+        viewModelScope.launch {
+            serviceFlow.runWhenAlive { service ->
+                val engine = ScriptEngine(service) { msg -> log(msg) }
+                val script = """
                 log("Script started on display $displayId")
                 display.launch("moe.shizuku.privileged.api", $displayId)
                 sleep(2000)
@@ -156,50 +172,28 @@ class VirtualDisplayDebugViewModel @Inject constructor(
                 log("Script finished")
             """.trimIndent()
 
-            viewModelScope.launch {
-                runCatching {
-                    engine.execute(script)
-                }.onFailure {
-                    log("Script Error: ${it.message}")
+                viewModelScope.launch {
+                    runCatching {
+                        engine.execute(script)
+                    }.onFailure {
+                        log("Script Error: ${it.message}")
+                    }
                 }
             }
         }
     }
 
     fun debug(input: String) {
-        withService { service ->
-            val result = service.debug(input)
-            Timber.d("Debug: $result")
+        viewModelScope.launch {
+            serviceFlow.runWhenAlive { service ->
+                val result = service.debug(input)
+                Timber.d("Debug: $result")
+            }
         }
     }
 
 
     // ─── Helpers ──────────────────────────────────────────────────────────────
-
-    private fun withService(block: (IRelcShizukuService) -> Unit) {
-        viewModelScope.launch {
-            runCatching {
-                val handle = serviceHandle ?: run {
-                    // 使用 lastUpdateTime 作為版本：每次重裝都會改變，
-                    // 即使 versionCode 沒有更新也會讓 Shizuku 重啟 UserService 進程。
-                    val installVersion = context.packageManager
-                        .getPackageInfo(context.packageName, 0)
-                        .lastUpdateTime
-                        .toInt()
-                    ShizukuUserService.connect<IRelcShizukuService>(
-                        serviceClass = RelcShizukuService::class,
-                        asInterface = IRelcShizukuService.Stub::asInterface,
-                        version = installVersion,
-                    )
-                }.also { serviceHandle = it }
-                block(handle.service)
-            }.onFailure {
-                Timber.e(it)
-                log("Error: ${it.message}")
-            }
-            syncState(controller, uiState.value.showSurface)
-        }
-    }
 
     private fun syncState(ctrl: VirtualDisplayController?, showSurface: Boolean) {
         _uiState.update {

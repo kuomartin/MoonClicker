@@ -9,45 +9,56 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.xaxaxax.relc.IRelcShizukuService
 import com.xaxaxax.relc.RelcShizukuService
-import com.xaxaxax.relc.shizuku.ShizukuManager
-import com.xaxaxax.relc.shizuku.ShizukuUserService
+import com.xaxaxax.relc.shizuku.UserService
+import com.xaxaxax.relc.shizuku.hasShizukuPermission
+import com.xaxaxax.relc.shizuku.isShizukuAvailable
+import com.xaxaxax.relc.shizuku.refreshShizukuPermission
+import com.xaxaxax.relc.shizuku.runWhenAlive
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import jakarta.inject.Inject
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import timber.log.Timber
+import kotlin.time.Duration.Companion.milliseconds
 
 data class SettingsUiState(
     val hasShizukuPermission: Boolean = false,
     val isShizukuAvailable: Boolean = false,
     val hasOverlayPermission: Boolean = false,
-    val osAllowSecondaryDisplays: Boolean = false
+    val osAllowSecondaryDisplays: Boolean = false,
+    val isRefreshing: Boolean = false
 )
+
+private const val REFRESH_DELAY = 500
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
-    private val shizukuManager: ShizukuManager,
     @ApplicationContext
     private val context: Context
 ) : ViewModel() {
     private val _hasOverlayPermission = MutableStateFlow(false)
     private val _osAllowSecondaryDisplays = MutableStateFlow(false)
+    private val isRefreshing = MutableStateFlow(false)
 
     val uiState: StateFlow<SettingsUiState> = combine(
-        shizukuManager.hasPermission,
-        shizukuManager.isShizukuAvailable,
+        hasShizukuPermission,
+        isShizukuAvailable,
         _hasOverlayPermission,
-        _osAllowSecondaryDisplays
-    ) { hasShizuku, isShizuku, hasOverlay, allowSecondary ->
+        _osAllowSecondaryDisplays,
+        isRefreshing
+    ) { hasShizuku, isShizuku, hasOverlay, allowSecondary, isRefreshing ->
         SettingsUiState(
             hasShizukuPermission = hasShizuku,
             isShizukuAvailable = isShizuku,
             hasOverlayPermission = hasOverlay,
-            osAllowSecondaryDisplays = allowSecondary
+            osAllowSecondaryDisplays = allowSecondary,
+            isRefreshing = isRefreshing
         )
     }.stateIn(
         scope = viewModelScope,
@@ -59,18 +70,33 @@ class SettingsViewModel @Inject constructor(
         refreshPermissions()
     }
 
-    fun refreshPermissions() {
+    fun refreshPermissions(fromPullToRefresh: Boolean = false) {
         viewModelScope.launch {
-            _hasOverlayPermission.value = Settings.canDrawOverlays(context)
-            _osAllowSecondaryDisplays.value = context.packageManager.hasSystemFeature(
-                PackageManager.FEATURE_ACTIVITIES_ON_SECONDARY_DISPLAYS
-            )
+            try {
+                if (fromPullToRefresh) {
+                    Timber.d("fromPullToRefresh : $uiState")
+                    isRefreshing.value = true
+                    if (!uiState.value.hasShizukuPermission)
+                        refreshShizukuPermission()
+                }
+                _hasOverlayPermission.value = Settings.canDrawOverlays(context)
+                _osAllowSecondaryDisplays.value = context.packageManager.hasSystemFeature(
+                    PackageManager.FEATURE_ACTIVITIES_ON_SECONDARY_DISPLAYS
+                )
+            } catch (t: Throwable) {
+                Timber.e(t, "refreshPermissions failed")
+            } finally {
+                if (fromPullToRefresh) {
+                    delay(REFRESH_DELAY.milliseconds)
+                    Timber.d("fromPullToRefresh Done")
+                    isRefreshing.value = false
+                }
+            }
         }
     }
 
-    fun requestShizukuPermission() {
-        shizukuManager.requestPermission()
-    }
+    fun requestShizukuPermission() = com.xaxaxax.relc.shizuku.requestShizukuPermission()
+
 
     fun overlayPermissionIntent(): Intent {
         val intent = Intent(
@@ -97,17 +123,25 @@ class SettingsViewModel @Inject constructor(
 
     fun requestOverlayPermissionByShizuku() {
         viewModelScope.launch {
-            val installVersion = context.packageManager
-                .getPackageInfo(context.packageName, 0)
-                .lastUpdateTime
-                .toInt()
-            val handle = ShizukuUserService.connect<IRelcShizukuService>(
-                serviceClass = RelcShizukuService::class,
-                asInterface = IRelcShizukuService.Stub::asInterface,
-                version = installVersion,
-            )
-            handle.service.setOverlayAllowed(context.packageName)
-            refreshPermissions()
+            try {
+                val installVersion = context.packageManager
+                    .getPackageInfo(context.packageName, 0)
+                    .lastUpdateTime
+                    .toInt()
+
+                val serviceFlow = UserService.create(
+                    viewModelScope,
+                    RelcShizukuService::class,
+                    IRelcShizukuService.Stub::asInterface
+                )
+
+                serviceFlow.runWhenAlive { service ->
+                    service.setOverlayAllowed(context.packageName)
+                }
+                refreshPermissions()
+            } catch (t: Throwable) {
+                Timber.e(t, "requestOverlayPermissionByShizuku failed")
+            }
         }
     }
 

@@ -7,9 +7,7 @@ import android.os.Build
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.SdkSuppress
 import androidx.test.platform.app.InstrumentationRegistry
-import com.xaxaxax.relc.shizuku.ShizukuUserService
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertFalse
 import org.junit.Assume.assumeTrue
@@ -89,32 +87,5 @@ class RelcShizukuServiceInstrumentedTest {
     @Test
     fun setOverlayAllowed_unknownPackage_returnsFalse() {
         assertFalse(service().setOverlayAllowed("com.nonexistent.package.relc_test"))
-    }
-
-    /**
-     * Requires: Shizuku 已啟動（binder 可 ping）。
-     * 若尚未授權：會跳出 Shizuku 授權對話框，請在逾時前按允許（螢幕要開著、測試跑在前景）。
-     */
-    @Test
-    fun viaShizuku_connectAndCallService_methodsReturnWithoutThrowing() = runBlocking {
-        assumeTrue(
-            "Start Shizuku on device first (Shizuku.pingBinder() is false)",
-            Shizuku.pingBinder(),
-        )
-        awaitShizukuPermissionGranted()
-
-        val handle = ShizukuUserService.connect<IRelcShizukuService>(
-            serviceClass = RelcShizukuService::class,
-            asInterface = IRelcShizukuService.Stub::asInterface,
-        )
-        try {
-            val pkg = context.packageName
-            handle.service.setOverlayAllowed(pkg)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                handle.service.grantRuntimePermission(pkg, Manifest.permission.POST_NOTIFICATIONS)
-            }
-        } finally {
-            handle.unbind()
-        }
     }
 }

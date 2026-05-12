@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Button
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -24,6 +25,9 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -42,8 +46,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.xaxaxax.relc.R
-import com.xaxaxax.relc.ui.theme.ReLCTheme
 import com.xaxaxax.relc.ui.component.Section
+import com.xaxaxax.relc.ui.theme.ReLCTheme
 
 typealias HealthCheckActions = List<Pair<String, () -> Unit>>
 
@@ -65,6 +69,7 @@ fun SettingsScreen(
         onOpenShizuku = { launcher.launch(viewModel.openShizukuIntent()) },
         onRequestShizukuPermission = { viewModel.requestShizukuPermission() },
         onGrantOverlay = { launcher.launch(viewModel.overlayPermissionIntent()) },
+        onRefresh = { viewModel.refreshPermissions(true) },
         onRequestOverlayPermissionByShizuku = {
             if (uiState.isShizukuAvailable && uiState.hasShizukuPermission) {
                 viewModel.requestOverlayPermissionByShizuku()
@@ -79,20 +84,21 @@ fun SettingsScreen(
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun SettingsScreenContent(
     uiState: SettingsUiState,
     onOpenShizuku: () -> Unit,
     onRequestShizukuPermission: () -> Unit,
     onGrantOverlay: () -> Unit,
+    onRefresh: () -> Unit,
     onRequestOverlayPermissionByShizuku: () -> Unit,
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val pullRefreshState = rememberPullToRefreshState()
 
     Scaffold(
-        modifier = Modifier
-            .nestedScroll(scrollBehavior.nestedScrollConnection),
+        modifier = Modifier,
         topBar = {
             MediumTopAppBar(
                 title = { Text("Settings") },
@@ -100,102 +106,120 @@ private fun SettingsScreenContent(
             )
         }
     ) { innerPadding ->
-        LazyColumn(
-            contentPadding = innerPadding,
-            modifier = Modifier.fillMaxSize()
+        PullToRefreshBox(
+            state = pullRefreshState,
+            isRefreshing = uiState.isRefreshing,
+            onRefresh = onRefresh,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
+            indicator = {
+                PullToRefreshDefaults.LoadingIndicator(
+                    state = pullRefreshState,
+                    isRefreshing = uiState.isRefreshing,
+                    modifier = Modifier.align(Alignment.TopCenter),
+                )
+            }
         ) {
-            item {
-                Section("Health Check") {
-                    val hasAnyFailure = !uiState.isShizukuAvailable ||
-                            !uiState.hasShizukuPermission ||
-                            !uiState.hasOverlayPermission ||
-                            !uiState.osAllowSecondaryDisplays
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .nestedScroll(scrollBehavior.nestedScrollConnection),
+            ) {
+                item {
+                    Section("Health Check") {
+                        val hasAnyFailure = !uiState.isShizukuAvailable ||
+                                !uiState.hasShizukuPermission ||
+                                !uiState.hasOverlayPermission ||
+                                !uiState.osAllowSecondaryDisplays
 
-                    if (hasAnyFailure) {
-                        ElevatedCard(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            shape = MaterialTheme.shapes.extraLarge
-                        ) {
-                            Column {
-                                var first = true
-                                if (!uiState.isShizukuAvailable) {
-                                    HealthCheckFailedItem(
-                                        painterResource(R.drawable.ic_shizuku_icon),
-                                        "Shizuku Not Running",
-                                        "Start the Shizuku service to enable advanced features.",
-                                        actions = listOf("Launch Shizuku" to onOpenShizuku)
-                                    )
-                                    first = false
-                                } else if (!uiState.hasShizukuPermission) {
-                                    HealthCheckFailedItem(
-                                        painterResource(R.drawable.ic_shizuku_icon),
-                                        "Shizuku Permission Required",
-                                        "Permission is required to interact with system services.",
-                                        actions = listOf("Grant Permission" to onRequestShizukuPermission)
-                                    )
-                                    first = false
-                                }
+                        if (hasAnyFailure) {
+                            ElevatedCard(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                shape = MaterialTheme.shapes.extraLarge
+                            ) {
+                                Column {
+                                    var first = true
+                                    if (!uiState.isShizukuAvailable) {
+                                        HealthCheckFailedItem(
+                                            painterResource(R.drawable.ic_shizuku_icon),
+                                            "Shizuku Not Running",
+                                            "Start the Shizuku service to enable advanced features.",
+                                            actions = listOf("Launch Shizuku" to onOpenShizuku)
+                                        )
+                                        first = false
+                                    } else if (!uiState.hasShizukuPermission) {
+                                        HealthCheckFailedItem(
+                                            painterResource(R.drawable.ic_shizuku_icon),
+                                            "Shizuku Permission Required",
+                                            "Permission is required to interact with system services.",
+                                            actions = listOf("Grant Permission" to onRequestShizukuPermission)
+                                        )
+                                        first = false
+                                    }
 
-                                if (!uiState.hasOverlayPermission) {
-                                    if (!first) HorizontalDivider(
-                                        modifier = Modifier.padding(
-                                            horizontal = 16.dp
+                                    if (!uiState.hasOverlayPermission) {
+                                        if (!first) HorizontalDivider(
+                                            modifier = Modifier.padding(
+                                                horizontal = 16.dp
+                                            )
                                         )
-                                    )
-                                    val actions = mutableListOf("Open Settings" to onGrantOverlay)
-                                    if (uiState.isShizukuAvailable and uiState.hasShizukuPermission)
-                                        actions += "Grant via Shizuku" to onRequestOverlayPermissionByShizuku
-                                    HealthCheckFailedItem(
-                                        painterResource(R.drawable.picture_in_picture_24px),
-                                        "Overlay Permission Required",
-                                        "Needed to display floating controls.",
-                                        actions = actions
-                                    )
-                                    first = false
-                                }
-                                if (!uiState.osAllowSecondaryDisplays) {
-                                    if (!first) HorizontalDivider(
-                                        modifier = Modifier.padding(
-                                            horizontal = 16.dp
+                                        val actions =
+                                            mutableListOf("Open Settings" to onGrantOverlay)
+                                        if (uiState.isShizukuAvailable and uiState.hasShizukuPermission)
+                                            actions += "Grant via Shizuku" to onRequestOverlayPermissionByShizuku
+                                        HealthCheckFailedItem(
+                                            painterResource(R.drawable.picture_in_picture_24px),
+                                            "Overlay Permission Required",
+                                            "Needed to display floating controls.",
+                                            actions = actions
                                         )
-                                    )
-                                    HealthCheckFailedItem(
-                                        painterResource(R.drawable.picture_in_picture_off_24px),
-                                        "Secondary Displays Disabled",
-                                        "The system disabled secondary displays, which is an important feature for this app.",
-                                        actions = listOf()
-                                    )
+                                        first = false
+                                    }
+                                    if (!uiState.osAllowSecondaryDisplays) {
+                                        if (!first) HorizontalDivider(
+                                            modifier = Modifier.padding(
+                                                horizontal = 16.dp
+                                            )
+                                        )
+                                        HealthCheckFailedItem(
+                                            painterResource(R.drawable.picture_in_picture_off_24px),
+                                            "Secondary Displays Disabled",
+                                            "The system disabled secondary displays, which is an important feature for this app.",
+                                            actions = listOf()
+                                        )
+                                    }
                                 }
                             }
                         }
-                    }
-                    if (uiState.isShizukuAvailable and uiState.hasShizukuPermission) {
-                        HealthCheckGood(
-                            painter = painterResource(R.drawable.ic_shizuku_icon),
-                            title = "Shizuku Running",
-                            description = "Service is active and authorized."
-                        )
-                    }
-                    if (uiState.hasOverlayPermission) {
-                        HealthCheckGood(
-                            painter = painterResource(R.drawable.picture_in_picture_24px),
-                            title = "Overlay Permission Granted",
-                            description = "Authorized to display over other apps."
-                        )
+                        if (uiState.isShizukuAvailable and uiState.hasShizukuPermission) {
+                            HealthCheckGood(
+                                painter = painterResource(R.drawable.ic_shizuku_icon),
+                                title = "Shizuku Running",
+                                description = "Service is active and authorized."
+                            )
+                        }
+                        if (uiState.hasOverlayPermission) {
+                            HealthCheckGood(
+                                painter = painterResource(R.drawable.picture_in_picture_24px),
+                                title = "Overlay Permission Granted",
+                                description = "Authorized to display over other apps."
+                            )
+                        }
                     }
                 }
-            }
 
-            item {
-                Section(name = "General") {
+                item {
+                    Section(name = "General") {
 //                    ToggleSettingItem(
 //                        name = "Dark Mode",
 //                        description = "Enable dark theme across the app",
 //                        checked = false,
 //                        onCheckedChange = {}
 //                    )
+                    }
                 }
             }
         }
@@ -299,6 +323,7 @@ private fun SettingsScreenPreview() {
                         hasOverlayPermission = true
                     )
                 },
+                onRefresh = { uiState = SettingsUiState() },
                 onRequestOverlayPermissionByShizuku = {
                     uiState = uiState.copy(
                         osAllowSecondaryDisplays = true

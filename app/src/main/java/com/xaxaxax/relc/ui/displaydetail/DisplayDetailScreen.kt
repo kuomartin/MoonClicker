@@ -6,4 +6,5 @@ import androidx.compose.runtime.Composable
 @Composable
 fun DisplayDetailScreen(id: String) {
     Text("Display #$id")
+
 }

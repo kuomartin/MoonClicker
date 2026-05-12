@@ -12,7 +12,6 @@ import timber.log.Timber
 class RelcActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (BuildConfig.DEBUG) Timber.plant(Timber.DebugTree())
         enableEdgeToEdge()
         setContent {
             ReLCTheme {

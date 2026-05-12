@@ -46,10 +46,6 @@ class VirtualDisplayDebugActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        if (Timber.treeCount == 0) {
-            Timber.plant(Timber.DebugTree())
-            Timber.d("Timber is here~~")
-        }
         enableEdgeToEdge()
         setContent {
             ReLCTheme {

@@ -54,7 +54,7 @@ fun DisplaysScreen(
         onNavigateToDetail = onNavigateToDetail,
         onPullRefresh = { viewModel.refreshDisplays(true) },
         onFabClick = {
-            if (uiState.isShizukuAvailable and uiState.hasShizukuPermission)
+            if (uiState.isShizukuReady)
                 viewModel.createDisplay()
             else {
                 Toast.makeText(
@@ -107,7 +107,7 @@ internal fun DisplaysScreenContent(
                     modifier = Modifier.align(Alignment.TopCenter),
                 )
             },
-            enabled = uiState.isShizukuAvailable and uiState.hasShizukuPermission,
+            enabled = uiState.isShizukuReady,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding),
@@ -153,8 +153,7 @@ private fun PreviewDisplaysScreen() {
         DisplaysScreenContent(
             uiState = DisplaysUiState(
                 displayIds = listOf(1, 42),
-                isShizukuAvailable = true,
-                hasShizukuPermission = true,
+                isShizukuReady = true,
             ),
             onNavigateToDetail = {},
             onPullRefresh = {},
