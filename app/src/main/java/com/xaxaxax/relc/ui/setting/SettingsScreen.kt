@@ -92,7 +92,6 @@ private fun SettingsScreenContent(
 
     Scaffold(
         modifier = Modifier
-            .fillMaxSize()
             .nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             MediumTopAppBar(
@@ -103,7 +102,7 @@ private fun SettingsScreenContent(
     ) { innerPadding ->
         LazyColumn(
             contentPadding = innerPadding,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxSize()
         ) {
             item {
                 Section("Health Check") {
