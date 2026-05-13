@@ -8,7 +8,6 @@ import com.xaxaxax.relc.script.ScriptRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
@@ -23,18 +22,18 @@ class ScriptsViewModel @Inject constructor(
         emptyList()
     )
 
-    val scriptState = scriptManager.state.stateIn(
+    val scriptStates = scriptManager.scriptStates.stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5000),
-        com.xaxaxax.relc.script.ScriptState.IDLE
+        emptyMap()
     )
 
     fun startScript(config: ScriptConfig) {
         scriptManager.startScript(config)
     }
 
-    fun stopScript() {
-        scriptManager.stopScript()
+    fun stopScript(id: String) {
+        scriptManager.stopScript(id)
     }
 
     fun deleteScript(id: String) {

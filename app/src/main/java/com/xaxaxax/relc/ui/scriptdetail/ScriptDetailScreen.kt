@@ -20,8 +20,8 @@ fun ScriptDetailScreen(
     viewModel: ScriptDetailViewModel = hiltViewModel()
 ) {
     val config by viewModel.config.collectAsState()
-    val state by viewModel.scriptManager.state.collectAsState()
-    val logs by viewModel.scriptManager.logs.collectAsState(initial = "")
+    val state by viewModel.scriptState.collectAsState()
+    val logs by viewModel.logs.collectAsState(initial = "")
 
     // Maintain a simple list of recent logs
     val logList = remember { mutableStateListOf<String>() }
@@ -43,7 +43,7 @@ fun ScriptDetailScreen(
                 },
                 actions = {
                     if (state == ScriptState.RUNNING) {
-                        IconButton(onClick = { viewModel.scriptManager.stopScript() }) {
+                        IconButton(onClick = { config?.let { viewModel.scriptManager.stopScript(it.id) } }) {
                             Icon(Icons.Default.Stop, contentDescription = "Stop", tint = MaterialTheme.colorScheme.error)
                         }
                     } else {

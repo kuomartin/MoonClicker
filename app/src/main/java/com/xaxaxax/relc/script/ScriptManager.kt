@@ -14,19 +14,25 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import timber.log.Timber
+import java.util.concurrent.ConcurrentHashMap
+import kotlin.time.Duration.Companion.milliseconds
+
+data class ScriptLog(val scriptId: String, val message: String)
 
 class ScriptManager {
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
-    private var currentJob: Job? = null
+    private val scriptJobs = ConcurrentHashMap<String, Job>()
 
-    private val _state = MutableStateFlow(ScriptState.IDLE)
-    val state: StateFlow<ScriptState> = _state
+    private val _scriptStates = MutableStateFlow<Map<String, ScriptState>>(emptyMap())
+    val scriptStates: StateFlow<Map<String, ScriptState>> = _scriptStates.asStateFlow()
 
-    private val _logs = MutableSharedFlow<String>(extraBufferCapacity = 100)
-    val logs: SharedFlow<String> = _logs
+    private val _logs = MutableSharedFlow<ScriptLog>(extraBufferCapacity = 100)
+    val logs: SharedFlow<ScriptLog> = _logs
 
     private val serviceFlow = UserService.create(
         scope,
@@ -35,15 +41,15 @@ class ScriptManager {
     )
 
     fun startScript(config: ScriptConfig) {
-        if (_state.value == ScriptState.RUNNING) {
-            Timber.w("A script is already running")
+        if (_scriptStates.value[config.id] == ScriptState.RUNNING) {
+            Timber.w("Script ${config.id} is already running")
             return
         }
 
-        currentJob?.cancel()
-        _state.value = ScriptState.RUNNING
+        scriptJobs[config.id]?.cancel()
+        _scriptStates.update { it + (config.id to ScriptState.RUNNING) }
 
-        currentJob = scope.launch {
+        val job = scope.launch {
             try {
                 when (config.loopMode) {
                     LoopMode.SINGLE -> executeSingle(config)
@@ -51,44 +57,47 @@ class ScriptManager {
                         for (i in 0 until config.loopCount) {
                             if (!isActive) break
                             executeSingle(config)
-                            if (i < config.loopCount - 1 && isActive) delay(config.intervalMs)
+                            if (i < config.loopCount - 1 && isActive) delay(config.intervalMs.milliseconds)
                         }
                     }
 
                     LoopMode.INFINITE -> {
                         while (isActive) {
                             executeSingle(config)
-                            if (isActive) delay(config.intervalMs)
+                            if (isActive) delay(config.intervalMs.milliseconds)
                         }
                     }
                 }
                 if (isActive) {
-                    _state.value = ScriptState.FINISHED
+                    _scriptStates.update { it + (config.id to ScriptState.FINISHED) }
                 }
             } catch (e: CancellationException) {
-                Timber.d("Script cancelled")
-                _state.value = ScriptState.IDLE
+                Timber.d("Script ${config.id} cancelled")
+                _scriptStates.update { it + (config.id to ScriptState.IDLE) }
             } catch (e: Exception) {
-                Timber.e(e, "Script execution error")
-                _state.value = ScriptState.ERROR
+                Timber.e(e, "Script ${config.id} execution error")
+                _scriptStates.update { it + (config.id to ScriptState.ERROR) }
+            } finally {
+                scriptJobs.remove(config.id)
             }
         }
+        scriptJobs[config.id] = job
     }
 
     private suspend fun executeSingle(config: ScriptConfig) {
         // Run only when Shizuku is alive
         serviceFlow.runWhenAlive { service ->
             val engine = ScriptEngine(service) { logMsg ->
-                scope.launch { _logs.emit(logMsg) }
+                scope.launch { _logs.emit(ScriptLog(config.id, logMsg)) }
             }
             // Execute block is interruptible by coroutine cancellation
             engine.execute(config.code)
         }
     }
 
-    fun stopScript() {
-        currentJob?.cancel()
-        currentJob = null
-        _state.value = ScriptState.IDLE
+    fun stopScript(scriptId: String) {
+        scriptJobs[scriptId]?.cancel()
+        scriptJobs.remove(scriptId)
+        _scriptStates.update { it + (scriptId to ScriptState.IDLE) }
     }
 }

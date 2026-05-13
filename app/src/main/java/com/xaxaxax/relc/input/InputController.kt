@@ -95,7 +95,7 @@ class InputController(private val service: IRelcShizukuService) {
 }
 
 /**
- * Manages multi-touch state for script-driven input.
+ * Manages multitouch state for script-driven input.
  * Ensures correct ACTION_POINTER_DOWN/UP and ActionIndex calculation.
  */
 class MultiTouchScriptController(private val controller: InputController) {

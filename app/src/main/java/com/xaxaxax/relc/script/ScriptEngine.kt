@@ -1,18 +1,18 @@
 package com.xaxaxax.relc.script
 
 import com.xaxaxax.relc.IRelcShizukuService
-import com.xaxaxax.relc.core.DisplayConfig
 import com.xaxaxax.relc.display.VirtualDisplayController
 import com.xaxaxax.relc.input.InputController
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 import org.luaj.vm2.LuaValue
-import org.luaj.vm2.lib.LibFunction
+import org.luaj.vm2.Varargs
 import org.luaj.vm2.lib.OneArgFunction
 import org.luaj.vm2.lib.ThreeArgFunction
 import org.luaj.vm2.lib.TwoArgFunction
 import org.luaj.vm2.lib.VarArgFunction
-import org.luaj.vm2.lib.ZeroArgFunction
 import org.luaj.vm2.lib.jse.JsePlatform
 import timber.log.Timber
 
@@ -37,7 +37,7 @@ class ScriptEngine(
         displayLib.set("launch", object : TwoArgFunction() {
             override fun call(pkg: LuaValue, id: LuaValue): LuaValue {
                 val result = service.launchInDisplay(pkg.tojstring(), id.toint())
-                return LuaValue.valueOf(result)
+                return valueOf(result)
             }
         })
         // TODO: display.create, display.destroy
@@ -52,7 +52,7 @@ class ScriptEngine(
             }
         })
         inputLib.set("swipe", object : VarArgFunction() {
-            override fun invoke(args: org.luaj.vm2.Varargs): org.luaj.vm2.Varargs {
+            override fun invoke(args: Varargs): Varargs {
                 val x1 = args.arg(1).toint()
                 val y1 = args.arg(2).toint()
                 val x2 = args.arg(3).toint()
@@ -64,7 +64,7 @@ class ScriptEngine(
             }
         })
         inputLib.set("down", object : VarArgFunction() {
-            override fun invoke(args: org.luaj.vm2.Varargs): org.luaj.vm2.Varargs {
+            override fun invoke(args: Varargs): Varargs {
                 val id = args.arg(1).toint()
                 val x = args.arg(2).tofloat()
                 val y = args.arg(3).tofloat()
@@ -74,7 +74,7 @@ class ScriptEngine(
             }
         })
         inputLib.set("move", object : VarArgFunction() {
-            override fun invoke(args: org.luaj.vm2.Varargs): org.luaj.vm2.Varargs {
+            override fun invoke(args: Varargs): Varargs {
                 val id = args.arg(1).toint()
                 val x = args.arg(2).tofloat()
                 val y = args.arg(3).tofloat()
@@ -109,16 +109,16 @@ class ScriptEngine(
         })
     }
 
-    suspend fun execute(script: String) = withContext(Dispatchers.IO) {
+    suspend fun execute(script: String): LuaValue? = withContext(Dispatchers.IO) {
         try {
-            kotlinx.coroutines.runInterruptible {
+            runInterruptible {
                 val chunk = globals.load(script)
                 chunk.call()
             }
         } catch (e: Exception) {
-            if (e is kotlinx.coroutines.CancellationException || e is InterruptedException || e.cause is InterruptedException) {
+            if (e is CancellationException || e is InterruptedException || e.cause is InterruptedException) {
                 Timber.d("Script execution cancelled")
-                throw kotlinx.coroutines.CancellationException("Script cancelled")
+                throw CancellationException("Script cancelled")
             }
             Timber.e(e, "Script execution failed")
             onLog("Error: ${e.message}")
