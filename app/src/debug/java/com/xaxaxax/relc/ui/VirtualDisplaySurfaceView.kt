@@ -34,6 +34,7 @@ fun VirtualDisplaySurfaceView(
     controller: VirtualDisplayController,
     inputController: InputController,
     config: DisplayConfig,
+    isReadOnly: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     // 預先準備好矩陣與座標矩形，避免在 onTouch 中頻繁分配記憶體
@@ -86,6 +87,7 @@ fun VirtualDisplaySurfaceView(
 
                     // 攔截觸控事件
                     setOnTouchListener { view, event ->
+                        if (isReadOnly) return@setOnTouchListener false
                         val displayId = controller.displayId
                         if (displayId != -1) {
                             // 計算從 View (src) 到 VirtualDisplay (dst) 的變換矩陣
@@ -97,6 +99,17 @@ fun VirtualDisplaySurfaceView(
                     }
                 }
             },
+            update = { view ->
+                view.setOnTouchListener { v, event ->
+                    if (isReadOnly) return@setOnTouchListener false
+                    val displayId = controller.displayId
+                    if (displayId != -1) {
+                        srcRect.set(0f, 0f, v.width.toFloat(), v.height.toFloat())
+                        inputController.injectMotionEvent(event, displayId, touchMatrix)
+                    }
+                    true
+                }
+            }
         )
     }
 }

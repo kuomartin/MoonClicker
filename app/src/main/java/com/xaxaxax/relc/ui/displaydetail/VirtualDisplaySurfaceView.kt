@@ -36,6 +36,7 @@ fun VirtualDisplaySurfaceView(
     controller: VirtualDisplayController,
     inputController: InputController,
     config: DisplayConfig,
+    isReadOnly: Boolean,
     modifier: Modifier = Modifier,
 ) {
     // 預先準備好矩陣與座標矩形，避免在 onTouch 中頻繁分配記憶體
@@ -92,6 +93,7 @@ fun VirtualDisplaySurfaceView(
                     touchMatrix.setRectToRect(srcRect, dstRect, Matrix.ScaleToFit.FILL)
 
                     setOnTouchListener { _, event ->
+                        if (isReadOnly) return@setOnTouchListener false
                         val displayId = controller.displayId
                         if (displayId != -1) {
                             inputController.injectMotionEvent(event, displayId, touchMatrix)
@@ -100,6 +102,16 @@ fun VirtualDisplaySurfaceView(
                     }
                 }
             },
+            update = { view ->
+                view.setOnTouchListener { _, event ->
+                    if (isReadOnly) return@setOnTouchListener false
+                    val displayId = controller.displayId
+                    if (displayId != -1) {
+                        inputController.injectMotionEvent(event, displayId, touchMatrix)
+                    }
+                    true
+                }
+            }
         )
     }
 }

@@ -178,6 +178,66 @@ class RelcShizukuService(private val context: Context) : IRelcShizukuService.Stu
         }
     }
 
+    override fun launchHome(displayId: Int): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            launchHomeViaATM(displayId)
+        } else {
+            launchHomeViaIAM(displayId)
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.R)
+    private fun launchHomeViaATM(displayId: Int) = runCatching {
+        val intent = Intent(Intent.ACTION_MAIN).apply {
+            addCategory(Intent.CATEGORY_HOME)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        val options = ActivityOptions.makeBasic()
+        Refine.unsafeCast<ActivityOptionsHidden>(options).setLaunchDisplayId(displayId)
+
+        val atm = ActivityTaskManager.getService()
+        val result = atm.startActivity(
+            null, // IApplicationThread
+            "com.android.shell",
+            null, // callingFeatureId
+            intent,
+            null, // resolvedType
+            null, // resultTo
+            null, // resultWho
+            0,    // requestCode
+            0,    // flags
+            null, // ProfilerInfo
+            options.toBundle()
+        )
+        Timber.d("launchHomeViaATM result = $result")
+        checkStartActivityResult(result, intent)
+    }.isSuccess
+
+    private fun launchHomeViaIAM(displayId: Int) = runCatching {
+        val intent = Intent(Intent.ACTION_MAIN).apply {
+            addCategory(Intent.CATEGORY_HOME)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        val options = ActivityOptions.makeBasic()
+        Refine.unsafeCast<ActivityOptionsHidden>(options).setLaunchDisplayId(displayId)
+
+        val iam = ActivityManagerHidden.getService()
+        val result = iam.startActivity(
+            null, // IApplicationThread
+            "com.android.shell",
+            intent,
+            null, // resolvedType
+            null, // resultTo
+            null, // resultWho
+            0,    // requestCode
+            0,    // flags
+            null, // ProfilerInfo
+            options.toBundle()
+        )
+        Timber.d("launchHomeViaIAM result = $result")
+        checkStartActivityResult(result, intent)
+    }.isSuccess
+
     @RequiresApi(Build.VERSION_CODES.R)
     private fun launchAppViaATM(packageName: String, displayId: Int) = runCatching {
         // Whether the application are running or not, ATM will handle everything.

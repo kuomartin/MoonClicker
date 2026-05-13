@@ -14,6 +14,7 @@ interface IRelcShizukuService {
     int[] getVirtualDisplays() = 104;
     // 在指定 Display 中啟動 App
     boolean launchInDisplay(String packageName, int displayId) = 105;
+    boolean launchHome(int displayId) = 106;
 
     // Input 注入
     boolean injectMotionEvent(in MotionEvent event, int displayId) = 201;
