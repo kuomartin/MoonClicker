@@ -3,8 +3,10 @@ package com.xaxaxax.relc.input
 import android.graphics.Matrix
 import android.os.SystemClock
 import android.view.InputDevice
+import android.view.KeyEvent
 import android.view.MotionEvent
 import com.xaxaxax.relc.IRelcShizukuService
+import com.xaxaxax.relc.script.simple.SimplePhysicalKey
 import timber.log.Timber
 
 /**
@@ -38,6 +40,24 @@ class InputController(private val service: IRelcShizukuService) {
         }
 
         injectUp(x2, y2, SystemClock.uptimeMillis(), displayId)
+    }
+
+    fun injectPhysicalKey(key: SimplePhysicalKey, displayId: Int) {
+        injectKey(key.keyCode, displayId)
+    }
+
+    private fun injectKey(keyCode: Int, displayId: Int) {
+        val downTime = SystemClock.uptimeMillis()
+        val down = KeyEvent(downTime, downTime, KeyEvent.ACTION_DOWN, keyCode, 0)
+        val upTime = downTime + 50
+        val up = KeyEvent(upTime, upTime, KeyEvent.ACTION_UP, keyCode, 0)
+        try {
+            service.injectKeyEvent(down, displayId)
+            SystemClock.sleep(20)
+            service.injectKeyEvent(up, displayId)
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to inject key event")
+        }
     }
 
     private fun injectDown(x: Int, y: Int, time: Long, displayId: Int) {

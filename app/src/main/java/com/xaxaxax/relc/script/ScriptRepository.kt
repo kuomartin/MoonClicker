@@ -1,5 +1,9 @@
 package com.xaxaxax.relc.script
 
+import com.xaxaxax.relc.script.simple.SimpleScriptBodyJson
+import com.xaxaxax.relc.script.simple.SimpleScriptCodec
+import com.xaxaxax.relc.script.simple.SimpleStepJson
+import com.xaxaxax.relc.script.simple.SimpleStepKind
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -10,30 +14,61 @@ class ScriptRepository {
     val scripts: StateFlow<List<ScriptConfig>> = _scripts.asStateFlow()
 
     init {
-        // Load dummy data
         _scripts.value = listOf(
             ScriptConfig(
                 id = UUID.randomUUID().toString(),
                 name = "Demo Tap Script",
-                description = "Taps the center of the screen",
+                description = "Lua taps center",
+                type = ScriptCodeType.LUA,
+                init = null,
                 code = """
                     log("Starting tap script")
                     input.tap(540, 960, 0)
                     sleep(1000)
                     log("Tap script finished")
-                """.trimIndent()
+                """.trimIndent(),
+                clean = null,
+                alwaysRunClean = false,
+                loopMode = LoopMode.None,
             ),
             ScriptConfig(
                 id = UUID.randomUUID().toString(),
                 name = "Infinite Swipe",
-                description = "Swipes continuously",
+                description = "Lua swipes continuously",
+                type = ScriptCodeType.LUA,
+                init = null,
                 code = """
                     log("Swiping...")
                     input.swipe(540, 1500, 540, 500, 500, 0)
                 """.trimIndent(),
-                loopMode = LoopMode.INFINITE,
-                intervalMs = 1000
-            )
+                clean = null,
+                alwaysRunClean = false,
+                loopMode = LoopMode.Inf(),
+            ),
+            ScriptConfig(
+                id = UUID.randomUUID().toString(),
+                name = "Simple Tap Demo",
+                description = "JSON SIMPLE script",
+                type = ScriptCodeType.SIMPLE,
+                init = null,
+                code = SimpleScriptCodec.encode(
+                    SimpleScriptBodyJson(
+                        defaultDisplayId = 0,
+                        steps = listOf(
+                            SimpleStepJson(
+                                kind = SimpleStepKind.TAP,
+                                x = 540,
+                                y = 960,
+                                repeatCount = 1,
+                                delayAfterStepMs = 500,
+                            ),
+                        ),
+                    ),
+                ),
+                clean = null,
+                alwaysRunClean = false,
+                loopMode = LoopMode.None,
+            ),
         )
     }
 

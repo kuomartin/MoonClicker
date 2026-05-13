@@ -88,6 +88,7 @@ dependencies {
     // LuaJ
     implementation(libs.luaj)
 
+    implementation(libs.kotlinx.serialization.json)
 
     // Hilt
     implementation(libs.hilt.android.core)
@@ -99,4 +100,5 @@ dependencies {
     // JVM tests - Hilt
     testImplementation(libs.hilt.android.testing)
     kspTest(libs.hilt.compiler)
+    implementation(kotlin("reflect"))
 }

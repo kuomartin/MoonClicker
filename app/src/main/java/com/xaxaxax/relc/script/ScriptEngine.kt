@@ -109,6 +109,11 @@ class ScriptEngine(
         })
     }
 
+    suspend fun executeIfPresent(script: String?) {
+        if (script.isNullOrBlank()) return
+        execute(script)
+    }
+
     suspend fun execute(script: String): LuaValue? = withContext(Dispatchers.IO) {
         try {
             runInterruptible {

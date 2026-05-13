@@ -1,23 +1,26 @@
 package com.xaxaxax.relc.ui.scriptdetail
 
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -26,12 +29,20 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.xaxaxax.relc.script.LoopMode
+import com.xaxaxax.relc.script.ScriptCodeType
 import com.xaxaxax.relc.script.ScriptConfig
 import com.xaxaxax.relc.script.ScriptState
+import com.xaxaxax.relc.script.simple.SimpleScriptCodec
+import com.xaxaxax.relc.ui.component.Section
+import com.xaxaxax.relc.ui.theme.ReLCTheme
+import kotlinx.coroutines.launch
 
 @Composable
 fun ScriptDetailScreen(
@@ -67,14 +78,16 @@ fun ScriptDetailScreenContent(
     onPlay: () -> Unit,
     onStop: () -> Unit
 ) {
-    // Maintain a simple list of recent logs
-    val logList = remember { mutableStateListOf<String>() }
+    val logLines = remember { mutableStateListOf<String>() }
     LaunchedEffect(latestLog) {
         if (latestLog.isNotEmpty()) {
-            logList.add(latestLog)
-            if (logList.size > 50) logList.removeAt(0)
+            logLines.add(latestLog)
+            if (logLines.size > 50) logLines.removeAt(0)
         }
     }
+
+    val pagerState = rememberPagerState { 2 }
+    val scope = rememberCoroutineScope()
 
     Scaffold(
         topBar = {
@@ -86,34 +99,42 @@ fun ScriptDetailScreenContent(
                     }
                 },
                 actions = {
-                    if (state == ScriptState.RUNNING) {
-                        IconButton(onClick = onStop) {
-                            Icon(
-                                Icons.Default.Stop,
-                                contentDescription = "Stop",
-                                tint = MaterialTheme.colorScheme.error
-                            )
-                        }
-                    } else {
-                        IconButton(onClick = {
-                            onSave()
-                            onPlay()
-                        }) {
-                            Icon(
-                                Icons.Default.PlayArrow,
-                                contentDescription = "Play",
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    }
-                    Button(onClick = {
+                    IconButton(onClick = {
                         onSave()
-                        onNavigateBack()
                     }) {
-                        Text("Save")
+                        Icon(
+                            Icons.Default.Save,
+                            contentDescription = "Save",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
                     }
                 }
             )
+        },
+        floatingActionButton = {
+            if (config != null) {
+                ExtendedFloatingActionButton(
+                    onClick = {
+                        if (state == ScriptState.RUNNING) {
+                            onStop()
+                        } else {
+                            onSave()
+                            onPlay()
+                        }
+                    },
+                    icon = {
+                        Icon(
+                            if (state == ScriptState.RUNNING) Icons.Default.Stop else Icons.Default.PlayArrow,
+                            contentDescription = null
+                        )
+                    },
+                    text = {
+                        Text(if (state == ScriptState.RUNNING) "停止" else "執行")
+                    },
+                    containerColor = if (state == ScriptState.RUNNING) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = if (state == ScriptState.RUNNING) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
         }
     ) { padding ->
         config?.let { currentConfig ->
@@ -121,39 +142,147 @@ fun ScriptDetailScreenContent(
                 modifier = Modifier
                     .padding(padding)
                     .fillMaxSize()
-                    .padding(16.dp)
             ) {
-                OutlinedTextField(
-                    value = currentConfig.name,
-                    onValueChange = { newValue -> onUpdateConfig { it.copy(name = newValue) } },
-                    label = { Text("Script Name") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = currentConfig.code,
-                    onValueChange = { newValue -> onUpdateConfig { c -> c.copy(code = newValue) } },
-                    label = { Text("Lua Code") },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    textStyle = MaterialTheme.typography.bodySmall
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                // Console Area
-                Text("Console", style = MaterialTheme.typography.titleSmall)
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(150.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    shape = MaterialTheme.shapes.small
-                ) {
-                    Column(modifier = Modifier.padding(8.dp)) {
-                        logList.takeLast(10).forEach { log ->
-                            Text(text = log, style = MaterialTheme.typography.bodySmall)
-                        }
+                PrimaryTabRow(selectedTabIndex = pagerState.currentPage) {
+                    Tab(
+                        selected = pagerState.currentPage == 0,
+                        onClick = { scope.launch { pagerState.animateScrollToPage(0) } },
+                        text = { Text("配置") }
+                    )
+                    Tab(
+                        selected = pagerState.currentPage == 1,
+                        onClick = { scope.launch { pagerState.animateScrollToPage(1) } },
+                        text = { Text("編輯器") }
+                    )
+                }
+
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.Top
+                ) { page ->
+                    when (page) {
+                        0 -> ConfigPage(currentConfig, onUpdateConfig)
+                        1 -> EditorPage(currentConfig, onUpdateConfig)
                     }
+                }
+
+                ScriptConsole(logLines = logLines)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ConfigPage(
+    currentConfig: ScriptConfig,
+    onUpdateConfig: ((ScriptConfig) -> ScriptConfig) -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(bottom = 80.dp) // Space for FAB
+    ) {
+        Section(name = "基本資訊") {
+            FormOutlinedField(
+                value = currentConfig.name,
+                onValueChange = { v -> onUpdateConfig { it.copy(name = v) } },
+                label = "名稱",
+            )
+            FormOutlinedField(
+                value = currentConfig.description,
+                onValueChange = { v -> onUpdateConfig { it.copy(description = v) } },
+                label = "描述",
+            )
+        }
+
+        Section(name = "執行策略") {
+            ScriptTypeDropdown(type = currentConfig.type) { newType ->
+                if (newType == currentConfig.type) return@ScriptTypeDropdown
+                onUpdateConfig { cfg ->
+                    when (newType) {
+                        ScriptCodeType.LUA -> cfg.copy(
+                            type = ScriptCodeType.LUA,
+                            code = if (cfg.code.isBlank()) "log(\"hello\")\n" else cfg.code,
+                        )
+
+                        ScriptCodeType.SIMPLE -> cfg.copy(
+                            type = ScriptCodeType.SIMPLE,
+                            code = SimpleScriptCodec.emptyBodyJson(),
+                        )
+                    }
+                }
+            }
+            MacroLoopEditor(
+                loopMode = currentConfig.loopMode,
+                onLoopModeChange = { mode ->
+                    onUpdateConfig { it.copy(loopMode = mode) }
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun EditorPage(
+    currentConfig: ScriptConfig,
+    onUpdateConfig: ((ScriptConfig) -> ScriptConfig) -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(bottom = 80.dp) // Space for FAB
+    ) {
+        Section(name = "內容") {
+            when (currentConfig.type) {
+                ScriptCodeType.LUA -> {
+                    FormOutlinedField(
+                        value = currentConfig.init.orEmpty(),
+                        onValueChange = { v ->
+                            onUpdateConfig { it.copy(init = v.ifBlank { null }) }
+                        },
+                        label = "Init（Lua，可選）",
+                        minLines = 2,
+                        singleLine = false,
+                    )
+                    FormOutlinedField(
+                        value = currentConfig.code,
+                        onValueChange = { v ->
+                            onUpdateConfig { it.copy(code = v) }
+                        },
+                        label = "Lua",
+                        minLines = 12,
+                        singleLine = false,
+                    )
+                    FormOutlinedField(
+                        value = currentConfig.clean.orEmpty(),
+                        onValueChange = { v ->
+                            onUpdateConfig { it.copy(clean = v.ifBlank { null }) }
+                        },
+                        label = "Clean（Lua，可選）",
+                        minLines = 2,
+                        singleLine = false,
+                    )
+                    AlwaysRunCleanRow(
+                        checked = currentConfig.alwaysRunClean,
+                        onCheckedChange = { checked ->
+                            onUpdateConfig { it.copy(alwaysRunClean = checked) }
+                        },
+                    )
+                }
+
+                ScriptCodeType.SIMPLE -> {
+                    SimpleScriptEditor(
+                        scriptId = currentConfig.id,
+                        code = currentConfig.code,
+                        onBodyChanged = { body ->
+                            onUpdateConfig {
+                                it.copy(code = SimpleScriptCodec.encode(body))
+                            }
+                        },
+                    )
                 }
             }
         }
@@ -163,14 +292,19 @@ fun ScriptDetailScreenContent(
 @Preview(showBackground = true)
 @Composable
 fun ScriptDetailScreenPreview() {
-    com.xaxaxax.relc.ui.theme.ReLCTheme {
+    ReLCTheme {
         Surface {
             ScriptDetailScreenContent(
                 config = ScriptConfig(
                     id = "1",
                     name = "My Awesome Script",
                     description = "",
-                    code = "log('Running script...')\ninput.tap(500, 500, 0)\nsleep(1000)\nlog('Done!')"
+                    type = ScriptCodeType.LUA,
+                    init = null,
+                    code = "log('Running script...')\ninput.tap(500, 500, 0)\nsleep(1000)\nlog('Done!')",
+                    clean = null,
+                    alwaysRunClean = false,
+                    loopMode = LoopMode.None,
                 ),
                 state = ScriptState.IDLE,
                 latestLog = "[Lua] Running script...",

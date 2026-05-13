@@ -3,6 +3,8 @@ package com.xaxaxax.relc.ui.scriptdetail
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.xaxaxax.relc.script.LoopMode
+import com.xaxaxax.relc.script.ScriptCodeType
 import com.xaxaxax.relc.script.ScriptConfig
 import com.xaxaxax.relc.script.ScriptManager
 import com.xaxaxax.relc.script.ScriptRepository
@@ -48,7 +50,12 @@ class ScriptDetailViewModel @Inject constructor(
                 id = UUID.randomUUID().toString(),
                 name = "New Script",
                 description = "",
-                code = "log(\"Hello ReLC\")\n"
+                type = ScriptCodeType.LUA,
+                init = null,
+                code = "log(\"Hello ReLC\")\n",
+                clean = null,
+                alwaysRunClean = false,
+                loopMode = LoopMode.None,
             )
         } else {
             _config.value = repository.getScript(scriptId)
