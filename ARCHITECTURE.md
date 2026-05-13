@@ -267,9 +267,11 @@ local id = display.create(1080, 1920)
 -- 在虛擬顯示器啟動 APP
 display.launch("com.example.app", id)
 
--- 輸入操作
-input.tap(540, 960, id)
-input.swipe(540, 1500, 540, 500, 500, id)   -- (x1,y1,x2,y2,durationMs,displayId)
+-- 輸入操作（displayId 為 Lua 全域，由腳本指派）
+displayId = id
+input.tap(50, 540, 960)                      -- (durationMs, x, y)
+input.swipe(500, 540, 1500, 540, 500)        -- durationMs, x1, y1, ...（奇數個參數；L2 弧長）
+input.swipeL1(500, 540, 1500, 540, 500)      -- 同上，L1（曼哈頓）弧長
 input.key(66, id)   -- keyCode 66 = ENTER
 
 -- 畫面截圖（返回 Bitmap userdata）
@@ -307,7 +309,7 @@ App 啟動
   └─► VirtualDisplayController.create(config, sink=NoOpSink)
   └─► service.launchInDisplay("target.app", displayId)
   └─► ScriptRunner.run("script.lua")
-        └─► input.tap(x, y, displayId)   ← 透過 InputController → Shizuku
+        └─► displayId = … ; input.tap(durationMs, x, y)   ← InputController → Shizuku
 ```
 
 ### 組合 1+2+5+6：視覺自動化
@@ -320,7 +322,7 @@ App 啟動
   └─► ScriptRunner.run("vision_script.lua")
         └─► local bmp = screen.capture(id)
         └─► local pos = vision.find(bmp, "button.png")
-        └─► input.tap(pos.x, pos.y, id)
+        └─► input.tap(50, pos.x, pos.y)   -- 事先設定全域 displayId
 ```
 
 ---

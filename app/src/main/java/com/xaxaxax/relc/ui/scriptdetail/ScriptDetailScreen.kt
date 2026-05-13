@@ -41,6 +41,7 @@ import com.xaxaxax.relc.script.ScriptConfig
 import com.xaxaxax.relc.script.ScriptState
 import com.xaxaxax.relc.script.simple.SimpleScriptCodec
 import com.xaxaxax.relc.ui.component.Section
+import com.xaxaxax.relc.ui.scriptdetail.component.ScriptTypeSegmentedButton
 import com.xaxaxax.relc.ui.theme.ReLCTheme
 import kotlinx.coroutines.launch
 
@@ -198,13 +199,13 @@ private fun ConfigPage(
         }
 
         Section(name = "執行策略") {
-            ScriptTypeDropdown(type = currentConfig.type) { newType ->
-                if (newType == currentConfig.type) return@ScriptTypeDropdown
+            ScriptTypeSegmentedButton(currentType = currentConfig.type){ newType ->
+                if (newType == currentConfig.type) return@ScriptTypeSegmentedButton
                 onUpdateConfig { cfg ->
                     when (newType) {
                         ScriptCodeType.LUA -> cfg.copy(
                             type = ScriptCodeType.LUA,
-                            code = if (cfg.code.isBlank()) "log(\"hello\")\n" else cfg.code,
+                            code = cfg.code.ifBlank { "log(\"hello\")\n" },
                         )
 
                         ScriptCodeType.SIMPLE -> cfg.copy(
@@ -301,7 +302,7 @@ fun ScriptDetailScreenPreview() {
                     description = "",
                     type = ScriptCodeType.LUA,
                     init = null,
-                    code = "log('Running script...')\ninput.tap(500, 500, 0)\nsleep(1000)\nlog('Done!')",
+                    code = "log('Running script...')\ndisplayId = 0\ninput.tap(50, 500, 500)\nsleep(1000)\nlog('Done!')",
                     clean = null,
                     alwaysRunClean = false,
                     loopMode = LoopMode.None,
@@ -313,6 +314,27 @@ fun ScriptDetailScreenPreview() {
                 onSave = {},
                 onPlay = {},
                 onStop = {}
+            )
+        }
+    }
+}
+@Preview(showBackground = true)
+@Composable
+fun EditorPagePreview() {
+    ReLCTheme {
+        Surface {
+            EditorPage(
+                currentConfig = ScriptConfig(
+                    id = "1",
+                    name = "My Awesome Script",
+                    description = "",
+                    type = ScriptCodeType.SIMPLE,
+                    init = null,
+                    code = SimpleScriptCodec.emptyBodyJson(),
+                    clean = null,
+                    alwaysRunClean = false,
+                    loopMode = LoopMode.None,
+                ),{}
             )
         }
     }

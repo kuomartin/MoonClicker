@@ -8,6 +8,8 @@ import android.view.MotionEvent
 import com.xaxaxax.relc.IRelcShizukuService
 import com.xaxaxax.relc.script.simple.SimplePhysicalKey
 import timber.log.Timber
+import kotlin.math.abs
+import kotlin.math.hypot
 
 /**
  * High-level input controller that uses IRelcShizukuService to inject events.
@@ -19,27 +21,89 @@ class InputController(private val service: IRelcShizukuService) {
      */
     val script = MultiTouchScriptController(this)
 
-    fun tap(x: Int, y: Int, displayId: Int) {
+    /** Single tap with configurable press duration (down → up). */
+    fun tap(durationMs: Long, x: Int, y: Int, displayId: Int) {
+        val hold = durationMs.coerceAtLeast(0L)
         val now = SystemClock.uptimeMillis()
         injectDown(x, y, now, displayId)
-        SystemClock.sleep(50)
+        if (hold > 0L) SystemClock.sleep(hold)
         injectUp(x, y, SystemClock.uptimeMillis(), displayId)
     }
 
-    fun swipe(x1: Int, y1: Int, x2: Int, y2: Int, durationMs: Long, displayId: Int) {
-        val startTime = SystemClock.uptimeMillis()
-        injectDown(x1, y1, startTime, displayId)
+    /**
+     * Drag through [points] over [durationMs]. Requires at least two points.
+     * Progress along the polyline is uniform in **Euclidean (L2) arc length** per segment.
+     */
+    fun swipePolyline(durationMs: Long, points: List<Pair<Int, Int>>, displayId: Int) {
+        swipePolylineInternal(durationMs, points, displayId, SegmentMetric.L2)
+    }
 
-        val steps = (durationMs / 16).toInt().coerceAtLeast(1)
-        for (i in 1..steps) {
-            val progress = i.toFloat() / steps
-            val x = x1 + (x2 - x1) * progress
-            val y = y1 + (y2 - y1) * progress
-            SystemClock.sleep(16)
-            injectMove(x.toInt(), y.toInt(), SystemClock.uptimeMillis(), displayId)
+    /**
+     * Same geometry as [swipePolyline], but each segment's contribution to arc length is
+     * **Manhattan (L1)**: |Δx| + |Δy|. Motion between vertices is still a straight line.
+     */
+    fun swipePolylineL1(durationMs: Long, points: List<Pair<Int, Int>>, displayId: Int) {
+        swipePolylineInternal(durationMs, points, displayId, SegmentMetric.L1)
+    }
+
+    private enum class SegmentMetric { L1, L2 }
+
+    private fun swipePolylineInternal(
+        durationMs: Long,
+        points: List<Pair<Int, Int>>,
+        displayId: Int,
+        metric: SegmentMetric,
+    ) {
+        require(points.size >= 2) { "swipe needs at least 2 points" }
+        val segLen = ArrayList<Double>(points.lastIndex)
+        var total = 0.0
+        for (i in 0 until points.lastIndex) {
+            val dx = (points[i + 1].first - points[i].first).toDouble()
+            val dy = (points[i + 1].second - points[i].second).toDouble()
+            val len = when (metric) {
+                SegmentMetric.L2 -> hypot(dx, dy)
+                SegmentMetric.L1 -> abs(dx) + abs(dy)
+            }
+            segLen.add(len)
+            total += len
         }
+        val startTime = SystemClock.uptimeMillis()
+        val p0 = points[0]
+        injectDown(p0.first, p0.second, startTime, displayId)
 
-        injectUp(x2, y2, SystemClock.uptimeMillis(), displayId)
+        val steps = (durationMs / 16L).toInt().coerceAtLeast(1)
+        for (i in 1..steps) {
+            val t = i.toFloat() / steps
+            val (x, y) = pointOnPolyline(points, segLen, total, t)
+            SystemClock.sleep(16)
+            injectMove(x, y, SystemClock.uptimeMillis(), displayId)
+        }
+        val last = points.last()
+        injectUp(last.first, last.second, SystemClock.uptimeMillis(), displayId)
+    }
+
+    private fun pointOnPolyline(
+        points: List<Pair<Int, Int>>,
+        segLen: List<Double>,
+        totalLen: Double,
+        t: Float,
+    ): Pair<Int, Int> {
+        if (totalLen <= 0.0) return points.last()
+        var dist = t.coerceIn(0f, 1f) * totalLen
+        if (dist >= totalLen) return points.last()
+        var i = 0
+        while (i < segLen.size && dist >= segLen[i]) {
+            dist -= segLen[i]
+            i++
+        }
+        if (i >= segLen.size) return points.last()
+        val pA = points[i]
+        val pB = points[i + 1]
+        val s = segLen[i]
+        val u = if (s <= 0.0) 0.0 else dist / s
+        val x = (pA.first + (pB.first - pA.first) * u).toInt()
+        val y = (pA.second + (pB.second - pA.second) * u).toInt()
+        return x to y
     }
 
     fun injectPhysicalKey(key: SimplePhysicalKey, displayId: Int) {

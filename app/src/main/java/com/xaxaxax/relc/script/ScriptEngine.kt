@@ -31,6 +31,8 @@ class ScriptEngine(
         setupApi()
     }
 
+    private fun readDisplayId(): Int = globals.get("displayId").optint(0)
+
     private fun setupApi() {
         // --- display ---
         val displayLib = LuaValue.tableOf()
@@ -43,49 +45,63 @@ class ScriptEngine(
         // TODO: display.create, display.destroy
         globals.set("display", displayLib)
 
+        /** Lua may assign `displayId = n`; injected APIs read it for input. */
+        globals.set("displayId", LuaValue.valueOf(0))
+
         // --- input ---
         val inputLib = LuaValue.tableOf()
         inputLib.set("tap", object : ThreeArgFunction() {
             override fun call(arg1: LuaValue, arg2: LuaValue, arg3: LuaValue): LuaValue {
-                inputController.tap(arg1.toint(), arg2.toint(), arg3.toint())
+                inputController.tap(
+                    arg1.tolong(),
+                    arg2.toint(),
+                    arg3.toint(),
+                    readDisplayId(),
+                )
                 return NIL
             }
         })
+        /** `durationMs, x1, y1, x2, y2, ...` — total arg count is odd (>= 5). Uses L2 arc length. */
         inputLib.set("swipe", object : VarArgFunction() {
             override fun invoke(args: Varargs): Varargs {
-                val x1 = args.arg(1).toint()
-                val y1 = args.arg(2).toint()
-                val x2 = args.arg(3).toint()
-                val y2 = args.arg(4).toint()
-                val duration = args.arg(5).tolong()
-                val id = args.arg(6).toint()
-                inputController.swipe(x1, y1, x2, y2, duration, id)
+                val (duration, pts) = parseSwipePolylineArgs(args, "input.swipe")
+                inputController.swipePolyline(duration, pts, readDisplayId())
                 return NIL
             }
         })
-        inputLib.set("down", object : VarArgFunction() {
+        /** Same args as `swipe`; uses Manhattan (L1) arc length — see [InputController.swipePolylineL1]. */
+        inputLib.set("swipeL1", object : VarArgFunction() {
             override fun invoke(args: Varargs): Varargs {
-                val id = args.arg(1).toint()
-                val x = args.arg(2).tofloat()
-                val y = args.arg(3).tofloat()
-                val displayId = args.arg(4).toint()
-                inputController.script.down(id, x, y, displayId)
+                val (duration, pts) = parseSwipePolylineArgs(args, "input.swipeL1")
+                inputController.swipePolylineL1(duration, pts, readDisplayId())
                 return NIL
             }
         })
-        inputLib.set("move", object : VarArgFunction() {
-            override fun invoke(args: Varargs): Varargs {
-                val id = args.arg(1).toint()
-                val x = args.arg(2).tofloat()
-                val y = args.arg(3).tofloat()
-                val displayId = args.arg(4).toint()
-                inputController.script.move(id, x, y, displayId)
+        inputLib.set("down", object : ThreeArgFunction() {
+            override fun call(arg1: LuaValue, arg2: LuaValue, arg3: LuaValue): LuaValue {
+                inputController.script.down(
+                    arg1.toint(),
+                    arg2.tofloat(),
+                    arg3.tofloat(),
+                    readDisplayId(),
+                )
                 return NIL
             }
         })
-        inputLib.set("up", object : TwoArgFunction() {
-            override fun call(arg1: LuaValue, arg2: LuaValue): LuaValue {
-                inputController.script.up(arg1.toint(), arg2.toint())
+        inputLib.set("move", object : ThreeArgFunction() {
+            override fun call(arg1: LuaValue, arg2: LuaValue, arg3: LuaValue): LuaValue {
+                inputController.script.move(
+                    arg1.toint(),
+                    arg2.tofloat(),
+                    arg3.tofloat(),
+                    readDisplayId(),
+                )
+                return NIL
+            }
+        })
+        inputLib.set("up", object : OneArgFunction() {
+            override fun call(arg1: LuaValue): LuaValue {
+                inputController.script.up(arg1.toint(), readDisplayId())
                 return NIL
             }
         })
@@ -107,6 +123,23 @@ class ScriptEngine(
                 return NIL
             }
         })
+    }
+
+    /** Parses `durationMs, x1, y1, ...` from Lua (odd nargs ≥ 5). */
+    private fun parseSwipePolylineArgs(args: Varargs, apiName: String): Pair<Long, List<Pair<Int, Int>>> {
+        val n = args.narg()
+        require(n % 2 == 1 && n >= 5) {
+            "$apiName(durationMs, x1, y1, ...) needs odd arg count >= 5"
+        }
+        val duration = args.arg(1).tolong()
+        val pts = ArrayList<Pair<Int, Int>>()
+        var j = 2
+        while (j < n) {
+            pts.add(args.arg(j).toint() to args.arg(j + 1).toint())
+            j += 2
+        }
+        require(pts.size >= 2) { "$apiName needs at least two x,y points after duration" }
+        return duration to pts
     }
 
     suspend fun executeIfPresent(script: String?) {

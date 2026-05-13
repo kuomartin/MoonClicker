@@ -147,9 +147,9 @@ class VirtualDisplayDebugViewModel @Inject constructor(
                 viewModelScope.launch {
                     log("Testing input on display $displayId...")
                     delay(1000.milliseconds)
-                    ic.tap(500, 500, displayId)
+                    ic.tap(500, 500, 500, displayId)
                     delay(500.milliseconds)
-                    ic.swipe(200, 1000, 800, 1000, 500, displayId)
+                    ic.swipePolyline(500, listOf(200 to 1000, 800 to 1000), displayId)
                     log("Input test done")
                 }
             }
@@ -165,10 +165,11 @@ class VirtualDisplayDebugViewModel @Inject constructor(
                 display.launch("moe.shizuku.privileged.api", $displayId)
                 sleep(2000)
                 log("Tapping...")
-                input.tap(500, 500, $displayId)
+                displayId = $displayId
+                input.tap(50, 500, 500)
                 sleep(1000)
                 log("Swiping...")
-                input.swipe(200, 1500, 200, 500, 500, $displayId)
+                input.swipe(500, 200, 1500, 200, 500)
                 log("Script finished")
             """.trimIndent()
 

@@ -3,13 +3,16 @@ package com.xaxaxax.relc.script.runner
 import com.xaxaxax.relc.input.InputController
 import com.xaxaxax.relc.script.ScriptConfig
 import com.xaxaxax.relc.script.ScriptEngine
+import com.xaxaxax.relc.script.simple.ParsedSimpleLine
 import com.xaxaxax.relc.script.simple.SimplePhysicalKey
-import com.xaxaxax.relc.script.simple.SimpleScriptBodyJson
 import com.xaxaxax.relc.script.simple.SimpleScriptCodec
-import com.xaxaxax.relc.script.simple.SimpleStepJson
-import com.xaxaxax.relc.script.simple.SimpleStepKind
+import com.xaxaxax.relc.script.simple.SimpleScriptVerb
+import com.xaxaxax.relc.script.simple.parseSimpleScriptLine
+import com.xaxaxax.relc.script.simple.parseSwipePayload
+import com.xaxaxax.relc.script.simple.parseTapPayload
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
+import kotlin.time.Duration.Companion.milliseconds
 
 class SimpleScriptRunner(
     private val ctx: ScriptRunContext,
@@ -36,8 +39,17 @@ class SimpleScriptRunner(
             hookEngine?.executeIfPresent(config.init)
             macroIterate(config.loopMode) {
                 if (!ctx.isActive()) throw CancellationException("Script cancelled")
-                for (step in body.steps) {
-                    executeSimpleStep(step, body, input)
+                var displayId = 0
+                for (raw in body.steps) {
+                    val line = raw.trim()
+                    if (line.isEmpty()) continue
+                    val parsed = try {
+                        parseSimpleScriptLine(line)
+                    } catch (e: Exception) {
+                        ctx.onLog("Bad SIMPLE line: $line — ${e.message}")
+                        throw e
+                    }
+                    displayId = executeParsedLine(parsed, displayId, input)
                 }
             }
             finishedNormally = true
@@ -61,47 +73,68 @@ class SimpleScriptRunner(
         }
     }
 
-    private suspend fun executeSimpleStep(
-        step: SimpleStepJson,
-        body: SimpleScriptBodyJson,
+    /**
+     * Runs one line; returns updated display id ([SimpleScriptVerb.SET_DISPLAY] changes it).
+     */
+    private suspend fun executeParsedLine(
+        p: ParsedSimpleLine,
+        displayId: Int,
         input: InputController,
-    ) {
-        require(step.repeatCount >= 1) { "repeatCount must be >= 1" }
-        val displayId = step.displayId ?: body.defaultDisplayId
-
-        repeat(step.repeatCount) { rep ->
-            when (step.kind) {
-                SimpleStepKind.TAP -> {
-                    val x = step.x ?: error("TAP requires x")
-                    val y = step.y ?: error("TAP requires y")
-                    input.tap(x, y, displayId)
-                }
-
-                SimpleStepKind.SWIPE -> {
-                    input.swipe(
-                        step.x1 ?: error("SWIPE requires x1"),
-                        step.y1 ?: error("SWIPE requires y1"),
-                        step.x2 ?: error("SWIPE requires x2"),
-                        step.y2 ?: error("SWIPE requires y2"),
-                        step.durationMs ?: error("SWIPE requires durationMs"),
-                        displayId,
-                    )
-                }
-
-                SimpleStepKind.DELAY -> delay(step.delayMs ?: error("DELAY requires delayMs"))
-
-                SimpleStepKind.KEY -> {
-                    val keyName = step.key ?: error("KEY requires key")
-                    input.injectPhysicalKey(SimplePhysicalKey.parse(keyName), displayId)
-                }
-
-                SimpleStepKind.TEXT -> ctx.onLog("TEXT step skipped (not implemented)")
+    ): Int {
+        when (p.verb) {
+            SimpleScriptVerb.SET_DISPLAY -> {
+                val id = p.payload.trim().toIntOrNull()
+                    ?: error("setDisplay payload must be an int")
+                if (p.delayAfterStepMs > 0) delay(p.delayAfterStepMs.milliseconds)
+                return id
             }
-            if (rep < step.repeatCount - 1 && step.delayBetweenRepeatsMs > 0) {
-                delay(step.delayBetweenRepeatsMs)
+
+            else -> {
+                repeat(p.repeatCount) { rep ->
+                    when (p.verb) {
+                        SimpleScriptVerb.TAP -> {
+                            val (x, y) = parseTapPayload(p.payload)
+                            input.tap(50L, x, y, displayId)
+                        }
+
+                        SimpleScriptVerb.SWIPE -> {
+                            val s = parseSwipePayload(p.payload)
+                            input.swipePolyline(
+                                s.durationMs,
+                                points = s.points,
+                                displayId = displayId
+                            )
+                        }
+
+                        SimpleScriptVerb.DELAY -> {
+                            val ms = p.payload.trim().toLongOrNull()
+                                ?: error("delay payload must be delayMs")
+                            delay(ms.milliseconds)
+                        }
+
+                        SimpleScriptVerb.KEY -> {
+                            val keyName = p.payload.trim()
+                            require(keyName.isNotEmpty()) { "key payload empty" }
+                            input.injectPhysicalKey(
+                                SimplePhysicalKey.parse(keyName),
+                                displayId,
+                            )
+                        }
+
+                        SimpleScriptVerb.TEXT -> {
+                            ctx.onLog("TEXT step skipped (not implemented): ${p.payload}")
+                        }
+
+                        SimpleScriptVerb.SET_DISPLAY -> error("internal")
+                    }
+                    if (rep < p.repeatCount - 1 && p.delayBetweenRepeatsMs > 0) {
+                        delay(p.delayBetweenRepeatsMs.milliseconds)
+                    }
+                }
+                if (p.delayAfterStepMs > 0) delay(p.delayAfterStepMs.milliseconds)
+                return displayId
             }
         }
-        if (step.delayAfterStepMs > 0) delay(step.delayAfterStepMs)
     }
 }
 

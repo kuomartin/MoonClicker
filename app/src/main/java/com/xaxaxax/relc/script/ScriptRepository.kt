@@ -2,8 +2,6 @@ package com.xaxaxax.relc.script
 
 import com.xaxaxax.relc.script.simple.SimpleScriptBodyJson
 import com.xaxaxax.relc.script.simple.SimpleScriptCodec
-import com.xaxaxax.relc.script.simple.SimpleStepJson
-import com.xaxaxax.relc.script.simple.SimpleStepKind
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -23,7 +21,8 @@ class ScriptRepository {
                 init = null,
                 code = """
                     log("Starting tap script")
-                    input.tap(540, 960, 0)
+                    displayId = 0
+                    input.tap(50, 540, 960)
                     sleep(1000)
                     log("Tap script finished")
                 """.trimIndent(),
@@ -39,7 +38,8 @@ class ScriptRepository {
                 init = null,
                 code = """
                     log("Swiping...")
-                    input.swipe(540, 1500, 540, 500, 500, 0)
+                    displayId = 0
+                    input.swipe(500, 540, 1500, 540, 500)
                 """.trimIndent(),
                 clean = null,
                 alwaysRunClean = false,
@@ -53,15 +53,8 @@ class ScriptRepository {
                 init = null,
                 code = SimpleScriptCodec.encode(
                     SimpleScriptBodyJson(
-                        defaultDisplayId = 0,
                         steps = listOf(
-                            SimpleStepJson(
-                                kind = SimpleStepKind.TAP,
-                                x = 540,
-                                y = 960,
-                                repeatCount = 1,
-                                delayAfterStepMs = 500,
-                            ),
+                            "tap:1:0:500:540,960",
                         ),
                     ),
                 ),
