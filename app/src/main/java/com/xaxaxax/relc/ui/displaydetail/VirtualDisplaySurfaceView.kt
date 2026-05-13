@@ -68,7 +68,7 @@ fun VirtualDisplaySurfaceView(
                 Timber.d("VirtualDisplaySurfaceView: surfaceDestroyed")
                 if (controller.state != VirtualDisplayController.State.CREATED) return
                 runCatching {
-                    controller.replaceSink(NoOpSink())
+                    controller.replaceSink(NoOpSink)
                 }.onFailure {
                     Timber.e(it, "replaceSink(NoOpSink) failed")
                 }

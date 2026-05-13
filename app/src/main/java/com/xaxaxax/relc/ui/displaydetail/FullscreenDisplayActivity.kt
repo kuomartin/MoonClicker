@@ -9,24 +9,24 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -37,17 +37,10 @@ import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import com.xaxaxax.relc.IRelcShizukuService
-import com.xaxaxax.relc.RelcShizukuService
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.xaxaxax.relc.core.DisplayConfig
-import com.xaxaxax.relc.display.VirtualDisplayController
-import com.xaxaxax.relc.input.InputController
-import com.xaxaxax.relc.shizuku.UserService
-import com.xaxaxax.relc.shizuku.runWhenAlive
 import com.xaxaxax.relc.ui.theme.ReLCTheme
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.launch
 import timber.log.Timber
 import kotlin.math.roundToInt
 
@@ -72,53 +65,22 @@ class FullscreenDisplayActivity : ComponentActivity() {
 
         setContent {
             ReLCTheme {
-                FullscreenDisplayScreen(displayId = displayId)
+                FullscreenDisplayScreen()
             }
         }
     }
 }
 
+data class AppEntry(val packageName: String, val label: String)
+
 @Composable
-fun FullscreenDisplayScreen(displayId: Int) {
+fun FullscreenDisplayScreen(
+    viewModel: FullscreenDisplayViewModel = hiltViewModel()
+) {
     val activity = LocalActivity.current
-    val intent = activity?.intent
-    val scope = rememberCoroutineScope()
-    val serviceFlow = remember {
-        UserService.create(
-            scope,
-            RelcShizukuService::class,
-            IRelcShizukuService.Stub::asInterface
-        )
-    }
-
-    val controllerState = remember { MutableStateFlow<VirtualDisplayController?>(null) }
-    val inputControllerState = remember { MutableStateFlow<InputController?>(null) }
-
-    val controller by controllerState.collectAsState()
-    val inputController by inputControllerState.collectAsState()
-
-    var isReadOnly by remember {
-        mutableStateOf(intent?.getBooleanExtra("isReadOnly", false) ?: false)
-    }
-    var menuExpanded by remember { mutableStateOf(false) }
-    var menuOffsetX by remember { mutableFloatStateOf(0f) }
-    var menuOffsetY by remember { mutableFloatStateOf(0f) }
-
-    DisposableEffect(displayId) {
-        scope.launch {
-            serviceFlow.runWhenAlive { service ->
-                val ctrl = VirtualDisplayController(service)
-                ctrl.attach(displayId)
-                controllerState.value = ctrl
-                inputControllerState.value = InputController(service)
-            }
-        }
-
-        onDispose {
-            controllerState.value = null
-            inputControllerState.value = null
-        }
-    }
+    val uiState by viewModel.uiState.collectAsState()
+    val controller by viewModel.controller.collectAsState()
+    val inputController by viewModel.inputController.collectAsState()
 
     Box(
         modifier = Modifier
@@ -137,7 +99,7 @@ fun FullscreenDisplayScreen(displayId: Int) {
                 controller = controller!!,
                 inputController = inputController!!,
                 config = config,
-                isReadOnly = isReadOnly,
+                isReadOnly = uiState.isReadOnly,
                 modifier = Modifier.fillMaxSize()
             )
         }
@@ -145,47 +107,88 @@ fun FullscreenDisplayScreen(displayId: Int) {
         // Floating Control Menu
         Box(
             modifier = Modifier
-                .offset { IntOffset(menuOffsetX.roundToInt(), menuOffsetY.roundToInt()) }
+                .offset {
+                    IntOffset(
+                        uiState.menuOffsetX.roundToInt(),
+                        uiState.menuOffsetY.roundToInt()
+                    )
+                }
                 .align(Alignment.Center)
                 .pointerInput(Unit) {
                     detectDragGestures { change, dragAmount ->
                         change.consume()
-                        menuOffsetX += dragAmount.x
-                        menuOffsetY += dragAmount.y
+                        viewModel.updateMenuOffset(dragAmount.x, dragAmount.y)
                     }
                 }
                 .padding(16.dp)
         ) {
             FloatingActionButton(
-                onClick = { menuExpanded = true },
+                onClick = { viewModel.setMenuExpanded(true) },
                 modifier = Modifier.padding(8.dp)
             ) {
                 Icon(Icons.Default.Menu, contentDescription = "Menu")
             }
 
             DropdownMenu(
-                expanded = menuExpanded,
-                onDismissRequest = { menuExpanded = false }
+                expanded = uiState.menuExpanded,
+                onDismissRequest = { viewModel.setMenuExpanded(false) }
             ) {
                 DropdownMenuItem(
-                    text = { Text(if (isReadOnly) "Disable Read-Only" else "Enable Read-Only") },
+                    text = { Text("Start App") },
                     onClick = {
-                        isReadOnly = !isReadOnly
-                        menuExpanded = false
+                        viewModel.setMenuExpanded(false)
+                        viewModel.openAppList()
                     }
                 )
                 DropdownMenuItem(
-                    text = { Text("Launch Home") },
+                    text = { Text(if (uiState.isReadOnly) "Disable Read-Only" else "Enable Read-Only") },
                     onClick = {
-                        scope.launch {
-                            serviceFlow.runWhenAlive { service ->
-                                service.launchHome(displayId)
-                            }
-                        }
-                        menuExpanded = false
+                        viewModel.toggleReadOnly()
+                        viewModel.setMenuExpanded(false)
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("Close Display") },
+                    onClick = {
+                        viewModel.setMenuExpanded(false)
+                        viewModel.destroyDisplay()
+                        activity?.finish()
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("Return to ReLC") },
+                    onClick = {
+                        activity?.finish()
+                        viewModel.setMenuExpanded(false)
                     }
                 )
             }
+        }
+
+        if (uiState.showAppList) {
+            AlertDialog(
+                onDismissRequest = { viewModel.closeAppList() },
+                title = { Text("Select App to Start") },
+                text = {
+                    LazyColumn(modifier = Modifier.heightIn(max = 400.dp)) {
+                        items(uiState.apps) { app ->
+                            TextButton(
+                                onClick = {
+                                    viewModel.launchApp(app.packageName)
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(app.label, modifier = Modifier.fillMaxWidth())
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { viewModel.closeAppList() }) {
+                        Text("Cancel")
+                    }
+                }
+            )
         }
     }
 }

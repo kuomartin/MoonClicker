@@ -15,6 +15,7 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
 import android.content.pm.PackageManagerHidden
+import android.graphics.SurfaceTexture
 import android.hardware.display.DisplayManager
 import android.hardware.display.DisplayManagerHidden
 import android.hardware.display.VirtualDisplay
@@ -63,6 +64,7 @@ class RelcShizukuService(private val context: Context) : IRelcShizukuService.Stu
     }
 
     private val vdStore = mutableMapOf<Int, VirtualDisplay>()
+    private val nsStore = mutableMapOf<Int, NullSurface>()
     private val fakeDisplayContext = object : ContextWrapper(context) {
         override fun getPackageName(): String = "com.android.shell"
         override fun getOpPackageName(): String = "com.android.shell"
@@ -113,6 +115,7 @@ class RelcShizukuService(private val context: Context) : IRelcShizukuService.Stu
         densityDpi: Int,
         surface: Surface?,
         destroyContent: Boolean,
+        sytemDecorations: Boolean
     ): Int {
         var flags =
             DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_PUBLIC or
@@ -123,11 +126,14 @@ class RelcShizukuService(private val context: Context) : IRelcShizukuService.Stu
 
         if (destroyContent)
             flags = flags or DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_DESTROY_CONTENT_ON_REMOVAL
+        if (sytemDecorations)
+            flags =
+                flags or DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_SHOULD_SHOW_SYSTEM_DECORATIONS
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             flags = flags or
                     DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_TRUSTED or
-//                    DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP or
+                    DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP or
                     DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_ALWAYS_UNLOCKED or
                     DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_TOUCH_FEEDBACK_DISABLED
         }
@@ -156,7 +162,14 @@ class RelcShizukuService(private val context: Context) : IRelcShizukuService.Stu
         val vd = vdStore[displayId]
             ?: return false.also { Timber.w("setVirtualDisplaySurface: display $displayId not found") }
         Timber.d("setVirtualDisplaySurface: display $displayId surfaceValid=${surface?.isValid}")
-        vd.surface = surface
+
+        if (surface != null) {
+            vd.surface = surface
+            nsStore[displayId]?.close()
+        } else {
+            val nullSurface = nsStore.getOrElse(displayId) { NullSurface() }
+            vd.surface = nullSurface.surface
+        }
         return true
     }
 
@@ -177,66 +190,6 @@ class RelcShizukuService(private val context: Context) : IRelcShizukuService.Stu
             launchAppViaIAM(packageName, displayId)
         }
     }
-
-    override fun launchHome(displayId: Int): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            launchHomeViaATM(displayId)
-        } else {
-            launchHomeViaIAM(displayId)
-        }
-    }
-
-    @RequiresApi(Build.VERSION_CODES.R)
-    private fun launchHomeViaATM(displayId: Int) = runCatching {
-        val intent = Intent(Intent.ACTION_MAIN).apply {
-            addCategory(Intent.CATEGORY_HOME)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        val options = ActivityOptions.makeBasic()
-        Refine.unsafeCast<ActivityOptionsHidden>(options).setLaunchDisplayId(displayId)
-
-        val atm = ActivityTaskManager.getService()
-        val result = atm.startActivity(
-            null, // IApplicationThread
-            "com.android.shell",
-            null, // callingFeatureId
-            intent,
-            null, // resolvedType
-            null, // resultTo
-            null, // resultWho
-            0,    // requestCode
-            0,    // flags
-            null, // ProfilerInfo
-            options.toBundle()
-        )
-        Timber.d("launchHomeViaATM result = $result")
-        checkStartActivityResult(result, intent)
-    }.isSuccess
-
-    private fun launchHomeViaIAM(displayId: Int) = runCatching {
-        val intent = Intent(Intent.ACTION_MAIN).apply {
-            addCategory(Intent.CATEGORY_HOME)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        val options = ActivityOptions.makeBasic()
-        Refine.unsafeCast<ActivityOptionsHidden>(options).setLaunchDisplayId(displayId)
-
-        val iam = ActivityManagerHidden.getService()
-        val result = iam.startActivity(
-            null, // IApplicationThread
-            "com.android.shell",
-            intent,
-            null, // resolvedType
-            null, // resultTo
-            null, // resultWho
-            0,    // requestCode
-            0,    // flags
-            null, // ProfilerInfo
-            options.toBundle()
-        )
-        Timber.d("launchHomeViaIAM result = $result")
-        checkStartActivityResult(result, intent)
-    }.isSuccess
 
     @RequiresApi(Build.VERSION_CODES.R)
     private fun launchAppViaATM(packageName: String, displayId: Int) = runCatching {
@@ -316,6 +269,14 @@ class RelcShizukuService(private val context: Context) : IRelcShizukuService.Stu
     }.onFailure {
         Timber.e(it)
     }.isSuccess
+
+    override fun getLauncherApps(): List<String> {
+        val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        val resolveInfos = context.packageManager.queryIntentActivities(intent, 0)
+        return resolveInfos.map {
+            "${it.activityInfo.packageName}|${it.loadLabel(context.packageManager)}"
+        }
+    }
 
     override fun debug(input: String?): String {
         // API Level 27
@@ -408,5 +369,15 @@ class RelcShizukuService(private val context: Context) : IRelcShizukuService.Stu
         val ctor = DisplayManager::class.java.getDeclaredConstructor(Context::class.java)
         ctor.isAccessible = true
         return ctor.newInstance(fakeDisplayContext)
+    }
+
+    private class NullSurface : AutoCloseable {
+        val surfaceTexture = SurfaceTexture(0)
+            .apply { setDefaultBufferSize(0, 0) }
+        val surface = Surface(surfaceTexture)
+        override fun close() {
+            surface.release()
+            surfaceTexture.release()
+        }
     }
 }

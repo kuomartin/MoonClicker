@@ -4,11 +4,9 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -29,13 +27,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import com.xaxaxax.relc.ui.displaydetail.VirtualDisplaySurfaceView
 import com.xaxaxax.relc.ui.theme.ReLCTheme
 import dagger.hilt.android.AndroidEntryPoint
-import timber.log.Timber
 
 /**
  * Debug-only Activity for integration testing VirtualDisplayController.
@@ -121,10 +118,8 @@ private fun VirtualDisplayDebugScreen(
                     controller = ctrl!!,
                     inputController = inputController,
                     config = vm.defaultConfig,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(vm.defaultConfig.width.toFloat() / vm.defaultConfig.height)   // 對應 1080×1920
-                        .background(Color.Black),
+                    isReadOnly = false,
+                    modifier = Modifier.fillMaxSize()
                 )
             }
 

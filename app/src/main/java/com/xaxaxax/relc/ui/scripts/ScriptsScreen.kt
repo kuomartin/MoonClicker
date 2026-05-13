@@ -15,11 +15,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.xaxaxax.relc.script.ScriptConfig
 import com.xaxaxax.relc.script.ScriptState
 
-@OptIn(ExperimentalMaterial3Api::class)
+import androidx.compose.ui.tooling.preview.Preview
+import com.xaxaxax.relc.script.LoopMode
+
 @Composable
 fun ScriptsScreen(
     onNavigateToDetail: (String) -> Unit,
@@ -28,6 +30,24 @@ fun ScriptsScreen(
     val scripts by viewModel.scripts.collectAsState()
     val scriptState by viewModel.scriptState.collectAsState()
 
+    ScriptsScreenContent(
+        scripts = scripts,
+        scriptState = scriptState,
+        onNavigateToDetail = onNavigateToDetail,
+        onPlay = { viewModel.startScript(it) },
+        onStop = { viewModel.stopScript() }
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ScriptsScreenContent(
+    scripts: List<ScriptConfig>,
+    scriptState: ScriptState,
+    onNavigateToDetail: (String) -> Unit,
+    onPlay: (ScriptConfig) -> Unit,
+    onStop: () -> Unit
+) {
     Scaffold(
         floatingActionButton = {
             FloatingActionButton(onClick = { onNavigateToDetail("new") }) {
@@ -50,8 +70,8 @@ fun ScriptsScreen(
                 ScriptItem(
                     script = script,
                     onClick = { onNavigateToDetail(script.id) },
-                    onPlay = { viewModel.startScript(script) },
-                    onStop = { viewModel.stopScript() },
+                    onPlay = { onPlay(script) },
+                    onStop = onStop,
                     isRunning = scriptState == ScriptState.RUNNING
                 )
             }
@@ -98,5 +118,34 @@ fun ScriptItem(
                 }
             }
         }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun ScriptsScreenPreview() {
+    com.xaxaxax.relc.ui.theme.ReLCTheme {
+        ScriptsScreenContent(
+            scripts = listOf(
+                ScriptConfig(
+                    id = "1",
+                    name = "Test Script 1",
+                    description = "This is a test script.",
+                    code = "print('hello')",
+                    loopMode = LoopMode.SINGLE
+                ),
+                ScriptConfig(
+                    id = "2",
+                    name = "Test Script 2",
+                    description = "Another test script.",
+                    code = "print('world')",
+                    loopMode = LoopMode.INFINITE
+                )
+            ),
+            scriptState = ScriptState.IDLE,
+            onNavigateToDetail = {},
+            onPlay = {},
+            onStop = {}
+        )
     }
 }

@@ -15,15 +15,15 @@ class VirtualDisplayController(private val service: IRelcShizukuService) {
     var displayId: Int = Display.INVALID_DISPLAY
         private set
 
-    private var sink: DisplaySink = NoOpSink()
+    private var sink: DisplaySink = NoOpSink
 
-    fun create(config: DisplayConfig, sink: DisplaySink = NoOpSink()) {
+    fun create(config: DisplayConfig, sink: DisplaySink = NoOpSink) {
         check(state == State.IDLE) { "Cannot create: already in state $state" }
 
         this.sink = sink
         displayId = service.createVirtualDisplay(
             config.name, config.width, config.height, config.densityDpi,
-            sink.acquireSurface(), false
+            sink.acquireSurface(), false, false
         )
         check(displayId != Display.INVALID_DISPLAY) {
             "createVirtualDisplay returned INVALID_DISPLAY"
@@ -34,7 +34,7 @@ class VirtualDisplayController(private val service: IRelcShizukuService) {
         Timber.d("VirtualDisplayController: created displayId=$displayId")
     }
 
-    fun attach(existingDisplayId: Int, sink: DisplaySink = NoOpSink()) {
+    fun attach(existingDisplayId: Int, sink: DisplaySink = NoOpSink) {
         check(state == State.IDLE) { "Cannot attach: already in state $state" }
 
         this.sink = sink
@@ -51,6 +51,7 @@ class VirtualDisplayController(private val service: IRelcShizukuService) {
         check(state == State.CREATED) { "Cannot replaceSink: state is $state" }
 
         sink.stop()
+        sink.release()
         sink = newSink
         service.setVirtualDisplaySurface(displayId, newSink.acquireSurface())
         newSink.start()

@@ -79,7 +79,7 @@ class VirtualDisplayDebugViewModel @Inject constructor(
     fun createWithNoOp() = viewModelScope.launch {
         serviceFlow.runWhenAlive { service ->
             val ctrl = VirtualDisplayController(service)
-            ctrl.create(defaultConfig, NoOpSink())
+            ctrl.create(defaultConfig, NoOpSink)
             controller = ctrl
             inputController = InputController(service)
             log("Created VD with NoOpSink, displayId=${ctrl.displayId}")
@@ -94,7 +94,7 @@ class VirtualDisplayDebugViewModel @Inject constructor(
     fun createWithDirectSink() = viewModelScope.launch {
         serviceFlow.runWhenAlive { service ->
             val ctrl = VirtualDisplayController(service)
-            ctrl.create(defaultConfig, NoOpSink())   // 先用 NoOpSink，等 Surface 準備好再換
+            ctrl.create(defaultConfig, NoOpSink)   // 先用 NoOpSink，等 Surface 準備好再換
             controller = ctrl
             inputController = InputController(service)
             log("Created VD (waiting for SurfaceView...), displayId=${ctrl.displayId}")

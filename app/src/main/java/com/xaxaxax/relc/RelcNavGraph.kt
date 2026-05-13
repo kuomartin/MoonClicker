@@ -86,7 +86,10 @@ fun RelcNavGraph() {
             // 子頁面放在這裡
             composable<DisplayDetailRoute> { backStackEntry ->
                 val detail = backStackEntry.toRoute<DisplayDetailRoute>()
-                DisplayDetailScreen(id = detail.id)
+                DisplayDetailScreen(
+                    id = detail.id,
+                    onNavigateBack = { navController.popBackStack() }
+                )
             }
 
             // --- SCRIPTS 群組 ---
