@@ -111,9 +111,15 @@ class ScriptEngine(
 
     suspend fun execute(script: String) = withContext(Dispatchers.IO) {
         try {
-            val chunk = globals.load(script)
-            chunk.call()
+            kotlinx.coroutines.runInterruptible {
+                val chunk = globals.load(script)
+                chunk.call()
+            }
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException || e is InterruptedException || e.cause is InterruptedException) {
+                Timber.d("Script execution cancelled")
+                throw kotlinx.coroutines.CancellationException("Script cancelled")
+            }
             Timber.e(e, "Script execution failed")
             onLog("Error: ${e.message}")
             throw e

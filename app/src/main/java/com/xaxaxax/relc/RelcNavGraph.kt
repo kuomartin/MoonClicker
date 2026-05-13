@@ -2,7 +2,10 @@ package com.xaxaxax.relc
 
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.adaptive.currentWindowAdaptiveInfo
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
+import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffoldDefaults
+import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.navigation.NavDestination.Companion.hasRoute
@@ -25,8 +28,21 @@ fun RelcNavGraph() {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
-    
+
+    val isDetailScreen = currentDestination?.hierarchy?.any {
+        it.hasRoute(DisplayDetailRoute::class) || it.hasRoute(ScriptDetailRoute::class)
+    } == true
+
+    val layoutType = if (isDetailScreen) {
+        NavigationSuiteType.None
+    } else {
+        NavigationSuiteScaffoldDefaults.calculateFromAdaptiveInfo(
+            currentWindowAdaptiveInfo()
+        )
+    }
+
     NavigationSuiteScaffold(
+        layoutType = layoutType,
         navigationSuiteItems = {
             // 這裡只會迭代 DISPLAYS, SCRIPTS, SETTINGS
             TopLevelDestination.entries.forEach { destination ->
@@ -84,7 +100,10 @@ fun RelcNavGraph() {
             // 子頁面放在這裡
             composable<ScriptDetailRoute> { backStackEntry ->
                 val detail = backStackEntry.toRoute<ScriptDetailRoute>()
-                ScriptDetailScreen(id = detail.id)
+                ScriptDetailScreen(
+                    id = detail.id,
+                    onNavigateBack = { navController.popBackStack() }
+                )
             }
 
             // --- SETTINGS 群組 ---
@@ -94,6 +113,3 @@ fun RelcNavGraph() {
         }
     }
 }
-
-
-
