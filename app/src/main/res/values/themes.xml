@@ -2,4 +2,11 @@
 <resources>
 
     <style name="Theme.ReLC" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <style name="Theme.ReLC.Fullscreen" parent="Theme.ReLC">
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowActionBar">false</item>
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowContentOverlay">@null</item>
+    </style>
 </resources>

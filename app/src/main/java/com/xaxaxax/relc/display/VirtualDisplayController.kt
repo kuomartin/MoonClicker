@@ -34,6 +34,18 @@ class VirtualDisplayController(private val service: IRelcShizukuService) {
         Timber.d("VirtualDisplayController: created displayId=$displayId")
     }
 
+    fun attach(existingDisplayId: Int, sink: DisplaySink = NoOpSink()) {
+        check(state == State.IDLE) { "Cannot attach: already in state $state" }
+
+        this.sink = sink
+        this.displayId = existingDisplayId
+        service.setVirtualDisplaySurface(displayId, sink.acquireSurface())
+
+        sink.start()
+        state = State.CREATED
+        Timber.d("VirtualDisplayController: attached to displayId=$displayId")
+    }
+
     /** 熱替換輸出端，不需要重建 VirtualDisplay */
     fun replaceSink(newSink: DisplaySink) {
         check(state == State.CREATED) { "Cannot replaceSink: state is $state" }

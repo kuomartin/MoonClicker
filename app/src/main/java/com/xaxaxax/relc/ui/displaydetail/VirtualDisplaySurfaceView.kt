@@ -91,7 +91,7 @@ fun VirtualDisplaySurfaceView(
                     srcRect.set(this.x, this.y, this.width.toFloat(), this.height.toFloat())
                     touchMatrix.setRectToRect(srcRect, dstRect, Matrix.ScaleToFit.FILL)
 
-                    setOnGenericMotionListener { _, event ->
+                    setOnTouchListener { _, event ->
                         val displayId = controller.displayId
                         if (displayId != -1) {
                             inputController.injectMotionEvent(event, displayId, touchMatrix)
