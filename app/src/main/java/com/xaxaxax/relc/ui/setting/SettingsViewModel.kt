@@ -124,11 +124,6 @@ class SettingsViewModel @Inject constructor(
     fun requestOverlayPermissionByShizuku() {
         viewModelScope.launch {
             try {
-                val installVersion = context.packageManager
-                    .getPackageInfo(context.packageName, 0)
-                    .lastUpdateTime
-                    .toInt()
-
                 val serviceFlow = UserService.create(
                     viewModelScope,
                     RelcShizukuService::class,

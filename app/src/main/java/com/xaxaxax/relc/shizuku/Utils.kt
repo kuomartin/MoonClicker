@@ -7,6 +7,7 @@ import android.os.IBinder
 import android.os.IInterface
 import android.os.RemoteException
 import com.xaxaxax.relc.BuildConfig
+import com.xaxaxax.relc.RelcApplication
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.channels.awaitClose
@@ -98,8 +99,18 @@ sealed interface UserService<T : IInterface> {
             scope: CoroutineScope,
             serviceClass: KClass<*>,
             crossinline asInterface: (IBinder) -> I?,
-            version: Int = BuildConfig.VERSION_CODE
         ): StateFlow<UserService<I>> {
+            val context = RelcApplication.instance
+            val version = if (BuildConfig.DEBUG) {
+                try {
+                    context.packageManager.getPackageInfo(context.packageName, 0).lastUpdateTime.toInt()
+                } catch (e: Exception) {
+                    BuildConfig.VERSION_CODE
+                }
+            } else {
+                BuildConfig.VERSION_CODE
+            }
+
             val componentName = ComponentName(BuildConfig.APPLICATION_ID, serviceClass.java.name)
             val args = Shizuku.UserServiceArgs(componentName)
                 .processNameSuffix(I::class.java.simpleName)
