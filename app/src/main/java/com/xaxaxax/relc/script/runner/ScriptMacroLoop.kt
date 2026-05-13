@@ -9,25 +9,17 @@ internal suspend fun macroIterate(
     loopMode: LoopMode,
     body: suspend () -> Unit,
 ) {
-    when (loopMode) {
-        LoopMode.None -> {
+    if (loopMode.count == -1) {
+        while (currentCoroutineContext().isActive) {
             body()
+            if (!currentCoroutineContext().isActive) break
+            delay(loopMode.duration)
         }
-
-        is LoopMode.Repeat -> {
-            repeat(loopMode.count) { i ->
-                body()
-                if (i < loopMode.count - 1)
-                    delay(loopMode.duration)
-            }
-        }
-
-        is LoopMode.Inf -> {
-            while (currentCoroutineContext().isActive) {
-                body()
-                if (!currentCoroutineContext().isActive) break
+    } else {
+        repeat(loopMode.count) { i ->
+            body()
+            if (i < loopMode.count - 1)
                 delay(loopMode.duration)
-            }
         }
     }
 }

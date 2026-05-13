@@ -54,38 +54,24 @@ private enum class MacroLoopKind(val label: String) {
     REPEAT("重複"),
 }
 
-private fun LoopMode.toMacroKind(): MacroLoopKind = when (this) {
-    LoopMode.None -> MacroLoopKind.NONE
-    is LoopMode.Inf -> MacroLoopKind.INF
-    is LoopMode.Repeat -> MacroLoopKind.REPEAT
+private fun LoopMode.toMacroKind(): MacroLoopKind = when {
+    count == 1 -> MacroLoopKind.NONE
+    count == -1 -> MacroLoopKind.INF
+    else -> MacroLoopKind.REPEAT
 }
 
-private fun LoopMode.sleepMs(): Long = when (this) {
-    is LoopMode.Inf -> duration.inWholeMilliseconds
-    is LoopMode.Repeat -> duration.inWholeMilliseconds
-    else -> 0L
-}
+private fun LoopMode.sleepMs(): Long = duration.inWholeMilliseconds
 
-private fun LoopMode.repeatCount(): Int = when (this) {
-    is LoopMode.Repeat -> count
-    else -> 3
-}
+private fun LoopMode.repeatCount(): Int = if (count == -1) 3 else count
 
 private fun LoopMode.withSleepMs(ms: Long): LoopMode {
     val dur = ms.coerceAtLeast(0).milliseconds
-    return when (this) {
-        LoopMode.None -> LoopMode.None
-        is LoopMode.Inf -> LoopMode.Inf(dur)
-        is LoopMode.Repeat -> LoopMode.Repeat(count, dur)
-    }
+    return copy(duration = dur)
 }
 
 private fun LoopMode.withRepeatCount(c: Int): LoopMode {
     val cnt = c.coerceAtLeast(1)
-    return when (this) {
-        is LoopMode.Repeat -> LoopMode.Repeat(cnt, duration)
-        else -> LoopMode.Repeat(cnt, sleepMs().coerceAtLeast(0).milliseconds)
-    }
+    return copy(count = cnt)
 }
 
 @Composable
@@ -143,7 +129,7 @@ internal fun MacroLoopEditor(
                     when (newKind) {
                         MacroLoopKind.NONE -> LoopMode.None
                         MacroLoopKind.INF -> LoopMode.Inf(ms.coerceAtLeast(0).milliseconds)
-                        MacroLoopKind.REPEAT -> LoopMode.Repeat(
+                        MacroLoopKind.REPEAT -> LoopMode(
                             cnt,
                             ms.coerceAtLeast(0).milliseconds,
                         )

@@ -9,10 +9,11 @@ import kotlin.time.Duration
 //}
 
 
-sealed class LoopMode(val count: Int, val duration: Duration) {
-    val string: String = "$count:$duration"
+data class LoopMode(val count: Int, val duration: Duration) {
+    val string: String = if (count == -1) "Inf:$duration" else "$count:$duration"
 
-    object None : LoopMode(1, Duration.ZERO)
-    class Inf(duration: Duration = Duration.ZERO) : LoopMode(-1, duration)
-    class Repeat(count: Int, duration: Duration = Duration.ZERO) : LoopMode(count, duration)
+    companion object {
+        val None = LoopMode(1, Duration.ZERO)
+        fun Inf(duration: Duration = Duration.ZERO) = LoopMode(-1, duration)
+    }
 }
