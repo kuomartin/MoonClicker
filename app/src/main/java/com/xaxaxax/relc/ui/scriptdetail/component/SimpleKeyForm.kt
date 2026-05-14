@@ -18,7 +18,9 @@ import com.xaxaxax.relc.ui.theme.ReLCTheme
 
 @Composable
 fun SimpleKeyForm(
+    index: Int,
     modifier: Modifier = Modifier,
+    dragHandleModifier: Modifier = Modifier,
     parsed: ParsedSimpleLine,
     onParsedChange: (ParsedSimpleLine?) -> Unit,
 ) {
@@ -27,8 +29,10 @@ fun SimpleKeyForm(
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         SimpleStepTopLine(
+            index = index,
             parsed = parsed,
             onParsedChange = onParsedChange,
+            dragHandleModifier = dragHandleModifier,
         ) {
             SimpleKeyWireDropdown(wireName = parsed.payload) {
                 onParsedChange(parsed.copy(payload = it))
@@ -53,6 +57,7 @@ private fun SimpleKeyFormPreview() {
     }
     ReLCTheme {
         SimpleKeyForm(
+            index = 0,
             parsed = parsed,
             onParsedChange = { if (it != null) parsed = it },
             modifier = Modifier.padding(8.dp)

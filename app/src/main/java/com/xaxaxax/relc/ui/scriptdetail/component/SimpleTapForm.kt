@@ -24,7 +24,9 @@ import com.xaxaxax.relc.ui.theme.ReLCTheme
 
 @Composable
 fun SimpleTapForm(
+    index: Int,
     modifier: Modifier = Modifier,
+    dragHandleModifier: Modifier = Modifier,
     parsed: ParsedSimpleLine,
     onParsedChange: (ParsedSimpleLine?) -> Unit,
 ) {
@@ -36,8 +38,10 @@ fun SimpleTapForm(
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         SimpleStepTopLine(
+            index = index,
             parsed = parsed,
             onParsedChange = onParsedChange,
+            dragHandleModifier = dragHandleModifier,
         ) {
             CompactNumberInput(
                 value = tap.durationMs.toString(),
@@ -97,6 +101,7 @@ private fun SimpleTapFormPreview() {
     }
     ReLCTheme {
         SimpleTapForm(
+            index = 0,
             parsed = parsed,
             onParsedChange = { if (it != null) parsed = it },
             modifier = Modifier.padding(8.dp)

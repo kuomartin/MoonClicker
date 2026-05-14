@@ -49,7 +49,9 @@ import com.xaxaxax.relc.ui.theme.ReLCTheme
 
 @Composable
 fun SimpleSwipe(
+    index: Int,
     modifier: Modifier = Modifier,
+    dragHandleModifier: Modifier = Modifier,
     parsed: ParsedSimpleLine,
     payload: SimpleSwipePayload,
     onParsedChange: (ParsedSimpleLine?) -> Unit,
@@ -65,11 +67,13 @@ fun SimpleSwipe(
     val inner: @Composable () -> Unit = {
         Column(
             modifier = Modifier,
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             SimpleStepTopLine(
+                index = index,
                 parsed = parsed,
                 onParsedChange = onParsedChange,
+                dragHandleModifier = dragHandleModifier,
             ) {
                 CompactNumberInput(
                     value = payload.durationMs.toString(),
@@ -119,9 +123,9 @@ fun SimpleSwipe(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Text(
-                                    "P${index + 1}:",
+                                    modifier = Modifier.padding(start =8.dp),
+                                    text = "%03d:".format(index),
                                     style = MaterialTheme.typography.labelMedium,
-                                    modifier = Modifier.width(32.dp)
                                 )
 
                                 CompactNumberInput(
@@ -235,6 +239,7 @@ private fun PreviewSimpleSwipe() {
     }
     ReLCTheme {
         SimpleSwipe(
+            index = 0,
             parsed = parsed,
             payload = swipePayload,
             onParsedChange = { parsed = it ?: parsed },
@@ -261,6 +266,7 @@ private fun PreviewSimpleSwipeEmbedded() {
     }
     ReLCTheme {
         SimpleSwipe(
+            index = 1,
             parsed = parsed,
             payload = swipePayload,
             onParsedChange = { parsed = it ?: parsed },

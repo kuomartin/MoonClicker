@@ -8,22 +8,18 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.xaxaxax.relc.script.simple.ParsedSimpleLine
 import com.xaxaxax.relc.script.simple.SimpleScriptVerb
 import com.xaxaxax.relc.script.simple.defaultPayloadForVerb
 import com.xaxaxax.relc.script.simple.parseSwipePayload
-import com.xaxaxax.relc.ui.theme.ReLCTheme
 
 @Composable
 fun SimpleScriptStepCard(
+    index: Int,
     modifier: Modifier = Modifier,
+    dragHandleModifier: Modifier = Modifier,
     parsed: ParsedSimpleLine,
     onParsedChange: (ParsedSimpleLine?) -> Unit,
 ) {
@@ -42,8 +38,10 @@ fun SimpleScriptStepCard(
             when (parsed.verb) {
                 SimpleScriptVerb.TAP -> {
                     SimpleTapForm(
+                        index = index,
                         parsed = parsed,
                         onParsedChange = onParsedChange,
+                        dragHandleModifier = dragHandleModifier,
                     )
                 }
 
@@ -52,85 +50,51 @@ fun SimpleScriptStepCard(
                         parseSwipePayload(defaultPayloadForVerb(parsed.verb))
                     }
                     SimpleSwipe(
+                        index = index,
                         parsed = parsed,
                         payload = swipePayload,
                         onParsedChange = onParsedChange,
                         useOuterCard = false,
+                        dragHandleModifier = dragHandleModifier,
                     )
                 }
 
                 SimpleScriptVerb.DELAY -> {
                     SimpleDelayForm(
+                        index = index,
                         parsed = parsed,
                         onParsedChange = onParsedChange,
+                        dragHandleModifier = dragHandleModifier,
                     )
                 }
 
                 SimpleScriptVerb.KEY -> {
                     SimpleKeyForm(
+                        index = index,
                         parsed = parsed,
                         onParsedChange = onParsedChange,
+                        dragHandleModifier = dragHandleModifier,
                     )
                 }
 
                 SimpleScriptVerb.TEXT -> {
                     SimpleTextForm(
+                        index = index,
                         parsed = parsed,
                         onParsedChange = onParsedChange,
+                        dragHandleModifier = dragHandleModifier,
                     )
                 }
 
                 SimpleScriptVerb.SET_DISPLAY -> {
                     SimpleSetDisplayForm(
+                        index = index,
                         parsed = parsed,
                         onParsedChange = onParsedChange,
+                        dragHandleModifier = dragHandleModifier,
                     )
                 }
             }
         }
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-private fun SimpleScriptStepCardTapPreview() {
-    var parsed by remember {
-        mutableStateOf(
-            ParsedSimpleLine(
-                verb = SimpleScriptVerb.TAP,
-                repeatCount = 2,
-                delayBetweenRepeatsMs = 100,
-                delayAfterStepMs = 50,
-                payload = "50,540,960",
-            )
-        )
-    }
-    ReLCTheme {
-        SimpleScriptStepCard(
-            parsed = parsed,
-            onParsedChange = { if (it != null) parsed = it },
-        )
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-private fun SimpleScriptStepCardSwipePreview() {
-    var parsed by remember {
-        mutableStateOf(
-            ParsedSimpleLine(
-                verb = SimpleScriptVerb.SWIPE,
-                repeatCount = 1,
-                delayBetweenRepeatsMs = 0,
-                delayAfterStepMs = 0,
-                payload = "500,0,0,200,200",
-            )
-        )
-    }
-    ReLCTheme {
-        SimpleScriptStepCard(
-            parsed = parsed,
-            onParsedChange = { if (it != null) parsed = it },
-        )
     }
 }

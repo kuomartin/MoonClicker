@@ -22,7 +22,9 @@ import com.xaxaxax.relc.ui.theme.ReLCTheme
 
 @Composable
 fun SimpleTextForm(
+    index: Int,
     modifier: Modifier = Modifier,
+    dragHandleModifier: Modifier = Modifier,
     parsed: ParsedSimpleLine,
     onParsedChange: (ParsedSimpleLine?) -> Unit,
 ) {
@@ -32,8 +34,10 @@ fun SimpleTextForm(
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         SimpleStepTopLine(
+            index = index,
             parsed = parsed,
             onParsedChange = onParsedChange,
+            dragHandleModifier = dragHandleModifier,
         ) {}
         HorizontalDivider(color = scriptColors.divider)
         OutlinedTextField(
@@ -64,6 +68,7 @@ private fun SimpleTextFormPreview() {
     }
     ReLCTheme {
         SimpleTextForm(
+            index = 0,
             parsed = parsed,
             onParsedChange = { if (it != null) parsed = it },
             modifier = Modifier.padding(8.dp)

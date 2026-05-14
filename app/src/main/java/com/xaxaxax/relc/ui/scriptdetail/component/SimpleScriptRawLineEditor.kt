@@ -26,7 +26,9 @@ import com.xaxaxax.relc.ui.theme.ReLCTheme
 
 @Composable
 fun SimpleScriptRawLineEditor(
+    index: Int,
     modifier: Modifier = Modifier,
+    dragHandleModifier: Modifier = Modifier,
     rawLine: String,
     errorHint: String,
     onRawLineChange: (String) -> Unit,
@@ -48,6 +50,13 @@ fun SimpleScriptRawLineEditor(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                DragHandle(modifier = dragHandleModifier)
+                Text(
+                    text = "#${index + 1}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                    modifier = Modifier.padding(end = 4.dp)
+                )
                 Text(
                     "無法解析的步驟",
                     style = MaterialTheme.typography.titleSmall,
@@ -90,6 +99,7 @@ fun SimpleScriptRawLineEditor(
 private fun SimpleScriptRawLineEditorPreview() {
     ReLCTheme {
         SimpleScriptRawLineEditor(
+            index = 3,
             rawLine = "not-a-valid-line",
             errorHint = "SIMPLE step must be verb:repeat:between:after:payload",
             onRawLineChange = {},

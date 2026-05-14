@@ -19,7 +19,9 @@ import com.xaxaxax.relc.ui.theme.ReLCTheme
 
 @Composable
 fun SimpleSetDisplayForm(
+    index: Int,
     modifier: Modifier = Modifier,
+    dragHandleModifier: Modifier = Modifier,
     parsed: ParsedSimpleLine,
     onParsedChange: (ParsedSimpleLine?) -> Unit,
 ) {
@@ -29,8 +31,10 @@ fun SimpleSetDisplayForm(
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         SimpleStepTopLine(
+            index = index,
             parsed = parsed,
             onParsedChange = onParsedChange,
+            dragHandleModifier = dragHandleModifier,
         ) {
             CompactNumberInput(
                 value = id.toString(),
@@ -60,6 +64,7 @@ private fun SimpleSetDisplayFormPreview() {
     }
     ReLCTheme {
         SimpleSetDisplayForm(
+            index = 0,
             parsed = parsed,
             onParsedChange = { if (it != null) parsed = it },
             modifier = Modifier.padding(8.dp)

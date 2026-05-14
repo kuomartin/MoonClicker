@@ -33,6 +33,12 @@ class ScriptDetailViewModel @Inject constructor(
     private val _config = MutableStateFlow<ScriptConfig?>(null)
     val config = _config.asStateFlow()
 
+    private val _initialConfig = MutableStateFlow<ScriptConfig?>(null)
+    val hasChanges = kotlinx.coroutines.flow.combine(_config, _initialConfig) { current, initial ->
+        if (current == null || initial == null) false
+        else current != initial
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
     val scriptState = scriptManager.scriptStates.map { states ->
         states[scriptId] ?: ScriptState.IDLE
     }.stateIn(
@@ -48,7 +54,7 @@ class ScriptDetailViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             if (scriptId == "new") {
-                _config.value = ScriptConfig(
+                val newCfg = ScriptConfig(
                     id = UUID.randomUUID().toString(),
                     name = "New Script",
                     description = "",
@@ -59,12 +65,15 @@ class ScriptDetailViewModel @Inject constructor(
                     alwaysRunClean = false,
                     loopMode = LoopMode.None,
                 )
+                _config.value = newCfg
+                _initialConfig.value = newCfg
             } else {
                 repository.scripts.collect { scripts ->
                     val script = scripts.find { it.id == scriptId }
-                    // 只有當前 config 為 null (首次讀取) 或是當前 id 與 repository 內容匹配時才更新
-                    // 為了避免編輯中的資料被覆蓋，這裡簡單實作為只在首次或外部更新時同步
-                    _config.value = script
+                    if (_config.value == null && script != null) {
+                        _config.value = script
+                        _initialConfig.value = script
+                    }
                 }
             }
         }
@@ -77,6 +86,9 @@ class ScriptDetailViewModel @Inject constructor(
     }
 
     fun saveScript() {
-        _config.value?.let { repository.saveScript(it) }
+        _config.value?.let {
+            repository.saveScript(it)
+            _initialConfig.value = it
+        }
     }
 }

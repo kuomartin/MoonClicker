@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -31,7 +32,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.xaxaxax.relc.script.simple.ParsedSimpleLine
-import com.xaxaxax.relc.script.simple.SimplePhysicalKey
 import com.xaxaxax.relc.script.simple.SimpleScriptVerb
 import com.xaxaxax.relc.script.simple.convertTo
 import com.xaxaxax.relc.ui.theme.ReLCTheme
@@ -46,6 +46,18 @@ internal fun SimpleScriptVerb.menuLabel(): String =
         SimpleScriptVerb.TEXT -> "Text"
         SimpleScriptVerb.SET_DISPLAY -> "Display"
     }
+
+@Composable
+fun DragHandle(modifier: Modifier = Modifier) {
+    Icon(
+        imageVector = Icons.Default.DragHandle,
+        contentDescription = "拖曳排序",
+        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+        modifier = modifier
+            .padding(4.dp)
+            .size(24.dp)
+    )
+}
 
 @Composable
 private fun SimpleVerbMenuAnchor(
@@ -162,9 +174,11 @@ private fun StepSettingsButton(
 
 @Composable
 fun SimpleStepTopLine(
+    index: Int,
     parsed: ParsedSimpleLine,
     onParsedChange: (ParsedSimpleLine?) -> Unit,
     modifier: Modifier = Modifier,
+    dragHandleModifier: Modifier = Modifier,
     middle: @Composable RowScope.() -> Unit = {},
 ) {
     val scriptColors = simpleScriptUiColors()
@@ -172,6 +186,13 @@ fun SimpleStepTopLine(
         modifier = modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        DragHandle(modifier = dragHandleModifier)
+        Text(
+            text = "#${index + 1}",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+            modifier = Modifier.padding(end = 4.dp)
+        )
         Row(
             modifier = Modifier.wrapContentWidth(),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -208,46 +229,13 @@ fun SimpleStepTopLine(
     }
 }
 
-@Composable
-fun RowScope.SimpleKeyWireDropdown(
-    wireName: String,
-    onSelectWire: (String) -> Unit,
-) {
-    val parsedKey = runCatching { SimplePhysicalKey.parse(wireName) }.getOrNull()
-    var expanded by remember { mutableStateOf(false) }
-    val label = parsedKey?.wireName ?: wireName.ifBlank { "…" }
-    Box {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier
-                .clickable { expanded = true }
-                .padding(horizontal = 8.dp, vertical = 6.dp)
-        )
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-        ) {
-            SimplePhysicalKey.entries.forEach { k ->
-                DropdownMenuItem(
-                    text = { Text(k.wireName) },
-                    onClick = {
-                        onSelectWire(k.wireName)
-                        expanded = false
-                    }
-                )
-            }
-        }
-    }
-}
-
 @Preview(showBackground = true)
 @Composable
 private fun SimpleVerbMenuAnchorPreview() {
     var v by remember { mutableStateOf(SimpleScriptVerb.TAP) }
     ReLCTheme {
         SimpleStepTopLine(
+            index = 1,
             parsed = ParsedSimpleLine(v, 1, 0, 0, ""),
             onParsedChange = { if (it != null) v = it.verb }
         )
@@ -271,6 +259,7 @@ private fun SimpleStepTopLinePreview() {
     val update = { next: ParsedSimpleLine? -> if (next != null) parsed = next }
     ReLCTheme {
         SimpleStepTopLine(
+            index = 1,
             parsed = parsed,
             onParsedChange = update,
             modifier = Modifier.padding(8.dp),

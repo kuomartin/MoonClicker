@@ -1,9 +1,13 @@
-package com.xaxaxax.relc.ui.scriptdetail.component
+package com.xaxaxax.relc.ui.component
 
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -48,7 +52,7 @@ fun NoPaddingOutlinedTextField(
     BasicTextField(
         value = value,
         onValueChange = onValueChange,
-        modifier = modifier.defaultMinSize(minHeight = 32.dp),
+        modifier = modifier.padding(top = 8.dp).defaultMinSize(minHeight = 32.dp),
         keyboardOptions = keyboardOptions,
         keyboardActions = keyboardActions,
         interactionSource = interactionSource,
@@ -97,11 +101,14 @@ fun NoPaddingOutlinedTextField(
 private fun NoPaddingOutlinedTextFieldPreview() {
     ReLCTheme {
         var state by remember { mutableStateOf("42") }
-        NoPaddingOutlinedTextField(
-            value = state,
-            onValueChange = { state = it },
-            label = "Ms",
-            modifier = Modifier.fillMaxWidth(),
-        )
+        Column(Modifier.fillMaxSize()) {
+            Spacer(Modifier.padding(10.dp))
+            NoPaddingOutlinedTextField(
+                value = state,
+                onValueChange = { state = it },
+                label = "Ms",
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
     }
 }

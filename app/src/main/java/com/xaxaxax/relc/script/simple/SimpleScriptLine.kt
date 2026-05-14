@@ -65,12 +65,12 @@ private fun ParsedSimpleLine.performConversion(verb: SimpleScriptVerb): ParsedSi
     var newPayload = defaultPayloadForVerb(verb)
     if (this.verb.hasDuration && verb.hasDuration) {
         val durationStr = this.payload.substringBefore(',')
-        if (verb == SimpleScriptVerb.DELAY) {
-            newPayload = durationStr
+        newPayload = if (verb == SimpleScriptVerb.DELAY) {
+            durationStr
         } else if (newPayload.contains(',')) {
-            newPayload = durationStr + "," + newPayload.substringAfter(',')
+            durationStr + "," + newPayload.substringAfter(',')
         } else {
-            newPayload = durationStr
+            durationStr
         }
     }
     return this.copy(verb = verb, payload = newPayload)

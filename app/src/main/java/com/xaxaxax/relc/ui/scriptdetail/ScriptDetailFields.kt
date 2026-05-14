@@ -1,8 +1,10 @@
 package com.xaxaxax.relc.ui.scriptdetail
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -35,6 +38,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,9 +46,12 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import com.xaxaxax.relc.script.LoopMode
 import com.xaxaxax.relc.script.simple.SIMPLE_SCRIPT_DEFAULT_STEP_LINE
 import com.xaxaxax.relc.script.simple.SimpleScriptBodyJson
@@ -254,7 +261,18 @@ internal fun SimpleScriptEditor(
         latestOnBodyChanged(SimpleScriptBodyJson(steps = lines.toList()))
     }
 
+    val lazyListState = rememberLazyListState()
+    var draggedIndex by remember { mutableIntStateOf(-1) }
+    var dragOffset by remember { mutableStateOf(0f) }
+
+    fun moveItem(fromIndex: Int, toIndex: Int) {
+        if (fromIndex == toIndex || toIndex !in lines.indices) return
+        lines.add(toIndex, lines.removeAt(fromIndex))
+        push()
+    }
+
     LazyColumn(
+        state = lazyListState,
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp),
         contentPadding = PaddingValues(bottom = 16.dp)
@@ -270,33 +288,88 @@ internal fun SimpleScriptEditor(
             }
         }
 
-        itemsIndexed(lines) { index, line ->
-            val parsedResult = runCatching { parseSimpleScriptLine(line) }
-            if (parsedResult.isSuccess) {
-                SimpleScriptStepCard(
-                    parsed = parsedResult.getOrThrow(),
-                    onParsedChange = { next ->
-                        if (next == null)
+        itemsIndexed(items = lines, key = { i: Int, line: String -> line + i }) { index: Int, line: String ->
+            val isDragging = draggedIndex == index
+            val offset by animateFloatAsState(if (isDragging) dragOffset else 0f)
+
+            val dragModifier = Modifier.pointerInput(Unit) {
+                detectDragGestures(
+                    onDragStart = {
+                        draggedIndex = index
+                        dragOffset = 0f
+                    },
+                    onDrag = { change, dragAmount ->
+                        change.consume()
+                        dragOffset += dragAmount.y
+
+                        val layoutInfo = lazyListState.layoutInfo
+                        val draggedItem = layoutInfo.visibleItemsInfo.find { it.index == index + 1 }
+                            ?: return@detectDragGestures
+
+                        val targetItem = layoutInfo.visibleItemsInfo.find { item ->
+                            val itemIndex = item.index - 1
+                            if (itemIndex !in lines.indices || itemIndex == index) return@find false
+                            val center = dragOffset + draggedItem.offset + draggedItem.size / 2f
+                            center >= item.offset && center <= (item.offset + item.size)
+                        }
+
+                        if (targetItem != null) {
+                            val newIndex = targetItem.index - 1
+                            moveItem(draggedIndex, newIndex)
+                            draggedIndex = newIndex
+                            dragOffset = 0f
+                        }
+                    },
+                    onDragEnd = {
+                        draggedIndex = -1
+                        dragOffset = 0f
+                    },
+                    onDragCancel = {
+                        draggedIndex = -1
+                        dragOffset = 0f
+                    }
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .graphicsLayer {
+                        translationY = offset
+                    }
+                    .zIndex(if (isDragging) 1f else 0f)
+            ) {
+                val parsedResult = runCatching { parseSimpleScriptLine(line) }
+                if (parsedResult.isSuccess) {
+                    SimpleScriptStepCard(
+                        index = index,
+                        parsed = parsedResult.getOrThrow(),
+                        dragHandleModifier = dragModifier,
+                        onParsedChange = { next ->
+                            if (next == null)
+                                lines.removeAt(index)
+                            else
+                                lines[index] = next.encodeToLine()
+                            push()
+                        },
+                    )
+                } else {
+                    val hint = parsedResult.exceptionOrNull()?.message ?: "parse error"
+                    SimpleScriptRawLineEditor(
+                        index = index,
+                        rawLine = line,
+                        dragHandleModifier = dragModifier,
+                        errorHint = hint,
+                        onRawLineChange = {
+                            lines[index] = it
+                            push()
+                        },
+                        onDelete = {
                             lines.removeAt(index)
-                        else
-                            lines[index] = next.encodeToLine()
-                        push()
-                    },
-                )
-            } else {
-                val hint = parsedResult.exceptionOrNull()?.message ?: "parse error"
-                SimpleScriptRawLineEditor(
-                    rawLine = line,
-                    errorHint = hint,
-                    onRawLineChange = {
-                        lines[index] = it
-                        push()
-                    },
-                    onDelete = {
-                        lines.removeAt(index)
-                        push()
-                    },
-                )
+                            push()
+                        },
+                    )
+                }
             }
         }
 
