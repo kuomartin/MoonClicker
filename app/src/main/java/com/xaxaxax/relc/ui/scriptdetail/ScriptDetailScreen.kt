@@ -39,7 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.xaxaxax.relc.script.LoopMode
 import com.xaxaxax.relc.script.ScriptCodeType
 import com.xaxaxax.relc.script.ScriptConfig
@@ -215,7 +215,6 @@ private fun ConfigPage(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(bottom = 80.dp) // Space for FAB
     ) {
         Section(name = "基本資訊") {
             FormOutlinedField(
@@ -265,45 +264,46 @@ private fun EditorPage(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
             .padding(bottom = 80.dp) // Space for FAB
     ) {
         Section(name = "內容") {
             when (currentConfig.type) {
                 ScriptCodeType.LUA -> {
-                    FormOutlinedField(
-                        value = currentConfig.init.orEmpty(),
-                        onValueChange = { v ->
-                            onUpdateConfig { it.copy(init = v.ifBlank { null }) }
-                        },
-                        label = "Init（Lua，可選）",
-                        minLines = 2,
-                        singleLine = false,
-                    )
-                    FormOutlinedField(
-                        value = currentConfig.code,
-                        onValueChange = { v ->
-                            onUpdateConfig { it.copy(code = v) }
-                        },
-                        label = "Lua",
-                        minLines = 12,
-                        singleLine = false,
-                    )
-                    FormOutlinedField(
-                        value = currentConfig.clean.orEmpty(),
-                        onValueChange = { v ->
-                            onUpdateConfig { it.copy(clean = v.ifBlank { null }) }
-                        },
-                        label = "Clean（Lua，可選）",
-                        minLines = 2,
-                        singleLine = false,
-                    )
-                    AlwaysRunCleanRow(
-                        checked = currentConfig.alwaysRunClean,
-                        onCheckedChange = { checked ->
-                            onUpdateConfig { it.copy(alwaysRunClean = checked) }
-                        },
-                    )
+                    Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                        FormOutlinedField(
+                            value = currentConfig.init.orEmpty(),
+                            onValueChange = { v ->
+                                onUpdateConfig { it.copy(init = v.ifBlank { null }) }
+                            },
+                            label = "Init（Lua，可選）",
+                            minLines = 2,
+                            singleLine = false,
+                        )
+                        FormOutlinedField(
+                            value = currentConfig.code,
+                            onValueChange = { v ->
+                                onUpdateConfig { it.copy(code = v) }
+                            },
+                            label = "Lua",
+                            minLines = 12,
+                            singleLine = false,
+                        )
+                        FormOutlinedField(
+                            value = currentConfig.clean.orEmpty(),
+                            onValueChange = { v ->
+                                onUpdateConfig { it.copy(clean = v.ifBlank { null }) }
+                            },
+                            label = "Clean（Lua，可選）",
+                            minLines = 2,
+                            singleLine = false,
+                        )
+                        AlwaysRunCleanRow(
+                            checked = currentConfig.alwaysRunClean,
+                            onCheckedChange = { checked ->
+                                onUpdateConfig { it.copy(alwaysRunClean = checked) }
+                            },
+                        )
+                    }
                 }
 
                 ScriptCodeType.SIMPLE -> {

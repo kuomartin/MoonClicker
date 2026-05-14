@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -183,6 +184,11 @@ internal fun ScriptConsole(logLines: List<String>) {
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    if (expanded) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp,
+                    contentDescription = if (expanded) "Collapse" else "Expand",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 Text(
                     "Console",
                     style = MaterialTheme.typography.titleSmall,
@@ -198,11 +204,6 @@ internal fun ScriptConsole(logLines: List<String>) {
                     )
                 }
             }
-            Icon(
-                if (expanded) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp,
-                contentDescription = if (expanded) "Collapse" else "Expand",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
         }
 
         AnimatedVisibility(visible = expanded) {
@@ -253,59 +254,70 @@ internal fun SimpleScriptEditor(
         latestOnBodyChanged(SimpleScriptBodyJson(steps = lines.toList()))
     }
 
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("步驟", style = MaterialTheme.typography.titleSmall)
-        Text(
-            "格式：verb:次數:次間ms:後延ms:payload — 無法解析的列可手動編輯至合法後即恢復表單。",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            lines.forEachIndexed { index, line ->
-                val parsedResult = runCatching { parseSimpleScriptLine(line) }
-                if (parsedResult.isSuccess) {
-                    SimpleScriptStepCard(
-                        parsed = parsedResult.getOrThrow(),
-                        onParsedChange = { next ->
-                            if (next == null)
-                                lines.removeAt(index)
-                            else
-                                lines[index] = next.encodeToLine()
-                            push()
-                        },
-                    )
-                } else {
-                    val hint = parsedResult.exceptionOrNull()?.message ?: "parse error"
-                    SimpleScriptRawLineEditor(
-                        rawLine = line,
-                        errorHint = hint,
-                        onRawLineChange = {
-                            lines[index] = it
-                            push()
-                        },
-                        onDelete = {
-                            lines.removeAt(index)
-                            push()
-                        },
-                    )
-                }
+    LazyColumn(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        contentPadding = PaddingValues(bottom = 16.dp)
+    ) {
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("步驟", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "格式：verb:次數:次間ms:後延ms:payload — 無法解析的列可手動編輯至合法後即恢復表單。",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
-        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
-            TextButton(
-                onClick = {
-                    lines.add(SIMPLE_SCRIPT_DEFAULT_STEP_LINE)
-                    push()
-                },
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                modifier = Modifier.height(36.dp),
-            ) {
-                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(4.dp))
-                Text("新增步驟", style = MaterialTheme.typography.labelLarge)
+
+        itemsIndexed(lines) { index, line ->
+            val parsedResult = runCatching { parseSimpleScriptLine(line) }
+            if (parsedResult.isSuccess) {
+                SimpleScriptStepCard(
+                    parsed = parsedResult.getOrThrow(),
+                    onParsedChange = { next ->
+                        if (next == null)
+                            lines.removeAt(index)
+                        else
+                            lines[index] = next.encodeToLine()
+                        push()
+                    },
+                )
+            } else {
+                val hint = parsedResult.exceptionOrNull()?.message ?: "parse error"
+                SimpleScriptRawLineEditor(
+                    rawLine = line,
+                    errorHint = hint,
+                    onRawLineChange = {
+                        lines[index] = it
+                        push()
+                    },
+                    onDelete = {
+                        lines.removeAt(index)
+                        push()
+                    },
+                )
+            }
+        }
+
+        item {
+            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+                TextButton(
+                    onClick = {
+                        lines.add(SIMPLE_SCRIPT_DEFAULT_STEP_LINE)
+                        push()
+                    },
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                    modifier = Modifier.height(36.dp),
+                ) {
+                    Icon(
+                        Icons.Default.Add,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text("新增步驟", style = MaterialTheme.typography.labelLarge)
+                }
             }
         }
     }
@@ -321,7 +333,7 @@ private fun SimpleScriptEditorPreview() {
                 code = SimpleScriptCodec.encode(
                     SimpleScriptBodyJson(
                         steps = listOf(
-                            "tap:1:0:0:100,200",
+                            "tap:1:0:0:50,100,200",
                             "swipe:1:0:0:400,10,10,90,90",
                             "delay:2:50:0:500",
                         ),

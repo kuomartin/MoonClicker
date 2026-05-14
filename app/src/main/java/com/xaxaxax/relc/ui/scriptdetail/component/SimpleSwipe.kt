@@ -9,9 +9,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -101,82 +104,95 @@ fun SimpleSwipe(
             }
 
             if (pointsExpanded) {
-                payload.points.forEachIndexed { index, (x, y) ->
-                    key(index) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Text(
-                                "P${index + 1}:",
-                                style = MaterialTheme.typography.labelMedium,
-                                modifier = Modifier.width(32.dp)
-                            )
-
-                            CompactNumberInput(
-                                value = x.toString(),
-                                label = "X:",
-                                modifier = Modifier.weight(1f),
-                                onValueChange = { newX ->
-                                    val newPoints = payload.points.toMutableList()
-                                    newPoints[index] = (newX.toIntOrNull() ?: 0) to y
-                                    emitSwipe(payload.copy(points = newPoints))
-                                }
-                            )
-
-                            CompactNumberInput(
-                                value = y.toString(),
-                                label = "Y:",
-                                modifier = Modifier.weight(1f),
-                                onValueChange = { newY ->
-                                    val newPoints = payload.points.toMutableList()
-                                    newPoints[index] = x to (newY.toIntOrNull() ?: 0)
-                                    emitSwipe(payload.copy(points = newPoints))
-                                }
-                            )
-
-                            val canRemovePoint = payload.points.size > 2
-                            IconButton(
-                                onClick = {
-                                    if (!canRemovePoint) return@IconButton
-                                    val newPoints =
-                                        payload.points.toMutableList().apply { removeAt(index) }
-                                    emitSwipe(payload.copy(points = newPoints))
-                                },
-                                enabled = canRemovePoint,
-                                modifier = Modifier.size(32.dp),
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 400.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    itemsIndexed(payload.points) { index, point ->
+                        val (x, y) = point
+                        key(index) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.Delete,
-                                    contentDescription = "刪除點",
-                                    tint = if (canRemovePoint) {
-                                        scriptColors.destructive
-                                    } else {
-                                        scriptColors.destructiveMuted
-                                    },
-                                    modifier = Modifier.size(24.dp),
+                                Text(
+                                    "P${index + 1}:",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    modifier = Modifier.width(32.dp)
                                 )
+
+                                CompactNumberInput(
+                                    value = x.toString(),
+                                    label = "X:",
+                                    modifier = Modifier.weight(1f),
+                                    onValueChange = { newX ->
+                                        val newPoints = payload.points.toMutableList()
+                                        newPoints[index] = (newX.toIntOrNull() ?: 0) to y
+                                        emitSwipe(payload.copy(points = newPoints))
+                                    }
+                                )
+
+                                CompactNumberInput(
+                                    value = y.toString(),
+                                    label = "Y:",
+                                    modifier = Modifier.weight(1f),
+                                    onValueChange = { newY ->
+                                        val newPoints = payload.points.toMutableList()
+                                        newPoints[index] = x to (newY.toIntOrNull() ?: 0)
+                                        emitSwipe(payload.copy(points = newPoints))
+                                    }
+                                )
+
+                                val canRemovePoint = payload.points.size > 2
+                                IconButton(
+                                    onClick = {
+                                        if (!canRemovePoint) return@IconButton
+                                        val newPoints =
+                                            payload.points.toMutableList().apply { removeAt(index) }
+                                        emitSwipe(payload.copy(points = newPoints))
+                                    },
+                                    enabled = canRemovePoint,
+                                    modifier = Modifier.size(32.dp),
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Delete,
+                                        contentDescription = "刪除點",
+                                        tint = if (canRemovePoint) {
+                                            scriptColors.destructive
+                                        } else {
+                                            scriptColors.destructiveMuted
+                                        },
+                                        modifier = Modifier.size(24.dp),
+                                    )
+                                }
                             }
                         }
                     }
-                }
 
-                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
-                    TextButton(
-                        onClick = {
-                            emitSwipe(payload.copy(points = payload.points + (0 to 0)))
-                        },
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                        modifier = Modifier.height(32.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.Add,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        Text("Add Point", style = MaterialTheme.typography.labelLarge)
+                    item {
+                        Box(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentAlignment = Alignment.CenterEnd
+                        ) {
+                            TextButton(
+                                onClick = {
+                                    emitSwipe(payload.copy(points = payload.points + (0 to 0)))
+                                },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                modifier = Modifier.height(32.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Add,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text("Add Point", style = MaterialTheme.typography.labelLarge)
+                            }
+                        }
                     }
                 }
             }
@@ -221,11 +237,7 @@ private fun PreviewSimpleSwipe() {
         SimpleSwipe(
             parsed = parsed,
             payload = swipePayload,
-            onParsedChange = {
-                if (it != null) {
-                    parsed = it
-                }
-            },
+            onParsedChange = { parsed = it ?: parsed },
         )
     }
 }
@@ -251,11 +263,7 @@ private fun PreviewSimpleSwipeEmbedded() {
         SimpleSwipe(
             parsed = parsed,
             payload = swipePayload,
-            onParsedChange = {
-                if (it != null) {
-                    parsed = it
-                }
-            },
+            onParsedChange = { parsed = it ?: parsed },
             useOuterCard = false,
         )
     }
