@@ -1,5 +1,8 @@
 package com.xaxaxax.relc.ui.scriptdetail
 
+import android.os.Build
+import android.provider.Settings
+import android.widget.Toast
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -22,6 +25,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -32,6 +36,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -39,6 +44,7 @@ import com.xaxaxax.relc.script.LoopMode
 import com.xaxaxax.relc.script.ScriptCodeType
 import com.xaxaxax.relc.script.ScriptConfig
 import com.xaxaxax.relc.script.ScriptState
+import com.xaxaxax.relc.overlay.startClickAssistOverlay
 import com.xaxaxax.relc.script.simple.SimpleScriptCodec
 import com.xaxaxax.relc.ui.component.Section
 import com.xaxaxax.relc.ui.scriptdetail.component.ScriptTypeSegmentedButton
@@ -54,6 +60,25 @@ fun ScriptDetailScreen(
     val config by viewModel.config.collectAsState()
     val state by viewModel.scriptState.collectAsState()
     val logs by viewModel.logs.collectAsState(initial = "")
+    val ctx = LocalContext.current
+
+    val overlayLaunch: (() -> Unit)? =
+        config?.takeIf { it.type == ScriptCodeType.SIMPLE }?.let { sc ->
+            {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
+                    !Settings.canDrawOverlays(ctx)
+                ) {
+                    Toast.makeText(
+                        ctx,
+                        "請先開啟「在其他應用程式上疊加顯示」權限",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                } else {
+                    viewModel.saveScript()
+                    startClickAssistOverlay(ctx, sc.id)
+                }
+            }
+        }
 
     ScriptDetailScreenContent(
         config = config,
@@ -63,7 +88,8 @@ fun ScriptDetailScreen(
         onUpdateConfig = { viewModel.updateConfig(it) },
         onSave = { viewModel.saveScript() },
         onPlay = { config?.let { viewModel.scriptManager.startScript(it) } },
-        onStop = { config?.let { viewModel.scriptManager.stopScript(it.id) } }
+        onStop = { config?.let { viewModel.scriptManager.stopScript(it.id) } },
+        onLaunchFloatingAssist = overlayLaunch,
     )
 }
 
@@ -77,7 +103,8 @@ fun ScriptDetailScreenContent(
     onUpdateConfig: ((ScriptConfig) -> ScriptConfig) -> Unit,
     onSave: () -> Unit,
     onPlay: () -> Unit,
-    onStop: () -> Unit
+    onStop: () -> Unit,
+    onLaunchFloatingAssist: (() -> Unit)? = null,
 ) {
     val logLines = remember { mutableStateListOf<String>() }
     LaunchedEffect(latestLog) {
@@ -100,6 +127,11 @@ fun ScriptDetailScreenContent(
                     }
                 },
                 actions = {
+                    if (onLaunchFloatingAssist != null) {
+                        TextButton(onClick = { onLaunchFloatingAssist() }) {
+                            Text("浮窗")
+                        }
+                    }
                     IconButton(onClick = {
                         onSave()
                     }) {
@@ -313,7 +345,8 @@ fun ScriptDetailScreenPreview() {
                 onUpdateConfig = {},
                 onSave = {},
                 onPlay = {},
-                onStop = {}
+                onStop = {},
+                onLaunchFloatingAssist = null,
             )
         }
     }

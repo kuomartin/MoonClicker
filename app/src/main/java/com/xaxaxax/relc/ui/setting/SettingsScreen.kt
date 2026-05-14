@@ -171,7 +171,7 @@ private fun SettingsScreenContent(
                                         if (uiState.isShizukuAvailable and uiState.hasShizukuPermission)
                                             actions += "Grant via Shizuku" to onRequestOverlayPermissionByShizuku
                                         HealthCheckFailedItem(
-                                            painterResource(R.drawable.picture_in_picture_24px),
+                                            painterResource(R.drawable.ic_picture_in_picture),
                                             "Overlay Permission Required",
                                             "Needed to display floating controls.",
                                             actions = actions
@@ -185,7 +185,7 @@ private fun SettingsScreenContent(
                                             )
                                         )
                                         HealthCheckFailedItem(
-                                            painterResource(R.drawable.picture_in_picture_off_24px),
+                                            painterResource(R.drawable.ic_picture_in_picture_off),
                                             "Secondary Displays Disabled",
                                             "The system disabled secondary displays, which is an important feature for this app.",
                                             actions = listOf()
@@ -203,7 +203,7 @@ private fun SettingsScreenContent(
                         }
                         if (uiState.hasOverlayPermission) {
                             HealthCheckGood(
-                                painter = painterResource(R.drawable.picture_in_picture_24px),
+                                painter = painterResource(R.drawable.ic_picture_in_picture),
                                 title = "Overlay Permission Granted",
                                 description = "Authorized to display over other apps."
                             )

@@ -1,5 +1,6 @@
 package com.xaxaxax.relc.script
 
+import android.os.SystemClock
 import com.xaxaxax.relc.IRelcShizukuService
 import com.xaxaxax.relc.RelcShizukuService
 import com.xaxaxax.relc.script.runner.LuaScriptRunnerFactory
@@ -33,6 +34,10 @@ class ScriptManager {
     private val _scriptStates = MutableStateFlow<Map<String, ScriptState>>(emptyMap())
     val scriptStates: StateFlow<Map<String, ScriptState>> = _scriptStates.asStateFlow()
 
+    /** Single HUD slice for overlays; cleared when idle / script ends. */
+    private val _hudUi = MutableStateFlow<RunningScriptHudUi?>(null)
+    val hudUi: StateFlow<RunningScriptHudUi?> = _hudUi.asStateFlow()
+
     private val _logs = MutableSharedFlow<ScriptLog>(extraBufferCapacity = 100)
     val logs: SharedFlow<ScriptLog> = _logs
 
@@ -55,16 +60,42 @@ class ScriptManager {
 
         scriptJobs[config.id]?.cancel()
         _scriptStates.update { it + (config.id to ScriptState.RUNNING) }
+        val sessionStart = SystemClock.elapsedRealtime()
+        _hudUi.value = RunningScriptHudUi(
+            scriptId = config.id,
+            name = config.name,
+            codeType = config.type,
+            state = ScriptState.RUNNING,
+            progress = null,
+            sessionStartElapsedRealtime = sessionStart,
+        )
 
         val job = scope.launch {
             try {
                 serviceFlow.runWhenAlive { service ->
+                    val emitSimpleProgress =
+                        if (config.type == ScriptCodeType.SIMPLE) {
+                            { p: SimpleScriptProgress ->
+                                _hudUi.value = RunningScriptHudUi(
+                                    scriptId = config.id,
+                                    name = config.name,
+                                    codeType = config.type,
+                                    state = ScriptState.RUNNING,
+                                    progress = p,
+                                    sessionStartElapsedRealtime = sessionStart,
+                                )
+                            }
+                        } else {
+                            null
+                        }
                     val ctx = ScriptRunContext(
                         service = service,
                         onLog = { logMsg ->
                             scope.launch { _logs.emit(ScriptLog(config.id, logMsg)) }
                         },
                         isActive = { isActive },
+                        sessionStartElapsedRealtime = sessionStart,
+                        onSimpleProgress = emitSimpleProgress,
                     )
                     runnerFactories.getValue(config.type).create(ctx).run(config)
                 }
@@ -79,6 +110,7 @@ class ScriptManager {
                 _scriptStates.update { it + (config.id to ScriptState.ERROR) }
             } finally {
                 scriptJobs.remove(config.id)
+                _hudUi.value = null
             }
         }
         scriptJobs[config.id] = job
@@ -88,5 +120,9 @@ class ScriptManager {
         scriptJobs[scriptId]?.cancel()
         scriptJobs.remove(scriptId)
         _scriptStates.update { it + (scriptId to ScriptState.IDLE) }
+        if (_hudUi.value?.scriptId == scriptId) {
+            _hudUi.value = null
+        }
     }
+
 }

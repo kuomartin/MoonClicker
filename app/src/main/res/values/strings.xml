@@ -5,4 +5,23 @@
     <string name="settings_title">Settings</string>
     <string name="tasks_header_image_content_description">Tasks header image</string>
     <string name="navigation_view_header_title">ReLC</string>
+    <string name="click_assist_notif_chan_id">click_assist_overlay</string>
+    <string name="click_assist_notif_chan_label">點擊助手覆蓋層</string>
+    <string name="click_assist_notif_title">ReLC 點擊助手</string>
+    <string name="click_assist_notif_running">服務運行中</string>
+    <string name="click_assist_notif_stop">結束浮窗</string>
+    <string name="click_assist_no_simple_script">找不到 SIMPLE 腳本 — 輕觸離開</string>
+    <string name="click_assist_swipe_banner_start">録製滑動：先點起點</string>
+    <string name="click_assist_swipe_banner_end">再點終點完成</string>
+    <string name="click_assist_cd_play">執行</string>
+    <string name="click_assist_cd_pause">暫停</string>
+    <string name="click_assist_cd_stop">停止</string>
+    <string name="click_assist_cd_add">添加</string>
+    <string name="click_assist_cd_remove">移除</string>
+    <string name="click_assist_cd_swipe">滑動錄製</string>
+    <string name="click_assist_cd_save">儲存</string>
+    <string name="click_assist_cd_settings">設定</string>
+    <string name="click_assist_cd_markers">標記顯示</string>
+    <string name="click_assist_cd_close">關閉</string>
+    <string name="click_assist_cd_drag_move">拖曳移動</string>
 </resources>
