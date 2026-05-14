@@ -20,8 +20,7 @@ import com.xaxaxax.relc.ui.theme.ReLCTheme
 fun SimpleKeyForm(
     modifier: Modifier = Modifier,
     parsed: ParsedSimpleLine,
-    onParsedChange: (ParsedSimpleLine) -> Unit,
-    onChangeVerb: (SimpleScriptVerb?) -> Unit,
+    onParsedChange: (ParsedSimpleLine?) -> Unit,
 ) {
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -30,7 +29,6 @@ fun SimpleKeyForm(
         SimpleStepTopLine(
             parsed = parsed,
             onParsedChange = onParsedChange,
-            onChangeVerb = onChangeVerb,
         ) {
             SimpleKeyWireDropdown(wireName = parsed.payload) {
                 onParsedChange(parsed.copy(payload = it))
@@ -56,8 +54,7 @@ private fun SimpleKeyFormPreview() {
     ReLCTheme {
         SimpleKeyForm(
             parsed = parsed,
-            onParsedChange = { parsed = it },
-            onChangeVerb = {},
+            onParsedChange = { if (it != null) parsed = it },
             modifier = Modifier.padding(8.dp)
         )
     }

@@ -265,11 +265,11 @@ class ClickAssistOverlayService : LifecycleService() {
         // Add or update views
         body.steps.forEachIndexed { index, line ->
             if (isTapStep(line)) {
-                val (x, y) = parseTapPayload(parseSimpleScriptLine(line).payload)
+                val tap = parseTapPayload(parseSimpleScriptLine(line).payload)
                 if (targetViews.containsKey(index)) {
-                    updateTargetWindow(index, x, y)
+                    updateTargetWindow(index, tap.x, tap.y)
                 } else {
-                    addTargetWindow(index, x, y)
+                    addTargetWindow(index, tap.x, tap.y)
                 }
             }
         }
@@ -324,10 +324,14 @@ class ClickAssistOverlayService : LifecycleService() {
         val current = _currentScript.value
         val steps = current.steps.toMutableList()
         val line = steps.getOrNull(index) ?: return
-        val parsed = parseSimpleScriptLine(line)
+        val parsed = try {
+            parseSimpleScriptLine(line)
+        } catch (e: Exception) {
+            null
+        } ?: return
         if (parsed.verb == SimpleScriptVerb.TAP) {
-            val updatedLine = parsed.copy(payload = "$x,$y").encodeToLine()
-            steps[index] = updatedLine
+            val duration = parsed.payload.substringBefore(',')
+            steps[index] = parsed.copy(payload = "$duration,$x,$y").encodeToLine()
             _currentScript.value = current.copy(steps = steps)
         }
     }

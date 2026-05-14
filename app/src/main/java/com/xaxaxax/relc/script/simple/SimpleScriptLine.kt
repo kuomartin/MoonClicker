@@ -6,8 +6,9 @@ package com.xaxaxax.relc.script.simple
  * Only the first four `:` characters split the header; the rest is payload (may contain `:`).
  *
  * Payload shapes:
- * - `tap` — `x,y`
+ * - `tap` — `durationMs,x,y`
  * - `swipe` — `durationMs,x1,y1,x2,y2[,x3,y3[,x4,y4 ...]]`
+ * - `swipe_raw` — same as `swipe`
  * - `delay` — `delayMs`
  * - `key` — physical key wire name (e.g. BACK)
  * - `text` — literal text (execution currently logs only)
@@ -16,6 +17,7 @@ package com.xaxaxax.relc.script.simple
 enum class SimpleScriptVerb {
     TAP,
     SWIPE,
+    SWIPE_RAW,
     DELAY,
     KEY,
     TEXT,
@@ -27,6 +29,7 @@ enum class SimpleScriptVerb {
             return when (raw.trim().lowercase()) {
                 "tap" -> TAP
                 "swipe" -> SWIPE
+                "swipe_raw" -> SWIPE_RAW
                 "delay" -> DELAY
                 "key" -> KEY
                 "text" -> TEXT
@@ -45,6 +48,46 @@ data class ParsedSimpleLine(
     val payload: String,
 )
 
+fun ParsedSimpleLine.convertTo(verb: SimpleScriptVerb): ParsedSimpleLine = when (this.verb) {
+    verb -> this
+    SimpleScriptVerb.SWIPE -> if (verb == SimpleScriptVerb.SWIPE_RAW) this.copy(verb = verb) else performConversion(
+        verb
+    )
+
+    SimpleScriptVerb.SWIPE_RAW -> if (verb == SimpleScriptVerb.SWIPE) this.copy(verb = verb) else performConversion(
+        verb
+    )
+
+    else -> performConversion(verb)
+}
+
+private fun ParsedSimpleLine.performConversion(verb: SimpleScriptVerb): ParsedSimpleLine {
+    var newPayload = defaultPayloadForVerb(verb)
+    if (this.verb.hasDuration && verb.hasDuration) {
+        val durationStr = this.payload.substringBefore(',')
+        if (verb == SimpleScriptVerb.DELAY) {
+            newPayload = durationStr
+        } else if (newPayload.contains(',')) {
+            newPayload = durationStr + "," + newPayload.substringAfter(',')
+        } else {
+            newPayload = durationStr
+        }
+    }
+    return this.copy(verb = verb, payload = newPayload)
+}
+
+private val SimpleScriptVerb.hasDuration: Boolean
+    get() = when (this) {
+        SimpleScriptVerb.TAP,
+        SimpleScriptVerb.SWIPE,
+        SimpleScriptVerb.SWIPE_RAW,
+        SimpleScriptVerb.DELAY -> true
+
+        SimpleScriptVerb.KEY,
+        SimpleScriptVerb.TEXT,
+        SimpleScriptVerb.SET_DISPLAY -> false
+    }
+
 fun parseSimpleScriptLine(line: String): ParsedSimpleLine {
     val t = line.trim()
     require(t.isNotEmpty()) { "empty SIMPLE step line" }
@@ -60,10 +103,24 @@ fun parseSimpleScriptLine(line: String): ParsedSimpleLine {
     return ParsedSimpleLine(verb, repeat, between, after, payload = parts[4])
 }
 
-fun parseTapPayload(payload: String): Pair<Int, Int> {
-    val p = payload.split(',', limit = 3)
-    require(p.size == 2) { "tap payload: x,y — got \"$payload\"" }
-    return p[0].trim().toInt() to p[1].trim().toInt()
+data class SimpleTapPayload(
+    val durationMs: Long,
+    val x: Int,
+    val y: Int,
+) {
+    fun encodeToPayload() = "$durationMs,$x,$y"
+}
+
+fun parseTapPayload(payload: String): SimpleTapPayload {
+    val p = payload.split(',').map { it.trim() }
+    return if (p.size == 2) {
+        // Legacy support (optional, but good to have)
+        SimpleTapPayload(50L, p[0].toInt(), p[1].toInt())
+    } else if (p.size == 3) {
+        SimpleTapPayload(p[0].toLong(), p[1].toInt(), p[2].toInt())
+    } else {
+        error("tap payload: durationMs,x,y — got \"$payload\"")
+    }
 }
 
 fun parseSwipePayload(payload: String): SimpleSwipePayload {
@@ -90,12 +147,13 @@ data class SimpleSwipePayload(
 )
 
 /** Default line for new steps in the editor (`tap` center-ish). */
-const val SIMPLE_SCRIPT_DEFAULT_STEP_LINE = "tap:1:0:0:540,960"
+const val SIMPLE_SCRIPT_DEFAULT_STEP_LINE = "tap:1:0:0:50,540,960"
 
 fun SimpleScriptVerb.wireName(): String =
     when (this) {
         SimpleScriptVerb.TAP -> "tap"
         SimpleScriptVerb.SWIPE -> "swipe"
+        SimpleScriptVerb.SWIPE_RAW -> "swipe_raw"
         SimpleScriptVerb.DELAY -> "delay"
         SimpleScriptVerb.KEY -> "key"
         SimpleScriptVerb.TEXT -> "text"
@@ -104,8 +162,8 @@ fun SimpleScriptVerb.wireName(): String =
 
 fun defaultPayloadForVerb(verb: SimpleScriptVerb): String =
     when (verb) {
-        SimpleScriptVerb.TAP -> "540,960"
-        SimpleScriptVerb.SWIPE -> "500,0,0,100,100"
+        SimpleScriptVerb.TAP -> "50,540,960"
+        SimpleScriptVerb.SWIPE, SimpleScriptVerb.SWIPE_RAW -> "500,0,0,100,100"
         SimpleScriptVerb.DELAY -> "1000"
         SimpleScriptVerb.KEY -> "BACK"
         SimpleScriptVerb.TEXT -> ""

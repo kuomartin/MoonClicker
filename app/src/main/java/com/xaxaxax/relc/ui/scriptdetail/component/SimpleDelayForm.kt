@@ -21,8 +21,7 @@ import com.xaxaxax.relc.ui.theme.ReLCTheme
 fun SimpleDelayForm(
     modifier: Modifier = Modifier,
     parsed: ParsedSimpleLine,
-    onParsedChange: (ParsedSimpleLine) -> Unit,
-    onChangeVerb: (SimpleScriptVerb?) -> Unit,
+    onParsedChange: (ParsedSimpleLine?) -> Unit,
 ) {
     val ms = parsed.payload.trim().toLongOrNull() ?: 0L
     Column(
@@ -32,7 +31,6 @@ fun SimpleDelayForm(
         SimpleStepTopLine(
             parsed = parsed,
             onParsedChange = onParsedChange,
-            onChangeVerb = onChangeVerb,
         ) {
             CompactNumberInput(
                 value = ms.toString(),
@@ -63,8 +61,7 @@ private fun SimpleDelayFormPreview() {
     ReLCTheme {
         SimpleDelayForm(
             parsed = parsed,
-            onParsedChange = { parsed = it },
-            onChangeVerb = {},
+            onParsedChange = { if (it != null) parsed = it },
             modifier = Modifier.padding(8.dp)
         )
     }

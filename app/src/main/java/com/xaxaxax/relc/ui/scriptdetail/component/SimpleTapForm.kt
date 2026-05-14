@@ -18,6 +18,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.xaxaxax.relc.script.simple.ParsedSimpleLine
 import com.xaxaxax.relc.script.simple.SimpleScriptVerb
+import com.xaxaxax.relc.script.simple.SimpleTapPayload
 import com.xaxaxax.relc.script.simple.parseTapPayload
 import com.xaxaxax.relc.ui.theme.ReLCTheme
 
@@ -25,10 +26,10 @@ import com.xaxaxax.relc.ui.theme.ReLCTheme
 fun SimpleTapForm(
     modifier: Modifier = Modifier,
     parsed: ParsedSimpleLine,
-    onParsedChange: (ParsedSimpleLine) -> Unit,
-    onChangeVerb: (SimpleScriptVerb?) -> Unit,
+    onParsedChange: (ParsedSimpleLine?) -> Unit,
 ) {
-    val (tx, ty) = runCatching { parseTapPayload(parsed.payload) }.getOrDefault(0 to 0)
+    val tap = runCatching { parseTapPayload(parsed.payload) }
+        .getOrDefault(SimpleTapPayload(50L, 0, 0))
     val scriptColors = simpleScriptUiColors()
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -37,14 +38,18 @@ fun SimpleTapForm(
         SimpleStepTopLine(
             parsed = parsed,
             onParsedChange = onParsedChange,
-            onChangeVerb = onChangeVerb,
         ) {
             CompactNumberInput(
-                value = parsed.delayAfterStepMs.toString(),
+                value = tap.durationMs.toString(),
                 label = "Ms",
                 modifier = Modifier.width(72.dp),
                 onValueChange = {
-                    onParsedChange(parsed.copy(delayAfterStepMs = it.toLongOrNull() ?: 0L))
+                    val d = it.toLongOrNull() ?: 0L
+                    onParsedChange(
+                        parsed.copy(
+                            payload = tap.copy(durationMs = d).encodeToPayload()
+                        )
+                    )
                 },
             )
         }
@@ -55,16 +60,22 @@ fun SimpleTapForm(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             CompactNumberInput(
-                value = tx.toString(),
+                value = tap.x.toString(),
                 label = "X:",
                 modifier = Modifier.weight(1f),
-                onValueChange = { onParsedChange(parsed.copy(payload = "${it.toIntOrNull() ?: 0},$ty")) }
+                onValueChange = {
+                    val x = it.toIntOrNull() ?: 0
+                    onParsedChange(parsed.copy(payload = tap.copy(x = x).encodeToPayload()))
+                }
             )
             CompactNumberInput(
-                value = ty.toString(),
+                value = tap.y.toString(),
                 label = "Y:",
                 modifier = Modifier.weight(1f),
-                onValueChange = { onParsedChange(parsed.copy(payload = "$tx,${it.toIntOrNull() ?: 0}")) }
+                onValueChange = {
+                    val y = it.toIntOrNull() ?: 0
+                    onParsedChange(parsed.copy(payload = tap.copy(y = y).encodeToPayload()))
+                }
             )
         }
     }
@@ -80,15 +91,14 @@ private fun SimpleTapFormPreview() {
                 repeatCount = 1,
                 delayBetweenRepeatsMs = 0,
                 delayAfterStepMs = 0,
-                payload = "540,960",
+                payload = "50,540,960",
             )
         )
     }
     ReLCTheme {
         SimpleTapForm(
             parsed = parsed,
-            onParsedChange = { parsed = it },
-            onChangeVerb = {},
+            onParsedChange = { if (it != null) parsed = it },
             modifier = Modifier.padding(8.dp)
         )
     }

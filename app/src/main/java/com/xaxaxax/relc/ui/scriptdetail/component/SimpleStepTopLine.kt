@@ -3,6 +3,7 @@ package com.xaxaxax.relc.ui.scriptdetail.component
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
@@ -32,13 +33,14 @@ import androidx.compose.ui.unit.dp
 import com.xaxaxax.relc.script.simple.ParsedSimpleLine
 import com.xaxaxax.relc.script.simple.SimplePhysicalKey
 import com.xaxaxax.relc.script.simple.SimpleScriptVerb
-import com.xaxaxax.relc.script.simple.defaultPayloadForVerb
+import com.xaxaxax.relc.script.simple.convertTo
 import com.xaxaxax.relc.ui.theme.ReLCTheme
 
 internal fun SimpleScriptVerb.menuLabel(): String =
     when (this) {
         SimpleScriptVerb.TAP -> "Tap"
         SimpleScriptVerb.SWIPE -> "Swipe"
+        SimpleScriptVerb.SWIPE_RAW -> "Swipe Raw"
         SimpleScriptVerb.DELAY -> "Delay"
         SimpleScriptVerb.KEY -> "Key"
         SimpleScriptVerb.TEXT -> "Text"
@@ -46,9 +48,9 @@ internal fun SimpleScriptVerb.menuLabel(): String =
     }
 
 @Composable
-fun SimpleVerbMenuAnchor(
-    currentVerb: SimpleScriptVerb,
-    onSelectVerb: (SimpleScriptVerb) -> Unit,
+private fun SimpleVerbMenuAnchor(
+    parsed: ParsedSimpleLine,
+    onParsedChange: (ParsedSimpleLine?) -> Unit,
 ) {
     val scriptColors = simpleScriptUiColors()
     var expanded by remember { mutableStateOf(false) }
@@ -61,7 +63,7 @@ fun SimpleVerbMenuAnchor(
             horizontalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             Text(
-                text = currentVerb.menuLabel(),
+                text = parsed.verb.menuLabel(),
                 style = MaterialTheme.typography.titleSmall,
                 color = scriptColors.verbMenuLabel,
             )
@@ -81,8 +83,77 @@ fun SimpleVerbMenuAnchor(
                     text = { Text(v.menuLabel()) },
                     onClick = {
                         expanded = false
-                        onSelectVerb(v)
+                        if (v != parsed.verb) {
+                            onParsedChange(parsed.convertTo(v))
+                        }
                     }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun StepSettingsButton(
+    parsed: ParsedSimpleLine,
+    onParsedChange: (ParsedSimpleLine?) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val scriptColors = simpleScriptUiColors()
+
+    Box {
+        Row(
+            modifier = Modifier
+                .clickable { expanded = true }
+                .padding(vertical = 6.dp, horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                text = "x${parsed.repeatCount}",
+                style = MaterialTheme.typography.titleSmall,
+                color = scriptColors.verbMenuLabel,
+            )
+            Icon(
+                imageVector = Icons.Default.ArrowDropDown,
+                contentDescription = null,
+                tint = scriptColors.verbMenuLabel,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.width(180.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                CompactNumberInput(
+                    value = parsed.repeatCount.toString(),
+                    label = "Repeat (x)",
+                    onValueChange = {
+                        val n = it.toIntOrNull()?.coerceAtLeast(1) ?: 1
+                        onParsedChange(parsed.copy(repeatCount = n))
+                    },
+                )
+                CompactNumberInput(
+                    value = parsed.delayBetweenRepeatsMs.toString(),
+                    label = "Delay Between (ms)",
+                    onValueChange = {
+                        val n = it.toLongOrNull() ?: 0L
+                        onParsedChange(parsed.copy(delayBetweenRepeatsMs = n))
+                    },
+                )
+                CompactNumberInput(
+                    value = parsed.delayAfterStepMs.toString(),
+                    label = "Delay After (ms)",
+                    onValueChange = {
+                        val n = it.toLongOrNull() ?: 0L
+                        onParsedChange(parsed.copy(delayAfterStepMs = n))
+                    },
                 )
             }
         }
@@ -92,8 +163,7 @@ fun SimpleVerbMenuAnchor(
 @Composable
 fun SimpleStepTopLine(
     parsed: ParsedSimpleLine,
-    onParsedChange: (ParsedSimpleLine) -> Unit,
-    onChangeVerb: (SimpleScriptVerb?) -> Unit,
+    onParsedChange: (ParsedSimpleLine?) -> Unit,
     modifier: Modifier = Modifier,
     middle: @Composable RowScope.() -> Unit = {},
 ) {
@@ -108,12 +178,8 @@ fun SimpleStepTopLine(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             SimpleVerbMenuAnchor(
-                currentVerb = parsed.verb,
-                onSelectVerb = { v ->
-                    if (v != parsed.verb) {
-                        onParsedChange(parsed.copy(verb = v, payload = defaultPayloadForVerb(v)))
-                    }
-                },
+                parsed = parsed,
+                onParsedChange = onParsedChange,
             )
             middle()
         }
@@ -123,35 +189,12 @@ fun SimpleStepTopLine(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            CompactNumberInput(
-                value = parsed.repeatCount.toString(),
-                label = "R",
-                modifier = Modifier.width(50.dp),
-                onValueChange = {
-                    val n = it.toIntOrNull()?.coerceAtLeast(1) ?: 1
-                    onParsedChange(parsed.copy(repeatCount = n))
-                },
-            )
-            CompactNumberInput(
-                value = parsed.delayBetweenRepeatsMs.toString(),
-                label = "B",
-                modifier = Modifier.width(50.dp),
-                onValueChange = {
-                    val n = it.toLongOrNull() ?: 0L
-                    onParsedChange(parsed.copy(delayBetweenRepeatsMs = n))
-                },
-            )
-            CompactNumberInput(
-                value = parsed.delayAfterStepMs.toString(),
-                label = "A",
-                modifier = Modifier.width(50.dp),
-                onValueChange = {
-                    val n = it.toLongOrNull() ?: 0L
-                    onParsedChange(parsed.copy(delayAfterStepMs = n))
-                },
+            StepSettingsButton(
+                parsed = parsed,
+                onParsedChange = onParsedChange,
             )
             IconButton(
-                onClick = { onChangeVerb(null) },
+                onClick = { onParsedChange(null) },
                 modifier = Modifier.size(32.dp),
             ) {
                 Icon(
@@ -204,9 +247,9 @@ fun RowScope.SimpleKeyWireDropdown(
 private fun SimpleVerbMenuAnchorPreview() {
     var v by remember { mutableStateOf(SimpleScriptVerb.TAP) }
     ReLCTheme {
-        SimpleVerbMenuAnchor(
-            currentVerb = v,
-            onSelectVerb = { v = it },
+        SimpleStepTopLine(
+            parsed = ParsedSimpleLine(v, 1, 0, 0, ""),
+            onParsedChange = { if (it != null) v = it.verb }
         )
     }
 }
@@ -225,12 +268,11 @@ private fun SimpleStepTopLinePreview() {
             )
         )
     }
-    val update = { next: ParsedSimpleLine -> parsed = next }
+    val update = { next: ParsedSimpleLine? -> if (next != null) parsed = next }
     ReLCTheme {
         SimpleStepTopLine(
             parsed = parsed,
             onParsedChange = update,
-            onChangeVerb = {},
             modifier = Modifier.padding(8.dp),
         ) {
             CompactNumberInput(

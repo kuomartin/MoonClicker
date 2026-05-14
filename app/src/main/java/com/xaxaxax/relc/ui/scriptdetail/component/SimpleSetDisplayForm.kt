@@ -21,8 +21,7 @@ import com.xaxaxax.relc.ui.theme.ReLCTheme
 fun SimpleSetDisplayForm(
     modifier: Modifier = Modifier,
     parsed: ParsedSimpleLine,
-    onParsedChange: (ParsedSimpleLine) -> Unit,
-    onChangeVerb: (SimpleScriptVerb?) -> Unit,
+    onParsedChange: (ParsedSimpleLine?) -> Unit,
 ) {
     val id = parsed.payload.trim().toIntOrNull() ?: 0
     Column(
@@ -32,7 +31,6 @@ fun SimpleSetDisplayForm(
         SimpleStepTopLine(
             parsed = parsed,
             onParsedChange = onParsedChange,
-            onChangeVerb = onChangeVerb,
         ) {
             CompactNumberInput(
                 value = id.toString(),
@@ -63,8 +61,7 @@ private fun SimpleSetDisplayFormPreview() {
     ReLCTheme {
         SimpleSetDisplayForm(
             parsed = parsed,
-            onParsedChange = { parsed = it },
-            onChangeVerb = {},
+            onParsedChange = { if (it != null) parsed = it },
             modifier = Modifier.padding(8.dp)
         )
     }

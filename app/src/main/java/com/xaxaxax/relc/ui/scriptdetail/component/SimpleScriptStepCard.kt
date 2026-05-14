@@ -25,18 +25,8 @@ import com.xaxaxax.relc.ui.theme.ReLCTheme
 fun SimpleScriptStepCard(
     modifier: Modifier = Modifier,
     parsed: ParsedSimpleLine,
-    onParsedChange: (ParsedSimpleLine) -> Unit,
-    onDeleteStep: () -> Unit,
+    onParsedChange: (ParsedSimpleLine?) -> Unit,
 ) {
-    val handleVerb: (SimpleScriptVerb?) -> Unit = { v ->
-        when (v) {
-            null -> onDeleteStep()
-            else -> if (v != parsed.verb) {
-                onParsedChange(parsed.copy(verb = v, payload = defaultPayloadForVerb(v)))
-            }
-        }
-    }
-
     val scriptColors = simpleScriptUiColors()
     Card(
         modifier = modifier
@@ -54,7 +44,6 @@ fun SimpleScriptStepCard(
                     SimpleTapForm(
                         parsed = parsed,
                         onParsedChange = onParsedChange,
-                        onChangeVerb = handleVerb,
                     )
                 }
 
@@ -66,7 +55,6 @@ fun SimpleScriptStepCard(
                         parsed = parsed,
                         payload = swipePayload,
                         onParsedChange = onParsedChange,
-                        onChangeVerb = handleVerb,
                         useOuterCard = false,
                     )
                 }
@@ -75,7 +63,6 @@ fun SimpleScriptStepCard(
                     SimpleDelayForm(
                         parsed = parsed,
                         onParsedChange = onParsedChange,
-                        onChangeVerb = handleVerb,
                     )
                 }
 
@@ -83,15 +70,13 @@ fun SimpleScriptStepCard(
                     SimpleKeyForm(
                         parsed = parsed,
                         onParsedChange = onParsedChange,
-                        onChangeVerb = handleVerb,
                     )
                 }
 
-                SimpleScriptVerb.TEXT -> {
+                SimpleScriptVerb.TEXT, SimpleScriptVerb.SWIPE_RAW -> {
                     SimpleTextForm(
                         parsed = parsed,
                         onParsedChange = onParsedChange,
-                        onChangeVerb = handleVerb,
                     )
                 }
 
@@ -99,7 +84,6 @@ fun SimpleScriptStepCard(
                     SimpleSetDisplayForm(
                         parsed = parsed,
                         onParsedChange = onParsedChange,
-                        onChangeVerb = handleVerb,
                     )
                 }
             }
@@ -117,15 +101,14 @@ private fun SimpleScriptStepCardTapPreview() {
                 repeatCount = 2,
                 delayBetweenRepeatsMs = 100,
                 delayAfterStepMs = 50,
-                payload = "540,960",
+                payload = "50,540,960",
             )
         )
     }
     ReLCTheme {
         SimpleScriptStepCard(
             parsed = parsed,
-            onParsedChange = { parsed = it },
-            onDeleteStep = {},
+            onParsedChange = { if (it != null) parsed = it },
         )
     }
 }
@@ -147,100 +130,7 @@ private fun SimpleScriptStepCardSwipePreview() {
     ReLCTheme {
         SimpleScriptStepCard(
             parsed = parsed,
-            onParsedChange = { parsed = it },
-            onDeleteStep = {},
-        )
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-private fun SimpleScriptStepCardDelayPreview() {
-    var parsed by remember {
-        mutableStateOf(
-            ParsedSimpleLine(
-                verb = SimpleScriptVerb.DELAY,
-                repeatCount = 1,
-                delayBetweenRepeatsMs = 0,
-                delayAfterStepMs = 0,
-                payload = "250",
-            )
-        )
-    }
-    ReLCTheme {
-        SimpleScriptStepCard(
-            parsed = parsed,
-            onParsedChange = { parsed = it },
-            onDeleteStep = {},
-        )
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-private fun SimpleScriptStepCardKeyPreview() {
-    var parsed by remember {
-        mutableStateOf(
-            ParsedSimpleLine(
-                verb = SimpleScriptVerb.KEY,
-                repeatCount = 1,
-                delayBetweenRepeatsMs = 0,
-                delayAfterStepMs = 0,
-                payload = "KEYCODE_HOME",
-            )
-        )
-    }
-    ReLCTheme {
-        SimpleScriptStepCard(
-            parsed = parsed,
-            onParsedChange = { parsed = it },
-            onDeleteStep = {},
-        )
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-private fun SimpleScriptStepCardTextPreview() {
-    var parsed by remember {
-        mutableStateOf(
-            ParsedSimpleLine(
-                verb = SimpleScriptVerb.TEXT,
-                repeatCount = 1,
-                delayBetweenRepeatsMs = 0,
-                delayAfterStepMs = 0,
-                payload = "Hello World",
-            )
-        )
-    }
-    ReLCTheme {
-        SimpleScriptStepCard(
-            parsed = parsed,
-            onParsedChange = { parsed = it },
-            onDeleteStep = {},
-        )
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-private fun SimpleScriptStepCardSetDisplayPreview() {
-    var parsed by remember {
-        mutableStateOf(
-            ParsedSimpleLine(
-                verb = SimpleScriptVerb.SET_DISPLAY,
-                repeatCount = 1,
-                delayBetweenRepeatsMs = 0,
-                delayAfterStepMs = 0,
-                payload = "1080,1920",
-            )
-        )
-    }
-    ReLCTheme {
-        SimpleScriptStepCard(
-            parsed = parsed,
-            onParsedChange = { parsed = it },
-            onDeleteStep = {},
+            onParsedChange = { if (it != null) parsed = it },
         )
     }
 }

@@ -70,7 +70,7 @@ class ScriptEngine(
             }
         })
         /** Same args as `swipe`; uses Manhattan (L1) arc length — see [InputController.swipePolylineL1]. */
-        inputLib.set("swipeL1", object : VarArgFunction() {
+        inputLib.set("swipe_l1", object : VarArgFunction() {
             override fun invoke(args: Varargs): Varargs {
                 val (duration, pts) = parseSwipePolylineArgs(args, "input.swipeL1")
                 inputController.swipePolylineL1(duration, pts, readDisplayId())
@@ -126,7 +126,10 @@ class ScriptEngine(
     }
 
     /** Parses `durationMs, x1, y1, ...` from Lua (odd nargs ≥ 5). */
-    private fun parseSwipePolylineArgs(args: Varargs, apiName: String): Pair<Long, List<Pair<Int, Int>>> {
+    private fun parseSwipePolylineArgs(
+        args: Varargs,
+        apiName: String
+    ): Pair<Long, List<Pair<Int, Int>>> {
         val n = args.narg()
         require(n % 2 == 1 && n >= 5) {
             "$apiName(durationMs, x1, y1, ...) needs odd arg count >= 5"

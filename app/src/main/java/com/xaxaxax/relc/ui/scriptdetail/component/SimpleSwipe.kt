@@ -1,5 +1,6 @@
 package com.xaxaxax.relc.ui.scriptdetail.component
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,6 +16,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -25,6 +28,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -45,13 +49,14 @@ fun SimpleSwipe(
     modifier: Modifier = Modifier,
     parsed: ParsedSimpleLine,
     payload: SimpleSwipePayload,
-    onParsedChange: (ParsedSimpleLine) -> Unit,
-    onChangeVerb: (SimpleScriptVerb?) -> Unit,
+    onParsedChange: (ParsedSimpleLine?) -> Unit,
     useOuterCard: Boolean = true,
 ) {
     fun emitSwipe(next: SimpleSwipePayload) {
         onParsedChange(parsed.copy(payload = next.encodeToPayload()))
     }
+
+    var pointsExpanded by remember { mutableStateOf(payload.points.size <= 5) }
 
     val scriptColors = simpleScriptUiColors()
     val inner: @Composable () -> Unit = {
@@ -62,7 +67,6 @@ fun SimpleSwipe(
             SimpleStepTopLine(
                 parsed = parsed,
                 onParsedChange = onParsedChange,
-                onChangeVerb = onChangeVerb,
             ) {
                 CompactNumberInput(
                     value = payload.durationMs.toString(),
@@ -75,79 +79,105 @@ fun SimpleSwipe(
             }
             HorizontalDivider(color = scriptColors.divider)
 
-            payload.points.forEachIndexed { index, (x, y) ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        "P${index + 1}:",
-                        style = MaterialTheme.typography.labelMedium,
-                        modifier = Modifier.width(32.dp)
-                    )
-
-                    CompactNumberInput(
-                        value = x.toString(),
-                        label = "X:",
-                        modifier = Modifier.weight(1f),
-                        onValueChange = { newX ->
-                            val newPoints = payload.points.toMutableList()
-                            newPoints[index] = (newX.toIntOrNull() ?: 0) to y
-                            emitSwipe(payload.copy(points = newPoints))
-                        }
-                    )
-
-                    CompactNumberInput(
-                        value = y.toString(),
-                        label = "Y:",
-                        modifier = Modifier.weight(1f),
-                        onValueChange = { newY ->
-                            val newPoints = payload.points.toMutableList()
-                            newPoints[index] = x to (newY.toIntOrNull() ?: 0)
-                            emitSwipe(payload.copy(points = newPoints))
-                        }
-                    )
-
-                    val canRemovePoint = payload.points.size > 2
-                    IconButton(
-                        onClick = {
-                            if (!canRemovePoint) return@IconButton
-                            val newPoints = payload.points.toMutableList().apply { removeAt(index) }
-                            emitSwipe(payload.copy(points = newPoints))
-                        },
-                        enabled = canRemovePoint,
-                        modifier = Modifier.size(32.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Delete,
-                            contentDescription = "刪除點",
-                            tint = if (canRemovePoint) {
-                                scriptColors.destructive
-                            } else {
-                                scriptColors.destructiveMuted
-                            },
-                            modifier = Modifier.size(24.dp),
-                        )
-                    }
-                }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { pointsExpanded = !pointsExpanded }
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Points (${payload.points.size})",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(Modifier.weight(1f))
+                Icon(
+                    imageVector = if (pointsExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp)
+                )
             }
 
-            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
-                TextButton(
-                    onClick = {
-                        emitSwipe(payload.copy(points = payload.points + (0 to 0)))
-                    },
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                    modifier = Modifier.height(32.dp)
-                ) {
-                    Icon(
-                        Icons.Default.Add,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    Text("Add Point", style = MaterialTheme.typography.labelLarge)
+            if (pointsExpanded) {
+                payload.points.forEachIndexed { index, (x, y) ->
+                    key(index) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                "P${index + 1}:",
+                                style = MaterialTheme.typography.labelMedium,
+                                modifier = Modifier.width(32.dp)
+                            )
+
+                            CompactNumberInput(
+                                value = x.toString(),
+                                label = "X:",
+                                modifier = Modifier.weight(1f),
+                                onValueChange = { newX ->
+                                    val newPoints = payload.points.toMutableList()
+                                    newPoints[index] = (newX.toIntOrNull() ?: 0) to y
+                                    emitSwipe(payload.copy(points = newPoints))
+                                }
+                            )
+
+                            CompactNumberInput(
+                                value = y.toString(),
+                                label = "Y:",
+                                modifier = Modifier.weight(1f),
+                                onValueChange = { newY ->
+                                    val newPoints = payload.points.toMutableList()
+                                    newPoints[index] = x to (newY.toIntOrNull() ?: 0)
+                                    emitSwipe(payload.copy(points = newPoints))
+                                }
+                            )
+
+                            val canRemovePoint = payload.points.size > 2
+                            IconButton(
+                                onClick = {
+                                    if (!canRemovePoint) return@IconButton
+                                    val newPoints =
+                                        payload.points.toMutableList().apply { removeAt(index) }
+                                    emitSwipe(payload.copy(points = newPoints))
+                                },
+                                enabled = canRemovePoint,
+                                modifier = Modifier.size(32.dp),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = "刪除點",
+                                    tint = if (canRemovePoint) {
+                                        scriptColors.destructive
+                                    } else {
+                                        scriptColors.destructiveMuted
+                                    },
+                                    modifier = Modifier.size(24.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+                    TextButton(
+                        onClick = {
+                            emitSwipe(payload.copy(points = payload.points + (0 to 0)))
+                        },
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                        modifier = Modifier.height(32.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Add,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text("Add Point", style = MaterialTheme.typography.labelLarge)
+                    }
                 }
             }
         }
@@ -191,8 +221,11 @@ private fun PreviewSimpleSwipe() {
         SimpleSwipe(
             parsed = parsed,
             payload = swipePayload,
-            onParsedChange = { parsed = it },
-            onChangeVerb = {},
+            onParsedChange = {
+                if (it != null) {
+                    parsed = it
+                }
+            },
         )
     }
 }
@@ -218,8 +251,11 @@ private fun PreviewSimpleSwipeEmbedded() {
         SimpleSwipe(
             parsed = parsed,
             payload = swipePayload,
-            onParsedChange = { parsed = it },
-            onChangeVerb = {},
+            onParsedChange = {
+                if (it != null) {
+                    parsed = it
+                }
+            },
             useOuterCard = false,
         )
     }

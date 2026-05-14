@@ -24,8 +24,7 @@ import com.xaxaxax.relc.ui.theme.ReLCTheme
 fun SimpleTextForm(
     modifier: Modifier = Modifier,
     parsed: ParsedSimpleLine,
-    onParsedChange: (ParsedSimpleLine) -> Unit,
-    onChangeVerb: (SimpleScriptVerb?) -> Unit,
+    onParsedChange: (ParsedSimpleLine?) -> Unit,
 ) {
     val scriptColors = simpleScriptUiColors()
     Column(
@@ -35,7 +34,6 @@ fun SimpleTextForm(
         SimpleStepTopLine(
             parsed = parsed,
             onParsedChange = onParsedChange,
-            onChangeVerb = onChangeVerb,
         ) {}
         HorizontalDivider(color = scriptColors.divider)
         OutlinedTextField(
@@ -67,8 +65,7 @@ private fun SimpleTextFormPreview() {
     ReLCTheme {
         SimpleTextForm(
             parsed = parsed,
-            onParsedChange = { parsed = it },
-            onChangeVerb = {},
+            onParsedChange = { if (it != null) parsed = it },
             modifier = Modifier.padding(8.dp)
         )
     }

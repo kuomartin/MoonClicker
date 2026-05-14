@@ -107,11 +107,11 @@ class SimpleScriptRunner(
                 repeat(p.repeatCount) { rep ->
                     when (p.verb) {
                         SimpleScriptVerb.TAP -> {
-                            val (x, y) = parseTapPayload(p.payload)
-                            input.tap(50L, x, y, displayId)
+                            val tap = parseTapPayload(p.payload)
+                            input.tap(tap.durationMs, tap.x, tap.y, displayId)
                         }
 
-                        SimpleScriptVerb.SWIPE -> {
+                        SimpleScriptVerb.SWIPE, SimpleScriptVerb.SWIPE_RAW -> {
                             val s = parseSwipePayload(p.payload)
                             input.swipePolyline(
                                 s.durationMs,
