@@ -11,4 +11,5 @@
     <color name="click_assist_swipe_start">#FFB3261E</color>
     <color name="click_assist_swipe_end">#FFFFC107</color>
     <color name="overlay_hud_icon">#FF333333</color>
+    <color name="start_green">#FF4CAF50</color>
 </resources>

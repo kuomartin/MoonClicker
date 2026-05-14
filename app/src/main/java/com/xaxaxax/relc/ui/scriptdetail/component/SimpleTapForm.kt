@@ -34,7 +34,7 @@ fun SimpleTapForm(
         .getOrDefault(SimpleTapPayload(50L, 0, 0))
     val scriptColors = simpleScriptUiColors()
     Column(
-        modifier = modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         SimpleStepTopLine(

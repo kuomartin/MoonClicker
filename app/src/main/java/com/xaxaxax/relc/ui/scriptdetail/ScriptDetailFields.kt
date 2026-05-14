@@ -58,7 +58,8 @@ import com.xaxaxax.relc.script.simple.SimpleScriptBodyJson
 import com.xaxaxax.relc.script.simple.SimpleScriptCodec
 import com.xaxaxax.relc.script.simple.encodeToLine
 import com.xaxaxax.relc.script.simple.parseSimpleScriptLine
-import com.xaxaxax.relc.ui.scriptdetail.component.SimpleScriptRawLineEditor
+import com.xaxaxax.relc.ui.component.NoPaddingOutlinedTextField
+import com.xaxaxax.relc.ui.scriptdetail.component.SimpleScriptRawLine
 import com.xaxaxax.relc.ui.scriptdetail.component.SimpleScriptStepCard
 import com.xaxaxax.relc.ui.scriptdetail.component.simpleScriptUiColors
 import com.xaxaxax.relc.ui.theme.ReLCTheme
@@ -79,7 +80,7 @@ private fun LoopMode.withRepeatCount(c: Int): LoopMode {
 }
 
 @Composable
-internal fun FormOutlinedField(
+fun FormOutlinedField(
     value: String,
     onValueChange: (String) -> Unit,
     label: String,
@@ -100,7 +101,7 @@ internal fun FormOutlinedField(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun MacroLoopEditor(
+fun MacroLoopEditor(
     loopMode: LoopMode,
     onLoopModeChange: (LoopMode) -> Unit,
 ) {
@@ -148,7 +149,7 @@ internal fun MacroLoopEditor(
             ) {
                 // 只有在「指定次數」模式（即非 None 且非 Inf）才顯示次數框
                 if (loopMode.count >= 1) {
-                    FormOutlinedField(
+                    NoPaddingOutlinedTextField(
                         modifier = Modifier.weight(1f),
                         value = loopMode.repeatCount().toString(),
                         onValueChange = { raw ->
@@ -159,7 +160,7 @@ internal fun MacroLoopEditor(
                     )
                 }
 
-                FormOutlinedField(
+                NoPaddingOutlinedTextField(
                     modifier = Modifier.weight(1f),
                     value = loopMode.sleepMs().toString(),
                     onValueChange = { raw ->
@@ -242,7 +243,7 @@ internal fun ScriptConsole(logLines: List<String>) {
 }
 
 @Composable
-internal fun SimpleScriptEditor(
+fun SimpleScriptEditor(
     scriptId: String,
     code: String,
     onBodyChanged: (SimpleScriptBodyJson) -> Unit,
@@ -355,7 +356,7 @@ internal fun SimpleScriptEditor(
                     )
                 } else {
                     val hint = parsedResult.exceptionOrNull()?.message ?: "parse error"
-                    SimpleScriptRawLineEditor(
+                    SimpleScriptRawLine(
                         index = index,
                         rawLine = line,
                         dragHandleModifier = dragModifier,

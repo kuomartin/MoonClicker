@@ -7,19 +7,40 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.graphics.PixelFormat
-import android.graphics.Rect
 import android.os.Build
 import android.os.IBinder
 import android.view.Gravity
 import android.view.WindowManager
 import android.widget.Toast
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
 import com.xaxaxax.relc.RelcActivity
+import com.xaxaxax.relc.script.ScriptCodeType
 import com.xaxaxax.relc.script.ScriptManager
 import com.xaxaxax.relc.script.ScriptRepository
 import com.xaxaxax.relc.script.ScriptState
@@ -37,6 +58,7 @@ import com.xaxaxax.relc.script.simple.parseTapPayload
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -66,6 +88,9 @@ class ClickAssistOverlayService : LifecycleService() {
     private var controlBarView: ComposeView? = null
     private var controlBarParams: WindowManager.LayoutParams? = null
 
+    private var detailedEditorView: ComposeView? = null
+    private var saveDialogView: ComposeView? = null
+
     private val targetViews = mutableMapOf<Int, ComposeView>()
     private val targetParams = mutableMapOf<Int, WindowManager.LayoutParams>()
 
@@ -74,6 +99,9 @@ class ClickAssistOverlayService : LifecycleService() {
     private var scriptId: String? = null
     private val _currentScript = MutableStateFlow(SimpleScriptBodyJson())
     private val _isRecording = MutableStateFlow(false)
+    private val _isCollapsed = MutableStateFlow(false)
+    private val _showSaveDialog = MutableStateFlow(false)
+    private val _showDetailedEditor = MutableStateFlow(false)
 
     override fun onCreate() {
         super.onCreate()
@@ -82,8 +110,20 @@ class ClickAssistOverlayService : LifecycleService() {
         createNotificationChannel()
 
         lifecycleScope.launch {
-            _currentScript.collectLatest { body ->
+            combine(_currentScript, _showDetailedEditor) { body, showEditor ->
+                if (showEditor) SimpleScriptBodyJson(emptyList()) else body
+            }.collectLatest { body ->
                 syncTargets(body)
+            }
+        }
+
+        lifecycleScope.launch {
+            _showSaveDialog.collectLatest { show ->
+                if (show) {
+                    showSaveDialogOverlay()
+                } else {
+                    hideSaveDialogOverlay()
+                }
             }
         }
     }
@@ -118,10 +158,13 @@ class ClickAssistOverlayService : LifecycleService() {
         }
     }
 
-    private fun saveDraft(showToast: Boolean = false) {
+    private fun saveDraft(name: String? = null, showToast: Boolean = false) {
         val id = scriptId ?: return
         val config = scriptRepository.getScript(id) ?: return
-        val updated = config.copy(code = SimpleScriptCodec.encode(_currentScript.value))
+        val updated = config.copy(
+            name = name ?: config.name,
+            code = SimpleScriptCodec.encode(_currentScript.value)
+        )
         scriptRepository.saveScript(updated)
         if (showToast) {
             Toast.makeText(this, "已儲存", Toast.LENGTH_SHORT).show()
@@ -148,27 +191,34 @@ class ClickAssistOverlayService : LifecycleService() {
                 val hudUi by scriptManager.hudUi.collectAsState()
                 val isRunning = hudUi?.scriptId == scriptId && hudUi?.state == ScriptState.RUNNING
                 val isRecording by _isRecording.collectAsState()
+                val isCollapsed by _isCollapsed.collectAsState()
 
                 EditorControlBar(
                     uiState = EditorControlUiState(
                         isRunning = isRunning,
-                        isRecording = isRecording
+                        isRecording = isRecording,
+                        isCollapsed = isCollapsed
                     ),
                     onStartStopClick = {
                         val currentId = scriptId ?: return@EditorControlBar
                         if (isRunning) {
                             scriptManager.stopScript(currentId)
                         } else {
-                            scriptRepository.getScript(currentId)?.let {
-                                scriptManager.startScript(it)
-                            }
+                            val currentConfig =
+                                scriptRepository.getScript(currentId) ?: return@EditorControlBar
+                            val updatedConfig = currentConfig.copy(
+                                code = SimpleScriptCodec.encode(_currentScript.value)
+                            )
+                            scriptManager.startScript(updatedConfig)
                         }
                     },
                     onAddTapClick = { addTap() },
                     onRecordSwipeClick = { startRecording() },
                     onRemoveClick = { removeLast() },
-                    onSaveClick = { saveDraft(true) },
+                    onSaveClick = { _showSaveDialog.value = true },
                     onCloseClick = { stopSelf() },
+                    onToggleCollapse = { _isCollapsed.value = !_isCollapsed.value },
+                    onMoreClick = { showDetailedEditor() },
                     onDrag = { dx, dy ->
                         params.x += dx.toInt()
                         params.y += dy.toInt()
@@ -246,6 +296,167 @@ class ClickAssistOverlayService : LifecycleService() {
         _isRecording.value = false
     }
 
+    private fun showDetailedEditor() {
+        if (detailedEditorView != null) return
+        _showDetailedEditor.value = true
+
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            PixelFormat.TRANSLUCENT
+        )
+
+        val view = ComposeView(this).apply {
+            installOverlayCompositionOwners(overlayOwner)
+            setContent {
+                val hudUi by scriptManager.hudUi.collectAsState()
+                val isRunning = hudUi?.scriptId == scriptId && hudUi?.state == ScriptState.RUNNING
+
+                // We need to keep track of the config being edited
+                var config by remember {
+                    mutableStateOf(
+                        scriptRepository.getScript(
+                            scriptId ?: ""
+                        )!!
+                    )
+                }
+
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background.copy(alpha = 0.95f)
+                ) {
+                    DetailedScriptEditor(
+                        config = config,
+                        isRunning = isRunning,
+                        onNavigateBack = { hideDetailedEditor() },
+                        onUpdateConfig = { updater ->
+                            val updated = updater(config)
+                            config = updated
+                            // If it's simple script, update _currentScript too
+                            if (updated.type == ScriptCodeType.SIMPLE) {
+                                SimpleScriptCodec.decodeOrNull(updated.code)?.let {
+                                    _currentScript.value = it
+                                }
+                            }
+                            updated
+                        },
+                        onSave = {
+                            scriptRepository.saveScript(config)
+                            Toast.makeText(
+                                this@ClickAssistOverlayService,
+                                "已儲存",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        },
+                        onPlay = {
+                            scriptRepository.saveScript(config)
+                            scriptManager.startScript(config)
+                        },
+                        onStop = {
+                            scriptManager.stopScript(config.id)
+                        }
+                    )
+                }
+            }
+        }
+        detailedEditorView = view
+        windowManager.addView(view, params)
+    }
+
+    private fun hideDetailedEditor() {
+        detailedEditorView?.let {
+            if (it.isAttachedToWindow) {
+                windowManager.removeView(it)
+            }
+        }
+        detailedEditorView = null
+        _showDetailedEditor.value = false
+    }
+
+    private fun showSaveDialogOverlay() {
+        if (saveDialogView != null) return
+
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            PixelFormat.TRANSLUCENT
+        )
+
+        val view = ComposeView(this).apply {
+            installOverlayCompositionOwners(overlayOwner)
+            setContent {
+                val config = remember { scriptRepository.getScript(scriptId ?: "") }
+                var name by remember { mutableStateOf(config?.name ?: "") }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.5f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth(0.8f)
+                            .padding(16.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surface,
+                        ),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            Text(
+                                "儲存腳本",
+                                style = MaterialTheme.typography.headlineSmall,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+
+                            OutlinedTextField(
+                                value = name,
+                                onValueChange = { name = it },
+                                label = { Text("名稱") },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                TextButton(onClick = { _showSaveDialog.value = false }) {
+                                    Text("取消")
+                                }
+                                TextButton(onClick = {
+                                    saveDraft(name, showToast = true)
+                                    _showSaveDialog.value = false
+                                }) {
+                                    Text("儲存")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        saveDialogView = view
+        windowManager.addView(view, params)
+    }
+
+    private fun hideSaveDialogOverlay() {
+        saveDialogView?.let {
+            if (it.isAttachedToWindow) {
+                windowManager.removeView(it)
+            }
+        }
+        saveDialogView = null
+    }
+
     private fun addSwipe(payload: SimpleSwipePayload) {
         val current = _currentScript.value
         val steps = current.steps.toMutableList()
@@ -261,8 +472,6 @@ class ClickAssistOverlayService : LifecycleService() {
     }
 
     private fun syncTargets(body: SimpleScriptBodyJson) {
-        val currentIndices = body.steps.indices.filter { isInteractiveStep(body.steps[it]) }.toSet()
-
         // Remove views that are no longer in the script or changed verb
         val iterator = targetViews.iterator()
         while (iterator.hasNext()) {
@@ -406,7 +615,8 @@ class ClickAssistOverlayService : LifecycleService() {
                 params.height = newH
                 windowManager.updateViewLayout(view, params)
             }
-        }    }
+        }
+    }
 
     private fun getSwipeBoundingBox(points: List<Pair<Int, Int>>): android.graphics.Rect {
         var minX = Int.MAX_VALUE
@@ -426,11 +636,16 @@ class ClickAssistOverlayService : LifecycleService() {
         val current = _currentScript.value
         val steps = current.steps.toMutableList()
         val line = steps.getOrNull(index) ?: return
-        val parsed = try { parseSimpleScriptLine(line) } catch (e: Exception) { null } ?: return
+        val parsed = try {
+            parseSimpleScriptLine(line)
+        } catch (e: Exception) {
+            null
+        } ?: return
         if (parsed.verb == SimpleScriptVerb.SWIPE || parsed.verb == SimpleScriptVerb.SWIPE_RAW) {
             val payload = parseSwipePayload(parsed.payload)
             val newPoints = payload.points.map { (px, py) -> (px + dx) to (py + dy) }
-            steps[index] = parsed.copy(payload = payload.copy(points = newPoints).encodeToPayload()).encodeToLine()
+            steps[index] = parsed.copy(payload = payload.copy(points = newPoints).encodeToPayload())
+                .encodeToLine()
             _currentScript.value = current.copy(steps = steps)
         }
     }
@@ -450,6 +665,7 @@ class ClickAssistOverlayService : LifecycleService() {
             _currentScript.value = current.copy(steps = steps)
         }
     }
+
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(

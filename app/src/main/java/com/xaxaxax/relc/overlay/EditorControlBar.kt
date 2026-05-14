@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -22,17 +23,18 @@ import androidx.compose.material.icons.filled.RadioButtonChecked
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Divider
+import androidx.compose.material3.DividerDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -42,6 +44,7 @@ import com.xaxaxax.relc.ui.theme.ReLCTheme
 data class EditorControlUiState(
     val isRunning: Boolean = false,
     val isRecording: Boolean = false,
+    val isCollapsed: Boolean = false,
 )
 
 @Composable
@@ -53,92 +56,106 @@ fun EditorControlBar(
     onRemoveClick: () -> Unit,
     onSaveClick: () -> Unit,
     onCloseClick: () -> Unit,
+    onToggleCollapse: () -> Unit,
+    onMoreClick: () -> Unit,
     modifier: Modifier = Modifier,
     onDrag: (Float, Float) -> Unit = { _, _ -> }
 ) {
-    var isExpanded by remember { mutableStateOf(false) }
-
     Column(
         modifier = modifier.wrapContentWidth(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Card(
             modifier = Modifier
-                .height(56.dp)
-                .padding(4.dp)
                 .pointerInput(Unit) {
                     detectDragGestures { change, dragAmount ->
                         change.consume()
                         onDrag(dragAmount.x, dragAmount.y)
                     }
                 },
-            shape = RoundedCornerShape(28.dp),
+            shape = RoundedCornerShape(8.dp),
             border = BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.5f)),
             colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.9f)),
             elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 4.dp),
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(2.dp)
+                horizontalArrangement = Arrangement.spacedBy(0.dp)
             ) {
                 // 1. Start/Stop
                 ControlIconButton(
                     icon = if (uiState.isRunning) Icons.Default.Stop else Icons.Default.PlayArrow,
                     contentDescription = if (uiState.isRunning) "Stop" else "Start",
-                    tint = if (uiState.isRunning) Color.Red else Color(0xFF4CAF50),
+                    tint = if (uiState.isRunning) Color.Red else colorResource(R.color.start_green),
                     onClick = onStartStopClick
                 )
 
-                EditorVerticalDivider()
+                VerticalDivider(Modifier.height(24.dp), DividerDefaults.Thickness, DividerDefaults.color)
 
-                // 2. Add Tap
-                ControlIconButton(
-                    icon = Icons.Default.Add,
-                    contentDescription = "Add Tap",
-                    onClick = onAddTapClick,
-                    enabled = !uiState.isRunning && !uiState.isRecording
-                )
+                if (!uiState.isCollapsed) {
+                    // 2. Add Tap
+                    ControlIconButton(
+                        icon = Icons.Default.Add,
+                        contentDescription = "Add Tap",
+                        onClick = onAddTapClick,
+                        enabled = !uiState.isRunning && !uiState.isRecording
+                    )
 
-                // 3. Remove Last
-                ControlIconButton(
-                    painter = painterResource(R.drawable.ic_remove),
-                    contentDescription = "Remove Last",
-                    onClick = onRemoveClick,
-                    enabled = !uiState.isRunning && !uiState.isRecording
-                )
+                    // 3. Remove Last
+                    ControlIconButton(
+                        painter = painterResource(R.drawable.ic_remove),
+                        contentDescription = "Remove Last",
+                        onClick = onRemoveClick,
+                        enabled = !uiState.isRunning && !uiState.isRecording
+                    )
 
-                // 4. Record Swipe
-                ControlIconButton(
-                    icon = Icons.Default.RadioButtonChecked,
-                    contentDescription = "Record Swipe",
-                    tint = if (uiState.isRecording) Color.Red else Color.DarkGray,
-                    onClick = onRecordSwipeClick,
-                    enabled = !uiState.isRunning
-                )
+                    // 4. Record Swipe
+                    ControlIconButton(
+                        icon = Icons.Default.RadioButtonChecked,
+                        contentDescription = "Record Swipe",
+                        tint = if (uiState.isRecording) Color.Red else Color.DarkGray,
+                        onClick = onRecordSwipeClick,
+                        enabled = !uiState.isRunning
+                    )
 
-                // 5. Save
-                ControlIconButton(
-                    painter = painterResource(R.drawable.ic_save),
-                    contentDescription = "Save",
-                    onClick = onSaveClick,
-                    enabled = !uiState.isRunning && !uiState.isRecording
-                )
+                    // 5. Save
+                    ControlIconButton(
+                        painter = painterResource(R.drawable.ic_save),
+                        contentDescription = "Save",
+                        onClick = onSaveClick,
+                        enabled = !uiState.isRunning && !uiState.isRecording
+                    )
 
-                // 6. Exit
+                    // 6. Hide
+                    ControlIconButton(
+                        painter = painterResource(R.drawable.ic_visibility_off),
+                        contentDescription = "Hide",
+                        onClick = onToggleCollapse
+                    )
+
+                    // 7. More
+                    ControlIconButton(
+                        icon = Icons.Default.MoreVert,
+                        contentDescription = "More",
+                        onClick = onMoreClick
+                    )
+                } else {
+                    // 6. Show (Collapsed mode)
+                    ControlIconButton(
+                        painter = painterResource(R.drawable.ic_visibility),
+                        contentDescription = "Show",
+                        onClick = onToggleCollapse
+                    )
+                }
+
+                VerticalDivider(Modifier.height(24.dp), DividerDefaults.Thickness, DividerDefaults.color)
+
+                // 8. Exit
                 ControlIconButton(
                     painter = painterResource(R.drawable.ic_exit_to_app),
                     contentDescription = "Exit",
                     onClick = onCloseClick
-                )
-
-                EditorVerticalDivider()
-
-                // 7. More
-                ControlIconButton(
-                    icon = Icons.Default.MoreVert,
-                    contentDescription = "More",
-                    onClick = { isExpanded = !isExpanded }
                 )
             }
         }
@@ -156,7 +173,7 @@ private fun ControlIconButton(
 ) {
     Box(
         modifier = Modifier
-            .size(48.dp)
+            .size(30.dp)
             .clickable(enabled = enabled) { onClick() },
         contentAlignment = Alignment.Center
     ) {
@@ -178,29 +195,34 @@ private fun ControlIconButton(
     }
 }
 
-@Composable
-private fun EditorVerticalDivider() {
-    Box(
-        modifier = Modifier
-            .height(24.dp)
-            .width(1.dp)
-            .background(Color.LightGray.copy(alpha = 0.5f))
-    )
-}
-
 @Preview(showBackground = true)
 @Composable
 private fun EditorControlBarPreview() {
     ReLCTheme {
-        Box(Modifier.padding(16.dp)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            // Expanded
             EditorControlBar(
-                uiState = EditorControlUiState(isRunning = false, isRecording = false),
+                uiState = EditorControlUiState(isRunning = false, isRecording = false, isCollapsed = false),
                 onStartStopClick = {},
                 onAddTapClick = {},
                 onRecordSwipeClick = {},
                 onRemoveClick = {},
                 onSaveClick = {},
-                onCloseClick = {}
+                onCloseClick = {},
+                onToggleCollapse = {},
+                onMoreClick = {}
+            )
+            // Collapsed
+            EditorControlBar(
+                uiState = EditorControlUiState(isRunning = true, isRecording = false, isCollapsed = true),
+                onStartStopClick = {},
+                onAddTapClick = {},
+                onRecordSwipeClick = {},
+                onRemoveClick = {},
+                onSaveClick = {},
+                onCloseClick = {},
+                onToggleCollapse = {},
+                onMoreClick = {}
             )
         }
     }

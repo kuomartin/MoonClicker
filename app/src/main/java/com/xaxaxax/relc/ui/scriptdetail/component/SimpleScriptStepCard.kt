@@ -54,7 +54,6 @@ fun SimpleScriptStepCard(
                         parsed = parsed,
                         payload = swipePayload,
                         onParsedChange = onParsedChange,
-                        useOuterCard = false,
                         dragHandleModifier = dragHandleModifier,
                     )
                 }

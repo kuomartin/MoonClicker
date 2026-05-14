@@ -26,11 +26,8 @@ fun SimpleSetDisplayForm(
     onParsedChange: (ParsedSimpleLine?) -> Unit,
 ) {
     val id = parsed.payload.trim().toIntOrNull() ?: 0
-    Column(
-        modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
         SimpleStepTopLine(
+            modifier = modifier,
             index = index,
             parsed = parsed,
             onParsedChange = onParsedChange,
@@ -46,7 +43,6 @@ fun SimpleSetDisplayForm(
             )
         }
     }
-}
 
 @Preview(showBackground = true)
 @Composable
@@ -67,7 +63,6 @@ private fun SimpleSetDisplayFormPreview() {
             index = 0,
             parsed = parsed,
             onParsedChange = { if (it != null) parsed = it },
-            modifier = Modifier.padding(8.dp)
         )
     }
 }

@@ -163,7 +163,7 @@ fun SimpleScriptVerb.wireName(): String =
 fun defaultPayloadForVerb(verb: SimpleScriptVerb): String =
     when (verb) {
         SimpleScriptVerb.TAP -> "50,540,960"
-        SimpleScriptVerb.SWIPE, SimpleScriptVerb.SWIPE_RAW -> "500,0,0,100,100"
+        SimpleScriptVerb.SWIPE, SimpleScriptVerb.SWIPE_RAW -> "500,640,1060,440,860"
         SimpleScriptVerb.DELAY -> "1000"
         SimpleScriptVerb.KEY -> "BACK"
         SimpleScriptVerb.TEXT -> ""
