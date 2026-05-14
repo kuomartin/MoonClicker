@@ -1,5 +1,8 @@
 package com.xaxaxax.relc.script
 
+import kotlinx.serialization.Serializable
+
+@Serializable
 data class ScriptConfig(
     val id: String,
     val name: String,

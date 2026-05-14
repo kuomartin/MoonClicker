@@ -69,6 +69,7 @@ dependencies {
 
     // viewModel
     implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.lifecycle.service)
     // Timber Logger
     implementation(libs.timber)
     // Shizuku

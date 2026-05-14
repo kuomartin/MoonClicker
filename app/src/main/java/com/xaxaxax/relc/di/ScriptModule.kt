@@ -1,10 +1,12 @@
 package com.xaxaxax.relc.di
 
+import android.content.Context
 import com.xaxaxax.relc.script.ScriptManager
 import com.xaxaxax.relc.script.ScriptRepository
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
@@ -14,8 +16,8 @@ object ScriptModule {
 
     @Provides
     @Singleton
-    fun provideScriptRepository(): ScriptRepository {
-        return ScriptRepository()
+    fun provideScriptRepository(@ApplicationContext context: Context): ScriptRepository {
+        return ScriptRepository(context)
     }
 
     @Provides

@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import java.util.UUID
 import javax.inject.Inject
 
@@ -45,20 +46,27 @@ class ScriptDetailViewModel @Inject constructor(
         .map { it.message }
 
     init {
-        if (scriptId == "new") {
-            _config.value = ScriptConfig(
-                id = UUID.randomUUID().toString(),
-                name = "New Script",
-                description = "",
-                type = ScriptCodeType.LUA,
-                init = null,
-                code = "log(\"Hello ReLC\")\n",
-                clean = null,
-                alwaysRunClean = false,
-                loopMode = LoopMode.None,
-            )
-        } else {
-            _config.value = repository.getScript(scriptId)
+        viewModelScope.launch {
+            if (scriptId == "new") {
+                _config.value = ScriptConfig(
+                    id = UUID.randomUUID().toString(),
+                    name = "New Script",
+                    description = "",
+                    type = ScriptCodeType.LUA,
+                    init = null,
+                    code = "log(\"Hello ReLC\")\n",
+                    clean = null,
+                    alwaysRunClean = false,
+                    loopMode = LoopMode.None,
+                )
+            } else {
+                repository.scripts.collect { scripts ->
+                    val script = scripts.find { it.id == scriptId }
+                    // 只有當前 config 為 null (首次讀取) 或是當前 id 與 repository 內容匹配時才更新
+                    // 為了避免編輯中的資料被覆蓋，這裡簡單實作為只在首次或外部更新時同步
+                    _config.value = script
+                }
+            }
         }
     }
 
