@@ -1,17 +1,21 @@
 package com.xaxaxax.relc.ui.scripts
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.xaxaxax.relc.overlay.startClickAssistOverlay
 import com.xaxaxax.relc.script.ScriptConfig
 import com.xaxaxax.relc.script.ScriptManager
 import com.xaxaxax.relc.script.ScriptRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
 
 @HiltViewModel
 class ScriptsViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val repository: ScriptRepository,
     private val scriptManager: ScriptManager
 ) : ViewModel() {
@@ -29,7 +33,7 @@ class ScriptsViewModel @Inject constructor(
     )
 
     fun startScript(config: ScriptConfig) {
-        scriptManager.startScript(config)
+        startClickAssistOverlay(context, config.id)
     }
 
     fun stopScript(id: String) {

@@ -73,53 +73,38 @@
 com.xaxaxax.relc/
 │
 ├── core/
-│   ├── DisplayConfig.kt          # data class (name, width, height, dpi)
-│   ├── StreamConfig.kt           # data class (codec, bitrate, fps)
-│   └── DisplayState.kt           # sealed class 狀態機
+│   ├── DisplayConfig.kt          # data class (name, width, height, densityDpi)
+│   └── ...
 │
 ├── shizuku/
-│   ├── ShizukuManager.kt         # ✅ 已有
-│   ├── ShizukuUserService.kt     # ✅ 已有
-│   ├── InputManager.kt           # ✅ 已有（需擴充 displayId）
-│   └── DisplayManagerBridge.kt   # NEW: 封裝 Shizuku createVirtualDisplay
+│   └── (目前主要實作在 RelcShizukuService.kt 中)
 │
 ├── display/
 │   ├── VirtualDisplayController.kt  # 生命週期管理，組合 Shizuku + Sink
 │   ├── DisplaySink.kt               # interface: 可插拔輸出端
 │   ├── NoOpSink.kt                  # 純背景執行（無捕捉）
-│   ├── H264Sink.kt                  # H.264 + LocalSocket
-│   └── DirectSurfaceSink.kt         # 直接輸出至 Surface（in-process）
-│
-├── stream/
-│   ├── encoder/
-│   │   └── H264Encoder.kt        # MediaCodec H.264 encoder，提供 inputSurface
-│   ├── transport/
-│   │   ├── StreamProtocol.kt     # Packet framing 定義
-│   │   ├── LocalSocketServer.kt  # 寫端（encoder → socket）
-│   │   └── LocalSocketClient.kt  # 讀端（socket → consumer）
-│   └── decoder/
-│       └── H264Decoder.kt        # MediaCodec H.264 decoder → Surface
+│   ├── H264EncoderSink.kt           # MediaCodec H.264 編碼
+│   └── DirectSink.kt                # 直接輸出至 Surface
 │
 ├── input/
 │   └── InputController.kt        # 封裝 InputManager，支援 displayId & 多點觸控
 │
 ├── script/
-│   ├── ScriptEngine.kt           # LuaJ 執行環境
-│   ├── ScriptApi.kt              # 暴露給 Lua 的 API (display/input/vision/sleep)
-│   └── ScriptRunner.kt           # Coroutine 包裝，執行 & 停止腳本
+│   ├── ScriptEngine.kt           # LuaJ 執行環境與 API 暴露
+│   ├── ScriptManager.kt          # 腳本生命週期管理
+│   ├── ScriptRepository.kt       # 腳本持久化
+│   └── runner/                   # 不同模式的腳本執行器
 │
-├── vision/
-│   ├── FrameGrabber.kt           # 從 LocalSocket stream 截取 Bitmap
-│   └── VisionEngine.kt           # 模板比對 / OCR
+├── overlay/                      # 懸浮窗 UI 組件
+│   ├── ClickAssistOverlayService.kt
+│   ├── CompactControlBar.kt
+│   └── ...
 │
-└── ui/
-    ├── theme/                    # ✅ 已有
-    ├── MainActivity.kt           # ✅ 已有
-    ├── MainViewModel.kt          # ✅ 已有（逐步重構）
-    └── screen/
-        ├── SettingsScreen.kt     # 從 MainActivity 提取
-        ├── VirtualDisplayScreen.kt
-        └── ScriptScreen.kt
+└── ui/                           # 主要 App UI (Compose)
+    ├── theme/
+    ├── displays/                 # 虛擬顯示器列表
+    ├── scripts/                  # 腳本列表
+    └── ...
 ```
 
 ---
@@ -131,21 +116,25 @@ com.xaxaxax.relc/
 ```aidl
 // IRelcShizukuService.aidl
 interface IRelcShizukuService {
-    // ✅ 已有
     boolean setOverlayAllowed(String packageName);
     boolean grantRuntimePermission(String packageName, String permissionName);
 
     // VirtualDisplay 管理
-    int createVirtualDisplay(String name, int width, int height, int densityDpi, in Surface surface);
+    int createVirtualDisplay(String name, int width, int height, int densityDpi, in Surface surface, boolean destroyContent, boolean sytemDecorations);
     boolean setVirtualDisplaySurface(int displayId, in Surface surface);  // 熱插拔 sink
     boolean destroyVirtualDisplay(int displayId);
+    int[] getVirtualDisplays();
 
     // 在指定 Display 中啟動 App
     boolean launchInDisplay(String packageName, int displayId);
+    List<String> getLauncherApps();
 
-    // Input 注入（displayId 已設在 MotionEvent 上）
-    boolean injectMotionEvent(in MotionEvent event);
-    boolean injectKeyEvent(in KeyEvent event);
+    // Input 注入
+    boolean injectMotionEvent(in MotionEvent event, int displayId);
+    boolean injectKeyEvent(in KeyEvent event, int displayId);
+
+    String debug(String input);
+    void destroy();
 }
 ```
 
@@ -155,9 +144,9 @@ interface IRelcShizukuService {
 VirtualDisplay 的 Surface 來源由 DisplaySink 提供，
 可在運行時透過 setVirtualDisplaySurface() 熱替換：
 
-NoOpSink      → surface = null  （純背景，不捕捉畫面）
-H264Sink      → surface = MediaCodec inputSurface
-DirectSink    → surface = 外部傳入的 SurfaceView surface
+NoOpSink           → surface = null  （純背景，不捕捉畫面）
+H264EncoderSink    → surface = MediaCodec inputSurface
+DirectSink         → surface = 外部傳入的 Surface
 ```
 
 ```kotlin
@@ -170,26 +159,19 @@ interface DisplaySink {
 }
 ```
 
-### 3. Streaming Pipeline (H264Sink 路徑)
+### 3. Streaming Pipeline (H264EncoderSink 路徑)
 
 ```
 VirtualDisplay
     │  (renders to)
     ▼
-MediaCodec inputSurface       ← H264Encoder.inputSurface
+MediaCodec inputSurface       ← H264EncoderSink.inputSurface
     │  (H.264 NAL units)
     ▼
-H264Encoder.outputBuffer
+onEncodedFrame(ByteBuffer, BufferInfo)
     │
     ▼
-LocalSocketServer              socket name: "relc_vd_{displayId}"
-    │  (framed packets, see protocol below)
-    ▼
-LocalSocketClient
-    │
-    ├──► H264Decoder → SurfaceView    (VideoPlayerScreen)
-    │
-    └──► FrameGrabber → Bitmap        (VisionEngine / ScriptEngine)
+(待實作：LocalSocketServer / 傳輸層)
 ```
 
 ### 4. Stream Protocol 封包格式
@@ -212,35 +194,31 @@ Type:
 
 ### 5. VirtualDisplayController 生命週期
 
-```
-         create(config, sink)
-IDLE ──────────────────────────► CREATED
-                                     │
-                           replaceSink(newSink)  ← 熱插拔（不用重建 VD）
-                                     │
-                                destroy()
-                                     │
-                                     ▼
-                                DESTROYED
-```
-
 ```kotlin
 // display/VirtualDisplayController.kt
 class VirtualDisplayController(private val service: IRelcShizukuService) {
     var displayId: Int = Display.INVALID_DISPLAY
     private var sink: DisplaySink = NoOpSink()
 
-    suspend fun create(config: DisplayConfig, sink: DisplaySink = NoOpSink()) {
+    fun create(config: DisplayConfig, sink: DisplaySink = NoOpSink()) {
         this.sink = sink
         displayId = service.createVirtualDisplay(
             config.name, config.width, config.height, config.densityDpi,
-            sink.acquireSurface()
+            sink.acquireSurface(), false, false
         )
         sink.start()
     }
 
+    /** 連接到現有的顯示器 */
+    fun attach(existingDisplayId: Int, sink: DisplaySink = NoOpSink()) {
+        this.sink = sink
+        this.displayId = existingDisplayId
+        service.setVirtualDisplaySurface(displayId, sink.acquireSurface())
+        sink.start()
+    }
+
     fun replaceSink(newSink: DisplaySink) {
-        sink.stop()
+        sink.stop(); sink.release()
         sink = newSink
         service.setVirtualDisplaySurface(displayId, newSink.acquireSurface())
         newSink.start()
@@ -261,30 +239,28 @@ class VirtualDisplayController(private val service: IRelcShizukuService) {
 Lua 可用 API：
 
 ```lua
--- 建立虛擬顯示器
-local id = display.create(1080, 1920)
-
 -- 在虛擬顯示器啟動 APP
 display.launch("com.example.app", id)
 
--- 輸入操作（displayId 為 Lua 全域，由腳本指派）
+-- 腳本可指定全域 displayId，供 input API 使用
 displayId = id
-input.tap(50, 540, 960)                      -- (durationMs, x, y)
-input.swipe(500, 540, 1500, 540, 500)        -- durationMs, x1, y1, ...（奇數個參數；L2 弧長）
-input.swipeL1(500, 540, 1500, 540, 500)      -- 同上，L1（曼哈頓）弧長
-input.key(66, id)   -- keyCode 66 = ENTER
 
--- 畫面截圖（返回 Bitmap userdata）
-local bmp = screen.capture(id)
+-- 輸入操作
+input.tap(durationMs, x, y)
+input.swipe(durationMs, x1, y1, x2, y2, ...)      -- 至少兩點，L2 弧長
+input.swipe_l1(durationMs, x1, y1, x2, y2, ...)   -- 至少兩點，L1 弧長
 
--- 視覺辨識
-local pos = vision.find(bmp, "template.png")   -- 模板比對，返回 {x, y} 或 nil
-local text = vision.ocr(bmp, {x=0,y=0,w=200,h=100})  -- 指定區域 OCR
+-- 多點觸控 (pointerId, x, y)
+input.down(0, 100, 100)
+input.move(0, 200, 200)
+input.up(0)
 
 -- 工具
 sleep(1000)   -- ms
 log("message")
 ```
+
+> **待實作**：`display.create/destroy`, `screen.capture`, `vision.*`
 
 ### 7. Vision Engine
 
@@ -347,13 +323,13 @@ implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 
 ## 實作順序建議
 
-| 階段 | 工作 | 對應功能 |
-|------|------|---------|
-| **P1** | 擴充 AIDL + 實作 `createVirtualDisplay` / `launchInDisplay` | 功能 1 |
-| **P1** | 修復 `InputManager` displayId（down/move 都要設） | 功能 4 |
-| **P2** | `H264Encoder` + `LocalSocketServer/Client` + `H264Decoder` | 功能 2+3 |
-| **P2** | `VirtualDisplayController` + `DisplaySink` 介面 + `NoOpSink` / `H264Sink` | 串接 |
-| **P2** | `VideoPlayerScreen`（Compose + SurfaceView） | 功能 3 UI |
-| **P3** | `ScriptEngine` (LuaJ) + `ScriptApi` + `ScriptRunner` | 功能 5 |
-| **P4** | `FrameGrabber` + `VisionEngine` (OpenCV 模板比對) | 功能 6 |
-| **P4** | ML Kit OCR 整合 | 功能 6 擴充 |
+| 階段 | 工作 | 狀態 |
+|------|------|------|
+| **P1** | 擴充 AIDL + 實作 `createVirtualDisplay` / `launchInDisplay` | ✅ |
+| **P1** | 修復 `InputManager` displayId（down/move 都要設） | ✅ |
+| **P2** | `VirtualDisplayController` + `DisplaySink` 介面 + `NoOpSink` / `H264EncoderSink` | ✅ |
+| **P2** | `H264Encoder` + `LocalSocketServer/Client` + `H264Decoder` | 🚧 進行中 |
+| **P2** | `VideoPlayerScreen`（Compose + SurfaceView） | 🚧 進行中 |
+| **P3** | `ScriptEngine` (LuaJ) + `ScriptApi` + `ScriptRunner` | 🚧 核心已完成 |
+| **P4** | `FrameGrabber` + `VisionEngine` (OpenCV 模板比對) | ⏳ 待辦 |
+| **P4** | ML Kit OCR 整合 | ⏳ 待辦 |
