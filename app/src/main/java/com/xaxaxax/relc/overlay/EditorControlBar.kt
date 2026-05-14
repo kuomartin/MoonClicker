@@ -1,6 +1,5 @@
 package com.xaxaxax.relc.overlay
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -9,7 +8,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -18,18 +16,13 @@ import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.RadioButtonChecked
-import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -40,9 +33,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.xaxaxax.relc.R
 import com.xaxaxax.relc.ui.theme.ReLCTheme
 
 data class EditorControlUiState(
@@ -68,39 +62,6 @@ fun EditorControlBar(
         modifier = modifier.wrapContentWidth(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        AnimatedVisibility(visible = isExpanded) {
-            Card(
-                modifier = Modifier
-                    .padding(bottom = 4.dp)
-                    .wrapContentWidth(),
-                shape = RoundedCornerShape(8.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.9f)),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-            ) {
-                Row(
-                    modifier = Modifier.padding(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.clickable { onSaveClick() },
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Icon(Icons.Default.Save, contentDescription = "Save", tint = MaterialTheme.colorScheme.primary)
-                        Text("儲存", style = MaterialTheme.typography.labelSmall, fontSize = 10.sp)
-                    }
-
-                    Column(
-                        modifier = Modifier.clickable { onCloseClick() },
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.Red)
-                        Text("退出", style = MaterialTheme.typography.labelSmall, fontSize = 10.sp)
-                    }
-                }
-            }
-        }
-
         Card(
             modifier = Modifier
                 .height(56.dp)
@@ -139,7 +100,15 @@ fun EditorControlBar(
                     enabled = !uiState.isRunning && !uiState.isRecording
                 )
 
-                // 3. Record Swipe
+                // 3. Remove Last
+                ControlIconButton(
+                    painter = painterResource(R.drawable.ic_remove),
+                    contentDescription = "Remove Last",
+                    onClick = onRemoveClick,
+                    enabled = !uiState.isRunning && !uiState.isRecording
+                )
+
+                // 4. Record Swipe
                 ControlIconButton(
                     icon = Icons.Default.RadioButtonChecked,
                     contentDescription = "Record Swipe",
@@ -148,17 +117,24 @@ fun EditorControlBar(
                     enabled = !uiState.isRunning
                 )
 
-                // 4. Remove Last
+                // 5. Save
                 ControlIconButton(
-                    icon = Icons.Default.Delete,
-                    contentDescription = "Remove Last",
-                    onClick = onRemoveClick,
+                    painter = painterResource(R.drawable.ic_save),
+                    contentDescription = "Save",
+                    onClick = onSaveClick,
                     enabled = !uiState.isRunning && !uiState.isRecording
+                )
+
+                // 6. Exit
+                ControlIconButton(
+                    painter = painterResource(R.drawable.ic_exit_to_app),
+                    contentDescription = "Exit",
+                    onClick = onCloseClick
                 )
 
                 EditorVerticalDivider()
 
-                // 5. More
+                // 7. More
                 ControlIconButton(
                     icon = Icons.Default.MoreVert,
                     contentDescription = "More",
@@ -171,7 +147,8 @@ fun EditorControlBar(
 
 @Composable
 private fun ControlIconButton(
-    icon: ImageVector,
+    icon: ImageVector? = null,
+    painter: androidx.compose.ui.graphics.painter.Painter? = null,
     contentDescription: String,
     onClick: () -> Unit,
     enabled: Boolean = true,
@@ -183,12 +160,21 @@ private fun ControlIconButton(
             .clickable(enabled = enabled) { onClick() },
         contentAlignment = Alignment.Center
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = contentDescription,
-            modifier = Modifier.size(24.dp),
-            tint = if (enabled) tint else Color.LightGray
-        )
+        if (icon != null) {
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                modifier = Modifier.size(24.dp),
+                tint = if (enabled) tint else Color.LightGray
+            )
+        } else if (painter != null) {
+            Icon(
+                painter = painter,
+                contentDescription = contentDescription,
+                modifier = Modifier.size(24.dp),
+                tint = if (enabled) tint else Color.LightGray
+            )
+        }
     }
 }
 
