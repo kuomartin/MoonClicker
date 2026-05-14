@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.graphics.PixelFormat
+import android.graphics.Rect
 import android.os.Build
 import android.os.IBinder
 import android.view.Gravity
@@ -31,6 +32,7 @@ import com.xaxaxax.relc.script.simple.SimpleSwipePayload
 import com.xaxaxax.relc.script.simple.encodeToLine
 import com.xaxaxax.relc.script.simple.encodeToPayload
 import com.xaxaxax.relc.script.simple.parseSimpleScriptLine
+import com.xaxaxax.relc.script.simple.parseSwipePayload
 import com.xaxaxax.relc.script.simple.parseTapPayload
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -249,74 +251,177 @@ class ClickAssistOverlayService : LifecycleService() {
     }
 
     private fun syncTargets(body: SimpleScriptBodyJson) {
+        val currentIndices = body.steps.indices.filter { isInteractiveStep(body.steps[it]) }.toSet()
+
         // Remove views that are no longer in the script or changed verb
         val iterator = targetViews.iterator()
         while (iterator.hasNext()) {
             val entry = iterator.next()
             val index = entry.key
-            val step = body.steps.getOrNull(index)
-            if (step == null || !isTapStep(step)) {
+            val line = body.steps.getOrNull(index)
+            if (line == null || !isInteractiveStep(line)) {
                 windowManager.removeView(entry.value)
                 iterator.remove()
                 targetParams.remove(index)
+            } else {
+                val newVerb = parseSimpleScriptLine(line).verb
+                val oldVerb = entry.value.tag as? SimpleScriptVerb
+                if (oldVerb != newVerb) {
+                    windowManager.removeView(entry.value)
+                    iterator.remove()
+                    targetParams.remove(index)
+                }
             }
         }
 
         // Add or update views
         body.steps.forEachIndexed { index, line ->
-            if (isTapStep(line)) {
-                val tap = parseTapPayload(parseSimpleScriptLine(line).payload)
+            if (isInteractiveStep(line)) {
+                val parsed = parseSimpleScriptLine(line)
                 if (targetViews.containsKey(index)) {
-                    updateTargetWindow(index, tap.x, tap.y)
+                    updateTargetWindow(index, parsed)
                 } else {
-                    addTargetWindow(index, tap.x, tap.y)
+                    addTargetWindow(index, parsed)
                 }
             }
         }
     }
 
-    private fun isTapStep(line: String): Boolean = runCatching {
-        parseSimpleScriptLine(line).verb == SimpleScriptVerb.TAP
+    private fun isInteractiveStep(line: String): Boolean = runCatching {
+        val verb = parseSimpleScriptLine(line).verb
+        verb == SimpleScriptVerb.TAP || verb == SimpleScriptVerb.SWIPE || verb == SimpleScriptVerb.SWIPE_RAW
     }.getOrDefault(false)
 
-    private fun addTargetWindow(index: Int, x: Int, y: Int) {
-        val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
-            PixelFormat.TRANSLUCENT
-        ).apply {
-            gravity = Gravity.TOP or Gravity.START
-            this.x = x - 16
-            this.y = y - 16
+    private val density: Float by lazy { resources.displayMetrics.density }
+    private fun dpToPx(dp: Int): Int = (dp * density).toInt()
+
+    private fun addTargetWindow(index: Int, parsed: ParsedSimpleLine) {
+        val verb = parsed.verb
+        val params = if (verb == SimpleScriptVerb.TAP) {
+            val tap = parseTapPayload(parsed.payload)
+            val padding = dpToPx(16)
+            WindowManager.LayoutParams(
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                        WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                        WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                PixelFormat.TRANSLUCENT
+            ).apply {
+                gravity = Gravity.TOP or Gravity.START
+                this.x = tap.x - padding
+                this.y = tap.y - padding
+            }
+        } else {
+            // Swipe
+            val swipe = parseSwipePayload(parsed.payload)
+            val rect = getSwipeBoundingBox(swipe.points)
+            val padding = dpToPx(18)
+            WindowManager.LayoutParams(
+                rect.width() + padding * 2,
+                rect.height() + padding * 2,
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                        WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                        WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                PixelFormat.TRANSLUCENT
+            ).apply {
+                gravity = Gravity.TOP or Gravity.START
+                this.x = rect.left - padding
+                this.y = rect.top - padding
+            }
         }
         targetParams[index] = params
 
         val view = ComposeView(this).apply {
+            tag = verb
             installOverlayCompositionOwners(overlayOwner)
             setContent {
-                FloatingTarget(
-                    index = index,
-                    onDrag = { dx, dy ->
-                        params.x += dx.toInt()
-                        params.y += dy.toInt()
-                        windowManager.updateViewLayout(this, params)
-                        updateScriptTap(index, params.x + 16, params.y + 16)
-                    }
-                )
+                if (verb == SimpleScriptVerb.TAP) {
+                    val padding = dpToPx(16)
+                    FloatingTarget(
+                        index = index,
+                        onDrag = { dx, dy ->
+                            params.x += dx.toInt()
+                            params.y += dy.toInt()
+                            windowManager.updateViewLayout(this, params)
+                            updateScriptTap(index, params.x + padding, params.y + padding)
+                        }
+                    )
+                } else {
+                    val swipe = parseSwipePayload(parsed.payload)
+                    FloatingSwipe(
+                        index = index,
+                        payload = swipe,
+                        offsetX = params.x,
+                        offsetY = params.y,
+                        onPanDrag = { dx, dy ->
+                            panScriptSwipe(index, dx.toInt(), dy.toInt())
+                        }
+                    )
+                }
             }
         }
         targetViews[index] = view
         windowManager.addView(view, params)
     }
 
-    private fun updateTargetWindow(index: Int, x: Int, y: Int) {
+    private fun updateTargetWindow(index: Int, parsed: ParsedSimpleLine) {
         val params = targetParams[index] ?: return
-        if (params.x != x - 16 || params.y != y - 16) {
-            params.x = x - 16
-            params.y = y - 16
-            windowManager.updateViewLayout(targetViews[index], params)
+        val view = targetViews[index] ?: return
+        val verb = parsed.verb
+
+        if (verb == SimpleScriptVerb.TAP) {
+            val tap = parseTapPayload(parsed.payload)
+            val padding = dpToPx(16)
+            if (params.x != tap.x - padding || params.y != tap.y - padding) {
+                params.x = tap.x - padding
+                params.y = tap.y - padding
+                windowManager.updateViewLayout(view, params)
+            }
+        } else {
+            val swipe = parseSwipePayload(parsed.payload)
+            val rect = getSwipeBoundingBox(swipe.points)
+            val padding = dpToPx(18)
+            val newX = rect.left - padding
+            val newY = rect.top - padding
+            val newW = rect.width() + padding * 2
+            val newH = rect.height() + padding * 2
+
+            if (params.x != newX || params.y != newY || params.width != newW || params.height != newH) {
+                params.x = newX
+                params.y = newY
+                params.width = newW
+                params.height = newH
+                windowManager.updateViewLayout(view, params)
+            }
+        }    }
+
+    private fun getSwipeBoundingBox(points: List<Pair<Int, Int>>): android.graphics.Rect {
+        var minX = Int.MAX_VALUE
+        var minY = Int.MAX_VALUE
+        var maxX = Int.MIN_VALUE
+        var maxY = Int.MIN_VALUE
+        for (p in points) {
+            minX = minOf(minX, p.first)
+            minY = minOf(minY, p.second)
+            maxX = maxOf(maxX, p.first)
+            maxY = maxOf(maxY, p.second)
+        }
+        return android.graphics.Rect(minX, minY, maxX, maxY)
+    }
+
+    private fun panScriptSwipe(index: Int, dx: Int, dy: Int) {
+        val current = _currentScript.value
+        val steps = current.steps.toMutableList()
+        val line = steps.getOrNull(index) ?: return
+        val parsed = try { parseSimpleScriptLine(line) } catch (e: Exception) { null } ?: return
+        if (parsed.verb == SimpleScriptVerb.SWIPE || parsed.verb == SimpleScriptVerb.SWIPE_RAW) {
+            val payload = parseSwipePayload(parsed.payload)
+            val newPoints = payload.points.map { (px, py) -> (px + dx) to (py + dy) }
+            steps[index] = parsed.copy(payload = payload.copy(points = newPoints).encodeToPayload()).encodeToLine()
+            _currentScript.value = current.copy(steps = steps)
         }
     }
 
@@ -335,7 +440,6 @@ class ClickAssistOverlayService : LifecycleService() {
             _currentScript.value = current.copy(steps = steps)
         }
     }
-
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(

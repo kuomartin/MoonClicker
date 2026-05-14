@@ -47,9 +47,9 @@ fun SimpleScriptStepCard(
                     )
                 }
 
-                SimpleScriptVerb.SWIPE -> {
+                SimpleScriptVerb.SWIPE, SimpleScriptVerb.SWIPE_RAW -> {
                     val swipePayload = runCatching { parseSwipePayload(parsed.payload) }.getOrElse {
-                        parseSwipePayload(defaultPayloadForVerb(SimpleScriptVerb.SWIPE))
+                        parseSwipePayload(defaultPayloadForVerb(parsed.verb))
                     }
                     SimpleSwipe(
                         parsed = parsed,
@@ -73,7 +73,7 @@ fun SimpleScriptStepCard(
                     )
                 }
 
-                SimpleScriptVerb.TEXT, SimpleScriptVerb.SWIPE_RAW -> {
+                SimpleScriptVerb.TEXT -> {
                     SimpleTextForm(
                         parsed = parsed,
                         onParsedChange = onParsedChange,
