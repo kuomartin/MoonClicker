@@ -1,9 +1,9 @@
 package com.xaxaxax.relc.script
 
 import android.os.SystemClock
-import com.xaxaxax.relc.IRelcShizukuService
-import com.xaxaxax.relc.RelcShizukuService
-import com.xaxaxax.relc.script.runner.LuaScriptRunnerFactory
+import com.xaxaxax.relc.IRelcV2Service
+import com.xaxaxax.relc.RelcV2Service
+import com.xaxaxax.relc.script.runner.NativeLuaScriptRunnerFactory
 import com.xaxaxax.relc.script.runner.ScriptRunContext
 import com.xaxaxax.relc.script.runner.ScriptRunnerFactory
 import com.xaxaxax.relc.script.runner.SimpleScriptRunnerFactory
@@ -43,12 +43,12 @@ class ScriptManager {
 
     private val serviceFlow = UserService.create(
         scope,
-        RelcShizukuService::class,
-        IRelcShizukuService.Stub::asInterface
+        RelcV2Service::class,
+        IRelcV2Service.Stub::asInterface
     )
 
     private val runnerFactories: Map<ScriptCodeType, ScriptRunnerFactory> = mapOf(
-        ScriptCodeType.LUA to LuaScriptRunnerFactory(),
+        ScriptCodeType.LUA to NativeLuaScriptRunnerFactory(),
         ScriptCodeType.SIMPLE to SimpleScriptRunnerFactory(),
     )
 

@@ -22,8 +22,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import com.xaxaxax.relc.IRelcShizukuService
-import com.xaxaxax.relc.RelcShizukuService
+import com.xaxaxax.relc.IRelcV2Service
+import com.xaxaxax.relc.RelcV2Service
 import com.xaxaxax.relc.display.VirtualDisplayController
 import com.xaxaxax.relc.shizuku.UserService
 import com.xaxaxax.relc.shizuku.runWhenAlive
@@ -40,8 +40,8 @@ fun DisplayDetailScreen(id: String, onNavigateBack: () -> Unit) {
     val serviceFlow = remember {
         UserService.create(
             scope,
-            RelcShizukuService::class,
-            IRelcShizukuService.Stub::asInterface
+            RelcV2Service::class,
+            IRelcV2Service.Stub::asInterface
         )
     }
     val controllerState = remember { MutableStateFlow<VirtualDisplayController?>(null) }

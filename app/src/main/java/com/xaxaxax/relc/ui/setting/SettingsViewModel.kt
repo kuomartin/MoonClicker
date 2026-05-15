@@ -7,8 +7,8 @@ import android.provider.Settings
 import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.xaxaxax.relc.IRelcShizukuService
-import com.xaxaxax.relc.RelcShizukuService
+import com.xaxaxax.relc.IRelcV2Service
+import com.xaxaxax.relc.RelcV2Service
 import com.xaxaxax.relc.shizuku.UserService
 import com.xaxaxax.relc.shizuku.hasShizukuPermission
 import com.xaxaxax.relc.shizuku.isShizukuAvailable
@@ -125,10 +125,11 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val serviceFlow = UserService.create(
-                    viewModelScope,
-                    RelcShizukuService::class,
-                    IRelcShizukuService.Stub::asInterface
+                    this,
+                    RelcV2Service::class,
+                    IRelcV2Service.Stub::asInterface
                 )
+
 
                 serviceFlow.runWhenAlive { service ->
                     service.setOverlayAllowed(context.packageName)

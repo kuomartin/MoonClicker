@@ -17,7 +17,7 @@ import rikka.shizuku.Shizuku
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
- * Instrumented tests for [RelcShizukuService] — runs on device / emulator (`connectedAndroidTest`).
+ * Instrumented tests for [com.xaxaxax.relc.input.RelcShizukuService] — runs on device / emulator (`connectedAndroidTest`).
  *
  * - Smoke tests (invalid package, API gate) always run.
  * - Shizuku integration test: if binder is up but permission missing, calls [Shizuku.requestPermission]

@@ -3,8 +3,8 @@ package com.xaxaxax.relc.ui.displays
 import android.content.res.Resources
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.xaxaxax.relc.IRelcShizukuService
-import com.xaxaxax.relc.RelcShizukuService
+import com.xaxaxax.relc.IRelcV2Service
+import com.xaxaxax.relc.RelcV2Service
 import com.xaxaxax.relc.core.DisplayConfig
 import com.xaxaxax.relc.display.VirtualDisplayController
 import com.xaxaxax.relc.shizuku.UserService
@@ -43,8 +43,8 @@ class DisplaysViewModel @Inject constructor(
     private val serviceFlow by lazy {
         UserService.create(
             viewModelScope,
-            RelcShizukuService::class,
-            IRelcShizukuService.Stub::asInterface
+            RelcV2Service::class,
+            IRelcV2Service.Stub::asInterface
         )
     }
 

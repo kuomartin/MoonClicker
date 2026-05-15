@@ -28,10 +28,9 @@ android {
                 arguments(
                     "-DANDROID_STL=c++_shared",
                     "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON",
-                    "-DOpenCV_DIR=~/OpenCV-android-sdk/sdk/native/jni"
+                    "-DOpenCV_DIR=~/OpenCV-android-sdk/sdk/native/jni",
+                    "-DCMAKE_SHARED_LINKER_FLAGS=-Wl,-z,max-page-size=16384"
                 )
-                // Explicitly set 16KB alignment for the linker
-                cppFlags("-Wl,-z,max-page-size=16384")
             }
         }
     }

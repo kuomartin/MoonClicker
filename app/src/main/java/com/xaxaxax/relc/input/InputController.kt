@@ -5,16 +5,16 @@ import android.os.SystemClock
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
-import com.xaxaxax.relc.IRelcShizukuService
+import com.xaxaxax.relc.IRelcV2Service
 import com.xaxaxax.relc.script.simple.SimplePhysicalKey
 import timber.log.Timber
 import kotlin.math.abs
 import kotlin.math.hypot
 
 /**
- * High-level input controller that uses IRelcShizukuService to inject events.
+ * High-level input controller that uses IRelcV2Service to inject events.
  */
-class InputController(private val service: IRelcShizukuService) {
+class InputController(private val service: IRelcV2Service) {
 
     /**
      * Helper for script-driven multitouch.

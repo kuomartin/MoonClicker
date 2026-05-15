@@ -3,8 +3,8 @@ package com.xaxaxax.relc.ui.displaydetail
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.xaxaxax.relc.IRelcShizukuService
-import com.xaxaxax.relc.RelcShizukuService
+import com.xaxaxax.relc.IRelcV2Service
+import com.xaxaxax.relc.RelcV2Service
 import com.xaxaxax.relc.display.VirtualDisplayController
 import com.xaxaxax.relc.input.InputController
 import com.xaxaxax.relc.shizuku.UserService
@@ -37,8 +37,8 @@ class FullscreenDisplayViewModel @Inject constructor(
 
     private val serviceFlow = UserService.create(
         viewModelScope,
-        RelcShizukuService::class,
-        IRelcShizukuService.Stub::asInterface
+        RelcV2Service::class,
+        IRelcV2Service.Stub::asInterface
     )
 
     private val _controller = MutableStateFlow<VirtualDisplayController?>(null)

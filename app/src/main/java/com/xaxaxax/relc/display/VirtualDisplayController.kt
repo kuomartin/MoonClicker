@@ -1,11 +1,11 @@
 package com.xaxaxax.relc.display
 
 import android.view.Display
-import com.xaxaxax.relc.IRelcShizukuService
+import com.xaxaxax.relc.IRelcV2Service
 import com.xaxaxax.relc.core.DisplayConfig
 import timber.log.Timber
 
-class VirtualDisplayController(private val service: IRelcShizukuService) {
+class VirtualDisplayController(private val service: IRelcV2Service) {
 
     enum class State { IDLE, CREATED, DESTROYED }
 
@@ -25,6 +25,7 @@ class VirtualDisplayController(private val service: IRelcShizukuService) {
             config.name, config.width, config.height, config.densityDpi,
             sink.acquireSurface(), config.flags
         )
+
         check(displayId != Display.INVALID_DISPLAY) {
             "createVirtualDisplay returned INVALID_DISPLAY"
         }

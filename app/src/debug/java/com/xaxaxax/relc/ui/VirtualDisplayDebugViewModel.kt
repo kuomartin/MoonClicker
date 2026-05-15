@@ -4,8 +4,8 @@ import android.content.Context
 import android.content.res.Resources
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.xaxaxax.relc.IRelcShizukuService
-import com.xaxaxax.relc.RelcShizukuService
+import com.xaxaxax.relc.IRelcV2Service
+import com.xaxaxax.relc.RelcV2Service
 import com.xaxaxax.relc.core.DisplayConfig
 import com.xaxaxax.relc.display.H264EncoderSink
 import com.xaxaxax.relc.display.NoOpSink
@@ -47,8 +47,8 @@ class VirtualDisplayDebugViewModel @Inject constructor(
     private val serviceFlow by lazy {
         UserService.create(
             viewModelScope,
-            RelcShizukuService::class,
-            IRelcShizukuService.Stub::asInterface
+            RelcV2Service::class,
+            IRelcV2Service.Stub::asInterface
         )
     }
     private val _controllerState = MutableStateFlow<VirtualDisplayController?>(null)

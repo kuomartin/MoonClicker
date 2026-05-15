@@ -1,6 +1,5 @@
 package com.xaxaxax.relc.display.cv
 
-import android.graphics.Bitmap
 import timber.log.Timber
 
 /**
@@ -16,27 +15,26 @@ class NativeDetector {
                 Timber.e(ex, "Failed to load relc_native")
             }
         }
-
-        const val TM_CCOEFF_NORMED = 5
     }
 
     /**
-     * 原生模板匹配
-     * @param screen 螢幕截圖 (RGBA_8888)
-     * @param target 目標小圖 (RGBA_8888)
-     * @param x ROI 起點 X
-     * @param y ROI 起點 Y
-     * @param width ROI 寬度
-     * @param height ROI 高度
-     * @param method 匹配演算法
+     * 啟動原生引擎 (Hot Loop)
+     * @param service Shizuku 服務，用於注入事件
+     * @param width 螢幕寬度
+     * @param height 螢幕高度
+     * @param script Lua 腳本內容
+     * @return 供 VirtualDisplay 使用的 Surface
      */
-    external fun matchTemplateNative(
-        screen: Bitmap,
-        target: Bitmap,
-        x: Int,
-        y: Int,
+    external fun startEngine(
+        service: com.xaxaxax.relc.IRelcV2Service,
         width: Int,
         height: Int,
-        method: Int = TM_CCOEFF_NORMED
-    ): DetectionResult?
+        script: String
+    ): android.view.Surface?
+
+
+    /**
+     * 停止原生引擎
+     */
+    external fun stopEngine()
 }

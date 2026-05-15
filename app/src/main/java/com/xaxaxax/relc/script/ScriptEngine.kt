@@ -1,6 +1,6 @@
 package com.xaxaxax.relc.script
 
-import com.xaxaxax.relc.IRelcShizukuService
+import com.xaxaxax.relc.IRelcV2Service
 import com.xaxaxax.relc.display.VirtualDisplayController
 import com.xaxaxax.relc.input.InputController
 import kotlinx.coroutines.CancellationException
@@ -17,7 +17,7 @@ import org.luaj.vm2.lib.jse.JsePlatform
 import timber.log.Timber
 
 class ScriptEngine(
-    private val service: IRelcShizukuService,
+    private val service: IRelcV2Service,
     private val onLog: (String) -> Unit
 ) {
     private val globals = JsePlatform.standardGlobals()

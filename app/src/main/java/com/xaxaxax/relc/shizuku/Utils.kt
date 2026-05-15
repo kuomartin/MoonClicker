@@ -5,11 +5,9 @@ import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.os.IBinder
 import android.os.IInterface
-import android.os.RemoteException
 import com.xaxaxax.relc.BuildConfig
 import com.xaxaxax.relc.RelcApplication
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
@@ -103,7 +101,10 @@ sealed interface UserService<T : IInterface> {
             val context = RelcApplication.instance
             val version = if (BuildConfig.DEBUG) {
                 try {
-                    context.packageManager.getPackageInfo(context.packageName, 0).lastUpdateTime.toInt()
+                    context.packageManager.getPackageInfo(
+                        context.packageName,
+                        0
+                    ).lastUpdateTime.toInt()
                 } catch (e: Exception) {
                     BuildConfig.VERSION_CODE
                 }
@@ -145,21 +146,20 @@ sealed interface UserService<T : IInterface> {
  * 擴充函數：讓呼叫端超級簡單
  * 範例：myServiceFlow.runWhenAlive { it.doSomething() }
  */
-suspend fun <T : IInterface> StateFlow<UserService<T>>.runWhenAlive(
+suspend fun <T : IInterface, V> StateFlow<UserService<T>>.runWhenAlive(
     timeout: Duration = 5.seconds,
-    block: suspend (T) -> Unit
-) {
-    try {
+    block: suspend (T) -> V
+): V? {
+    runCatching {
         withTimeout(timeout) {
-            // 自動等待直到狀態為 Alive
-            val aliveState = filterIsInstance<UserService.Alive<T>>().first()
-            try {
-                block(aliveState.service)
-            } catch (e: RemoteException) {
-                Timber.e(e, "Shizuku 服務呼叫失敗 (可能是服務已停止)")
-            }
+            filterIsInstance<UserService.Alive<T>>().first()
         }
-    } catch (e: TimeoutCancellationException) {
-        Timber.d("等待 Shizuku 服務連線超時")
     }
+        .onSuccess {
+            return block(it.service)
+        }
+        .onFailure {
+            Timber.e(it, "Shizuku 服務呼叫失敗 (可能是服務已停止)")
+        }
+    return null
 }

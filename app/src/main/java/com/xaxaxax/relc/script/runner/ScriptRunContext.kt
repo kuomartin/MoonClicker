@@ -1,6 +1,6 @@
 package com.xaxaxax.relc.script.runner
 
-import com.xaxaxax.relc.IRelcShizukuService
+import com.xaxaxax.relc.IRelcV2Service
 import com.xaxaxax.relc.script.ScriptConfig
 import com.xaxaxax.relc.script.SimpleScriptProgress
 
@@ -13,7 +13,7 @@ interface ScriptRunner {
 }
 
 data class ScriptRunContext(
-    val service: IRelcShizukuService,
+    val service: IRelcV2Service,
     val onLog: (String) -> Unit,
     val isActive: () -> Boolean,
     val sessionStartElapsedRealtime: Long = 0L,
