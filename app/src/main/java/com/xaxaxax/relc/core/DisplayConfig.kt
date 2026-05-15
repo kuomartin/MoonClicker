@@ -5,4 +5,5 @@ data class DisplayConfig(
     val width: Int,
     val height: Int,
     val densityDpi: Int = 320,
+    val flags: Int = 0,
 )

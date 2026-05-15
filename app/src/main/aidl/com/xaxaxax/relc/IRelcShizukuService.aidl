@@ -7,7 +7,8 @@ interface IRelcShizukuService {
     boolean setOverlayAllowed(String packageName) = 1;
     boolean grantRuntimePermission(String packageName, String permissionName) = 2;
     // VirtualDisplay 管理
-    int createVirtualDisplay(String name, int width, int height, int densityDpi, in Surface surface, boolean destroyContent, boolean sytemDecorations) = 101;
+    // support destroyContent, sytemDecorations, autoMirror via adding flags
+    int createVirtualDisplay(String name, int width, int height, int densityDpi, in Surface surface, int flags) = 101;
     boolean setVirtualDisplaySurface(int displayId, in Surface surface) = 102;  // 熱插拔 sink
     boolean destroyVirtualDisplay(int displayId) = 103;
 

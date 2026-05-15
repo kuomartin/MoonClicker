@@ -38,6 +38,23 @@ import kotlin.system.exitProcess
 
 @Keep
 class RelcShizukuService(private val context: Context) : IRelcShizukuService.Stub() {
+    private companion object {
+        const val SUPPORTED_FLAGS =
+            DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR or
+                    DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_DESTROY_CONTENT_ON_REMOVAL or
+                    DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_SHOULD_SHOW_SYSTEM_DECORATIONS
+        const val ADD_FLAGS = DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_PUBLIC or
+                DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_PRESENTATION or
+                DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY or
+                DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_SUPPORTS_TOUCH or
+                DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_ROTATES_WITH_CONTENT
+        const val ADD_FLAGS_33 = DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_TRUSTED or
+                DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP or
+                DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_ALWAYS_UNLOCKED or
+                DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_TOUCH_FEEDBACK_DISABLED
+        const val ADD_FLAGS_34 = DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_OWN_FOCUS or
+                DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_DEVICE_DISPLAY_GROUP
+    }
 
     init {
         Timber.plant(Timber.DebugTree())
@@ -114,33 +131,16 @@ class RelcShizukuService(private val context: Context) : IRelcShizukuService.Stu
         height: Int,
         densityDpi: Int,
         surface: Surface?,
-        destroyContent: Boolean,
-        sytemDecorations: Boolean
+        flags: Int,
     ): Int {
-        var flags =
-            DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_PUBLIC or
-                    DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_PRESENTATION or
-                    DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY or
-                    DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_SUPPORTS_TOUCH or
-                    DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_ROTATES_WITH_CONTENT
-
-        if (destroyContent)
-            flags = flags or DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_DESTROY_CONTENT_ON_REMOVAL
-        if (sytemDecorations)
-            flags =
-                flags or DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_SHOULD_SHOW_SYSTEM_DECORATIONS
+        var flags = flags and SUPPORTED_FLAGS
+        flags = flags or ADD_FLAGS
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            flags = flags or
-                    DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_TRUSTED or
-                    DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP or
-                    DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_ALWAYS_UNLOCKED or
-                    DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_TOUCH_FEEDBACK_DISABLED
+            flags = flags or ADD_FLAGS_33
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            flags = flags or
-                    DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_OWN_FOCUS or
-                    DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_DEVICE_DISPLAY_GROUP
+            flags = flags or ADD_FLAGS_34
         }
 
         val dm = buildDisplayManagerForVirtualDisplay()
