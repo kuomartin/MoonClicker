@@ -1,5 +1,6 @@
 package com.xaxaxax.relc.display.cv
 
+import android.graphics.Bitmap
 import timber.log.Timber
 
 /**
@@ -37,4 +38,17 @@ class NativeDetector {
      * 停止原生引擎
      */
     external fun stopEngine()
+
+    /**
+     * 進行模板匹配
+     */
+    external fun matchTemplateNative(
+        screenBitmap: Bitmap,
+        targetBitmap: Bitmap,
+        x: Int,
+        y: Int,
+        width: Int,
+        height: Int,
+        method: Int = 5 // cv::TM_CCOEFF_NORMED
+    ): DetectionResult?
 }

@@ -13,25 +13,28 @@ class NativeEngineSink(
 
 
     private val nativeDetector = NativeDetector()
-    private var surface: Surface? = null
+    private var isStarted = false
 
     override fun acquireSurface(): Surface? {
-        if (surface == null) {
-            surface = nativeDetector.startEngine(service, width, height, script)
-        }
-        return surface
+        // Unused. VirtualDisplay is created by C++ via Lua script.
+        return null
     }
 
     override fun start() {
-        // Native engine starts processing once surface is created and frames flow in
+        if (!isStarted) {
+            nativeDetector.startEngine(service, width, height, script)
+            isStarted = true
+        }
     }
 
     override fun stop() {
-        nativeDetector.stopEngine()
+        if (isStarted) {
+            nativeDetector.stopEngine()
+            isStarted = false
+        }
     }
 
     override fun release() {
-        surface?.release()
-        surface = null
+        // Surface is managed by C++
     }
 }

@@ -66,6 +66,38 @@ input.tap(50, 100, 200)
 
 ---
 
+## 原生引擎 (Native Engine) 專用 API
+
+使用原生引擎時（腳本由 C++ `lua_State` 執行），提供以下高效能電腦視覺與非同步 API：
+
+### `display.create(width, height, [densityDpi=440], [flags=16])`
+- 由 Lua 腳本主動要求建立 VirtualDisplay，開始擷取畫面。
+- 回傳 boolean 表示是否成功建立。
+
+### `display.launch(packageName, [displayId])`
+- 在指定顯示器（預設為腳本建立的虛擬顯示器）啟動應用程式。
+- 回傳 boolean 表示是否成功啟動。
+
+### `display.get_all()`
+- 取得目前所有活動中的虛擬顯示器 ID 清單。
+- 回傳一個包含 ID 的 Lua table，例如 `{2, 5, 8}`。
+
+### `match.templates`
+- Lua 表格，設定要搜尋的模板清單。需要在呼叫 `match.wait()` 前設定。
+- 格式：`{{name = "target1", target = "/path/to/img.png", threshold = 0.8}, ...}`
+
+### `match.wait()`
+- **阻塞當前 Lua 線程**，等待 AImageReader 回傳下一張新畫面，並執行 OpenCV 比對。
+- 回傳一個包含搜尋結果的表，例如：
+  `{ target1 = { found = true, x = 100, y = 200, confidence = 0.95 }, ... }`
+- 這種主動 Pull (拉取) 模式可讓腳本完全控制執行節奏與等待時間。
+
+### 原生 `input.swipe`
+- `input.swipe(pointerId, {{x1, y1}, {x2, y2}, ...}, duration, keep)`
+- 透過 Shizuku / Root 進行多點觸控滑動。
+
+---
+
 ## Luaj 預設環境
 
 以 `JsePlatform.standardGlobals()` 建立，包含一組常見的 Lua 5.2 風格標準庫與 JVM 相關擴充（如 `string`、`math`、`table` 等）。細節以 [Luaj](https://github.com/luaj/luaj) 行為為準；本專案未另外自訂 `require` 路徑或沙箱。

@@ -8,11 +8,28 @@
 #include <string>
 #include <jni.h>
 #include <opencv2/core.hpp>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <atomic>
 
 struct SearchTemplate {
     std::string name;
     cv::Mat image;
     double threshold;
+};
+
+struct MatchResultItem {
+    std::string name;
+    bool found;
+    double x;
+    double y;
+    double confidence;
+};
+
+struct FrameResult {
+    bool hasResult = false;
+    std::vector<MatchResultItem> matches;
 };
 
 class RelcEngine {
@@ -25,16 +42,25 @@ public:
 
     ANativeWindow* getWindow();
 
-    // Helper for Lua callbacks
+    // Helpers for Lua callbacks
     bool multiTouchSwipe(int pointerId, const std::vector<int>& points, long duration, bool keep);
+    bool createVirtualDisplay(int width, int height, int densityDpi, int flags);
+    bool launchInDisplay(const std::string& packageName, int displayId);
+    std::vector<int> getVirtualDisplays();
 
 private:
     void processFrame(const cv::Mat& frame);
     void updateTemplatesFromLua();
+    void luaThreadLoop(std::string script);
+    static void lua_stop_hook(lua_State* L, lua_Debug* ar);
     
     // JNI Upcalls for Lua API
     static int lua_swipe(lua_State* L);
     static int lua_log(lua_State* L);
+    static int lua_display_create(lua_State* L);
+    static int lua_display_launch(lua_State* L);
+    static int lua_display_get_all(lua_State* L);
+    static int lua_match_wait(lua_State* L);
 
     std::unique_ptr<LuaEngine> luaEngine;
     std::unique_ptr<NativeImageReader> imageReader;
@@ -43,9 +69,18 @@ private:
     jobject serviceObj;
     
     jmethodID swipeMethodId;
+    jmethodID createVirtualDisplayMethodId;
+    jmethodID launchInDisplayMethodId;
+    jmethodID getVirtualDisplaysMethodId;
     int displayId;
 
     std::vector<SearchTemplate> templates;
+
+    std::thread luaThread;
+    std::mutex resultMutex;
+    std::condition_variable resultCV;
+    FrameResult latestResult;
+    std::atomic<bool> isRunning;
 };
 
 #endif // RELC_ENGINE_H

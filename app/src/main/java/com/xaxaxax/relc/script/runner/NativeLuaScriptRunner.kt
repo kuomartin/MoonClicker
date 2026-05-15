@@ -1,8 +1,6 @@
 package com.xaxaxax.relc.script.runner
 
-import com.xaxaxax.relc.core.DisplayConfig
 import com.xaxaxax.relc.display.NativeEngineSink
-import com.xaxaxax.relc.display.VirtualDisplayController
 import com.xaxaxax.relc.script.ScriptConfig
 import kotlinx.coroutines.delay
 
@@ -17,23 +15,17 @@ class NativeLuaScriptRunner(
         val height = size[1]
 
         val sink = NativeEngineSink(v2Service, config.code, width, height)
-        val vdController = VirtualDisplayController(v2Service)
 
-        val displayConfig = DisplayConfig(
-            name = "NativeLuaEngine",
-            width = width,
-            height = height,
-            densityDpi = 440
-        )
-
-        vdController.create(displayConfig, sink)
+        // Starts the engine in a new thread. Lua script decides when to create the VirtualDisplay.
+        sink.start()
 
         try {
             while (ctx.isActive()) {
                 delay(500)
             }
         } finally {
-            vdController.destroy()
+            sink.stop()
+            sink.release()
         }
     }
 }
