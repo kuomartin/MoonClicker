@@ -39,7 +39,7 @@ private const val REFRESH_DELAY = 500
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
-    @ApplicationContext
+    @param:ApplicationContext
     private val context: Context
 ) : ViewModel() {
     private val _hasOverlayPermission = MutableStateFlow(false)

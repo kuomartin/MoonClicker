@@ -69,7 +69,7 @@ fun RecordingOverlay(
                     } while (event.changes.any { it.pressed })
 
                     if (result != null) {
-                        onRecordingFinished(result!!)
+                        onRecordingFinished(result)
                     } else {
                         onCancel()
                     }
