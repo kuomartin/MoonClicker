@@ -1,18 +1,15 @@
 package com.xaxaxax.relc.overlay
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -23,9 +20,7 @@ import androidx.compose.material.icons.filled.RadioButtonChecked
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Divider
 import androidx.compose.material3.DividerDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
@@ -44,6 +39,8 @@ import com.xaxaxax.relc.ui.theme.ReLCTheme
 data class EditorControlUiState(
     val isRunning: Boolean = false,
     val isRecording: Boolean = false,
+    val isCapturing: Boolean = false,
+    val isTriggerLoopActive: Boolean = false,
     val isCollapsed: Boolean = false,
 )
 
@@ -91,7 +88,11 @@ fun EditorControlBar(
                     onClick = onStartStopClick
                 )
 
-                VerticalDivider(Modifier.height(24.dp), DividerDefaults.Thickness, DividerDefaults.color)
+                VerticalDivider(
+                    Modifier.height(24.dp),
+                    DividerDefaults.Thickness,
+                    DividerDefaults.color
+                )
 
                 if (!uiState.isCollapsed) {
                     // 2. Add Tap
@@ -118,6 +119,7 @@ fun EditorControlBar(
                         onClick = onRecordSwipeClick,
                         enabled = !uiState.isRunning
                     )
+
 
                     // 5. Save
                     ControlIconButton(
@@ -149,7 +151,11 @@ fun EditorControlBar(
                     )
                 }
 
-                VerticalDivider(Modifier.height(24.dp), DividerDefaults.Thickness, DividerDefaults.color)
+                VerticalDivider(
+                    Modifier.height(24.dp),
+                    DividerDefaults.Thickness,
+                    DividerDefaults.color
+                )
 
                 // 8. Exit
                 ControlIconButton(
@@ -202,7 +208,11 @@ private fun EditorControlBarPreview() {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             // Expanded
             EditorControlBar(
-                uiState = EditorControlUiState(isRunning = false, isRecording = false, isCollapsed = false),
+                uiState = EditorControlUiState(
+                    isRunning = false,
+                    isRecording = false,
+                    isCollapsed = false
+                ),
                 onStartStopClick = {},
                 onAddTapClick = {},
                 onRecordSwipeClick = {},
@@ -214,7 +224,11 @@ private fun EditorControlBarPreview() {
             )
             // Collapsed
             EditorControlBar(
-                uiState = EditorControlUiState(isRunning = true, isRecording = false, isCollapsed = true),
+                uiState = EditorControlUiState(
+                    isRunning = true,
+                    isRecording = false,
+                    isCollapsed = true
+                ),
                 onStartStopClick = {},
                 onAddTapClick = {},
                 onRecordSwipeClick = {},

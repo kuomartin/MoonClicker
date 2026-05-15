@@ -15,7 +15,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class ScriptsViewModel @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
     private val repository: ScriptRepository,
     private val scriptManager: ScriptManager
 ) : ViewModel() {
