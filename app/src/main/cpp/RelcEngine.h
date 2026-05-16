@@ -6,6 +6,8 @@
 #include <memory>
 #include <vector>
 #include <string>
+#include <android/native_window.h>
+#include <android/native_window_jni.h>
 #include <jni.h>
 #include <opencv2/core.hpp>
 #include <thread>
@@ -43,6 +45,8 @@ public:
     void stop();
 
     ANativeWindow *getWindow();
+
+    void setPreviewSurface(JNIEnv *env, jobject surface);
 
     // Helpers for Lua callbacks
     bool multiTouchSwipe(int pointerId, const std::vector<int> &points, long duration, bool keep);
@@ -99,6 +103,9 @@ private:
     std::mutex resultMutex;
     FrameResult latestResult;
     std::atomic<bool> isRunning;
+
+    ANativeWindow *previewWindow;
+    std::mutex previewMutex;
 };
 
 #endif // RELC_ENGINE_H

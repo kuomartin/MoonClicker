@@ -12,7 +12,7 @@ class NativeEngineSink(
 ) : DisplaySink {
 
 
-    private val nativeDetector = NativeDetector()
+    val nativeDetector = NativeDetector()
     private var isStarted = false
 
     override fun acquireSurface(): Surface? {

@@ -5,7 +5,7 @@
 #include <opencv2/imgproc.hpp>
 #include "RelcEngine.h"
 
-static RelcEngine* gEngine = nullptr;
+static RelcEngine *gEngine = nullptr;
 
 extern "C" {
 
@@ -13,7 +13,7 @@ extern "C" {
  * 計算兩張圖的顏色差異 (平均值差異)
  * 返回 0-100，越小表示越接近
  */
-double getColorDiff(const cv::Mat& candidate, const cv::Mat& target) {
+double getColorDiff(const cv::Mat &candidate, const cv::Mat &target) {
     cv::Scalar meanCandidate = cv::mean(candidate);
     cv::Scalar meanTarget = cv::mean(target);
 
@@ -35,13 +35,13 @@ Java_com_xaxaxax_relc_display_cv_NativeDetector_startEngine(
         jint height,
         jstring script) {
 
-    if (gEngine) {
-        delete gEngine;
-    }
+//    if (gEngine) {
+//        delete gEngine;
+//    }
 
     gEngine = new RelcEngine(env, service);
-    
-    const char* nativeScript = env->GetStringUTFChars(script, nullptr);
+
+    const char *nativeScript = env->GetStringUTFChars(script, nullptr);
     bool success = gEngine->start(width, height, nativeScript);
     env->ReleaseStringUTFChars(script, nativeScript);
 
@@ -51,7 +51,7 @@ Java_com_xaxaxax_relc_display_cv_NativeDetector_startEngine(
         return nullptr;
     }
 
-    ANativeWindow* window = gEngine->getWindow();
+    ANativeWindow *window = gEngine->getWindow();
     if (!window) return nullptr;
 
     return ANativeWindow_toSurface(env, window);
@@ -67,12 +67,22 @@ Java_com_xaxaxax_relc_display_cv_NativeDetector_stopEngine(
     }
 }
 
+JNIEXPORT void JNICALL
+Java_com_xaxaxax_relc_display_cv_NativeDetector_setPreviewSurface(
+        JNIEnv *env,
+        jobject thiz,
+        jobject surface) {
+    if (gEngine) {
+        gEngine->setPreviewSurface(env, surface);
+    }
+}
+
 JNIEXPORT jboolean JNICALL
 Java_com_xaxaxax_relc_display_cv_NativeDetector_isEngineRunning(
         JNIEnv *env,
         jobject thiz) {
     if (gEngine) {
-        return (jboolean)gEngine->isEngineRunning();
+        return (jboolean) gEngine->isEngineRunning();
     }
     return JNI_FALSE;
 }
@@ -107,7 +117,7 @@ Java_com_xaxaxax_relc_display_cv_NativeDetector_matchTemplateNative(
     cv::Rect roi(x, y, width, height);
     // 邊界檢查，防止越界
     roi &= cv::Rect(0, 0, screenFull.cols, screenFull.rows);
-    
+
     if (roi.width < target.cols || roi.height < target.rows) {
         AndroidBitmap_unlockPixels(env, screen_bitmap);
         AndroidBitmap_unlockPixels(env, target_bitmap);
@@ -120,7 +130,7 @@ Java_com_xaxaxax_relc_display_cv_NativeDetector_matchTemplateNative(
     int result_cols = screenRoi.cols - target.cols + 1;
     int result_rows = screenRoi.rows - target.rows + 1;
     cv::Mat result(result_rows, result_cols, CV_32FC1);
-    
+
     cv::matchTemplate(screenRoi, target, result, method);
 
     double minVal, maxVal;
@@ -139,14 +149,14 @@ Java_com_xaxaxax_relc_display_cv_NativeDetector_matchTemplateNative(
 
     jclass result_class = env->FindClass("com/xaxaxax/relc/display/cv/DetectionResult");
     jmethodID constructor = env->GetMethodID(result_class, "<init>", "(ZIIDD)V");
-    
+
     // 將座標轉換回全螢幕座標
-    return env->NewObject(result_class, constructor, 
-                          true, 
-                          (jint)(roi.x + maxLoc.x + target.cols / 2), 
-                          (jint)(roi.y + maxLoc.y + target.rows / 2), 
-                          (jdouble)maxVal,
-                          (jdouble)colorDiff);
+    return env->NewObject(result_class, constructor,
+                          true,
+                          (jint) (roi.x + maxLoc.x + target.cols / 2),
+                          (jint) (roi.y + maxLoc.y + target.rows / 2),
+                          (jdouble) maxVal,
+                          (jdouble) colorDiff);
 }
 
 }

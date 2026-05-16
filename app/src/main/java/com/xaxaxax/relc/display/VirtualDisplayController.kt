@@ -59,6 +59,20 @@ class VirtualDisplayController(private val service: IRelcV2Service) {
         Timber.d("VirtualDisplayController: sink replaced on displayId=$displayId")
     }
 
+    fun setPreviewSink(newSink: DisplaySink) {
+        when (val sink = sink) {
+            is NativeEngineSink -> {
+                Timber.d("VirtualDisplayController: Engine is running, redirecting surface to C++")
+                sink.nativeDetector.setPreviewSurface(newSink.acquireSurface())
+            }
+
+            else -> {
+                Timber.d("the origSink is not NativeEngineSink")
+                replaceSink(newSink)
+            }
+        }
+    }
+
     fun destroy() {
         check(state == State.CREATED) { "Cannot destroy: state is $state" }
 

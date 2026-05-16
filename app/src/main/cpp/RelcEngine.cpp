@@ -5,7 +5,7 @@
 #include <android/log.h>
 
 RelcEngine::RelcEngine(JNIEnv *env, jobject service) : javaVM(nullptr), displayId(-1),
-                                                       isRunning(false) {
+                                                       isRunning(false), previewWindow(nullptr) {
     env->GetJavaVM(&javaVM);
     serviceObj = env->NewGlobalRef(service);
 
@@ -25,6 +25,11 @@ RelcEngine::~RelcEngine() {
     JNIEnv *env;
     if (javaVM->GetEnv((void **) &env, JNI_VERSION_1_6) == JNI_OK) {
         env->DeleteGlobalRef(serviceObj);
+    }
+    std::lock_guard<std::mutex> lock(previewMutex);
+    if (previewWindow) {
+        ANativeWindow_release(previewWindow);
+        previewWindow = nullptr;
     }
 }
 
@@ -79,7 +84,24 @@ bool RelcEngine::start(int width, int height, const std::string &script) {
     if (!imageReader->init()) return false;
 
     imageReader->setCallback([this](const cv::Mat &frame) {
+        if (!isRunning) return;
         processFrame(frame);
+
+        std::lock_guard<std::mutex> lock(previewMutex);
+        if (previewWindow) {
+            ANativeWindow_Buffer buffer;
+            if (ANativeWindow_lock(previewWindow, &buffer, nullptr) == 0) {
+                if (buffer.width == frame.cols && buffer.height == frame.rows) {
+                    auto *dst = static_cast<uint8_t *>(buffer.bits);
+                    auto *src = frame.data;
+                    int rowSize = frame.cols * 4; // RGBA_8888
+                    for (int y = 0; y < frame.rows; ++y) {
+                        memcpy(dst + y * buffer.stride * 4, src + y * frame.step, rowSize);
+                    }
+                }
+                ANativeWindow_unlockAndPost(previewWindow);
+            }
+        }
     });
 
     isRunning = true;
@@ -117,7 +139,8 @@ void RelcEngine::luaThreadLoop(const std::string &script) {
     }
 
     // Initial start
-    int status = lua_resume(coL, gL, 0, nullptr);
+    int nres = 0;
+    int status = lua_resume(coL, gL, 0, &nres);
     if (status != LUA_OK && status != LUA_YIELD) {
         LOGE("Script execution error: %s", lua_tostring(coL, -1));
         isRunning = false;
@@ -180,17 +203,21 @@ void RelcEngine::luaThreadLoop(const std::string &script) {
             lua_pop(gL, 1);
         }
 
-        // 3. Resume main coroutine if not event-driven loop
-        status = lua_resume(coL, gL, 0, nullptr);
-
-        if (status == LUA_OK) {
-            if (!hasOnTick) {
-                LOGD("Script finished execution");
+        // 3. Resume main coroutine if it yielded
+        if (lua_status(coL) == LUA_YIELD) {
+            int nres_loop = 0;
+            int resume_status = lua_resume(coL, gL, 0, &nres_loop);
+            
+            if (resume_status != LUA_OK && resume_status != LUA_YIELD) {
+                LOGE("Script execution error: %s", lua_tostring(coL, -1));
                 isRunning = false;
                 break;
             }
-        } else if (status != LUA_YIELD) {
-            LOGE("Script execution error: %s", lua_tostring(coL, -1));
+        }
+
+        // 4. Check if we should exit
+        if (lua_status(coL) == LUA_OK && !hasOnTick) {
+            LOGD("Script finished execution");
             isRunning = false;
             break;
         }
@@ -245,6 +272,17 @@ bool RelcEngine::destroyVirtualDisplay() {
 
 ANativeWindow *RelcEngine::getWindow() {
     return imageReader ? imageReader->getWindow() : nullptr;
+}
+
+void RelcEngine::setPreviewSurface(JNIEnv *env, jobject surface) {
+    std::lock_guard<std::mutex> lock(previewMutex);
+    if (previewWindow) {
+        ANativeWindow_release(previewWindow);
+        previewWindow = nullptr;
+    }
+    if (surface) {
+        previewWindow = ANativeWindow_fromSurface(env, surface);
+    }
 }
 
 void RelcEngine::updateTemplatesFromLua() {

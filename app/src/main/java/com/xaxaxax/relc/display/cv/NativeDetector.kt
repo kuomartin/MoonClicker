@@ -40,6 +40,11 @@ class NativeDetector {
     external fun stopEngine()
 
     /**
+     * 設定預覽用的 Surface (畫面分流)
+     */
+    external fun setPreviewSurface(surface: android.view.Surface?)
+
+    /**
      * 檢查原生引擎是否正在運行
      */
     external fun isEngineRunning(): Boolean

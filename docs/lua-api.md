@@ -1,123 +1,127 @@
-# ReLC ScriptEngine — Lua API
+# ReLC Lua API 參考手冊 (v2)
 
-說明對應程式：`app/src/main/java/com/xaxaxax/relc/script/ScriptEngine.kt`、`app/src/main/java/com/xaxaxax/relc/script/runner/LuaScriptRunner.kt`。
+目前所有的 API 分為四大模組：**日誌 (Log)**、**輸入 (Input)**、**顯示 (Display)** 以及 **圖像匹配 (Match)**。
 
----
-
-## 執行順序（腳本類型為 Lua）
-
-1. **`init`**（可空）— 先執行一次  
-2. **`code`** — 依 **`loopMode`** 重複執行（見下）
-3. **`clean`**（可空）— 預設僅在腳本**正常跑完**時執行；若在 UI 勾選 **永遠執行 clean**，則中斷／錯誤後仍會執行。`clean` 內發生的例外會被吞掉，不往上拋。
-
-### `loopMode`（`app/src/main/java/com/xaxaxax/relc/script/runner/ScriptMacroLoop.kt`）
-
-- `count == -1`：無限迴圈；每輪跑完 `code` 後 `delay(duration)`，再下一輪。
-- 否則：`repeat(count)` 次；輪與輪之間 `delay(duration)`。  
-  常見：`LoopMode.None` 等同 `count == 1` 且 `duration` 為 0，主邏輯只跑一輪。
+## 1. 全域函數 (Global)
+### `log(message)`
+在 Android Logcat 中輸出偵錯訊息。標籤為 `LuaScript`。
+*   **參數**: `message` (string) - 要輸出的文字。
+*   **範例**: `log("腳本啟動中...")`
 
 ---
 
-## 全域 `displayId`
-
-引擎啟動時會設定 **`displayId = 0`**（Lua 全域變數）。所有 **`input.*`** 都會讀取**當下的** `displayId`，不再在每個函式上傳 display 參數。
-
-範例：
-
-```lua
-displayId = 2
-input.tap(50, 100, 200)
-```
-
-`display.launch(packageName, displayId)` 仍可明確指定要在哪個顯示上啟動 App（第二參數照常傳）。
-
----
-
-## 專案注入的全域函式與函式庫
-
-### `log(msg)`
-
-- 將字串送到 UI 的 log，並寫入 `Timber.d`。
-
-### `sleep(ms)`
-
-- **阻塞目前執行緒**（`Thread.sleep`），單位為毫秒。腳本在 IO thread 上執行，會阻塞該次 `execute`。
-
-### `input`
-
-`swipe` / `swipeL1`：第一個參數為總歷時（毫秒），之後為連續 `x, y`；**參數總個數為奇數且 ≥ 5**（至少兩個座標點）。
-
-| 呼叫 | 說明 |
-|------|------|
-| `input.tap(durationMs, x, y)` | 在 `ACTION_DOWN` 與 `ACTION_UP` 之間持續 `durationMs`（毫秒）；使用全域 `displayId`。 |
-| `input.swipe(durationMs, x1, y1, x2, y2, ...)` | 折線滑動（**L2** 弧長：每段 `√(Δx²+Δy²)`）。 |
-| `input.swipeL1(durationMs, x1, y1, x2, y2, ...)` | 同上，但以 **L1（曼哈頓）弧長** 分配時間：每段貢獻 `|Δx|+|Δy|`；指尖軌跡仍在頂點間直線插值。 |
-| `input.down(pointerId, x, y)` | 觸控按下（多指流程）；使用全域 `displayId`。 |
-| `input.move(pointerId, x, y)` | 觸控移動。 |
-| `input.up(pointerId)` | 觸控放開（僅 pointer id；display 依全域 `displayId`）。 |
-
-### `display`
-
-| 呼叫 | 說明 |
-|------|------|
-| `display.launch(packageName, displayId)` | 在指定顯示上啟動應用程式；回傳值由底層服務決定。 |
-
-程式註解標有 TODO：`display.create`、`display.destroy` **尚未提供**。
+## 2. 輸入模組 (input)
+### `input.swipe(pointerId, points, duration, keep)`
+執行單點或多點滑動（或點擊）。
+*   **參數**:
+    *   `pointerId` (number): 手指 ID (通常從 0 開始，-1 代表由系統分配)。
+    *   `points` (table): 座標點清單。格式為 `{x1, y1, x2, y2, ...}` 或雙層 table `{{x1, y1}, {x2, y2}}`。
+    *   `duration` (number, 選填): 滑動持續時間（毫秒），預設為 0。
+    *   `keep` (boolean, 選填): 結束後是否保持手指按下狀態，預設為 `false`。
+*   **範例**: 
+    ```lua
+    -- 在 (100, 100) 點擊一下
+    input.swipe(0, {100, 100}, 50)
+    -- 從 (100, 100) 滑動到 (500, 500)，耗時 500ms
+    input.swipe(0, {100, 100, 500, 500}, 500)
+    ```
 
 ---
 
-## 原生引擎 (Native Engine) 專用 API
+## 3. 顯示模組 (display)
+### `display.create(width, height, densityDpi, flags)`
+建立一個新的虛擬顯示器 (Virtual Display)。畫面會自動串接到 C++ 辨識引擎。
+*   **參數**:
+    *   `width`, `height` (number): 解析度。
+    *   `densityDpi` (number, 選填): 螢幕密度，預設 440。
+    *   `flags` (number, 選填): 系統旗標，預設 16 (PUBLIC)。
+*   **傳回值**: `displayId` (number) 或 `nil` (失敗)。
 
-使用原生引擎時（腳本由 C++ `lua_State` 執行），提供以下高效能電腦視覺與非同步 API：
-
-### `display.create(width, height, [densityDpi=440], [flags=16])`
-- 由 Lua 腳本主動要求建立 VirtualDisplay，開始擷取畫面。
-- 回傳建立成功的 **Display ID (number)**，若失敗則回傳 `nil`。
-
-### `display.launch(packageName, [displayId])`
-- 在指定顯示器（預設為腳本建立的虛擬顯示器）啟動應用程式。
-- 回傳 boolean 表示是否成功啟動。
+### `display.launch(packageName, displayId)`
+在指定的顯示器中啟動應用程式。
+*   **參數**:
+    *   `packageName` (string): 應用程式包名 (e.g., "com.android.settings")。
+    *   `displayId` (number, 選填): 目標顯示器 ID，預設為最近建立的 ID。
+*   **傳回值**: `boolean` (是否成功啟動)。
 
 ### `display.get_all()`
-- 取得目前所有活動中的虛擬顯示器 ID 清單。
-- 回傳一個包含 ID 的 Lua table，例如 `{2, 5, 8}`。
+取得目前系統中所有的虛擬顯示器 ID。
+*   **傳回值**: `table` (數字列表，例如 `{0, 1, 10}`)。
 
-### `match.templates`
-- Lua 表格，設定要搜尋的模板清單。需要在呼叫 `match.wait()` 前設定。
-- 格式：`{{name = "target1", target = "/path/to/img.png", threshold = 0.8}, ...}`
+---
+
+## 4. 圖像匹配模組 (match)
+此模組透過 C++ 與 OpenCV 進行底層加速。
+
+### `match.templates` (Table 屬性)
+定義要搜尋的目標模板。
+*   **結構**:
+    ```lua
+    match.templates = {
+        { name = "目標A", target = "/sdcard/a.png", threshold = 0.8 },
+        { name = "目標B", target = "/sdcard/b.png", threshold = 0.9 }
+    }
+    ```
 
 ### `match.wait()`
-- **阻塞當前 Lua 線程**，等待 AImageReader 回傳下一張新畫面，並執行 OpenCV 比對。
-- 回傳一個包含搜尋結果的表，例如：
-  `{ target1 = { found = true, x = 100, y = 200, confidence = 0.95 }, ... }`
-- 這種主動 Pull (拉取) 模式可讓腳本完全控制執行節奏與等待時間。
-
-### 原生 `input.swipe`
-- `input.swipe(pointerId, {{x1, y1}, {x2, y2}, ...}, duration, keep)`
-- 透過 Shizuku / Root 進行多點觸控滑動。
-
----
-
-## Luaj 預設環境
-
-以 `JsePlatform.standardGlobals()` 建立，包含一組常見的 Lua 5.2 風格標準庫與 JVM 相關擴充（如 `string`、`math`、`table` 等）。細節以 [Luaj](https://github.com/luaj/luaj) 行為為準；本專案未另外自訂 `require` 路徑或沙箱。
+掛起腳本直到 `match.templates` 中的任何一個目標被辨識到。
+*   **傳回值**: 一個包含辨識結果的 table。
+*   **資料格式**:
+    ```lua
+    local results = match.wait()
+    if results["目標A"] and results["目標A"].found then
+        log("找到目標A，位置在: " .. results["目標A"].x .. ", " .. results["目標A"].y)
+    end
+    ```
 
 ---
 
-## 目前未在 Lua 暴露的能力
+## 5. 腳本生命週期回呼 (Callbacks)
+你可以定義以下函數，引擎會在特定時間點呼叫它們：
 
-- **實體按鍵注入**（BACK、HOME 等）：`ScriptEngine` 未綁定至 Lua；若要在腳本裡送按鍵，可使用 **SIMPLE** 腳本類型的 `key` 步驟（見 Kotlin 端 `InputController.injectPhysicalKey`）。
+*   **`on_start()`**: 腳本載入後第一次執行前呼叫。
+*   **`on_tick(dt)`**: 每秒約呼叫 15 次（15 FPS 邏輯循環），`dt` 為間隔時間。
+*   **`on_match(name, results)`**: 當畫面辨識到任何模板時主動呼叫。
+    *   `name`: 匹配到的第一個模板名稱。
+    *   `results`: 完整的匹配結果 table。
 
 ---
 
-## 範例
+## 範例腳本：自動啟動、監控與超時處理
+
+這個範例展示了如何利用 `on_start` 初始化、`on_match` 處理圖像辨識，以及 `on_tick` 處理超時邏輯。
 
 ```lua
-displayId = 0
-log("start")
-input.tap(50, 540, 960)
-sleep(500)
-input.swipe(300, 100, 800, 900, 800, 300, 500)
-input.swipeL1(300, 100, 800, 900, 800, 300, 500)
-log("done")
+match.templates = {
+    { name = "登入按鈕", target = "/data/local/tmp/login.png", threshold = 0.8 }
+}
+
+local last_seen_time = 0
+
+function on_start()
+    log("開始執行自動登入...")
+    local dId = display.create(1080, 1920)
+    display.launch("com.example.game", dId)
+end
+
+function on_tick(dt)
+    last_seen_time = last_seen_time + dt
+    
+    -- 如果超過 10 秒沒看到任何目標，每 10 秒輸出一次警告
+    if last_seen_time > 10 then
+        log("警告：已超過 10 秒未辨識到任何目標...")
+        last_seen_time = 0 -- 重置計時以避免日誌洗版
+    end
+end
+
+function on_match(name, results)
+    -- 只要有匹配，就重置計時器
+    last_seen_time = 0
+
+    if name == "登入按鈕" then
+        local btn = results[name]
+        log("看到登入按鈕了，點擊它！")
+        input.swipe(-1, {btn.x, btn.y}, 100)
+    end
+end
 ```

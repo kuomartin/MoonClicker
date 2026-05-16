@@ -52,7 +52,7 @@ fun VirtualDisplaySurfaceView(
                 Timber.d("VirtualDisplaySurfaceView: surfaceCreated")
                 if (controller.state != VirtualDisplayController.State.CREATED) return
                 runCatching {
-                    controller.replaceSink(DirectSink(holder.surface))
+                    controller.setPreviewSink(DirectSink(holder.surface))
                 }.onFailure {
                     Timber.e(it, "replaceSink(DirectSink) failed")
                 }
@@ -68,7 +68,7 @@ fun VirtualDisplaySurfaceView(
                 Timber.d("VirtualDisplaySurfaceView: surfaceDestroyed")
                 if (controller.state != VirtualDisplayController.State.CREATED) return
                 runCatching {
-                    controller.replaceSink(NoOpSink)
+                    controller.setPreviewSink(NoOpSink)
                 }.onFailure {
                     Timber.e(it, "replaceSink(NoOpSink) failed")
                 }
