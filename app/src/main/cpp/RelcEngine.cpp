@@ -12,6 +12,7 @@ RelcEngine::RelcEngine(JNIEnv* env, jobject service) : displayId(-1), isRunning(
     // V2 Method: multiTouchSwipe(int pointerId, int displayId, int[] points, long duration, boolean keep)
     swipeMethodId = env->GetMethodID(serviceClass, "multiTouchSwipe", "(II[IJZ)V");
     createVirtualDisplayMethodId = env->GetMethodID(serviceClass, "createVirtualDisplay", "(Ljava/lang/String;IIILandroid/view/Surface;I)I");
+    destroyVirtualDisplayMethodId = env->GetMethodID(serviceClass, "destroyVirtualDisplay", "(I)Z");
     launchInDisplayMethodId = env->GetMethodID(serviceClass, "launchInDisplay", "(Ljava/lang/String;I)Z");
     getVirtualDisplaysMethodId = env->GetMethodID(serviceClass, "getVirtualDisplays", "()[I");
 }
@@ -29,6 +30,10 @@ bool RelcEngine::start(int width, int height, const std::string& script) {
     if (!luaEngine->init()) return false;
 
     lua_State* L = luaEngine->getLuaState();
+
+    // Store 'this' in registry for hook to access
+    lua_pushlightuserdata(L, this);
+    lua_setfield(L, LUA_REGISTRYINDEX, "RelcEngineInstance");
     
     // Global log function
     lua_pushlightuserdata(L, this);
@@ -81,10 +86,35 @@ bool RelcEngine::start(int width, int height, const std::string& script) {
 }
 
 void RelcEngine::luaThreadLoop(std::string script) {
-    if (!luaEngine->loadScript(script)) return;
+    if (!luaEngine->loadScript(script)) {
+        isRunning = false;
+        return;
+    }
     
+    lua_State* coL = luaEngine->getCoroutineState();
+    if (!coL) {
+        isRunning = false;
+        return;
+    }
+
+    // Set a hook that runs every 1000 instructions to check if we should stop
+    lua_sethook(coL, lua_stop_hook, LUA_MASKCOUNT, 1000);
+
     // Run the script
     luaEngine->resume();
+
+    // Mark as finished so UI/Kotlin can detect it
+    isRunning = false;
+}
+
+void RelcEngine::lua_stop_hook(lua_State* L, lua_Debug* ar) {
+    lua_getfield(L, LUA_REGISTRYINDEX, "RelcEngineInstance");
+    RelcEngine* self = (RelcEngine*)lua_touserdata(L, -1);
+    lua_pop(L, 1);
+
+    if (self && !self->isRunning) {
+        luaL_error(L, "Script terminated by user");
+    }
 }
 
 void RelcEngine::stop() {
@@ -94,8 +124,28 @@ void RelcEngine::stop() {
         luaThread.join();
     }
 
+    destroyVirtualDisplay();
+
     if (imageReader) imageReader->release();
     if (luaEngine) luaEngine->stop();
+}
+
+bool RelcEngine::destroyVirtualDisplay() {
+    if (displayId == -1) return false;
+
+    JNIEnv* env;
+    bool attached = false;
+    int res = javaVM->GetEnv((void**)&env, JNI_VERSION_1_6);
+    if (res == JNI_EDETACHED) {
+        if (javaVM->AttachCurrentThread(&env, nullptr) != JNI_OK) return false;
+        attached = true;
+    }
+
+    env->CallBooleanMethod(serviceObj, destroyVirtualDisplayMethodId, displayId);
+    displayId = -1;
+
+    if (attached) javaVM->DetachCurrentThread();
+    return true;
 }
 
 ANativeWindow* RelcEngine::getWindow() {
@@ -202,7 +252,11 @@ int RelcEngine::lua_display_create(lua_State* L) {
     int flags = luaL_optinteger(L, 4, 16);
     
     bool success = self->createVirtualDisplay(width, height, densityDpi, flags);
-    lua_pushboolean(L, success);
+    if (success) {
+        lua_pushinteger(L, self->displayId);
+    } else {
+        lua_pushnil(L);
+    }
     return 1;
 }
 

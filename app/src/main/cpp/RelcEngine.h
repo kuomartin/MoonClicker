@@ -45,8 +45,11 @@ public:
     // Helpers for Lua callbacks
     bool multiTouchSwipe(int pointerId, const std::vector<int>& points, long duration, bool keep);
     bool createVirtualDisplay(int width, int height, int densityDpi, int flags);
+    bool destroyVirtualDisplay();
     bool launchInDisplay(const std::string& packageName, int displayId);
     std::vector<int> getVirtualDisplays();
+
+    bool isEngineRunning() const { return isRunning; }
 
 private:
     void processFrame(const cv::Mat& frame);
@@ -70,6 +73,7 @@ private:
     
     jmethodID swipeMethodId;
     jmethodID createVirtualDisplayMethodId;
+    jmethodID destroyVirtualDisplayMethodId;
     jmethodID launchInDisplayMethodId;
     jmethodID getVirtualDisplaysMethodId;
     int displayId;

@@ -67,6 +67,16 @@ Java_com_xaxaxax_relc_display_cv_NativeDetector_stopEngine(
     }
 }
 
+JNIEXPORT jboolean JNICALL
+Java_com_xaxaxax_relc_display_cv_NativeDetector_isEngineRunning(
+        JNIEnv *env,
+        jobject thiz) {
+    if (gEngine) {
+        return (jboolean)gEngine->isEngineRunning();
+    }
+    return JNI_FALSE;
+}
+
 JNIEXPORT jobject JNICALL
 Java_com_xaxaxax_relc_display_cv_NativeDetector_matchTemplateNative(
         JNIEnv *env,

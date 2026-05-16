@@ -20,7 +20,7 @@ class NativeLuaScriptRunner(
         sink.start()
 
         try {
-            while (ctx.isActive()) {
+            while (ctx.isActive() && nativeDetector.isEngineRunning()) {
                 delay(500)
             }
         } finally {

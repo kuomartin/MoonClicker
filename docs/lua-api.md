@@ -72,7 +72,7 @@ input.tap(50, 100, 200)
 
 ### `display.create(width, height, [densityDpi=440], [flags=16])`
 - 由 Lua 腳本主動要求建立 VirtualDisplay，開始擷取畫面。
-- 回傳 boolean 表示是否成功建立。
+- 回傳建立成功的 **Display ID (number)**，若失敗則回傳 `nil`。
 
 ### `display.launch(packageName, [displayId])`
 - 在指定顯示器（預設為腳本建立的虛擬顯示器）啟動應用程式。
