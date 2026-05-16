@@ -4,37 +4,40 @@
 #include <android/native_window_jni.h>
 #include <android/log.h>
 
-RelcEngine::RelcEngine(JNIEnv* env, jobject service) : displayId(-1), isRunning(false) {
+RelcEngine::RelcEngine(JNIEnv *env, jobject service) : javaVM(nullptr), displayId(-1),
+                                                       isRunning(false) {
     env->GetJavaVM(&javaVM);
     serviceObj = env->NewGlobalRef(service);
 
     jclass serviceClass = env->GetObjectClass(serviceObj);
     // V2 Method: multiTouchSwipe(int pointerId, int displayId, int[] points, long duration, boolean keep)
     swipeMethodId = env->GetMethodID(serviceClass, "multiTouchSwipe", "(II[IJZ)V");
-    createVirtualDisplayMethodId = env->GetMethodID(serviceClass, "createVirtualDisplay", "(Ljava/lang/String;IIILandroid/view/Surface;I)I");
+    createVirtualDisplayMethodId = env->GetMethodID(serviceClass, "createVirtualDisplay",
+                                                    "(Ljava/lang/String;IIILandroid/view/Surface;I)I");
     destroyVirtualDisplayMethodId = env->GetMethodID(serviceClass, "destroyVirtualDisplay", "(I)Z");
-    launchInDisplayMethodId = env->GetMethodID(serviceClass, "launchInDisplay", "(Ljava/lang/String;I)Z");
+    launchInDisplayMethodId = env->GetMethodID(serviceClass, "launchInDisplay",
+                                               "(Ljava/lang/String;I)Z");
     getVirtualDisplaysMethodId = env->GetMethodID(serviceClass, "getVirtualDisplays", "()[I");
 }
 
 RelcEngine::~RelcEngine() {
     stop();
-    JNIEnv* env;
-    if (javaVM->GetEnv((void**)&env, JNI_VERSION_1_6) == JNI_OK) {
+    JNIEnv *env;
+    if (javaVM->GetEnv((void **) &env, JNI_VERSION_1_6) == JNI_OK) {
         env->DeleteGlobalRef(serviceObj);
     }
 }
 
-bool RelcEngine::start(int width, int height, const std::string& script) {
+bool RelcEngine::start(int width, int height, const std::string &script) {
     luaEngine = std::make_unique<LuaEngine>();
     if (!luaEngine->init()) return false;
 
-    lua_State* L = luaEngine->getLuaState();
+    lua_State *L = luaEngine->getLuaState();
 
     // Store 'this' in registry for hook to access
     lua_pushlightuserdata(L, this);
     lua_setfield(L, LUA_REGISTRYINDEX, "RelcEngineInstance");
-    
+
     // Global log function
     lua_pushlightuserdata(L, this);
     lua_pushcclosure(L, lua_log, 1);
@@ -69,13 +72,13 @@ bool RelcEngine::start(int width, int height, const std::string& script) {
     lua_pushlightuserdata(L, this);
     lua_pushcclosure(L, lua_display_get_all, 1);
     lua_setfield(L, -2, "get_all");
-    
+
     lua_setglobal(L, "display");
 
     imageReader = std::make_unique<NativeImageReader>(width, height);
     if (!imageReader->init()) return false;
 
-    imageReader->setCallback([this](const cv::Mat& frame) {
+    imageReader->setCallback([this](const cv::Mat &frame) {
         processFrame(frame);
     });
 
@@ -85,13 +88,13 @@ bool RelcEngine::start(int width, int height, const std::string& script) {
     return true;
 }
 
-void RelcEngine::luaThreadLoop(std::string script) {
+void RelcEngine::luaThreadLoop(const std::string &script) {
     if (!luaEngine->loadScript(script)) {
         isRunning = false;
         return;
     }
-    
-    lua_State* coL = luaEngine->getCoroutineState();
+
+    lua_State *coL = luaEngine->getCoroutineState();
     if (!coL) {
         isRunning = false;
         return;
@@ -100,8 +103,8 @@ void RelcEngine::luaThreadLoop(std::string script) {
     // Set a hook that runs every 1000 instructions to check if we should stop
     lua_sethook(coL, lua_stop_hook, LUA_MASKCOUNT, 1000);
 
-    lua_State* gL = luaEngine->getLuaState();
-    
+    lua_State *gL = luaEngine->getLuaState();
+
     // Check if on_start is defined and call it
     lua_getglobal(gL, "on_start");
     if (lua_isfunction(gL, -1)) {
@@ -149,19 +152,23 @@ void RelcEngine::luaThreadLoop(std::string script) {
 
             if (!matchesCopy.empty()) {
                 lua_pushstring(gL, matchesCopy[0].name.c_str());
-                
+
                 lua_newtable(gL);
-                for (const auto& item : matchesCopy) {
+                for (const auto &item: matchesCopy) {
                     if (item.found) {
                         lua_newtable(gL);
-                        lua_pushboolean(gL, true); lua_setfield(gL, -2, "found");
-                        lua_pushnumber(gL, item.x); lua_setfield(gL, -2, "x");
-                        lua_pushnumber(gL, item.y); lua_setfield(gL, -2, "y");
-                        lua_pushnumber(gL, item.confidence); lua_setfield(gL, -2, "confidence");
+                        lua_pushboolean(gL, true);
+                        lua_setfield(gL, -2, "found");
+                        lua_pushnumber(gL, item.x);
+                        lua_setfield(gL, -2, "x");
+                        lua_pushnumber(gL, item.y);
+                        lua_setfield(gL, -2, "y");
+                        lua_pushnumber(gL, item.confidence);
+                        lua_setfield(gL, -2, "confidence");
                         lua_setfield(gL, -2, item.name.c_str());
                     }
                 }
-                
+
                 if (lua_pcall(gL, 2, 0, 0) != LUA_OK) {
                     LOGE("on_match error: %s", lua_tostring(gL, -1));
                     lua_pop(gL, 1);
@@ -196,9 +203,9 @@ void RelcEngine::luaThreadLoop(std::string script) {
     }
 }
 
-void RelcEngine::lua_stop_hook(lua_State* L, lua_Debug* ar) {
+void RelcEngine::lua_stop_hook(lua_State *L, lua_Debug *ar) {
     lua_getfield(L, LUA_REGISTRYINDEX, "RelcEngineInstance");
-    RelcEngine* self = (RelcEngine*)lua_touserdata(L, -1);
+    auto *self = static_cast<RelcEngine *>(lua_touserdata(L, -1));
     lua_pop(L, 1);
 
     if (self && !self->isRunning) {
@@ -221,9 +228,9 @@ void RelcEngine::stop() {
 bool RelcEngine::destroyVirtualDisplay() {
     if (displayId == -1) return false;
 
-    JNIEnv* env;
+    JNIEnv *env;
     bool attached = false;
-    int res = javaVM->GetEnv((void**)&env, JNI_VERSION_1_6);
+    int res = javaVM->GetEnv((void **) &env, JNI_VERSION_1_6);
     if (res == JNI_EDETACHED) {
         if (javaVM->AttachCurrentThread(&env, nullptr) != JNI_OK) return false;
         attached = true;
@@ -236,26 +243,30 @@ bool RelcEngine::destroyVirtualDisplay() {
     return true;
 }
 
-ANativeWindow* RelcEngine::getWindow() {
+ANativeWindow *RelcEngine::getWindow() {
     return imageReader ? imageReader->getWindow() : nullptr;
 }
 
 void RelcEngine::updateTemplatesFromLua() {
-    lua_State* L = luaEngine->getLuaState();
+    lua_State *L = luaEngine->getLuaState();
     lua_getglobal(L, "match");
     lua_getfield(L, -1, "templates");
 
     std::vector<SearchTemplate> newTemplates;
 
     if (lua_istable(L, -1)) {
-        int n = lua_rawlen(L, -1);
+        auto n = static_cast<int>(lua_rawlen(L, -1));
         for (int i = 1; i <= n; i++) {
             lua_rawgeti(L, -1, i);
             if (lua_istable(L, -1)) {
                 SearchTemplate t;
-                lua_getfield(L, -1, "name"); t.name = luaL_optstring(L, -1, ""); lua_pop(L, 1);
-                lua_getfield(L, -1, "threshold"); t.threshold = luaL_optnumber(L, -1, 0.8); lua_pop(L, 1);
-                
+                lua_getfield(L, -1, "name");
+                t.name = luaL_optstring(L, -1, "");
+                lua_pop(L, 1);
+                lua_getfield(L, -1, "threshold");
+                t.threshold = luaL_optnumber(L, -1, 0.8);
+                lua_pop(L, 1);
+
                 lua_getfield(L, -1, "target");
                 std::string path = luaL_optstring(L, -1, "");
                 lua_pop(L, 1);
@@ -286,18 +297,18 @@ void RelcEngine::updateTemplatesFromLua() {
     templates = std::move(newTemplates);
 }
 
-void RelcEngine::processFrame(const cv::Mat& frame) {
+void RelcEngine::processFrame(const cv::Mat &frame) {
     if (!isRunning) return;
 
     std::lock_guard<std::mutex> lock(resultMutex);
     latestResult.matches.clear();
-    
-    for (const auto& t : templates) {
+
+    for (const auto &t: templates) {
         if (t.image.empty() || frame.cols < t.image.cols || frame.rows < t.image.rows) continue;
 
         cv::Mat result;
         cv::matchTemplate(frame, t.image, result, cv::TM_CCOEFF_NORMED);
-        
+
         double minVal, maxVal;
         cv::Point minLoc, maxLoc;
         cv::minMaxLoc(result, &minVal, &maxVal, &minLoc, &maxLoc);
@@ -315,19 +326,20 @@ void RelcEngine::processFrame(const cv::Mat& frame) {
 }
 
 bool RelcEngine::createVirtualDisplay(int width, int height, int densityDpi, int flags) {
-    JNIEnv* env;
+    JNIEnv *env;
     bool attached = false;
-    int res = javaVM->GetEnv((void**)&env, JNI_VERSION_1_6);
+    int res = javaVM->GetEnv((void **) &env, JNI_VERSION_1_6);
     if (res == JNI_EDETACHED) {
         if (javaVM->AttachCurrentThread(&env, nullptr) != JNI_OK) return false;
         attached = true;
     }
 
     jstring name = env->NewStringUTF("RelcLuaDisplay");
-    ANativeWindow* window = getWindow();
+    ANativeWindow *window = getWindow();
     jobject surface = window ? ANativeWindow_toSurface(env, window) : nullptr;
 
-    displayId = env->CallIntMethod(serviceObj, createVirtualDisplayMethodId, name, width, height, densityDpi, surface, flags);
+    displayId = env->CallIntMethod(serviceObj, createVirtualDisplayMethodId, name, width, height,
+                                   densityDpi, surface, flags);
 
     if (surface) env->DeleteLocalRef(surface);
     env->DeleteLocalRef(name);
@@ -336,13 +348,13 @@ bool RelcEngine::createVirtualDisplay(int width, int height, int densityDpi, int
     return displayId != -1;
 }
 
-int RelcEngine::lua_display_create(lua_State* L) {
-    RelcEngine* self = (RelcEngine*)lua_touserdata(L, lua_upvalueindex(1));
-    int width = luaL_checkinteger(L, 1);
-    int height = luaL_checkinteger(L, 2);
-    int densityDpi = luaL_optinteger(L, 3, 440);
-    int flags = luaL_optinteger(L, 4, 16);
-    
+int RelcEngine::lua_display_create(lua_State *L) {
+    auto *self = static_cast<RelcEngine *>(lua_touserdata(L, lua_upvalueindex(1)));
+    auto width = static_cast<int>(luaL_checkinteger(L, 1));
+    auto height = static_cast<int>(luaL_checkinteger(L, 2));
+    auto densityDpi = static_cast<int>(luaL_optinteger(L, 3, 440));
+    auto flags = static_cast<int>(luaL_optinteger(L, 4, 16));
+
     bool success = self->createVirtualDisplay(width, height, densityDpi, flags);
     if (success) {
         lua_pushinteger(L, self->displayId);
@@ -352,27 +364,28 @@ int RelcEngine::lua_display_create(lua_State* L) {
     return 1;
 }
 
-bool RelcEngine::launchInDisplay(const std::string& packageName, int displayId) {
-    JNIEnv* env;
+bool RelcEngine::launchInDisplay(const std::string &packageName, int targetDisplayId) {
+    JNIEnv *env;
     bool attached = false;
-    int res = javaVM->GetEnv((void**)&env, JNI_VERSION_1_6);
+    int res = javaVM->GetEnv((void **) &env, JNI_VERSION_1_6);
     if (res == JNI_EDETACHED) {
         if (javaVM->AttachCurrentThread(&env, nullptr) != JNI_OK) return false;
         attached = true;
     }
 
     jstring pkg = env->NewStringUTF(packageName.c_str());
-    jboolean success = env->CallBooleanMethod(serviceObj, launchInDisplayMethodId, pkg, displayId);
+    jboolean success = env->CallBooleanMethod(serviceObj, launchInDisplayMethodId, pkg,
+                                              targetDisplayId);
     env->DeleteLocalRef(pkg);
 
     if (attached) javaVM->DetachCurrentThread();
-    return (bool)success;
+    return static_cast<bool>(success);
 }
 
-int RelcEngine::lua_display_launch(lua_State* L) {
-    RelcEngine* self = (RelcEngine*)lua_touserdata(L, lua_upvalueindex(1));
-    const char* packageName = luaL_checkstring(L, 1);
-    int dId = (int)luaL_optinteger(L, 2, self->displayId);
+int RelcEngine::lua_display_launch(lua_State *L) {
+    auto *self = static_cast<RelcEngine *>(lua_touserdata(L, lua_upvalueindex(1)));
+    const char *packageName = luaL_checkstring(L, 1);
+    auto dId = static_cast<int>(luaL_optinteger(L, 2, self->displayId));
 
     bool ok = self->launchInDisplay(packageName, dId);
     lua_pushboolean(L, ok);
@@ -381,18 +394,18 @@ int RelcEngine::lua_display_launch(lua_State* L) {
 
 std::vector<int> RelcEngine::getVirtualDisplays() {
     std::vector<int> ids;
-    JNIEnv* env;
+    JNIEnv *env;
     bool attached = false;
-    int res = javaVM->GetEnv((void**)&env, JNI_VERSION_1_6);
+    int res = javaVM->GetEnv((void **) &env, JNI_VERSION_1_6);
     if (res == JNI_EDETACHED) {
         if (javaVM->AttachCurrentThread(&env, nullptr) != JNI_OK) return ids;
         attached = true;
     }
 
-    jintArray jIds = (jintArray)env->CallObjectMethod(serviceObj, getVirtualDisplaysMethodId);
+    auto jIds = (jintArray) env->CallObjectMethod(serviceObj, getVirtualDisplaysMethodId);
     if (jIds) {
         jsize len = env->GetArrayLength(jIds);
-        jint* elements = env->GetIntArrayElements(jIds, nullptr);
+        jint *elements = env->GetIntArrayElements(jIds, nullptr);
         for (int i = 0; i < len; i++) {
             ids.push_back(elements[i]);
         }
@@ -404,8 +417,8 @@ std::vector<int> RelcEngine::getVirtualDisplays() {
     return ids;
 }
 
-int RelcEngine::lua_display_get_all(lua_State* L) {
-    RelcEngine* self = (RelcEngine*)lua_touserdata(L, lua_upvalueindex(1));
+int RelcEngine::lua_display_get_all(lua_State *L) {
+    auto *self = static_cast<RelcEngine *>(lua_touserdata(L, lua_upvalueindex(1)));
     std::vector<int> ids = self->getVirtualDisplays();
 
     lua_newtable(L);
@@ -416,13 +429,13 @@ int RelcEngine::lua_display_get_all(lua_State* L) {
     return 1;
 }
 
-int RelcEngine::lua_match_wait(lua_State* L) {
-    RelcEngine* self = (RelcEngine*)lua_touserdata(L, lua_upvalueindex(1));
-    
+int RelcEngine::lua_match_wait(lua_State *L) {
+    auto *self = static_cast<RelcEngine *>(lua_touserdata(L, lua_upvalueindex(1)));
+
     self->updateTemplatesFromLua();
 
     std::unique_lock<std::mutex> lock(self->resultMutex);
-    
+
     if (self->latestResult.matches.empty()) {
         // No matches found, yield the coroutine
         return lua_yield(L, 0);
@@ -434,61 +447,68 @@ int RelcEngine::lua_match_wait(lua_State* L) {
     }
 
     lua_newtable(L);
-    for (const auto& item : self->latestResult.matches) {
+    for (const auto &item: self->latestResult.matches) {
         if (item.found) {
             lua_newtable(L);
-            lua_pushboolean(L, true); lua_setfield(L, -2, "found");
-            lua_pushnumber(L, item.x); lua_setfield(L, -2, "x");
-            lua_pushnumber(L, item.y); lua_setfield(L, -2, "y");
-            lua_pushnumber(L, item.confidence); lua_setfield(L, -2, "confidence");
+            lua_pushboolean(L, true);
+            lua_setfield(L, -2, "found");
+            lua_pushnumber(L, item.x);
+            lua_setfield(L, -2, "x");
+            lua_pushnumber(L, item.y);
+            lua_setfield(L, -2, "y");
+            lua_pushnumber(L, item.confidence);
+            lua_setfield(L, -2, "confidence");
             lua_setfield(L, -2, item.name.c_str());
         }
     }
-    
+
     return 1;
 }
 
-bool RelcEngine::multiTouchSwipe(int pointerId, const std::vector<int>& points, long duration, bool keep) {
-    JNIEnv* env;
+bool RelcEngine::multiTouchSwipe(int pointerId, const std::vector<int> &points, long duration,
+                                 bool keep) {
+    JNIEnv *env;
     bool attached = false;
-    int res = javaVM->GetEnv((void**)&env, JNI_VERSION_1_6);
+    int res = javaVM->GetEnv((void **) &env, JNI_VERSION_1_6);
     if (res == JNI_EDETACHED) {
         if (javaVM->AttachCurrentThread(&env, nullptr) != JNI_OK) return false;
         attached = true;
     }
 
-    jintArray jPoints = env->NewIntArray(points.size());
-    env->SetIntArrayRegion(jPoints, 0, points.size(), points.data());
+    auto size = static_cast<jsize>(points.size());
+    jintArray jPoints = env->NewIntArray(size);
+    env->SetIntArrayRegion(jPoints, 0, size, points.data());
 
-    env->CallVoidMethod(serviceObj, swipeMethodId, pointerId, displayId, jPoints, (jlong)duration, (jboolean)keep);
-    
+    env->CallVoidMethod(serviceObj, swipeMethodId, pointerId, displayId, jPoints, (jlong) duration,
+                        (jboolean) keep);
+
     env->DeleteLocalRef(jPoints);
 
     if (attached) javaVM->DetachCurrentThread();
     return true;
 }
 
-int RelcEngine::lua_swipe(lua_State* L) {
-    RelcEngine* self = (RelcEngine*)lua_touserdata(L, lua_upvalueindex(1));
-    
-    int pointerId = (int)luaL_checkinteger(L, 1);
+int RelcEngine::lua_swipe(lua_State *L) {
+    auto *self = static_cast<RelcEngine *>(lua_touserdata(L, lua_upvalueindex(1)));
+
+    auto pointerId = static_cast<int>(luaL_checkinteger(L, 1));
     luaL_checktype(L, 2, LUA_TTABLE);
-    long duration = (long)luaL_optinteger(L, 3, 0);
-    bool keep = lua_toboolean(L, 4);
+    auto duration = static_cast<long>(luaL_optinteger(L, 3, 0));
+    bool keep = static_cast<bool>(lua_toboolean(L, 4));
 
     std::vector<int> points;
-    int n = lua_rawlen(L, 2);
+    auto n = static_cast<int>(lua_rawlen(L, 2));
     for (int i = 1; i <= n; i++) {
         lua_rawgeti(L, 2, i);
         if (lua_istable(L, -1)) {
-            int innerN = lua_rawlen(L, -1);
+            auto innerN = static_cast<int>(lua_rawlen(L, -1));
             for (int j = 1; j <= innerN; j++) {
                 lua_rawgeti(L, -1, j);
-                points.push_back((int)luaL_checkinteger(L, -1));
+                points.push_back(static_cast<int>(luaL_checkinteger(L, -1)));
                 lua_pop(L, 1);
             }
         } else {
-            points.push_back((int)luaL_checkinteger(L, -1));
+            points.push_back(static_cast<int>(luaL_checkinteger(L, -1)));
         }
         lua_pop(L, 1);
     }
@@ -497,8 +517,8 @@ int RelcEngine::lua_swipe(lua_State* L) {
     return 0;
 }
 
-int RelcEngine::lua_log(lua_State* L) {
-    const char* msg = luaL_checkstring(L, 1);
+int RelcEngine::lua_log(lua_State *L) {
+    const char *msg = luaL_checkstring(L, 1);
     __android_log_print(ANDROID_LOG_DEBUG, "LuaScript", "[NativeLog] %s", msg);
     return 0;
 }
