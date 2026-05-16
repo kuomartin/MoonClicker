@@ -37,4 +37,8 @@ class NativeEngineSink(
     override fun release() {
         // Surface is managed by C++
     }
+
+    fun isEngineRunning(): Boolean {
+        return isStarted && nativeDetector.isEngineRunning()
+    }
 }

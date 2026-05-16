@@ -12,6 +12,7 @@
 #include <mutex>
 #include <condition_variable>
 #include <atomic>
+#include <unordered_map>
 
 struct SearchTemplate {
     std::string name;
@@ -28,7 +29,6 @@ struct MatchResultItem {
 };
 
 struct FrameResult {
-    bool hasResult = false;
     std::vector<MatchResultItem> matches;
 };
 
@@ -79,10 +79,10 @@ private:
     int displayId;
 
     std::vector<SearchTemplate> templates;
+    std::unordered_map<std::string, cv::Mat> templateCache;
 
     std::thread luaThread;
     std::mutex resultMutex;
-    std::condition_variable resultCV;
     FrameResult latestResult;
     std::atomic<bool> isRunning;
 };

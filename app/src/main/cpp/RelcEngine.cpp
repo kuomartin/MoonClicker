@@ -100,11 +100,100 @@ void RelcEngine::luaThreadLoop(std::string script) {
     // Set a hook that runs every 1000 instructions to check if we should stop
     lua_sethook(coL, lua_stop_hook, LUA_MASKCOUNT, 1000);
 
-    // Run the script
-    luaEngine->resume();
+    lua_State* gL = luaEngine->getLuaState();
+    
+    // Check if on_start is defined and call it
+    lua_getglobal(gL, "on_start");
+    if (lua_isfunction(gL, -1)) {
+        if (lua_pcall(gL, 0, 0, 0) != LUA_OK) {
+            LOGE("on_start error: %s", lua_tostring(gL, -1));
+            lua_pop(gL, 1);
+        }
+    } else {
+        lua_pop(gL, 1);
+    }
 
-    // Mark as finished so UI/Kotlin can detect it
-    isRunning = false;
+    // Initial start
+    int status = lua_resume(coL, gL, 0, nullptr);
+    if (status != LUA_OK && status != LUA_YIELD) {
+        LOGE("Script execution error: %s", lua_tostring(coL, -1));
+        isRunning = false;
+        return;
+    }
+
+    // Fixed 15 FPS Logic Ticker
+    while (isRunning) {
+        auto start = std::chrono::steady_clock::now();
+
+        // 1. Process on_tick if defined
+        lua_getglobal(gL, "on_tick");
+        bool hasOnTick = lua_isfunction(gL, -1);
+        if (hasOnTick) {
+            lua_pushnumber(gL, 0.066); // approx dt
+            if (lua_pcall(gL, 1, 0, 0) != LUA_OK) {
+                LOGE("on_tick error: %s", lua_tostring(gL, -1));
+                lua_pop(gL, 1);
+            }
+        } else {
+            lua_pop(gL, 1);
+        }
+
+        // 2. Process on_match if defined
+        lua_getglobal(gL, "on_match");
+        if (lua_isfunction(gL, -1)) {
+            std::vector<MatchResultItem> matchesCopy;
+            {
+                std::lock_guard<std::mutex> lock(resultMutex);
+                matchesCopy = latestResult.matches;
+            }
+
+            if (!matchesCopy.empty()) {
+                lua_pushstring(gL, matchesCopy[0].name.c_str());
+                
+                lua_newtable(gL);
+                for (const auto& item : matchesCopy) {
+                    if (item.found) {
+                        lua_newtable(gL);
+                        lua_pushboolean(gL, true); lua_setfield(gL, -2, "found");
+                        lua_pushnumber(gL, item.x); lua_setfield(gL, -2, "x");
+                        lua_pushnumber(gL, item.y); lua_setfield(gL, -2, "y");
+                        lua_pushnumber(gL, item.confidence); lua_setfield(gL, -2, "confidence");
+                        lua_setfield(gL, -2, item.name.c_str());
+                    }
+                }
+                
+                if (lua_pcall(gL, 2, 0, 0) != LUA_OK) {
+                    LOGE("on_match error: %s", lua_tostring(gL, -1));
+                    lua_pop(gL, 1);
+                }
+            } else {
+                lua_pop(gL, 1);
+            }
+        } else {
+            lua_pop(gL, 1);
+        }
+
+        // 3. Resume main coroutine if not event-driven loop
+        status = lua_resume(coL, gL, 0, nullptr);
+
+        if (status == LUA_OK) {
+            if (!hasOnTick) {
+                LOGD("Script finished execution");
+                isRunning = false;
+                break;
+            }
+        } else if (status != LUA_YIELD) {
+            LOGE("Script execution error: %s", lua_tostring(coL, -1));
+            isRunning = false;
+            break;
+        }
+
+        auto end = std::chrono::steady_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+        if (elapsed.count() < 66) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(66 - elapsed.count()));
+        }
+    }
 }
 
 void RelcEngine::lua_stop_hook(lua_State* L, lua_Debug* ar) {
@@ -119,7 +208,6 @@ void RelcEngine::lua_stop_hook(lua_State* L, lua_Debug* ar) {
 
 void RelcEngine::stop() {
     isRunning = false;
-    resultCV.notify_all();
     if (luaThread.joinable()) {
         luaThread.join();
     }
@@ -173,11 +261,18 @@ void RelcEngine::updateTemplatesFromLua() {
                 lua_pop(L, 1);
 
                 if (!path.empty()) {
-                    t.image = cv::imread(path, cv::IMREAD_UNCHANGED);
-                    if (!t.image.empty()) {
-                        if (t.image.channels() == 3) {
-                            cv::cvtColor(t.image, t.image, cv::COLOR_BGR2RGBA);
+                    if (templateCache.find(path) == templateCache.end()) {
+                        cv::Mat img = cv::imread(path, cv::IMREAD_UNCHANGED);
+                        if (!img.empty()) {
+                            if (img.channels() == 3) {
+                                cv::cvtColor(img, img, cv::COLOR_BGR2RGBA);
+                            }
+                            templateCache[path] = img;
                         }
+                    }
+
+                    if (templateCache.find(path) != templateCache.end()) {
+                        t.image = templateCache[path];
                         newTemplates.push_back(t);
                     }
                 }
@@ -217,9 +312,6 @@ void RelcEngine::processFrame(const cv::Mat& frame) {
             latestResult.matches.push_back(item);
         }
     }
-    
-    latestResult.hasResult = true;
-    resultCV.notify_one();
 }
 
 bool RelcEngine::createVirtualDisplay(int width, int height, int densityDpi, int flags) {
@@ -330,11 +422,11 @@ int RelcEngine::lua_match_wait(lua_State* L) {
     self->updateTemplatesFromLua();
 
     std::unique_lock<std::mutex> lock(self->resultMutex);
-    self->latestResult.hasResult = false;
     
-    self->resultCV.wait(lock, [self]() {
-        return self->latestResult.hasResult || !self->isRunning;
-    });
+    if (self->latestResult.matches.empty()) {
+        // No matches found, yield the coroutine
+        return lua_yield(L, 0);
+    }
 
     if (!self->isRunning) {
         lua_pushnil(L);
