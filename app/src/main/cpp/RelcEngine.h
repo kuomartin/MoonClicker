@@ -36,7 +36,7 @@ struct FrameResult {
 
 class RelcEngine {
 public:
-    RelcEngine(JNIEnv *env, jobject service);
+    RelcEngine(JNIEnv *env, jobject service, jobject detector);
 
     ~RelcEngine();
 
@@ -46,12 +46,14 @@ public:
 
     ANativeWindow *getWindow();
 
-    void setPreviewSurface(JNIEnv *env, jobject surface);
-
     // Helpers for Lua callbacks
     bool multiTouchSwipe(int pointerId, const std::vector<int> &points, long duration, bool keep);
 
     bool createVirtualDisplay(int width, int height, int densityDpi, int flags);
+
+    int addVirtualDisplaySurface(int targetDisplayId, jobject surface);
+
+    bool removeVirtualDisplaySurface(int targetDisplayId, int handle);
 
     bool destroyVirtualDisplay();
 
@@ -91,10 +93,13 @@ private:
 
     jmethodID swipeMethodId;
     jmethodID createVirtualDisplayMethodId;
+    jmethodID addVirtualDisplaySurfaceMethodId;
+    jmethodID removeVirtualDisplaySurfaceMethodId;
     jmethodID destroyVirtualDisplayMethodId;
     jmethodID launchInDisplayMethodId;
     jmethodID getVirtualDisplaysMethodId;
     int displayId;
+    int sinkHandle;
 
     std::vector<SearchTemplate> templates;
     std::unordered_map<std::string, cv::Mat> templateCache;
@@ -103,9 +108,6 @@ private:
     std::mutex resultMutex;
     FrameResult latestResult;
     std::atomic<bool> isRunning;
-
-    ANativeWindow *previewWindow;
-    std::mutex previewMutex;
 };
 
 #endif // RELC_ENGINE_H

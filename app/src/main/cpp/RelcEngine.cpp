@@ -4,8 +4,10 @@
 #include <android/native_window_jni.h>
 #include <android/log.h>
 
-RelcEngine::RelcEngine(JNIEnv *env, jobject service) : javaVM(nullptr), displayId(-1),
-                                                       isRunning(false), previewWindow(nullptr) {
+RelcEngine::RelcEngine(JNIEnv *env, jobject service, jobject detector) : javaVM(nullptr),
+                                                                         displayId(-1),
+                                                                         sinkHandle(-1),
+                                                                         isRunning(false) {
     env->GetJavaVM(&javaVM);
     serviceObj = env->NewGlobalRef(service);
 
@@ -13,7 +15,11 @@ RelcEngine::RelcEngine(JNIEnv *env, jobject service) : javaVM(nullptr), displayI
     // V2 Method: multiTouchSwipe(int pointerId, int displayId, int[] points, long duration, boolean keep)
     swipeMethodId = env->GetMethodID(serviceClass, "multiTouchSwipe", "(II[IJZ)V");
     createVirtualDisplayMethodId = env->GetMethodID(serviceClass, "createVirtualDisplay",
-                                                    "(Ljava/lang/String;IIILandroid/view/Surface;I)I");
+                                                    "(Ljava/lang/String;IIII)I");
+    addVirtualDisplaySurfaceMethodId = env->GetMethodID(serviceClass, "addVirtualDisplaySurface",
+                                                        "(ILandroid/view/Surface;)I");
+    removeVirtualDisplaySurfaceMethodId = env->GetMethodID(serviceClass,
+                                                           "removeVirtualDisplaySurface", "(II)Z");
     destroyVirtualDisplayMethodId = env->GetMethodID(serviceClass, "destroyVirtualDisplay", "(I)Z");
     launchInDisplayMethodId = env->GetMethodID(serviceClass, "launchInDisplay",
                                                "(Ljava/lang/String;I)Z");
@@ -25,11 +31,6 @@ RelcEngine::~RelcEngine() {
     JNIEnv *env;
     if (javaVM->GetEnv((void **) &env, JNI_VERSION_1_6) == JNI_OK) {
         env->DeleteGlobalRef(serviceObj);
-    }
-    std::lock_guard<std::mutex> lock(previewMutex);
-    if (previewWindow) {
-        ANativeWindow_release(previewWindow);
-        previewWindow = nullptr;
     }
 }
 
@@ -86,22 +87,6 @@ bool RelcEngine::start(int width, int height, const std::string &script) {
     imageReader->setCallback([this](const cv::Mat &frame) {
         if (!isRunning) return;
         processFrame(frame);
-
-        std::lock_guard<std::mutex> lock(previewMutex);
-        if (previewWindow) {
-            ANativeWindow_Buffer buffer;
-            if (ANativeWindow_lock(previewWindow, &buffer, nullptr) == 0) {
-                if (buffer.width == frame.cols && buffer.height == frame.rows) {
-                    auto *dst = static_cast<uint8_t *>(buffer.bits);
-                    auto *src = frame.data;
-                    int rowSize = frame.cols * 4; // RGBA_8888
-                    for (int y = 0; y < frame.rows; ++y) {
-                        memcpy(dst + y * buffer.stride * 4, src + y * frame.step, rowSize);
-                    }
-                }
-                ANativeWindow_unlockAndPost(previewWindow);
-            }
-        }
     });
 
     isRunning = true;
@@ -207,7 +192,7 @@ void RelcEngine::luaThreadLoop(const std::string &script) {
         if (lua_status(coL) == LUA_YIELD) {
             int nres_loop = 0;
             int resume_status = lua_resume(coL, gL, 0, &nres_loop);
-            
+
             if (resume_status != LUA_OK && resume_status != LUA_YIELD) {
                 LOGE("Script execution error: %s", lua_tostring(coL, -1));
                 isRunning = false;
@@ -263,26 +248,20 @@ bool RelcEngine::destroyVirtualDisplay() {
         attached = true;
     }
 
-    env->CallBooleanMethod(serviceObj, destroyVirtualDisplayMethodId, displayId);
+    if (sinkHandle != -1) {
+        removeVirtualDisplaySurface(displayId, sinkHandle);
+        sinkHandle = -1;
+    }
+
+    jboolean ok = env->CallBooleanMethod(serviceObj, destroyVirtualDisplayMethodId, displayId);
     displayId = -1;
 
     if (attached) javaVM->DetachCurrentThread();
-    return true;
+    return static_cast<bool>(ok);
 }
 
 ANativeWindow *RelcEngine::getWindow() {
     return imageReader ? imageReader->getWindow() : nullptr;
-}
-
-void RelcEngine::setPreviewSurface(JNIEnv *env, jobject surface) {
-    std::lock_guard<std::mutex> lock(previewMutex);
-    if (previewWindow) {
-        ANativeWindow_release(previewWindow);
-        previewWindow = nullptr;
-    }
-    if (surface) {
-        previewWindow = ANativeWindow_fromSurface(env, surface);
-    }
 }
 
 void RelcEngine::updateTemplatesFromLua() {
@@ -372,18 +351,54 @@ bool RelcEngine::createVirtualDisplay(int width, int height, int densityDpi, int
         attached = true;
     }
 
+    // Call service to create display without surface
     jstring name = env->NewStringUTF("RelcLuaDisplay");
-    ANativeWindow *window = getWindow();
-    jobject surface = window ? ANativeWindow_toSurface(env, window) : nullptr;
-
     displayId = env->CallIntMethod(serviceObj, createVirtualDisplayMethodId, name, width, height,
-                                   densityDpi, surface, flags);
-
-    if (surface) env->DeleteLocalRef(surface);
+                                   densityDpi, flags);
     env->DeleteLocalRef(name);
+
+    if (displayId != -1 && imageReader) {
+        // Now add our own ImageReader surface as a sink
+        ANativeWindow *window = imageReader->getWindow();
+        jobject surface = ANativeWindow_toSurface(env, window);
+        sinkHandle = addVirtualDisplaySurface(displayId, surface);
+        env->DeleteLocalRef(surface);
+    }
 
     if (attached) javaVM->DetachCurrentThread();
     return displayId != -1;
+}
+
+int RelcEngine::addVirtualDisplaySurface(int targetDisplayId, jobject surface) {
+    JNIEnv *env;
+    bool attached = false;
+    int res = javaVM->GetEnv((void **) &env, JNI_VERSION_1_6);
+    if (res == JNI_EDETACHED) {
+        if (javaVM->AttachCurrentThread(&env, nullptr) != JNI_OK) return -1;
+        attached = true;
+    }
+
+    int handle = env->CallIntMethod(serviceObj, addVirtualDisplaySurfaceMethodId, targetDisplayId,
+                                   surface);
+
+    if (attached) javaVM->DetachCurrentThread();
+    return handle;
+}
+
+bool RelcEngine::removeVirtualDisplaySurface(int targetDisplayId, int handle) {
+    JNIEnv *env;
+    bool attached = false;
+    int res = javaVM->GetEnv((void **) &env, JNI_VERSION_1_6);
+    if (res == JNI_EDETACHED) {
+        if (javaVM->AttachCurrentThread(&env, nullptr) != JNI_OK) return false;
+        attached = true;
+    }
+
+    jboolean ok = env->CallBooleanMethod(serviceObj, removeVirtualDisplaySurfaceMethodId,
+                                         targetDisplayId, handle);
+
+    if (attached) javaVM->DetachCurrentThread();
+    return static_cast<bool>(ok);
 }
 
 int RelcEngine::lua_display_create(lua_State *L) {

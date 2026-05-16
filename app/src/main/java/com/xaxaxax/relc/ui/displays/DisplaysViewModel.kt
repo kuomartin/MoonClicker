@@ -6,8 +6,8 @@ import androidx.lifecycle.viewModelScope
 import com.xaxaxax.relc.IRelcV2Service
 import com.xaxaxax.relc.RelcV2Service
 import com.xaxaxax.relc.core.DisplayConfig
-import com.xaxaxax.relc.display.VirtualDisplayController
 import com.xaxaxax.relc.shizuku.UserService
+import com.xaxaxax.relc.shizuku.createVirtualDisplay
 import com.xaxaxax.relc.shizuku.ready
 import com.xaxaxax.relc.shizuku.refreshShizukuPermission
 import com.xaxaxax.relc.shizuku.runWhenAlive
@@ -114,8 +114,7 @@ class DisplaysViewModel @Inject constructor(
     fun createDisplay(config: DisplayConfig = defaultConfig) {
         viewModelScope.launch {
             serviceFlow.runWhenAlive { service ->
-                val ctrl = VirtualDisplayController(service)
-                ctrl.create(config)
+                service.createVirtualDisplay(config)
             }
             refreshDisplays()
         }

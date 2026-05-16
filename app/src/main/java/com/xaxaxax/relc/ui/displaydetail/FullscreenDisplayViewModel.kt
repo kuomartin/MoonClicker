@@ -1,11 +1,11 @@
 package com.xaxaxax.relc.ui.displaydetail
 
+import android.view.Surface
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.xaxaxax.relc.IRelcV2Service
 import com.xaxaxax.relc.RelcV2Service
-import com.xaxaxax.relc.display.VirtualDisplayController
 import com.xaxaxax.relc.input.InputController
 import com.xaxaxax.relc.shizuku.UserService
 import com.xaxaxax.relc.shizuku.runWhenAlive
@@ -14,26 +14,24 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import javax.inject.Inject
-
-data class FullscreenUiState(
-    val isReadOnly: Boolean = false,
-    val menuExpanded: Boolean = false,
-    val menuOffsetX: Float = 0f,
-    val menuOffsetY: Float = 0f,
-    val showAppList: Boolean = false,
-    val apps: List<AppEntry> = emptyList(),
-    val isControllerReady: Boolean = false
-)
 
 @HiltViewModel
 class FullscreenDisplayViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
-    private val displayId: Int = savedStateHandle.get<Int>("displayId") ?: -1
+    data class UiState(
+        val isReadOnly: Boolean = false,
+        val menuExpanded: Boolean = false,
+        val menuOffsetX: Float = 0f,
+        val menuOffsetY: Float = 0f,
+        val showAppList: Boolean = false,
+        val apps: List<AppEntry> = emptyList()
+    )
 
-    private val _uiState = MutableStateFlow(FullscreenUiState())
-    val uiState: StateFlow<FullscreenUiState> = _uiState.asStateFlow()
+    private val _uiState = MutableStateFlow(UiState())
+    val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
     private val serviceFlow = UserService.create(
         viewModelScope,
@@ -41,29 +39,19 @@ class FullscreenDisplayViewModel @Inject constructor(
         IRelcV2Service.Stub::asInterface
     )
 
-    private val _controller = MutableStateFlow<VirtualDisplayController?>(null)
-    val controller: StateFlow<VirtualDisplayController?> = _controller.asStateFlow()
+    init {
+        viewModelScope.launch {
+            serviceFlow.runWhenAlive { service ->
+                // 初始化 InputController，這會讓 UI 顯示 VirtualDisplaySurfaceView
+                _inputController.value = InputController(service)
+            }.onFailure {
+                Timber.e(it, "Failed to initialize InputController")
+            }
+        }
+    }
 
     private val _inputController = MutableStateFlow<InputController?>(null)
     val inputController: StateFlow<InputController?> = _inputController.asStateFlow()
-
-    init {
-        if (displayId != -1) {
-            viewModelScope.launch {
-                serviceFlow.runWhenAlive { service ->
-                    val ctrl = VirtualDisplayController(service)
-                    ctrl.attach(displayId)
-                    _controller.value = ctrl
-                    _inputController.value = InputController(service)
-                    _uiState.value = _uiState.value.copy(isControllerReady = true)
-                }
-            }
-        }
-
-        // Initialize isReadOnly from intent/savedState
-        val initialReadOnly = savedStateHandle.get<Boolean>("isReadOnly") ?: false
-        _uiState.value = _uiState.value.copy(isReadOnly = initialReadOnly)
-    }
 
     fun toggleReadOnly() {
         _uiState.value = _uiState.value.copy(isReadOnly = !_uiState.value.isReadOnly)
@@ -89,6 +77,8 @@ class FullscreenDisplayViewModel @Inject constructor(
                     AppEntry(parts[0], parts.getOrElse(1) { parts[0] })
                 }.sortedBy { it.label }
                 _uiState.value = _uiState.value.copy(apps = appEntries, showAppList = true)
+            }.onFailure {
+                Timber.e(it)
             }
         }
     }
@@ -97,7 +87,7 @@ class FullscreenDisplayViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(showAppList = false)
     }
 
-    fun launchApp(packageName: String) {
+    fun launchApp(packageName: String, displayId: Int) {
         viewModelScope.launch {
             serviceFlow.runWhenAlive { service ->
                 service.launchInDisplay(packageName, displayId)
@@ -106,13 +96,45 @@ class FullscreenDisplayViewModel @Inject constructor(
         }
     }
 
-    fun destroyDisplay() {
-        _controller.value?.destroy()
+    fun destroyDisplay(displayId: Int) {
+        viewModelScope.launch {
+            serviceFlow.runWhenAlive { service ->
+                service.destroyVirtualDisplay(displayId)
+            }.onFailure {
+                Timber.e(it)
+            }
+        }
+    }
+
+    private val surfaceHandleMap = mutableMapOf<Surface, Int>()
+
+    fun addSurface(displayId: Int, surface: Surface) {
+        viewModelScope.launch {
+            serviceFlow.runWhenAlive { service ->
+                val handle = service.addVirtualDisplaySurface(displayId, surface)
+                if (handle != -1) {
+                    surfaceHandleMap[surface] = handle
+                }
+            }.onFailure {
+                Timber.e(it)
+            }
+        }
+    }
+
+    fun removeSurface(displayId: Int, surface: Surface) {
+        viewModelScope.launch {
+            serviceFlow.runWhenAlive { service ->
+                surfaceHandleMap.remove(surface)?.let { handle ->
+                    service.removeVirtualDisplaySurface(displayId, handle)
+                }
+            }.onFailure {
+                Timber.e(it)
+            }
+        }
     }
 
     override fun onCleared() {
         super.onCleared()
-        _controller.value = null
         _inputController.value = null
     }
 }

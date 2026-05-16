@@ -7,13 +7,14 @@ interface IRelcV2Service {
     boolean setOverlayAllowed(String packageName) = 1;
     boolean grantRuntimePermission(String packageName, String permissionName) = 2;
     // VirtualDisplay 管理
-    int createVirtualDisplay(String name, int width, int height, int densityDpi, in Surface surface, int flags) = 101;
-    boolean setVirtualDisplaySurface(int displayId, in Surface surface) = 102;
-    boolean destroyVirtualDisplay(int displayId) = 103;
+    int createVirtualDisplay(String name, int width, int height, int densityDpi, int flags) = 101;
+    int addVirtualDisplaySurface(int displayId, in Surface surface) = 102;
+    boolean removeVirtualDisplaySurface(int displayId, int handle) = 103;
+    boolean destroyVirtualDisplay(int displayId) = 104;
 
-    int[] getVirtualDisplays() = 104;
-    boolean launchInDisplay(String packageName, int displayId) = 105;
-    List<String> getLauncherApps() = 106;
+    int[] getVirtualDisplays() = 105;
+    boolean launchInDisplay(String packageName, int displayId) = 106;
+    List<String> getLauncherApps() = 107;
 
     /**
      * points: flattened [x1, y1, x2, y2, ...]

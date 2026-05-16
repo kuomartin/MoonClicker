@@ -6,7 +6,9 @@ import android.content.pm.PackageManager
 import android.os.IBinder
 import android.os.IInterface
 import com.xaxaxax.relc.BuildConfig
+import com.xaxaxax.relc.IRelcV2Service
 import com.xaxaxax.relc.RelcApplication
+import com.xaxaxax.relc.core.DisplayConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -149,17 +151,19 @@ sealed interface UserService<T : IInterface> {
 suspend fun <T : IInterface, V> StateFlow<UserService<T>>.runWhenAlive(
     timeout: Duration = 5.seconds,
     block: suspend (T) -> V
-): V? {
-    runCatching {
+): Result<V> {
+    return runCatching {
         withTimeout(timeout) {
             filterIsInstance<UserService.Alive<T>>().first()
         }
     }
-        .onSuccess {
-            return block(it.service)
-        }
+        .map { block(it.service) }
         .onFailure {
             Timber.e(it, "Shizuku 服務呼叫失敗 (可能是服務已停止)")
         }
-    return null
 }
+
+
+fun IRelcV2Service.createVirtualDisplay(config: DisplayConfig) = createVirtualDisplay(
+    config.name, config.width, config.height, config.densityDpi, config.flags
+)

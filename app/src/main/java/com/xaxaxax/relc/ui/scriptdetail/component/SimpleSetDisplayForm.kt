@@ -1,9 +1,5 @@
 package com.xaxaxax.relc.ui.scriptdetail.component
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -26,23 +22,23 @@ fun SimpleSetDisplayForm(
     onParsedChange: (ParsedSimpleLine?) -> Unit,
 ) {
     val id = parsed.payload.trim().toIntOrNull() ?: 0
-        SimpleStepTopLine(
-            modifier = modifier,
-            index = index,
-            parsed = parsed,
-            onParsedChange = onParsedChange,
-            dragHandleModifier = dragHandleModifier,
-        ) {
-            CompactNumberInput(
-                value = id.toString(),
-                label = "Id:",
-                modifier = Modifier.width(72.dp),
-                onValueChange = {
-                    onParsedChange(parsed.copy(payload = (it.toIntOrNull() ?: 0).toString()))
-                },
-            )
-        }
+    SimpleStepTopLine(
+        modifier = modifier,
+        index = index,
+        parsed = parsed,
+        onParsedChange = onParsedChange,
+        dragHandleModifier = dragHandleModifier,
+    ) {
+        CompactNumberInput(
+            value = id.toString(),
+            label = "Id:",
+            modifier = Modifier.width(72.dp),
+            onValueChange = {
+                onParsedChange(parsed.copy(payload = (it.toIntOrNull() ?: 0).toString()))
+            },
+        )
     }
+}
 
 @Preview(showBackground = true)
 @Composable

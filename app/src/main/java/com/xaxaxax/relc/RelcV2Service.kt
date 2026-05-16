@@ -46,7 +46,16 @@ import kotlin.system.exitProcess
 
 @Keep
 class RelcV2Service(private val context: Context) : IRelcV2Service.Stub() {
-    private companion object {
+    companion object {
+        init {
+            try {
+                System.loadLibrary("relc_native")
+            } catch (ex: UnsatisfiedLinkError) {
+                // In Shizuku environment, sometimes we need to wait or handle library loading differently
+                // but standard loadLibrary is the first step.
+            }
+        }
+
         const val SUPPORTED_FLAGS =
             DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR or
                     DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_DESTROY_CONTENT_ON_REMOVAL or
@@ -103,7 +112,7 @@ class RelcV2Service(private val context: Context) : IRelcV2Service.Stub() {
     }
 
     private val vdStore = mutableMapOf<Int, VirtualDisplay>()
-    private val nsStore = mutableMapOf<Int, NullSurface>()
+    private val distributorStore = mutableMapOf<Int, Long>() // displayId -> nativePtr
     private val fakeDisplayContext = object : ContextWrapper(context) {
         override fun getPackageName(): String = "com.android.shell"
         override fun getOpPackageName(): String = "com.android.shell"
@@ -305,7 +314,6 @@ class RelcV2Service(private val context: Context) : IRelcV2Service.Stub() {
         width: Int,
         height: Int,
         densityDpi: Int,
-        surface: Surface?,
         flags: Int,
     ): Int {
         var flags = flags and SUPPORTED_FLAGS
@@ -318,37 +326,57 @@ class RelcV2Service(private val context: Context) : IRelcV2Service.Stub() {
             flags = flags or ADD_FLAGS_34
         }
 
+        // 1. 建立 Native GLES 分發器並獲取 Source Surface
+        val nativePtr = nativeCreateDistributor(width, height)
+        if (nativePtr == 0L) return -1
+        val sourceSurface = nativeGetDistributorSurface(nativePtr) ?: return -1
+
         val dm = buildDisplayManagerForVirtualDisplay()
         val vd = run {
             Timber.d(
-                "createVD: callingUid=${getCallingUid()} serviceUid=${Process.myUid()} fakePkg=${fakeDisplayContext.packageName} surfaceValid=${surface?.isValid}"
+                "createVD: callingUid=${getCallingUid()} serviceUid=${Process.myUid()} fakePkg=${fakeDisplayContext.packageName} surfaceValid=${sourceSurface.isValid}"
             )
             @SuppressLint("WrongConstant")
-            dm.createVirtualDisplay(name, width, height, densityDpi, surface, flags)
+            dm.createVirtualDisplay(name, width, height, densityDpi, sourceSurface, flags)
         }
 
         val displayId = vd.display?.displayId ?: return -1
         vdStore[displayId] = vd
-        Timber.d("VirtualDisplay created: id=$displayId name=$name ${width}x${height}@$densityDpi")
+        distributorStore[displayId] = nativePtr
+        Timber.d("VirtualDisplay created: id=$displayId name=$name ${width}x${height}@$densityDpi (Distributor Active)")
         return displayId
     }
 
-    override fun setVirtualDisplaySurface(displayId: Int, surface: Surface?): Boolean {
-        val vd = vdStore[displayId] ?: return false
-        if (surface != null) {
-            vd.surface = surface
-            nsStore[displayId]?.close()
-        } else {
-            val ns = nsStore.getOrPut(displayId) { NullSurface() }
-            vd.surface = ns.surface
+    override fun addVirtualDisplaySurface(displayId: Int, surface: Surface): Int {
+        Timber.d("addVirtualDisplaySurface: id=$displayId surfaceValid=${surface.isValid}")
+        val ptr = distributorStore[displayId] ?: run {
+            Timber.e("addVirtualDisplaySurface: distributor not found for id=$displayId")
+            return -1
         }
+        return nativeAddSurface(ptr, surface)
+    }
+
+    override fun removeVirtualDisplaySurface(displayId: Int, handle: Int): Boolean {
+        Timber.d("removeVirtualDisplaySurface: id=$displayId handle=$handle")
+        val ptr = distributorStore[displayId] ?: return false
+        nativeRemoveSurface(ptr, handle)
         return true
     }
 
     override fun destroyVirtualDisplay(displayId: Int): Boolean {
         vdStore.remove(displayId)?.release()
+        distributorStore.remove(displayId)?.let { ptr ->
+            nativeDestroyDistributor(ptr)
+        }
         return true
     }
+
+    // --- Native GLES Distributor ---
+    private external fun nativeCreateDistributor(width: Int, height: Int): Long
+    private external fun nativeGetDistributorSurface(ptr: Long): Surface?
+    private external fun nativeAddSurface(ptr: Long, surface: Surface): Int
+    private external fun nativeRemoveSurface(ptr: Long, handle: Int)
+    private external fun nativeDestroyDistributor(ptr: Long)
 
     override fun launchInDisplay(packageName: String, displayId: Int): Boolean {
         val intent = context.packageManager.getLaunchIntentForPackage(packageName) ?: return false
@@ -433,14 +461,5 @@ class RelcV2Service(private val context: Context) : IRelcV2Service.Stub() {
         val ctor = DisplayManager::class.java.getDeclaredConstructor(Context::class.java)
         ctor.isAccessible = true
         return ctor.newInstance(fakeDisplayContext)
-    }
-
-    private class NullSurface : AutoCloseable {
-        val surfaceTexture = SurfaceTexture(0).apply { setDefaultBufferSize(0, 0) }
-        val surface = Surface(surfaceTexture)
-        override fun close() {
-            surface.release()
-            surfaceTexture.release()
-        }
     }
 }

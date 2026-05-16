@@ -51,6 +51,7 @@ add_library(relc_native SHARED
         LuaEngine.cpp
         NativeImageReader.cpp
         RelcEngine.cpp
+        GlesDistributor.cpp
         ${LUA_SRC}
 )
 
@@ -63,6 +64,8 @@ find_library(media-lib mediandk)
 target_link_libraries(relc_native
         ${OpenCV_LIBS}
         jnigraphics
+        EGL
+        GLESv2
         ${log-lib}
         ${media-lib}
 )

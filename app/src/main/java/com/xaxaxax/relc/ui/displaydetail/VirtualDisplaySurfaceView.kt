@@ -3,6 +3,7 @@ package com.xaxaxax.relc.ui.displaydetail
 import android.annotation.SuppressLint
 import android.graphics.Matrix
 import android.graphics.RectF
+import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import androidx.compose.foundation.layout.height
@@ -14,9 +15,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.viewinterop.AndroidView
 import com.xaxaxax.relc.core.DisplayConfig
-import com.xaxaxax.relc.display.DirectSink
-import com.xaxaxax.relc.display.NoOpSink
-import com.xaxaxax.relc.display.VirtualDisplayController
 import com.xaxaxax.relc.input.InputController
 import timber.log.Timber
 
@@ -33,7 +31,9 @@ import timber.log.Timber
 @SuppressLint("ClickableViewAccessibility")
 @Composable
 fun VirtualDisplaySurfaceView(
-    controller: VirtualDisplayController,
+    targetDisplayId: Int,
+    addSurface: (Surface) -> Unit,
+    removeSurface: (Surface) -> Unit,
     inputController: InputController,
     config: DisplayConfig,
     isReadOnly: Boolean,
@@ -46,13 +46,12 @@ fun VirtualDisplaySurfaceView(
 
     // SurfaceHolder.Callback 的 instance 在 recomposition 間保持穩定
 
-    val callback = remember(controller) {
+    val callback = remember {
         object : SurfaceHolder.Callback {
             override fun surfaceCreated(holder: SurfaceHolder) {
                 Timber.d("VirtualDisplaySurfaceView: surfaceCreated")
-                if (controller.state != VirtualDisplayController.State.CREATED) return
                 runCatching {
-                    controller.setPreviewSink(DirectSink(holder.surface))
+                    addSurface(holder.surface)
                 }.onFailure {
                     Timber.e(it, "replaceSink(DirectSink) failed")
                 }
@@ -66,9 +65,8 @@ fun VirtualDisplaySurfaceView(
 
             override fun surfaceDestroyed(holder: SurfaceHolder) {
                 Timber.d("VirtualDisplaySurfaceView: surfaceDestroyed")
-                if (controller.state != VirtualDisplayController.State.CREATED) return
                 runCatching {
-                    controller.setPreviewSink(NoOpSink)
+                    removeSurface(holder.surface)
                 }.onFailure {
                     Timber.e(it, "replaceSink(NoOpSink) failed")
                 }
@@ -94,9 +92,8 @@ fun VirtualDisplaySurfaceView(
 
                     setOnTouchListener { _, event ->
                         if (isReadOnly) return@setOnTouchListener false
-                        val displayId = controller.displayId
-                        if (displayId != -1) {
-                            inputController.injectMotionEvent(event, displayId, touchMatrix)
+                        if (targetDisplayId != -1) {
+                            inputController.injectMotionEvent(event, targetDisplayId, touchMatrix)
                         }
                         true
                     }
@@ -105,9 +102,8 @@ fun VirtualDisplaySurfaceView(
             update = { view ->
                 view.setOnTouchListener { _, event ->
                     if (isReadOnly) return@setOnTouchListener false
-                    val displayId = controller.displayId
-                    if (displayId != -1) {
-                        inputController.injectMotionEvent(event, displayId, touchMatrix)
+                    if (targetDisplayId != -1) {
+                        inputController.injectMotionEvent(event, targetDisplayId, touchMatrix)
                     }
                     true
                 }

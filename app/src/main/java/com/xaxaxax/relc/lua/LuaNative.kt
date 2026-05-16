@@ -1,12 +1,15 @@
-package com.xaxaxax.relc.display.cv
+package com.xaxaxax.relc.lua
 
-import android.graphics.Bitmap
+import android.view.Surface
+import com.xaxaxax.relc.IRelcV2Service
 import timber.log.Timber
 
 /**
  * 原生 OpenCV 辨識包裝類
  */
-class NativeDetector {
+class LuaNative {
+
+    private var currentService: IRelcV2Service? = null
 
     companion object {
         init {
@@ -26,13 +29,22 @@ class NativeDetector {
      * @param script Lua 腳本內容
      * @return 供 VirtualDisplay 使用的 Surface
      */
-    external fun startEngine(
-        service: com.xaxaxax.relc.IRelcV2Service,
+    fun startEngineWithService(
+        service: IRelcV2Service,
         width: Int,
         height: Int,
         script: String
-    ): android.view.Surface?
+    ): Surface? {
+        this.currentService = service
+        return startEngine(service, width, height, script)
+    }
 
+    private external fun startEngine(
+        service: IRelcV2Service,
+        width: Int,
+        height: Int,
+        script: String
+    ): Surface?
 
     /**
      * 停止原生引擎
@@ -40,25 +52,7 @@ class NativeDetector {
     external fun stopEngine()
 
     /**
-     * 設定預覽用的 Surface (畫面分流)
-     */
-    external fun setPreviewSurface(surface: android.view.Surface?)
-
-    /**
      * 檢查原生引擎是否正在運行
      */
     external fun isEngineRunning(): Boolean
-
-    /**
-     * 進行模板匹配
-     */
-    external fun matchTemplateNative(
-        screenBitmap: Bitmap,
-        targetBitmap: Bitmap,
-        x: Int,
-        y: Int,
-        width: Int,
-        height: Int,
-        method: Int = 5 // cv::TM_CCOEFF_NORMED
-    ): DetectionResult?
 }

@@ -65,7 +65,7 @@ class FullscreenDisplayActivity : ComponentActivity() {
 
         setContent {
             ReLCTheme {
-                FullscreenDisplayScreen()
+                FullscreenDisplayScreen(displayId)
             }
         }
     }
@@ -75,11 +75,11 @@ data class AppEntry(val packageName: String, val label: String)
 
 @Composable
 fun FullscreenDisplayScreen(
+    targetDisplayId: Int,
     viewModel: FullscreenDisplayViewModel = hiltViewModel()
 ) {
     val activity = LocalActivity.current
     val uiState by viewModel.uiState.collectAsState()
-    val controller by viewModel.controller.collectAsState()
     val inputController by viewModel.inputController.collectAsState()
 
     Box(
@@ -87,7 +87,7 @@ fun FullscreenDisplayScreen(
             .fillMaxSize()
             .background(Color.Black)
     ) {
-        if (controller != null && inputController != null) {
+        if (inputController != null) {
             val metrics = LocalResources.current.displayMetrics
             val config = DisplayConfig(
                 name = "Attached",
@@ -96,7 +96,9 @@ fun FullscreenDisplayScreen(
                 densityDpi = metrics.densityDpi
             )
             VirtualDisplaySurfaceView(
-                controller = controller!!,
+                targetDisplayId = targetDisplayId,
+                addSurface = { viewModel.addSurface(targetDisplayId, it) },
+                removeSurface = { viewModel.removeSurface(targetDisplayId, it) },
                 inputController = inputController!!,
                 config = config,
                 isReadOnly = uiState.isReadOnly,
@@ -151,7 +153,7 @@ fun FullscreenDisplayScreen(
                     text = { Text("Close Display") },
                     onClick = {
                         viewModel.setMenuExpanded(false)
-                        viewModel.destroyDisplay()
+                        viewModel.destroyDisplay(targetDisplayId)
                         activity?.finish()
                     }
                 )
@@ -174,7 +176,7 @@ fun FullscreenDisplayScreen(
                         items(uiState.apps) { app ->
                             TextButton(
                                 onClick = {
-                                    viewModel.launchApp(app.packageName)
+                                    viewModel.launchApp(app.packageName, targetDisplayId)
                                 },
                                 modifier = Modifier.fillMaxWidth()
                             ) {
