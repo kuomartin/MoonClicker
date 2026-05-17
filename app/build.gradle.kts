@@ -134,4 +134,8 @@ dependencies {
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
+
+    // coil
+    implementation(libs.coil.compose) // 請根據當前最新版本調整
+    implementation(libs.coil.svg)
 }

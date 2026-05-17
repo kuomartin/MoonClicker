@@ -1,5 +1,6 @@
 [versions]
 agp = "9.3.0-alpha04"
+coilCompose = "3.4.0"
 minSdk = "27"
 targetSdk = "37"
 coreKtx = "1.18.0"
@@ -38,6 +39,8 @@ foundationLayout = "1.11.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
+coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coilCompose" }
+coil-svg = { module = "io.coil-kt.coil3:coil-svg", version.ref = "coilCompose" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
 androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }
