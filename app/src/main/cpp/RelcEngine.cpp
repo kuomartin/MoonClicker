@@ -7,9 +7,12 @@
 RelcEngine::RelcEngine(JNIEnv *env, jobject service, jobject detector) : javaVM(nullptr),
                                                                          displayId(-1),
                                                                          sinkHandle(-1),
-                                                                         isRunning(false) {
+                                                                         isRunning(false),
+                                                                         tickIntervalMs(66),
+                                                                         tickNum(0) {
     env->GetJavaVM(&javaVM);
     serviceObj = env->NewGlobalRef(service);
+    luaNativeObj = env->NewGlobalRef(detector); // detector is thiz from startEngine
 
     jclass serviceClass = env->GetObjectClass(serviceObj);
     // V2 Method: multiTouchSwipe(int pointerId, int displayId, int[] points, long duration, boolean keep)
@@ -24,6 +27,11 @@ RelcEngine::RelcEngine(JNIEnv *env, jobject service, jobject detector) : javaVM(
     launchInDisplayMethodId = env->GetMethodID(serviceClass, "launchInDisplay",
                                                "(Ljava/lang/String;I)Z");
     getVirtualDisplaysMethodId = env->GetMethodID(serviceClass, "getVirtualDisplays", "()[I");
+    
+    jclass luaNativeClass = env->GetObjectClass(luaNativeObj);
+    uiAddMethodId = env->GetMethodID(luaNativeClass, "uiAdd", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
+    uiUpdateMethodId = env->GetMethodID(luaNativeClass, "uiUpdate", "(Ljava/lang/String;Ljava/lang/String;)V");
+    uiRemoveMethodId = env->GetMethodID(luaNativeClass, "uiRemove", "(Ljava/lang/String;)V");
 }
 
 RelcEngine::~RelcEngine() {
@@ -31,10 +39,19 @@ RelcEngine::~RelcEngine() {
     JNIEnv *env;
     if (javaVM->GetEnv((void **) &env, JNI_VERSION_1_6) == JNI_OK) {
         env->DeleteGlobalRef(serviceObj);
+        env->DeleteGlobalRef(luaNativeObj);
     }
 }
 
-bool RelcEngine::start(int width, int height, const std::string &script) {
+bool RelcEngine::start(int width, int height, const std::string &scriptPath) {
+    this->scriptPath = scriptPath;
+    size_t lastSlash = scriptPath.find_last_of("/\\");
+    if (lastSlash != std::string::npos) {
+        this->scriptDir = scriptPath.substr(0, lastSlash + 1);
+    } else {
+        this->scriptDir = "./";
+    }
+
     luaEngine = std::make_unique<LuaEngine>();
     if (!luaEngine->init()) return false;
 
@@ -61,6 +78,19 @@ bool RelcEngine::start(int width, int height, const std::string &script) {
     lua_pushlightuserdata(L, this);
     lua_pushcclosure(L, lua_match_wait, 1);
     lua_setfield(L, -2, "wait");
+
+    lua_pushlightuserdata(L, this);
+    lua_pushcclosure(L, lua_match_enable, 1);
+    lua_setfield(L, -2, "enable");
+
+    lua_pushlightuserdata(L, this);
+    lua_pushcclosure(L, lua_match_disable, 1);
+    lua_setfield(L, -2, "disable");
+
+    lua_pushlightuserdata(L, this);
+    lua_pushcclosure(L, lua_match_set_enabled, 1);
+    lua_setfield(L, -2, "set_enabled");
+
     lua_pop(L, 1);
 
     // display.create
@@ -81,6 +111,22 @@ bool RelcEngine::start(int width, int height, const std::string &script) {
 
     lua_setglobal(L, "display");
 
+    // ui module
+    lua_newtable(L);
+    lua_pushlightuserdata(L, this);
+    lua_pushcclosure(L, lua_ui_add, 1);
+    lua_setfield(L, -2, "add");
+
+    lua_pushlightuserdata(L, this);
+    lua_pushcclosure(L, lua_ui_update, 1);
+    lua_setfield(L, -2, "update");
+
+    lua_pushlightuserdata(L, this);
+    lua_pushcclosure(L, lua_ui_remove, 1);
+    lua_setfield(L, -2, "remove");
+    
+    lua_setglobal(L, "ui");
+
     imageReader = std::make_unique<NativeImageReader>(width, height);
     if (!imageReader->init()) return false;
 
@@ -90,13 +136,18 @@ bool RelcEngine::start(int width, int height, const std::string &script) {
     });
 
     isRunning = true;
-    luaThread = std::thread(&RelcEngine::luaThreadLoop, this, script);
+    luaThread = std::thread(&RelcEngine::luaThreadLoop, this, scriptPath);
 
     return true;
 }
 
-void RelcEngine::luaThreadLoop(const std::string &script) {
-    if (!luaEngine->loadScript(script)) {
+void RelcEngine::pushUIEvent(const std::string& elementId, const std::string& eventType) {
+    std::lock_guard<std::mutex> lock(uiEventMutex);
+    uiEventQueue.push({elementId, eventType});
+}
+
+void RelcEngine::luaThreadLoop(const std::string &scriptPath) {
+    if (!luaEngine->loadFile(scriptPath)) {
         isRunning = false;
         return;
     }
@@ -112,7 +163,19 @@ void RelcEngine::luaThreadLoop(const std::string &script) {
 
     lua_State *gL = luaEngine->getLuaState();
 
-    // Check if on_start is defined and call it
+    // 1. Initial start to execute top-level (config, etc.)
+    int nres = 0;
+    int status = lua_resume(coL, gL, 0, &nres);
+    if (status != LUA_OK && status != LUA_YIELD) {
+        LOGE("Script execution error (init): %s", lua_tostring(coL, -1));
+        isRunning = false;
+        return;
+    }
+
+    // 2. Parse config
+    parseConfigFromLua();
+
+    // 3. Check if on_start is defined and call it
     lua_getglobal(gL, "on_start");
     if (lua_isfunction(gL, -1)) {
         if (lua_pcall(gL, 0, 0, 0) != LUA_OK) {
@@ -123,25 +186,87 @@ void RelcEngine::luaThreadLoop(const std::string &script) {
         lua_pop(gL, 1);
     }
 
-    // Initial start
-    int nres = 0;
-    int status = lua_resume(coL, gL, 0, &nres);
-    if (status != LUA_OK && status != LUA_YIELD) {
-        LOGE("Script execution error: %s", lua_tostring(coL, -1));
-        isRunning = false;
-        return;
-    }
-
-    // Fixed 15 FPS Logic Ticker
+    // Main Ticker Loop
     while (isRunning) {
         auto start = std::chrono::steady_clock::now();
+        tickNum++;
 
-        // 1. Process on_tick if defined
+        // 3.5 Process on_event(events, tick_num)
+        lua_getglobal(gL, "on_event");
+        if (lua_isfunction(gL, -1)) {
+            lua_newtable(gL);
+            int eventIndex = 1;
+            
+            {
+                std::lock_guard<std::mutex> lock(uiEventMutex);
+                while (!uiEventQueue.empty()) {
+                    auto ev = uiEventQueue.front();
+                    uiEventQueue.pop();
+
+                    lua_newtable(gL);
+                    lua_pushstring(gL, ev.elementId.c_str());
+                    lua_setfield(gL, -2, "id");
+                    lua_pushstring(gL, ev.eventType.c_str());
+                    lua_setfield(gL, -2, "type");
+                    
+                    lua_rawseti(gL, -2, eventIndex++);
+                }
+            }
+            
+            lua_pushinteger(gL, tickNum);
+
+            if (lua_pcall(gL, 2, 0, 0) != LUA_OK) {
+                LOGE("on_event error: %s", lua_tostring(gL, -1));
+                lua_pop(gL, 1);
+            }
+        } else {
+            lua_pop(gL, 1);
+            std::lock_guard<std::mutex> lock(uiEventMutex);
+            while (!uiEventQueue.empty()) uiEventQueue.pop();
+        }
+
+        // 4. Process on_tick(matches, tick_num)
         lua_getglobal(gL, "on_tick");
-        bool hasOnTick = lua_isfunction(gL, -1);
-        if (hasOnTick) {
-            lua_pushnumber(gL, 0.066); // approx dt
-            if (lua_pcall(gL, 1, 0, 0) != LUA_OK) {
+        if (lua_isfunction(gL, -1)) {
+            // matches table
+            lua_newtable(gL);
+            std::vector<MatchResultItem> matchesCopy;
+            {
+                std::lock_guard<std::mutex> lock(resultMutex);
+                matchesCopy = latestResult.matches;
+            }
+
+            {
+                std::lock_guard<std::mutex> lock(resultMutex);
+                for (const auto& t : templates) {
+                    lua_newtable(gL);
+                    bool found = false;
+                    for (const auto& m : matchesCopy) {
+                        if (m.name == t.name) {
+                            lua_pushboolean(gL, true);
+                            lua_setfield(gL, -2, "found");
+                            lua_pushnumber(gL, m.x);
+                            lua_setfield(gL, -2, "x");
+                            lua_pushnumber(gL, m.y);
+                            lua_setfield(gL, -2, "y");
+                            lua_pushnumber(gL, m.confidence);
+                            lua_setfield(gL, -2, "confidence");
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) {
+                        lua_pushboolean(gL, false);
+                        lua_setfield(gL, -2, "found");
+                    }
+                    lua_setfield(gL, -2, t.name.c_str());
+                }
+            }
+
+            // tick_num
+            lua_pushinteger(gL, tickNum);
+
+            if (lua_pcall(gL, 2, 0, 0) != LUA_OK) {
                 LOGE("on_tick error: %s", lua_tostring(gL, -1));
                 lua_pop(gL, 1);
             }
@@ -149,46 +274,7 @@ void RelcEngine::luaThreadLoop(const std::string &script) {
             lua_pop(gL, 1);
         }
 
-        // 2. Process on_match if defined
-        lua_getglobal(gL, "on_match");
-        if (lua_isfunction(gL, -1)) {
-            std::vector<MatchResultItem> matchesCopy;
-            {
-                std::lock_guard<std::mutex> lock(resultMutex);
-                matchesCopy = latestResult.matches;
-            }
-
-            if (!matchesCopy.empty()) {
-                lua_pushstring(gL, matchesCopy[0].name.c_str());
-
-                lua_newtable(gL);
-                for (const auto &item: matchesCopy) {
-                    if (item.found) {
-                        lua_newtable(gL);
-                        lua_pushboolean(gL, true);
-                        lua_setfield(gL, -2, "found");
-                        lua_pushnumber(gL, item.x);
-                        lua_setfield(gL, -2, "x");
-                        lua_pushnumber(gL, item.y);
-                        lua_setfield(gL, -2, "y");
-                        lua_pushnumber(gL, item.confidence);
-                        lua_setfield(gL, -2, "confidence");
-                        lua_setfield(gL, -2, item.name.c_str());
-                    }
-                }
-
-                if (lua_pcall(gL, 2, 0, 0) != LUA_OK) {
-                    LOGE("on_match error: %s", lua_tostring(gL, -1));
-                    lua_pop(gL, 1);
-                }
-            } else {
-                lua_pop(gL, 1);
-            }
-        } else {
-            lua_pop(gL, 1);
-        }
-
-        // 3. Resume main coroutine if it yielded
+        // 5. Resume main coroutine if it yielded
         if (lua_status(coL) == LUA_YIELD) {
             int nres_loop = 0;
             int resume_status = lua_resume(coL, gL, 0, &nres_loop);
@@ -200,17 +286,22 @@ void RelcEngine::luaThreadLoop(const std::string &script) {
             }
         }
 
-        // 4. Check if we should exit
-        if (lua_status(coL) == LUA_OK && !hasOnTick) {
-            LOGD("Script finished execution");
-            isRunning = false;
-            break;
+        // 6. Check if we should exit
+        if (lua_status(coL) == LUA_OK) {
+            lua_getglobal(gL, "on_tick");
+            bool hasOnTick = lua_isfunction(gL, -1);
+            lua_pop(gL, 1);
+            if (!hasOnTick) {
+                LOGD("Script finished execution");
+                isRunning = false;
+                break;
+            }
         }
 
         auto end = std::chrono::steady_clock::now();
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-        if (elapsed.count() < 66) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(66 - elapsed.count()));
+        if (elapsed.count() < tickIntervalMs) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(tickIntervalMs - elapsed.count()));
         }
     }
 }
@@ -264,54 +355,111 @@ ANativeWindow *RelcEngine::getWindow() {
     return imageReader ? imageReader->getWindow() : nullptr;
 }
 
-void RelcEngine::updateTemplatesFromLua() {
+void RelcEngine::parseConfigFromLua() {
     lua_State *L = luaEngine->getLuaState();
-    lua_getglobal(L, "match");
+    lua_getglobal(L, "config");
+
+    if (!lua_istable(L, -1)) {
+        lua_pop(L, 1);
+        LOGD("No 'config' table found, using defaults");
+        return;
+    }
+
+    // Parse FPS
+    lua_getfield(L, -1, "fps");
+    if (lua_isnumber(L, -1)) {
+        int fps = static_cast<int>(lua_tointeger(L, -1));
+        if (fps > 0) tickIntervalMs = 1000 / fps;
+    }
+    lua_pop(L, 1);
+
+    // Parse Templates
     lua_getfield(L, -1, "templates");
-
-    std::vector<SearchTemplate> newTemplates;
-
     if (lua_istable(L, -1)) {
+        std::vector<SearchTemplate> newTemplates;
         auto n = static_cast<int>(lua_rawlen(L, -1));
         for (int i = 1; i <= n; i++) {
             lua_rawgeti(L, -1, i);
             if (lua_istable(L, -1)) {
                 SearchTemplate t;
-                lua_getfield(L, -1, "name");
-                t.name = luaL_optstring(L, -1, "");
+
+                // Format: { name, roi, threshold, grayscale, enabled }
+                // 1. name
+                lua_rawgeti(L, -1, 1);
+                const char* nameStr = lua_tostring(L, -1);
+                if (nameStr) t.name = nameStr;
                 lua_pop(L, 1);
-                lua_getfield(L, -1, "threshold");
+
+                if (t.name.empty()) {
+                    lua_pop(L, 1);
+                    continue;
+                }
+
+                // 2. roi
+                lua_rawgeti(L, -1, 2);
+                if (lua_istable(L, -1)) {
+                    lua_rawgeti(L, -1, 1); t.roi.x = static_cast<int>(lua_tointeger(L, -1)); lua_pop(L, 1);
+                    lua_rawgeti(L, -1, 2); t.roi.y = static_cast<int>(lua_tointeger(L, -1)); lua_pop(L, 1);
+                    lua_rawgeti(L, -1, 3); t.roi.width = static_cast<int>(lua_tointeger(L, -1)); lua_pop(L, 1);
+                    lua_rawgeti(L, -1, 4); t.roi.height = static_cast<int>(lua_tointeger(L, -1)); lua_pop(L, 1);
+                } else {
+                    t.roi = cv::Rect(0, 0, 0, 0); // Full screen
+                }
+                lua_pop(L, 1);
+
+                // 3. threshold
+                lua_rawgeti(L, -1, 3);
                 t.threshold = luaL_optnumber(L, -1, 0.8);
                 lua_pop(L, 1);
 
-                lua_getfield(L, -1, "target");
-                std::string path = luaL_optstring(L, -1, "");
+                // 4. grayscale
+                lua_rawgeti(L, -1, 4);
+                t.grayscale = lua_toboolean(L, -1);
                 lua_pop(L, 1);
 
-                if (!path.empty()) {
-                    if (templateCache.find(path) == templateCache.end()) {
-                        cv::Mat img = cv::imread(path, cv::IMREAD_UNCHANGED);
-                        if (!img.empty()) {
-                            if (img.channels() == 3) {
-                                cv::cvtColor(img, img, cv::COLOR_BGR2RGBA);
-                            }
-                            templateCache[path] = img;
+                // 5. enabled (default true)
+                lua_rawgeti(L, -1, 5);
+                if (lua_isboolean(L, -1)) t.enabled = lua_toboolean(L, -1);
+                else t.enabled = true;
+                lua_pop(L, 1);
+
+                // Load image
+                std::string path = scriptDir + t.name + ".png";
+                if (templateCache.find(path) == templateCache.end()) {
+                    cv::Mat img = cv::imread(path, cv::IMREAD_UNCHANGED);
+                    if (!img.empty()) {
+                        // Ensure 4 channels (RGBA) for consistent processing before grayscale conversion
+                        if (img.channels() == 3) {
+                            cv::cvtColor(img, img, cv::COLOR_BGR2RGBA);
+                        } else if (img.channels() == 1) {
+                            cv::cvtColor(img, img, cv::COLOR_GRAY2RGBA);
                         }
+                        templateCache[path] = img;
+                    } else {
+                        LOGE("Failed to load template image: %s", path.c_str());
+                    }
+                }
+
+                if (templateCache.find(path) != templateCache.end()) {
+                    t.image = templateCache[path].clone(); // Clone because we might convert it to grayscale
+
+                    // If grayscale is requested, convert template now
+                    if (t.grayscale && t.image.channels() == 4) {
+                        cv::Mat gray;
+                        cv::cvtColor(t.image, gray, cv::COLOR_RGBA2GRAY);
+                        t.image = gray;
                     }
 
-                    if (templateCache.find(path) != templateCache.end()) {
-                        t.image = templateCache[path];
-                        newTemplates.push_back(t);
-                    }
+                    newTemplates.push_back(t);
                 }
             }
             lua_pop(L, 1);
         }
-    }
-    lua_pop(L, 2);
 
-    std::lock_guard<std::mutex> lock(resultMutex);
-    templates = std::move(newTemplates);
+        std::lock_guard<std::mutex> lock(resultMutex);
+        templates = std::move(newTemplates);
+    }
+    lua_pop(L, 2); // pop templates and config
 }
 
 void RelcEngine::processFrame(const cv::Mat &frame) {
@@ -321,10 +469,40 @@ void RelcEngine::processFrame(const cv::Mat &frame) {
     latestResult.matches.clear();
 
     for (const auto &t: templates) {
-        if (t.image.empty() || frame.cols < t.image.cols || frame.rows < t.image.rows) continue;
+        if (!t.enabled) continue;
+        if (t.image.empty()) continue;
+
+        cv::Mat searchArea = frame;
+        int offsetX = 0;
+        int offsetY = 0;
+
+        // Apply ROI if specified
+        if (t.roi.width > 0 && t.roi.height > 0) {
+            int x = std::max(0, t.roi.x);
+            int y = std::max(0, t.roi.y);
+            int w = std::min(t.roi.width, frame.cols - x);
+            int h = std::min(t.roi.height, frame.rows - y);
+
+            if (w < t.image.cols || h < t.image.rows) continue;
+
+            searchArea = frame(cv::Rect(x, y, w, h));
+            offsetX = x;
+            offsetY = y;
+        }
+
+        if (searchArea.cols < t.image.cols || searchArea.rows < t.image.rows) continue;
+
+        cv::Mat target;
+        if (t.grayscale && searchArea.channels() == 4) {
+            cv::Mat grayArea;
+            cv::cvtColor(searchArea, grayArea, cv::COLOR_RGBA2GRAY);
+            target = grayArea;
+        } else {
+            target = searchArea;
+        }
 
         cv::Mat result;
-        cv::matchTemplate(frame, t.image, result, cv::TM_CCOEFF_NORMED);
+        cv::matchTemplate(target, t.image, result, cv::TM_CCOEFF_NORMED);
 
         double minVal, maxVal;
         cv::Point minLoc, maxLoc;
@@ -334,8 +512,8 @@ void RelcEngine::processFrame(const cv::Mat &frame) {
             MatchResultItem item;
             item.name = t.name;
             item.found = true;
-            item.x = maxLoc.x + t.image.cols / 2.0;
-            item.y = maxLoc.y + t.image.rows / 2.0;
+            item.x = maxLoc.x + t.image.cols / 2.0 + offsetX;
+            item.y = maxLoc.y + t.image.rows / 2.0 + offsetY;
             item.confidence = maxVal;
             latestResult.matches.push_back(item);
         }
@@ -485,12 +663,11 @@ int RelcEngine::lua_display_get_all(lua_State *L) {
 int RelcEngine::lua_match_wait(lua_State *L) {
     auto *self = static_cast<RelcEngine *>(lua_touserdata(L, lua_upvalueindex(1)));
 
-    self->updateTemplatesFromLua();
-
+    // Since we now use on_tick, lua_match_wait might be less useful, 
+    // but we can still support it for yielding scripts.
     std::unique_lock<std::mutex> lock(self->resultMutex);
 
     if (self->latestResult.matches.empty()) {
-        // No matches found, yield the coroutine
         return lua_yield(L, 0);
     }
 
@@ -516,6 +693,33 @@ int RelcEngine::lua_match_wait(lua_State *L) {
     }
 
     return 1;
+}
+
+int RelcEngine::lua_match_set_enabled(lua_State *L) {
+    auto *self = static_cast<RelcEngine *>(lua_touserdata(L, lua_upvalueindex(1)));
+    const char *name = luaL_checkstring(L, 1);
+    bool enabled = lua_toboolean(L, 2);
+
+    std::lock_guard<std::mutex> lock(self->resultMutex);
+    for (auto &t : self->templates) {
+        if (t.name == name) {
+            t.enabled = enabled;
+            break;
+        }
+    }
+    return 0;
+}
+
+int RelcEngine::lua_match_enable(lua_State *L) {
+    lua_pushboolean(L, true);
+    lua_insert(L, 2);
+    return lua_match_set_enabled(L);
+}
+
+int RelcEngine::lua_match_disable(lua_State *L) {
+    lua_pushboolean(L, false);
+    lua_insert(L, 2);
+    return lua_match_set_enabled(L);
 }
 
 bool RelcEngine::multiTouchSwipe(int pointerId, const std::vector<int> &points, long duration,
@@ -573,5 +777,80 @@ int RelcEngine::lua_swipe(lua_State *L) {
 int RelcEngine::lua_log(lua_State *L) {
     const char *msg = luaL_checkstring(L, 1);
     __android_log_print(ANDROID_LOG_DEBUG, "LuaScript", "[NativeLog] %s", msg);
+    return 0;
+}
+
+int RelcEngine::lua_ui_add(lua_State *L) {
+    auto *self = static_cast<RelcEngine *>(lua_touserdata(L, lua_upvalueindex(1)));
+    
+    // Signature: ui.add(parentId, id, jsonExp)
+    const char *parentId = nullptr;
+    if (!lua_isnil(L, 1)) {
+        parentId = luaL_checkstring(L, 1);
+    }
+    const char *id = luaL_checkstring(L, 2);
+    const char *jsonExp = luaL_checkstring(L, 3);
+
+    JNIEnv *env;
+    bool attached = false;
+    if (self->javaVM->GetEnv((void **) &env, JNI_VERSION_1_6) == JNI_EDETACHED) {
+        if (self->javaVM->AttachCurrentThread(&env, nullptr) != JNI_OK) return 0;
+        attached = true;
+    }
+
+    jstring jParentId = parentId ? env->NewStringUTF(parentId) : nullptr;
+    jstring jId = env->NewStringUTF(id);
+    jstring jJsonExp = env->NewStringUTF(jsonExp);
+
+    env->CallVoidMethod(self->luaNativeObj, self->uiAddMethodId, jParentId, jId, jJsonExp);
+
+    if (jParentId) env->DeleteLocalRef(jParentId);
+    env->DeleteLocalRef(jId);
+    env->DeleteLocalRef(jJsonExp);
+
+    if (attached) self->javaVM->DetachCurrentThread();
+    return 0;
+}
+
+int RelcEngine::lua_ui_update(lua_State *L) {
+    auto *self = static_cast<RelcEngine *>(lua_touserdata(L, lua_upvalueindex(1)));
+    const char *id = luaL_checkstring(L, 1);
+    const char *jsonExp = luaL_checkstring(L, 2);
+
+    JNIEnv *env;
+    bool attached = false;
+    if (self->javaVM->GetEnv((void **) &env, JNI_VERSION_1_6) == JNI_EDETACHED) {
+        if (self->javaVM->AttachCurrentThread(&env, nullptr) != JNI_OK) return 0;
+        attached = true;
+    }
+
+    jstring jId = env->NewStringUTF(id);
+    jstring jJsonExp = env->NewStringUTF(jsonExp);
+
+    env->CallVoidMethod(self->luaNativeObj, self->uiUpdateMethodId, jId, jJsonExp);
+
+    env->DeleteLocalRef(jId);
+    env->DeleteLocalRef(jJsonExp);
+
+    if (attached) self->javaVM->DetachCurrentThread();
+    return 0;
+}
+
+int RelcEngine::lua_ui_remove(lua_State *L) {
+    auto *self = static_cast<RelcEngine *>(lua_touserdata(L, lua_upvalueindex(1)));
+    const char *id = luaL_checkstring(L, 1);
+
+    JNIEnv *env;
+    bool attached = false;
+    if (self->javaVM->GetEnv((void **) &env, JNI_VERSION_1_6) == JNI_EDETACHED) {
+        if (self->javaVM->AttachCurrentThread(&env, nullptr) != JNI_OK) return 0;
+        attached = true;
+    }
+
+    jstring jId = env->NewStringUTF(id);
+    env->CallVoidMethod(self->luaNativeObj, self->uiRemoveMethodId, jId);
+    env->DeleteLocalRef(jId);
+
+    if (attached) self->javaVM->DetachCurrentThread();
     return 0;
 }

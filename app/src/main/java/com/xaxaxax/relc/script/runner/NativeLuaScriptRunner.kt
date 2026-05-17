@@ -5,6 +5,8 @@ import com.xaxaxax.relc.script.ScriptConfig
 import kotlinx.coroutines.delay
 import kotlin.time.Duration.Companion.milliseconds
 
+import java.io.File
+
 class NativeLuaScriptRunner(
     private val ctx: ScriptRunContext,
 ) : ScriptRunner {
@@ -17,7 +19,10 @@ class NativeLuaScriptRunner(
         val width = size[0]
         val height = size[1]
 
-        luaNative.startEngineWithService(v2Service, width, height, config.code)
+        val scriptFile = File(ctx.context.filesDir, "script_${config.id}.lua")
+        scriptFile.writeText(config.code)
+
+        luaNative.startEngineWithService(v2Service, width, height, scriptFile.absolutePath)
         try {
             while (ctx.isActive() && luaNative.isEngineRunning()) {
                 delay(500.milliseconds)

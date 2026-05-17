@@ -73,7 +73,7 @@ Java_com_xaxaxax_relc_lua_LuaNative_startEngine(
         jobject service, // Now IRelcV2Service
         jint width,
         jint height,
-        jstring script) {
+        jstring scriptPath) {
 
 //    if (gEngine) {
 //        delete gEngine;
@@ -81,9 +81,9 @@ Java_com_xaxaxax_relc_lua_LuaNative_startEngine(
 
     gEngine = new RelcEngine(env, service, thiz);
 
-    const char *nativeScript = env->GetStringUTFChars(script, nullptr);
-    bool success = gEngine->start(width, height, nativeScript);
-    env->ReleaseStringUTFChars(script, nativeScript);
+    const char *nativeScriptPath = env->GetStringUTFChars(scriptPath, nullptr);
+    bool success = gEngine->start(width, height, nativeScriptPath);
+    env->ReleaseStringUTFChars(scriptPath, nativeScriptPath);
 
     if (!success) {
         delete gEngine;
@@ -115,6 +115,24 @@ Java_com_xaxaxax_relc_lua_LuaNative_isEngineRunning(
         return (jboolean) gEngine->isEngineRunning();
     }
     return JNI_FALSE;
+}
+
+JNIEXPORT void JNICALL
+Java_com_xaxaxax_relc_lua_LuaNative_sendUIEvent(
+        JNIEnv *env, 
+        jobject thiz, 
+        jstring elementId, 
+        jstring eventType) {
+        
+    if (gEngine && gEngine->isEngineRunning()) {
+        const char *cElementId = env->GetStringUTFChars(elementId, nullptr);
+        const char *cEventType = env->GetStringUTFChars(eventType, nullptr);
+        
+        gEngine->pushUIEvent(cElementId, cEventType);
+        
+        env->ReleaseStringUTFChars(elementId, cElementId);
+        env->ReleaseStringUTFChars(eventType, cEventType);
+    }
 }
 
 }

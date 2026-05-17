@@ -1,5 +1,6 @@
 package com.xaxaxax.relc.script.runner
 
+import android.content.Context
 import com.xaxaxax.relc.IRelcV2Service
 import com.xaxaxax.relc.script.ScriptConfig
 import com.xaxaxax.relc.script.SimpleScriptProgress
@@ -13,6 +14,7 @@ interface ScriptRunner {
 }
 
 data class ScriptRunContext(
+    val context: Context,
     val service: IRelcV2Service,
     val onLog: (String) -> Unit,
     val isActive: () -> Boolean,

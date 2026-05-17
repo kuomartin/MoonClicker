@@ -1,5 +1,6 @@
 package com.xaxaxax.relc.script
 
+import android.content.Context
 import android.os.SystemClock
 import com.xaxaxax.relc.IRelcV2Service
 import com.xaxaxax.relc.RelcV2Service
@@ -27,7 +28,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 data class ScriptLog(val scriptId: String, val message: String)
 
-class ScriptManager {
+class ScriptManager(private val context: Context) {
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private val scriptJobs = ConcurrentHashMap<String, Job>()
 
@@ -89,6 +90,7 @@ class ScriptManager {
                             null
                         }
                     val ctx = ScriptRunContext(
+                        context = context,
                         service = service,
                         onLog = { logMsg ->
                             scope.launch { _logs.emit(ScriptLog(config.id, logMsg)) }

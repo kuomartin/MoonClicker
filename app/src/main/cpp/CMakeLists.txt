@@ -7,6 +7,7 @@ find_package(OpenCV REQUIRED)
 
 include_directories(${OpenCV_INCLUDE_DIRS})
 include_directories(lua/lua-5.5.0)
+include_directories(lua/lua-cjson-2.1.0.9)
 
 # Lua Source Files (excluding lua.c, onelua.c, and ltests.c)
 set(LUA_DIR lua/lua-5.5.0)
@@ -45,6 +46,14 @@ set(LUA_SRC
         ${LUA_DIR}/lzio.c
 )
 
+set(LUA_CJSON_DIR lua/lua-cjson-2.1.0.9)
+set(LUA_CJSON_SRC
+        ${LUA_CJSON_DIR}/lua_cjson.c
+        ${LUA_CJSON_DIR}/strbuf.c
+        ${LUA_CJSON_DIR}/fpconv.c
+)
+
+
 # Main native library
 add_library(relc_native SHARED
         relc_native.cpp
@@ -53,10 +62,12 @@ add_library(relc_native SHARED
         RelcEngine.cpp
         GlesDistributor.cpp
         ${LUA_SRC}
+        ${LUA_CJSON_SRC}
 )
 
 # Suppress warnings for Lua source files
 set_source_files_properties(${LUA_SRC} PROPERTIES COMPILE_FLAGS "-Wno-deprecated-declarations")
+set_source_files_properties(${LUA_CJSON_SRC} PROPERTIES COMPILE_FLAGS "-Wno-deprecated-declarations")
 
 find_library(log-lib log)
 find_library(media-lib mediandk)

@@ -15,11 +15,20 @@
 #include <condition_variable>
 #include <atomic>
 #include <unordered_map>
+#include <queue>
+
+struct UIEvent {
+    std::string elementId;
+    std::string eventType;
+};
 
 struct SearchTemplate {
     std::string name;
     cv::Mat image;
     double threshold;
+    bool enabled;
+    bool grayscale;
+    cv::Rect roi;
 };
 
 struct MatchResultItem {
@@ -40,11 +49,14 @@ public:
 
     ~RelcEngine();
 
-    bool start(int width, int height, const std::string &script);
+    bool start(int width, int height, const std::string &scriptPath);
 
     void stop();
 
     ANativeWindow *getWindow();
+
+    // UI Event Queue
+    void pushUIEvent(const std::string& elementId, const std::string& eventType);
 
     // Helpers for Lua callbacks
     bool multiTouchSwipe(int pointerId, const std::vector<int> &points, long duration, bool keep);
@@ -66,9 +78,9 @@ public:
 private:
     void processFrame(const cv::Mat &frame);
 
-    void updateTemplatesFromLua();
+    void parseConfigFromLua();
 
-    void luaThreadLoop(const std::string &script);
+    void luaThreadLoop(const std::string &scriptPath);
 
     static void lua_stop_hook(lua_State *L, lua_Debug *ar);
 
@@ -85,8 +97,25 @@ private:
 
     static int lua_match_wait(lua_State *L);
 
+    static int lua_match_set_enabled(lua_State *L);
+
+    static int lua_match_enable(lua_State *L);
+
+    static int lua_match_disable(lua_State *L);
+
+    // Lua UI API
+    static int lua_ui_add(lua_State *L);
+    static int lua_ui_update(lua_State *L);
+    static int lua_ui_remove(lua_State *L);
+
     std::unique_ptr<LuaEngine> luaEngine;
     std::unique_ptr<NativeImageReader> imageReader;
+
+    std::string scriptPath;
+    std::string scriptDir;
+
+    int tickIntervalMs;
+    long tickNum;
 
     JavaVM *javaVM;
     jobject serviceObj;
@@ -98,6 +127,13 @@ private:
     jmethodID destroyVirtualDisplayMethodId;
     jmethodID launchInDisplayMethodId;
     jmethodID getVirtualDisplaysMethodId;
+    
+    // UI Upcalls
+    jobject luaNativeObj;
+    jmethodID uiAddMethodId;
+    jmethodID uiUpdateMethodId;
+    jmethodID uiRemoveMethodId;
+    
     int displayId;
     int sinkHandle;
 
@@ -108,6 +144,9 @@ private:
     std::mutex resultMutex;
     FrameResult latestResult;
     std::atomic<bool> isRunning;
+
+    std::queue<UIEvent> uiEventQueue;
+    std::mutex uiEventMutex;
 };
 
 #endif // RELC_ENGINE_H

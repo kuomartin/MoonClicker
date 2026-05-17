@@ -1,5 +1,9 @@
 #include "LuaEngine.h"
 
+extern "C" {
+int luaopen_cjson(lua_State *L);
+}
+
 LuaEngine::LuaEngine() : L(nullptr), coL(nullptr), coRef(LUA_NOREF) {}
 
 LuaEngine::~LuaEngine() {
@@ -11,6 +15,8 @@ bool LuaEngine::init() {
     if (!L) return false;
 
     luaL_openlibs(L);
+    luaL_requiref(L, "cjson", luaopen_cjson, 0);
+    lua_pop(L, 1);
 
     // Create match and input tables
     lua_newtable(L);
@@ -22,16 +28,16 @@ bool LuaEngine::init() {
     return true;
 }
 
-bool LuaEngine::loadScript(const std::string& script) {
+bool LuaEngine::loadFile(const std::string &filepath) {
     if (!L) return false;
 
     // Create a new thread (coroutine)
     coL = lua_newthread(L);
     coRef = luaL_ref(L, LUA_REGISTRYINDEX);
 
-    int status = luaL_loadstring(coL, script.c_str());
+    int status = luaL_loadfile(coL, filepath.c_str());
     if (status != LUA_OK) {
-        LOGE("Failed to load script: %s", lua_tostring(coL, -1));
+        LOGE("Failed to load script file %s: %s", filepath.c_str(), lua_tostring(coL, -1));
         return false;
     }
 
@@ -68,7 +74,7 @@ void LuaEngine::stop() {
     }
 }
 
-void LuaEngine::registerFunction(const char* name, lua_CFunction func) {
+void LuaEngine::registerFunction(const char *name, lua_CFunction func) {
     if (!L) return;
     lua_pushcfunction(L, func);
     lua_setglobal(L, name);

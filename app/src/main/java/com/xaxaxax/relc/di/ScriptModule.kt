@@ -22,7 +22,7 @@ object ScriptModule {
 
     @Provides
     @Singleton
-    fun provideScriptManager(): ScriptManager {
-        return ScriptManager()
+    fun provideScriptManager(@ApplicationContext context: Context): ScriptManager {
+        return ScriptManager(context)
     }
 }

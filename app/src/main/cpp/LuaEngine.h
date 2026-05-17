@@ -22,7 +22,7 @@ public:
     ~LuaEngine();
 
     bool init();
-    bool loadScript(const std::string& script);
+    bool loadFile(const std::string& filepath);
     bool resume();
     void stop();
 
