@@ -1,39 +1,42 @@
-package com.xaxaxax.relc.lua.ui
+package com.xaxaxax.relc.ui.lua
 
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import coil3.compose.AsyncImage
 import java.io.File
 
-class Image(
+class DynamicImage(
     override val id: String,
-    override val padding: Padding,
-    override val bolder: Bolder,
+    override val padding: PaddingValues,
+    override val border: Border,
     override val background: Background,
     override val width: Int?,
     override val height: Int?,
-    override val clickable: Boolean,
-    val path: String,
-    val color: Color,
-) : DynamicElement() {
+    val src: String,
+    val color: Color?,
+) : DynamicElement("image") {
+
+    context(uiScope: LuaUiScope)
     @Composable
-    override fun GetComposable(onElementClick: (String) -> Unit) {
-        val svgFile = File(path)
+    override fun GetComposable() {
+        val svgFile = File(uiScope.rootPath, src)
         if (svgFile.exists())
             AsyncImage(
                 model = svgFile,
                 contentDescription = "外部 SVG 圖示",
-                modifier = buildModifier(onElementClick)
+                modifier = modifier
             )
         else
             Icon(
                 imageVector = Icons.Default.Error,
                 contentDescription = null,
-                tint = color,
-                modifier = buildModifier(onElementClick)
+                tint = color ?: LocalContentColor.current,
+                modifier = modifier
             )
     }
 }

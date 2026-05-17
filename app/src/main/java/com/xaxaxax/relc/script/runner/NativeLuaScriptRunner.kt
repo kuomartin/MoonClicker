@@ -11,8 +11,6 @@ class NativeLuaScriptRunner(
     private val ctx: ScriptRunContext,
 ) : ScriptRunner {
 
-    val luaNative = LuaNative()
-
     override suspend fun run(config: ScriptConfig) {
         val v2Service = ctx.service
         val size = v2Service.getDisplaySize(0)
@@ -22,13 +20,13 @@ class NativeLuaScriptRunner(
         val scriptFile = File(ctx.context.filesDir, "script_${config.id}.lua")
         scriptFile.writeText(config.code)
 
-        luaNative.startEngineWithService(v2Service, width, height, scriptFile.absolutePath)
+        LuaNative.startEngineWithService(v2Service, width, height, scriptFile.absolutePath)
         try {
-            while (ctx.isActive() && luaNative.isEngineRunning()) {
+            while (ctx.isActive() && LuaNative.isEngineRunning()) {
                 delay(500.milliseconds)
             }
         } finally {
-            luaNative.stopEngine()
+            LuaNative.stop()
         }
     }
 }

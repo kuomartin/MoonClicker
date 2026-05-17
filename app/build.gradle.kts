@@ -74,9 +74,9 @@ android {
 }
 
 kotlin {
-//    compilerOptions {
-//        freeCompilerArgs.addAll("-XXLanguage:+PropertyParamAnnotationDefaultTargetMode")
-//    }
+    compilerOptions {
+        freeCompilerArgs.addAll("-XXLanguage:+ContextParameters")
+    }
 }
 dependencies {
     implementation(platform(libs.androidx.compose.bom))

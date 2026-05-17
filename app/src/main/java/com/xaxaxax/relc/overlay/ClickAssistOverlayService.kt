@@ -98,6 +98,7 @@ class ClickAssistOverlayService : LifecycleService() {
 
     private var scriptId: String? = null
     private val _currentScript = MutableStateFlow(SimpleScriptBodyJson())
+    private val _scriptType = MutableStateFlow(ScriptCodeType.SIMPLE)
     private val _isRecording = MutableStateFlow(false)
     private val _isCollapsed = MutableStateFlow(false)
     private val _showSaveDialog = MutableStateFlow(false)
@@ -110,8 +111,8 @@ class ClickAssistOverlayService : LifecycleService() {
         createNotificationChannel()
 
         lifecycleScope.launch {
-            combine(_currentScript, _showDetailedEditor) { body, showEditor ->
-                if (showEditor) SimpleScriptBodyJson(emptyList()) else body
+            combine(_currentScript, _showDetailedEditor, _scriptType) { body, showEditor, type ->
+                if (showEditor || type == ScriptCodeType.LUA) SimpleScriptBodyJson(emptyList()) else body
             }.collectLatest { body ->
                 syncTargets(body)
             }
@@ -153,8 +154,11 @@ class ClickAssistOverlayService : LifecycleService() {
     private fun loadScript(id: String) {
         val config = scriptRepository.getScript(id)
         if (config != null) {
-            _currentScript.value =
-                SimpleScriptCodec.decodeOrNull(config.code) ?: SimpleScriptBodyJson()
+            _scriptType.value = config.type
+            if (config.type == ScriptCodeType.SIMPLE) {
+                _currentScript.value =
+                    SimpleScriptCodec.decodeOrNull(config.code) ?: SimpleScriptBodyJson()
+            }
         }
     }
 
@@ -192,34 +196,51 @@ class ClickAssistOverlayService : LifecycleService() {
                 val isRunning = hudUi?.scriptId == scriptId && hudUi?.state == ScriptState.RUNNING
                 val isRecording by _isRecording.collectAsState()
                 val isCollapsed by _isCollapsed.collectAsState()
+                val currentType by _scriptType.collectAsState()
 
-                EditorControlBar(
-                    uiState = EditorControlUiState(
+                // 動態調整視窗大小
+                val codeType = if (isRunning) (hudUi?.codeType ?: currentType) else currentType
+                val targetWidth = WindowManager.LayoutParams.WRAP_CONTENT
+                val targetHeight = WindowManager.LayoutParams.WRAP_CONTENT
+
+                if (params.width != targetWidth || params.height != targetHeight) {
+                    params.width = targetWidth
+                    params.height = targetHeight
+                    if (codeType == ScriptCodeType.LUA) {
+                        params.x = 0
+                        params.y = 0
+                    }
+                    windowManager.updateViewLayout(this, params)
+                }
+
+                OverlayContent(
+                    codeType = codeType,
+                    simpleUiState = EditorControlUiState(
                         isRunning = isRunning,
                         isRecording = isRecording,
                         isCollapsed = isCollapsed
                     ),
-                    onStartStopClick = {
-                        val currentId = scriptId ?: return@EditorControlBar
+                    onSimpleStartStop = {
+                        val currentId = scriptId ?: return@OverlayContent
                         if (isRunning) {
                             scriptManager.stopScript(currentId)
                         } else {
                             val currentConfig =
-                                scriptRepository.getScript(currentId) ?: return@EditorControlBar
+                                scriptRepository.getScript(currentId) ?: return@OverlayContent
                             val updatedConfig = currentConfig.copy(
                                 code = SimpleScriptCodec.encode(_currentScript.value)
                             )
                             scriptManager.startScript(updatedConfig)
                         }
                     },
-                    onAddTapClick = { addTap() },
-                    onRecordSwipeClick = { startRecording() },
-                    onRemoveClick = { removeLast() },
-                    onSaveClick = { _showSaveDialog.value = true },
-                    onCloseClick = { stopSelf() },
-                    onToggleCollapse = { _isCollapsed.value = !_isCollapsed.value },
-                    onMoreClick = { showDetailedEditor() },
-                    onDrag = { dx, dy ->
+                    onSimpleAddTap = { addTap() },
+                    onSimpleRecordSwipe = { startRecording() },
+                    onSimpleRemove = { removeLast() },
+                    onSimpleSave = { _showSaveDialog.value = true },
+                    onSimpleClose = { stopSelf() },
+                    onSimpleToggleCollapse = { _isCollapsed.value = !_isCollapsed.value },
+                    onSimpleMore = { showDetailedEditor() },
+                    onSimpleDrag = { dx, dy ->
                         params.x += dx.toInt()
                         params.y += dy.toInt()
                         windowManager.updateViewLayout(this, params)

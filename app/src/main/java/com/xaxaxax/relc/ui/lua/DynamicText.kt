@@ -1,32 +1,33 @@
-package com.xaxaxax.relc.lua.ui
+package com.xaxaxax.relc.ui.lua
 
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
-class Text(
+class DynamicText(
     override val id: String,
-    override val padding: Padding,
-    override val bolder: Bolder,
+    override val padding: PaddingValues,
+    override val border: Border,
     override val background: Background,
     override val width: Int?,
     override val height: Int?,
-    override val clickable: Boolean,
     val text: String,
     val size: Int,
     val fontFamily: FontFamily,
     val fontWeight: FontWeight
-) : DynamicElement() {
+) : DynamicElement("text") {
+    context(uiScope: LuaUiScope)
     @Composable
-    override fun GetComposable(onElementClick: (String) -> Unit) {
+    override fun GetComposable() {
         Text(
             text = text,
             fontSize = size.sp,
             fontFamily = fontFamily,
             fontWeight = fontWeight,
-            modifier = buildModifier(onElementClick)
+            modifier = modifier
         )
     }
 }

@@ -7,17 +7,16 @@ import timber.log.Timber
 /**
  * 原生 OpenCV 辨識包裝類
  */
-class LuaNative {
+object LuaNative {
 
     private var currentService: IRelcV2Service? = null
+    val uiManager = com.xaxaxax.relc.ui.lua.LuaUiManager()
 
-    companion object {
-        init {
-            try {
-                System.loadLibrary("relc_native")
-            } catch (ex: UnsatisfiedLinkError) {
-                Timber.e(ex, "Failed to load relc_native")
-            }
+    init {
+        try {
+            System.loadLibrary("relc_native")
+        } catch (ex: UnsatisfiedLinkError) {
+            Timber.e(ex, "Failed to load relc_native")
         }
     }
 
@@ -26,7 +25,7 @@ class LuaNative {
      * @param service Shizuku 服務，用於注入事件
      * @param width 螢幕寬度
      * @param height 螢幕高度
-     * @param script Lua 腳本內容
+     * @param scriptPath Lua 腳本內容
      * @return 供 VirtualDisplay 使用的 Surface
      */
     fun startEngineWithService(
@@ -36,6 +35,7 @@ class LuaNative {
         scriptPath: String
     ): Surface? {
         this.currentService = service
+        uiManager.clear()
         return startEngine(service, width, height, scriptPath)
     }
 
@@ -50,6 +50,11 @@ class LuaNative {
      * 停止原生引擎
      */
     external fun stopEngine()
+
+    fun stop() {
+        stopEngine()
+        uiManager.clear()
+    }
 
     /**
      * 檢查原生引擎是否正在運行
@@ -69,7 +74,7 @@ class LuaNative {
      */
     fun uiAdd(parentId: String?, id: String, jsonExp: String) {
         Timber.d("LuaNative uiAdd: parentId=$parentId, id=$id, jsonExp=$jsonExp")
-        // TODO: 交給 Compose UI Manager 處理
+        uiManager.add(parentId, id, jsonExp)
     }
 
     /**
@@ -79,7 +84,7 @@ class LuaNative {
      */
     fun uiUpdate(id: String, jsonExp: String) {
         Timber.d("LuaNative uiUpdate: id=$id, jsonExp=$jsonExp")
-        // TODO: 交給 Compose UI Manager 處理
+        uiManager.update(id, jsonExp)
     }
 
     /**
@@ -88,6 +93,6 @@ class LuaNative {
      */
     fun uiRemove(id: String) {
         Timber.d("LuaNative uiRemove: id=$id")
-        // TODO: 交給 Compose UI Manager 處理
+        uiManager.remove(id)
     }
 }
