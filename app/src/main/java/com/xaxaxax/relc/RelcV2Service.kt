@@ -12,7 +12,6 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
 import android.content.pm.PackageManagerHidden
-import android.graphics.SurfaceTexture
 import android.hardware.display.DisplayManager
 import android.hardware.display.DisplayManagerHidden
 import android.hardware.display.VirtualDisplay
@@ -35,6 +34,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.lsposed.hiddenapibypass.LSPass
@@ -43,6 +43,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.hypot
 import kotlin.system.exitProcess
+import kotlin.time.Duration.Companion.milliseconds
 
 @Keep
 class RelcV2Service(private val context: Context) : IRelcV2Service.Stub() {
@@ -53,8 +54,11 @@ class RelcV2Service(private val context: Context) : IRelcV2Service.Stub() {
             } catch (ex: UnsatisfiedLinkError) {
                 // In Shizuku environment, sometimes we need to wait or handle library loading differently
                 // but standard loadLibrary is the first step.
+                Timber.e(ex)
             }
         }
+
+        const val DELAY_MS = 16 // 60fps
 
         const val SUPPORTED_FLAGS =
             DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR or
@@ -77,6 +81,7 @@ class RelcV2Service(private val context: Context) : IRelcV2Service.Stub() {
     private val serviceScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private val inputMutex = Mutex()
     private val nextInternalPointerId = AtomicInteger(-100)
+    private val swipeJobs = ConcurrentHashMap<Int, kotlinx.coroutines.Job>()
 
     private data class PointerState(
         val logicalId: Int,
@@ -130,65 +135,89 @@ class RelcV2Service(private val context: Context) : IRelcV2Service.Stub() {
     ) {
         if (points.size < 2) return
 
-        serviceScope.launch {
-            val logId = if (pointerId == -1) nextInternalPointerId.getAndDecrement() else pointerId
+        val logId = if (pointerId == -1) nextInternalPointerId.getAndDecrement() else pointerId
 
-            inputMutex.withLock {
-                val pointers = activePointersByDisplay.getOrPut(displayId) { mutableListOf() }
-                var state = pointers.find { it.logicalId == logId }
-                val now = SystemClock.uptimeMillis()
+        // Cancel previous interpolation job for this pointer if any
+        swipeJobs[logId]?.cancel()
 
-                if (state == null) {
-                    val usedPhysIds = pointers.map { it.physicalId }.toSet()
-                    val physId = (0..9).firstOrNull { it !in usedPhysIds } ?: return@launch
+        val job = serviceScope.launch {
+            try {
+                val state = inputMutex.withLock {
+                    val pointers = activePointersByDisplay.getOrPut(displayId) { mutableListOf() }
+                    var s = pointers.find { it.logicalId == logId }
+                    val now = SystemClock.uptimeMillis()
 
-                    state =
-                        PointerState(logId, physId, points[0].toFloat(), points[1].toFloat(), now)
-                    pointers.add(state)
+                    if (s == null) {
+                        val usedPhysIds = pointers.map { it.physicalId }.toSet()
+                        val physId =
+                            (0..9).firstOrNull { it !in usedPhysIds } ?: return@withLock null
 
-                    val actionIndex = pointers.indexOf(state)
-                    val action = if (pointers.size == 1) MotionEvent.ACTION_DOWN
-                    else MotionEvent.ACTION_POINTER_DOWN or (actionIndex shl MotionEvent.ACTION_POINTER_INDEX_SHIFT)
+                        s = PointerState(
+                            logId,
+                            physId,
+                            points[0].toFloat(),
+                            points[1].toFloat(),
+                            now
+                        )
+                        s.downTime = now
+                        pointers.add(s)
 
-                    sendMultiTouchMotionEvent(action, now, displayId, pointers)
-                }
+                        val actionIndex = pointers.indexOf(s)
+                        val action = if (pointers.size == 1) MotionEvent.ACTION_DOWN
+                        else MotionEvent.ACTION_POINTER_DOWN or (actionIndex shl MotionEvent.ACTION_POINTER_INDEX_SHIFT)
+
+                        sendMultiTouchMotionEvent(action, now, displayId, pointers)
+                    }
+                    s
+                } ?: return@launch
 
                 if (points.size >= 4 && duration > 0) {
-                    performSwipeInterpolation(state, points, duration, displayId, pointers)
+                    performSwipeInterpolation(state, points, duration, displayId)
                 } else {
-                    state.x = points[points.size - 2].toFloat()
-                    state.y = points[points.size - 1].toFloat()
-                    sendMultiTouchMotionEvent(
-                        MotionEvent.ACTION_MOVE,
-                        SystemClock.uptimeMillis(),
-                        displayId,
-                        pointers
-                    )
+                    inputMutex.withLock {
+                        val pointers = activePointersByDisplay[displayId] ?: return@withLock
+                        state.x = points[points.size - 2].toFloat()
+                        state.y = points[points.size - 1].toFloat()
+                        sendMultiTouchMotionEvent(
+                            MotionEvent.ACTION_MOVE,
+                            SystemClock.uptimeMillis(),
+                            displayId,
+                            pointers
+                        )
+                    }
                 }
 
                 if (!keep) {
-                    val actionIndex = pointers.indexOf(state)
-                    val action = if (pointers.size == 1) MotionEvent.ACTION_UP
-                    else MotionEvent.ACTION_POINTER_UP or (actionIndex shl MotionEvent.ACTION_POINTER_INDEX_SHIFT)
+                    inputMutex.withLock {
+                        val pointers = activePointersByDisplay[displayId] ?: return@withLock
+                        if (!pointers.contains(state)) return@withLock
 
-                    sendMultiTouchMotionEvent(
-                        action,
-                        SystemClock.uptimeMillis(),
-                        displayId,
-                        pointers
-                    )
-                    pointers.remove(state)
+                        val actionIndex = pointers.indexOf(state)
+                        val action = if (pointers.size == 1) MotionEvent.ACTION_UP
+                        else MotionEvent.ACTION_POINTER_UP or (actionIndex shl MotionEvent.ACTION_POINTER_INDEX_SHIFT)
+
+                        sendMultiTouchMotionEvent(
+                            action,
+                            SystemClock.uptimeMillis(),
+                            displayId,
+                            pointers
+                        )
+                        pointers.remove(state)
+                    }
                 }
+            } finally {
+                // Only remove if it's still our job
+                swipeJobs.remove(logId, coroutineContext[kotlinx.coroutines.Job])
             }
         }
+        swipeJobs[logId] = job
     }
 
     private suspend fun performSwipeInterpolation(
         state: PointerState,
         points: IntArray,
         duration: Long,
-        displayId: Int,
-        allPointers: List<PointerState>
+        displayId: Int
     ) {
         val numPoints = points.size / 2
         val segLen = mutableListOf<Double>()
@@ -203,7 +232,7 @@ class RelcV2Service(private val context: Context) : IRelcV2Service.Stub() {
             total += len
         }
 
-        val steps = (duration / 16).toInt().coerceAtLeast(1)
+        val steps = (duration / DELAY_MS).toInt().coerceAtLeast(1)
         for (i in 1..steps) {
             val t = i.toDouble() / steps
             var dist = t * total
@@ -220,17 +249,22 @@ class RelcV2Service(private val context: Context) : IRelcV2Service.Stub() {
                 val yB = points[(segIdx + 1) * 2 + 1]
                 val u = if (segLen[segIdx] > 0) dist / segLen[segIdx] else 1.0
 
-                state.x = (xA + (xB - xA) * u).toFloat()
-                state.y = (yA + (yB - yA) * u).toFloat()
+                val newX = (xA + (xB - xA) * u).toFloat()
+                val newY = (yA + (yB - yA) * u).toFloat()
 
-                sendMultiTouchMotionEvent(
-                    MotionEvent.ACTION_MOVE,
-                    SystemClock.uptimeMillis(),
-                    displayId,
-                    allPointers
-                )
+                inputMutex.withLock {
+                    val pointers = activePointersByDisplay[displayId] ?: return@withLock
+                    state.x = newX
+                    state.y = newY
+                    sendMultiTouchMotionEvent(
+                        MotionEvent.ACTION_MOVE,
+                        SystemClock.uptimeMillis(),
+                        displayId,
+                        pointers
+                    )
+                }
             }
-            delay(16)
+            delay(DELAY_MS.milliseconds)
         }
     }
 
@@ -265,15 +299,17 @@ class RelcV2Service(private val context: Context) : IRelcV2Service.Stub() {
         event.recycle()
     }
 
-    override fun getPointers(displayId: Int): IntArray {
-        val pointers = activePointersByDisplay[displayId] ?: return intArrayOf()
-        val result = IntArray(pointers.size * 3)
-        for (i in pointers.indices) {
-            result[i * 3] = pointers[i].logicalId
-            result[i * 3 + 1] = pointers[i].x.toInt()
-            result[i * 3 + 2] = pointers[i].y.toInt()
+    override fun getPointers(displayId: Int): IntArray = runBlocking {
+        inputMutex.withLock {
+            val pointers = activePointersByDisplay[displayId] ?: return@withLock intArrayOf()
+            val result = IntArray(pointers.size * 3)
+            for (i in pointers.indices) {
+                result[i * 3] = pointers[i].logicalId
+                result[i * 3 + 1] = pointers[i].x.toInt()
+                result[i * 3 + 2] = pointers[i].y.toInt()
+            }
+            result
         }
-        return result
     }
 
     // ─── 其餘實作 ───
@@ -289,6 +325,10 @@ class RelcV2Service(private val context: Context) : IRelcV2Service.Stub() {
                 )
             true
         } catch (t: Throwable) {
+            Timber.d(
+                t,
+                "Unable to grant runtime permission $permissionName permission to package '$packageName'."
+            )
             false
         }
     }
@@ -303,6 +343,10 @@ class RelcV2Service(private val context: Context) : IRelcV2Service.Stub() {
             )
             true
         } catch (t: Throwable) {
+            Timber.d(
+                t,
+                "Unable to grant the android.permission.SYSTEM_ALERT_WINDOW permission to package '$packageName'."
+            )
             false
         }
     }
@@ -414,6 +458,7 @@ class RelcV2Service(private val context: Context) : IRelcV2Service.Stub() {
             }
             true
         } catch (t: Throwable) {
+            Timber.d(t, "Failed to launch $packageName in display#$displayId.")
             false
         }
     }
@@ -430,6 +475,7 @@ class RelcV2Service(private val context: Context) : IRelcV2Service.Stub() {
             Refine.unsafeCast<MotionEventHidden>(event).setDisplayId(displayId)
             inputManager.injectInputEvent(event, 0)
         } catch (t: Throwable) {
+            Timber.d(t, "Failed to inject $event on display#$displayId.")
             false
         }
     }
@@ -438,6 +484,7 @@ class RelcV2Service(private val context: Context) : IRelcV2Service.Stub() {
         return try {
             inputManager.injectInputEvent(event, 0)
         } catch (t: Throwable) {
+            Timber.d(t, "Failed to inject $event on display#$displayId.")
             false
         }
     }
@@ -446,6 +493,7 @@ class RelcV2Service(private val context: Context) : IRelcV2Service.Stub() {
         val dm = context.getSystemService(DisplayManager::class.java)
         val display = dm.getDisplay(displayId) ?: return intArrayOf(0, 0)
         val outSize = android.graphics.Point()
+        @Suppress("DEPRECATION") // TODO: check if this method will still work in future Android versions.
         display.getRealSize(outSize)
         return intArrayOf(outSize.x, outSize.y)
     }
