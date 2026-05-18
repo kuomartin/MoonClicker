@@ -7,8 +7,6 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -22,10 +20,8 @@ import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -36,9 +32,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
@@ -46,17 +40,9 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.xaxaxax.relc.overlay.startClickAssistOverlay
 import com.xaxaxax.relc.script.ScriptConfig
-import com.xaxaxax.relc.script.ScriptConfig.ScriptCodeType
 import com.xaxaxax.relc.script.ScriptState
-import com.xaxaxax.relc.script.simple.ParsedSimpleLine
-import com.xaxaxax.relc.script.simple.SimpleScriptBodyJson
-import com.xaxaxax.relc.script.simple.SimpleScriptCodec
-import com.xaxaxax.relc.script.simple.encodeToLine
-import com.xaxaxax.relc.script.simple.parseSimpleScriptLine
 import com.xaxaxax.relc.ui.component.Section
-import com.xaxaxax.relc.ui.scriptdetail.component.ScriptTypeSegmentedButton
 import com.xaxaxax.relc.ui.theme.ReLCTheme
-import kotlinx.coroutines.launch
 
 @Composable
 fun ScriptDetailScreen(
@@ -130,7 +116,7 @@ fun ScriptDetailScreen(
         state = state,
         latestLog = logs,
         onNavigateBack = { tryNavigateBack() },
-        onUpdateConfig = { viewModel.updateConfig(it) },
+        onUpdateConfig = { newConfig -> viewModel.updateConfig { newConfig } },
         onSave = { viewModel.saveScript() },
         onPlay = {
             config?.let { sc ->
@@ -154,7 +140,7 @@ fun ScriptDetailScreenContent(
     state: ScriptState,
     latestLog: String,
     onNavigateBack: () -> Unit,
-    onUpdateConfig: ((ScriptConfig) -> ScriptConfig) -> Unit,
+    onUpdateConfig: (ScriptConfig) -> Unit,
     onSave: () -> Unit,
     onPlay: () -> Unit,
     onStop: () -> Unit,
@@ -167,9 +153,6 @@ fun ScriptDetailScreenContent(
             if (logLines.size > 50) logLines.removeAt(0)
         }
     }
-
-    val pagerState = rememberPagerState { 2 }
-    val scope = rememberCoroutineScope()
 
     Scaffold(
         topBar = {
@@ -230,30 +213,15 @@ fun ScriptDetailScreenContent(
                     .padding(padding)
                     .fillMaxSize()
             ) {
-                PrimaryTabRow(selectedTabIndex = pagerState.currentPage) {
-                    Tab(
-                        selected = pagerState.currentPage == 0,
-                        onClick = { scope.launch { pagerState.animateScrollToPage(0) } },
-                        text = { Text("配置") }
-                    )
-                    Tab(
-                        selected = pagerState.currentPage == 1,
-                        onClick = { scope.launch { pagerState.animateScrollToPage(1) } },
-                        text = { Text("編輯器") }
-                    )
-                }
-
-                HorizontalPager(
-                    state = pagerState,
-                    modifier = Modifier.weight(1f),
-                    verticalAlignment = Alignment.Top
-                ) { page ->
-                    when (page) {
-                        0 -> ConfigPage(currentConfig, onUpdateConfig)
-                        1 -> EditorPage(currentConfig, onUpdateConfig)
+                Column(modifier = Modifier.weight(1f)) {
+                    when (currentConfig) {
+                        is ScriptConfig.Lua -> LuaScriptEditorLayout(currentConfig, onUpdateConfig)
+                        is ScriptConfig.Simple -> SimpleScriptEditorLayout(
+                            currentConfig,
+                            onUpdateConfig
+                        )
                     }
                 }
-
                 ScriptConsole(logLines = logLines)
             }
         }
@@ -261,103 +229,95 @@ fun ScriptDetailScreenContent(
 }
 
 @Composable
-private fun ConfigPage(
-    currentConfig: ScriptConfig,
-    onUpdateConfig: ((ScriptConfig) -> ScriptConfig) -> Unit,
+private fun LuaScriptEditorLayout(
+    currentConfig: ScriptConfig.Lua,
+    onUpdateConfig: (ScriptConfig) -> Unit,
 ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
+            .padding(bottom = 80.dp) // Space for FAB
     ) {
         Section(name = "基本資訊") {
             FormOutlinedField(
                 value = currentConfig.name,
                 onValueChange = { name ->
-                    onUpdateConfig {
-                        when (it) {
-                            is ScriptConfig.Lua -> it.copy(name = name)
-                            is ScriptConfig.Simple -> it.copy(name = name)
-                        }
-                    }
+                    val newConfig = currentConfig.copy(name = name)
+                    onUpdateConfig(newConfig)
                 },
                 label = "名稱",
             )
             FormOutlinedField(
                 value = currentConfig.description,
                 onValueChange = { description ->
-                    onUpdateConfig {
-                        when (it) {
-                            is ScriptConfig.Lua -> it.copy(description = description)
-                            is ScriptConfig.Simple -> it.copy(description = description)
-                        }
-                    }
+                    val newConfig = currentConfig.copy(description = description)
+                    onUpdateConfig(newConfig)
                 },
                 label = "描述",
             )
         }
-
-        Section(name = "執行策略") {
-            ScriptTypeSegmentedButton(currentType = currentConfig.type) { newType ->
-                if (newType == currentConfig.type) return@ScriptTypeSegmentedButton
-                onUpdateConfig {
-                    when (newType) {
-                        ScriptCodeType.LUA -> it.copyToLua()
-                        ScriptCodeType.SIMPLE -> it.copyToSimple()
-                    }
-                }
-            }
-            if (currentConfig is ScriptConfig.Simple)
-                MacroLoopEditor(
-                    loopMode = currentConfig.loopMode,
-                    onLoopModeChange = { mode ->
-                        onUpdateConfig { (it as? ScriptConfig.Simple)?.copy(loopMode = mode) ?: it }
-                    },
-                )
+        Section(name = "內容") {
+            FormOutlinedField(
+                value = currentConfig.code,
+                onValueChange = { code ->
+                    val newConfig = currentConfig.copy(code = code)
+                    onUpdateConfig(newConfig)
+                },
+                label = "Lua",
+                minLines = 12,
+                singleLine = false,
+            )
         }
     }
 }
 
 @Composable
-private fun EditorPage(
-    currentConfig: ScriptConfig,
-    onUpdateConfig: ((ScriptConfig) -> ScriptConfig) -> Unit,
+private fun SimpleScriptEditorLayout(
+    currentConfig: ScriptConfig.Simple,
+    onUpdateConfig: (ScriptConfig.Simple) -> Unit,
 ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(bottom = 80.dp) // Space for FAB
     ) {
-        Section(name = "內容") {
-            when (currentConfig) {
-                is ScriptConfig.Lua -> {
-                    Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                        FormOutlinedField(
-                            value = currentConfig.code,
-                            onValueChange = { code ->
-                                onUpdateConfig { it.copyToLua(code = code) }
-                            },
-                            label = "Lua",
-                            minLines = 12,
-                            singleLine = false,
-                        )
-                    }
-                }
-
-                is ScriptConfig.Simple -> {
-                    SimpleScriptEditor(
-                        scriptId = currentConfig.id,
-                        code = SimpleScriptCodec.encode(
-                            SimpleScriptBodyJson(currentConfig.steps.map { it.encodeToLine() })
-                        ),
-                        onBodyChanged = { body ->
-                            onUpdateConfig { cfg ->
-                                cfg.copyToSimple(steps = body.steps.map { parseSimpleScriptLine(it) })
-                            }
-                        },
-                    )
-                }
-            }
+        Section(name = "基本資訊") {
+            FormOutlinedField(
+                value = currentConfig.name,
+                onValueChange = { name ->
+                    val newConfig = currentConfig.copy(name = name)
+                    onUpdateConfig(newConfig)
+                },
+                label = "名稱",
+            )
+            FormOutlinedField(
+                value = currentConfig.description,
+                onValueChange = { description ->
+                    val newConfig = currentConfig.copy(description = description)
+                    onUpdateConfig(newConfig)
+                },
+                label = "描述",
+            )
+        }
+        Section(name = "執行策略") {
+            MacroLoopEditor(
+                loopMode = currentConfig.loopMode,
+                onLoopModeChange = { mode ->
+                    val newConfig = currentConfig.copy(loopMode = mode)
+                    onUpdateConfig(newConfig)
+                },
+            )
+        }
+        Section(name = "內容", modifier = Modifier.weight(1f)) {
+            SimpleScriptEditor(
+                scriptId = currentConfig.id,
+                steps = currentConfig.steps,
+                onStepsChange = { steps ->
+                    val newConfig = currentConfig.copy(steps = steps)
+                    onUpdateConfig(newConfig)
+                },
+            )
         }
     }
 }
@@ -389,10 +349,10 @@ fun ScriptDetailScreenPreview() {
 
 @Preview(showBackground = true)
 @Composable
-fun EditorPagePreview() {
+fun SimpleEditorPreview() {
     ReLCTheme {
         Surface {
-            EditorPage(
+            SimpleScriptEditorLayout(
                 currentConfig = ScriptConfig.Simple(
                     id = "1",
                     name = "My Awesome Script",
@@ -401,40 +361,5 @@ fun EditorPagePreview() {
                 ), {}
             )
         }
-    }
-}
-//id: String = this.id,name: String = this.name,description: String = this.description
-
-private fun ScriptConfig.copyToLua(
-    id: String = this.id,
-    name: String = this.name,
-    description: String = this.description,
-    code: String? = null
-): ScriptConfig.Lua {
-    return when (this) {
-        is ScriptConfig.Simple -> ScriptConfig.Lua(id, name, description, code ?: "")
-        is ScriptConfig.Lua -> this.copy(
-            id = id,
-            name = name,
-            description = description,
-            code = code ?: this.code
-        )
-    }
-}
-
-private fun ScriptConfig.copyToSimple(
-    id: String = this.id,
-    name: String = this.name,
-    description: String = this.description,
-    steps: List<ParsedSimpleLine>? = null
-): ScriptConfig.Simple {
-    return when (this) {
-        is ScriptConfig.Lua -> ScriptConfig.Simple(id, name, description, steps ?: emptyList())
-        is ScriptConfig.Simple -> this.copy(
-            id = id,
-            name = name,
-            description = description,
-            steps = steps ?: this.steps
-        )
     }
 }

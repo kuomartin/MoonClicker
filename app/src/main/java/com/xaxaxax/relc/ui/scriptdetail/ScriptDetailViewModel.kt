@@ -53,12 +53,21 @@ class ScriptDetailViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            if (scriptId == "new") {
+            if (scriptId == "new_lua") {
                 val newCfg = ScriptConfig.Lua(
                     id = UUID.randomUUID().toString(),
-                    name = "New Script",
+                    name = "New Lua Script",
                     description = "",
                     code = "log(\"Hello ReLC\")\n",
+                )
+                _config.value = newCfg
+                _initialConfig.value = newCfg
+            } else if (scriptId == "new_simple") {
+                val newCfg = ScriptConfig.Simple(
+                    id = UUID.randomUUID().toString(),
+                    name = "New Simple Script",
+                    description = "",
+                    steps = emptyList()
                 )
                 _config.value = newCfg
                 _initialConfig.value = newCfg

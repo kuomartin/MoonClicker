@@ -49,7 +49,30 @@ data class ParsedSimpleLine(
     val delayBetweenRepeatsMs: Long,
     val delayAfterStepMs: Long,
     val payload: String,
-)
+) {
+    companion object {
+        val Swipe = ParsedSimpleLine(
+            verb = SimpleScriptVerb.SWIPE,
+            repeatCount = 1,
+            delayBetweenRepeatsMs = 0,
+            delayAfterStepMs = 0,
+            SimpleSwipePayload(
+                500,
+                listOf(540 to 720, 600 to 900),
+            ).encodeToPayload()
+        )
+        val Tap = ParsedSimpleLine(
+            verb = SimpleScriptVerb.TAP,
+            repeatCount = 1,
+            delayBetweenRepeatsMs = 0,
+            delayAfterStepMs = 0,
+            SimpleTapPayload(
+                500,
+                630, 960
+            ).encodeToPayload()
+        )
+    }
+}
 
 fun ParsedSimpleLine.convertTo(verb: SimpleScriptVerb): ParsedSimpleLine = when (this.verb) {
     verb -> this

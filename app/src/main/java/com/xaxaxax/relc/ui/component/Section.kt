@@ -13,10 +13,11 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun Section(
     name: String,
+    modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {

@@ -24,7 +24,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -36,13 +35,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,16 +49,12 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.xaxaxax.relc.script.LoopMode
-import com.xaxaxax.relc.script.simple.SIMPLE_SCRIPT_DEFAULT_STEP_LINE
-import com.xaxaxax.relc.script.simple.SimpleScriptBodyJson
-import com.xaxaxax.relc.script.simple.SimpleScriptCodec
-import com.xaxaxax.relc.script.simple.encodeToLine
-import com.xaxaxax.relc.script.simple.parseSimpleScriptLine
+import com.xaxaxax.relc.script.simple.ParsedSimpleLine
 import com.xaxaxax.relc.ui.component.NoPaddingOutlinedTextField
-import com.xaxaxax.relc.ui.scriptdetail.component.SimpleScriptRawLine
 import com.xaxaxax.relc.ui.scriptdetail.component.SimpleScriptStepCard
 import com.xaxaxax.relc.ui.scriptdetail.component.simpleScriptUiColors
 import com.xaxaxax.relc.ui.theme.ReLCTheme
+import com.xaxaxax.relc.update
 import kotlin.time.Duration.Companion.milliseconds
 
 private fun LoopMode.sleepMs(): Long = duration.inWholeMilliseconds
@@ -115,9 +107,9 @@ fun MacroLoopEditor(
 
             modes.forEachIndexed { index, label ->
                 val isSelected = when (index) {
-                    0 -> loopMode.repeatCount() == 0
-                    1 -> loopMode.repeatCount() == -1
-                    else -> loopMode.repeatCount() >= 1
+                    0 -> loopMode.count == 1
+                    1 -> loopMode.count == -1
+                    else -> loopMode.count > 1
                 }
 
                 SegmentedButton(
@@ -125,7 +117,7 @@ fun MacroLoopEditor(
                     onClick = {
                         if (isSelected) return@SegmentedButton
                         val ms = loopMode.sleepMs().milliseconds
-                        val currentCount = loopMode.repeatCount().coerceAtLeast(1)
+                        val currentCount = loopMode.repeatCount().coerceAtLeast(2) // 至少2次，否則就是「不重複」了
 
                         onLoopModeChange(
                             when (index) {
@@ -142,19 +134,19 @@ fun MacroLoopEditor(
         }
 
         // 下方的參數輸入區
-        if (loopMode.count != 0) {
+        if (loopMode.count != 1) { // 如果不是「不重複」才顯示
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // 只有在「指定次數」模式（即非 None 且非 Inf）才顯示次數框
-                if (loopMode.count >= 1) {
+                // 只有在「指定次數」模式（即 count > 1）才顯示次數框
+                if (loopMode.count > 1) {
                     NoPaddingOutlinedTextField(
                         modifier = Modifier.weight(1f),
                         value = loopMode.repeatCount().toString(),
                         onValueChange = { raw ->
                             raw.toIntOrNull()
-                                ?.let { onLoopModeChange(loopMode.withRepeatCount(it)) }
+                                ?.let { onLoopModeChange(loopMode.withRepeatCount(it.coerceAtLeast(2))) }
                         },
                         label = "次數",
                     )
@@ -245,31 +237,18 @@ internal fun ScriptConsole(logLines: List<String>) {
 @Composable
 fun SimpleScriptEditor(
     scriptId: String,
-    code: String,
-    onBodyChanged: (SimpleScriptBodyJson) -> Unit,
+    steps: List<ParsedSimpleLine>,
+    onStepsChange: (List<ParsedSimpleLine>) -> Unit,
 ) {
-    val lines = remember { mutableStateListOf<String>() }
-    val latestOnBodyChanged by rememberUpdatedState(onBodyChanged)
-
-    LaunchedEffect(scriptId, code) {
-        val body = SimpleScriptCodec.decodeOrNull(code) ?: SimpleScriptBodyJson()
-        if (lines.toList() == body.steps) return@LaunchedEffect
-        lines.clear()
-        lines.addAll(body.steps)
-    }
-
-    fun push() {
-        latestOnBodyChanged(SimpleScriptBodyJson(steps = lines.toList()))
-    }
-
     val lazyListState = rememberLazyListState()
     var draggedIndex by remember { mutableIntStateOf(-1) }
     var dragOffset by remember { mutableStateOf(0f) }
 
     fun moveItem(fromIndex: Int, toIndex: Int) {
-        if (fromIndex == toIndex || toIndex !in lines.indices) return
-        lines.add(toIndex, lines.removeAt(fromIndex))
-        push()
+        if (fromIndex == toIndex || toIndex !in steps.indices) return
+        val newSteps = steps.toMutableList()
+        newSteps.add(toIndex, newSteps.removeAt(fromIndex))
+        onStepsChange(newSteps)
     }
 
     LazyColumn(
@@ -289,7 +268,9 @@ fun SimpleScriptEditor(
             }
         }
 
-        itemsIndexed(items = lines, key = { i: Int, line: String -> line + i }) { index: Int, line: String ->
+        itemsIndexed(
+            items = steps,
+        ) { index: Int, step: ParsedSimpleLine ->
             val isDragging = draggedIndex == index
             val offset by animateFloatAsState(if (isDragging) dragOffset else 0f)
 
@@ -309,7 +290,7 @@ fun SimpleScriptEditor(
 
                         val targetItem = layoutInfo.visibleItemsInfo.find { item ->
                             val itemIndex = item.index - 1
-                            if (itemIndex !in lines.indices || itemIndex == index) return@find false
+                            if (itemIndex !in steps.indices || itemIndex == index) return@find false
                             val center = dragOffset + draggedItem.offset + draggedItem.size / 2f
                             center >= item.offset && center <= (item.offset + item.size)
                         }
@@ -340,36 +321,36 @@ fun SimpleScriptEditor(
                     }
                     .zIndex(if (isDragging) 1f else 0f)
             ) {
-                val parsedResult = runCatching { parseSimpleScriptLine(line) }
+                val parsedResult = runCatching { steps[index] }
                 if (parsedResult.isSuccess) {
                     SimpleScriptStepCard(
                         index = index,
                         parsed = parsedResult.getOrThrow(),
                         dragHandleModifier = dragModifier,
                         onParsedChange = { next ->
-                            if (next == null)
-                                lines.removeAt(index)
+                            val newSteps = if (next == null)
+                                steps.subList(0, index) + steps.subList(index + 1, steps.size)
                             else
-                                lines[index] = next.encodeToLine()
-                            push()
+                                steps.update(index, next)
+                            onStepsChange(newSteps)
                         },
                     )
                 } else {
-                    val hint = parsedResult.exceptionOrNull()?.message ?: "parse error"
-                    SimpleScriptRawLine(
-                        index = index,
-                        rawLine = line,
-                        dragHandleModifier = dragModifier,
-                        errorHint = hint,
-                        onRawLineChange = {
-                            lines[index] = it
-                            push()
-                        },
-                        onDelete = {
-                            lines.removeAt(index)
-                            push()
-                        },
-                    )
+//                    val hint = parsedResult.exceptionOrNull()?.message ?: "parse error"
+//                    SimpleScriptRawLine(
+//                        index = index,
+//                        rawLine = line,
+//                        dragHandleModifier = dragModifier,
+//                        errorHint = hint,
+//                        onRawLineChange = {
+//                            lines[index] = it
+//                            push()
+//                        },
+//                        onDelete = {
+//                            lines.removeAt(index)
+//                            push()
+//                        },
+//                    )
                 }
             }
         }
@@ -378,8 +359,7 @@ fun SimpleScriptEditor(
             Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
                 TextButton(
                     onClick = {
-                        lines.add(SIMPLE_SCRIPT_DEFAULT_STEP_LINE)
-                        push()
+                        onStepsChange(steps + ParsedSimpleLine.Tap)
                     },
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                     modifier = Modifier.height(36.dp),
@@ -404,31 +384,11 @@ private fun SimpleScriptEditorPreview() {
         Surface(Modifier.padding(8.dp)) {
             SimpleScriptEditor(
                 scriptId = "preview",
-                code = SimpleScriptCodec.encode(
-                    SimpleScriptBodyJson(
-                        steps = listOf(
-                            "tap:1:0:0:50,100,200",
-                            "swipe:1:0:0:400,10,10,90,90",
-                            "delay:2:50:0:500",
-                        ),
-                    ),
+                listOf(
+                    ParsedSimpleLine.Tap, ParsedSimpleLine.Swipe
                 ),
-                onBodyChanged = {},
+                onStepsChange = {},
             )
         }
-    }
-}
-
-@Composable
-internal fun AlwaysRunCleanRow(
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Checkbox(
-            checked = checked,
-            onCheckedChange = onCheckedChange,
-        )
-        Text("永遠執行 clean", style = MaterialTheme.typography.bodyMedium)
     }
 }
