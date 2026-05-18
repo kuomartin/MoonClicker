@@ -18,6 +18,7 @@ import com.xaxaxax.relc.overlay.ui.updateViewLayout
 import com.xaxaxax.relc.script.ScriptConfig
 import com.xaxaxax.relc.script.ScriptManager
 import com.xaxaxax.relc.script.ScriptRepository
+import com.xaxaxax.relc.script.ScriptState
 import com.xaxaxax.relc.script.simple.ParsedSimpleLine
 import com.xaxaxax.relc.script.simple.SimpleScriptVerb
 import com.xaxaxax.relc.script.simple.SimpleSwipePayload
@@ -54,15 +55,15 @@ class SimpleOverlayViewModel @Inject constructor(
 
     private var runningConfig: ScriptConfig.Simple? = null
 
-    private val isRunning = MutableStateFlow(false)
     private val isRecording = MutableStateFlow(false)
     private val isEditing = MutableStateFlow(false)
     private val currentConfig = MutableStateFlow(ScriptConfig.Simple.Empty)
 
     val uiState: StateFlow<UiState> = combine(
-        isRunning, isRecording, isEditing, currentConfig
-    ) { running, recording, editing, currentConfig ->
-        UiState(running, recording, editing, currentConfig)
+        isRecording, isEditing, currentConfig, scriptManager.scriptStates
+    ) { recording, editing, currentConfig, scripts ->
+        val state = scripts[currentConfig.id]
+        UiState(state == ScriptState.RUNNING, recording, editing, currentConfig)
     }
         .stateIn(
             viewModelScope,
@@ -70,11 +71,6 @@ class SimpleOverlayViewModel @Inject constructor(
             UiState()
         )
 
-    val scriptStates = scriptManager.scriptStates.stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5000),
-        emptyMap()
-    )
 
     fun exitEditScreen() {
         isEditing.value = false
@@ -166,7 +162,6 @@ class SimpleOverlayViewModel @Inject constructor(
     fun startEdit() {
         isEditing.value = true
     }
-
 
     context(overlayWindowScope: OverlayWindowScope<ViewKeyType>)
     private fun syncWindowToLine() {

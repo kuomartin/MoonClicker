@@ -16,6 +16,8 @@ import android.view.View
 import android.view.WindowManager
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.ComposeView
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.LifecycleService
@@ -26,6 +28,7 @@ import com.xaxaxax.relc.overlay.ui.OverlayWindowScope
 import com.xaxaxax.relc.overlay.ui.addView
 import com.xaxaxax.relc.overlay.ui.simple.SimpleOverlay
 import com.xaxaxax.relc.overlay.ui.simple.ViewKeyType
+import com.xaxaxax.relc.overlay.ui.updateViewLayout
 import com.xaxaxax.relc.script.ScriptConfig
 import com.xaxaxax.relc.script.ScriptManager
 import com.xaxaxax.relc.script.ScriptRepository
@@ -104,6 +107,7 @@ class ClickAssistOverlayService : LifecycleService(), OverlayWindowScope<ViewKey
     }
 
     private fun showControlBar() {
+        val origOffset = Offset(100f, 300f)
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -112,18 +116,42 @@ class ClickAssistOverlayService : LifecycleService(), OverlayWindowScope<ViewKey
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = 100
-            y = 300
+            x = origOffset.x.toInt()
+            y = origOffset.y.toInt()
         }
         val view = ComposeView(this).apply {
             setContent {
                 when (currentConfig.value.type) {
-                    ScriptConfig.ScriptCodeType.SIMPLE ->
+                    ScriptConfig.ScriptCodeType.SIMPLE -> {
+                        val factory = object : androidx.lifecycle.ViewModelProvider.Factory {
+                            override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
+                                @Suppress("UNCHECKED_CAST")
+                                return com.xaxaxax.relc.overlay.ui.simple.SimpleOverlayViewModel(
+                                    applicationContext, scriptRepository, scriptManager
+                                ) as T
+                            }
+                        }
+                        val viewModel = androidx.lifecycle.ViewModelProvider(
+                            overlayOwner, factory
+                        )[com.xaxaxax.relc.overlay.ui.simple.SimpleOverlayViewModel::class.java]
+
+
+                        val offset = remember { mutableStateOf(origOffset) }
                         SimpleOverlay(
+                            viewModel = viewModel,
                             onClose = {
-                                removeView(this)
+                                removeView(this@apply)
+                            },
+                            onDrag = { delta ->
+                                this@ClickAssistOverlayService.updateViewLayout(ViewKeyType.Root) { params ->
+                                    offset.value += delta
+                                    params.x = offset.value.x.toInt()
+                                    params.y = offset.value.y.toInt()
+                                    params
+                                }
                             }
                         )
+                    }
 
                     ScriptConfig.ScriptCodeType.LUA -> LuaUiManagerView(
                         manager = LuaNative.uiManager,

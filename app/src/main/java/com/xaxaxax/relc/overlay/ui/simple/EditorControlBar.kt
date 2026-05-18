@@ -30,6 +30,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -52,7 +53,7 @@ fun EditorControlBar(
     onCloseClick: () -> Unit,
     onMoreClick: () -> Unit,
     modifier: Modifier = Modifier,
-    onDrag: (Float, Float) -> Unit = { _, _ -> }
+    onDrag: (Offset) -> Unit={}
 ) {
     var isCollapsed by remember { mutableStateOf(false) }
     Column(
@@ -64,7 +65,7 @@ fun EditorControlBar(
                 .pointerInput(Unit) {
                     detectDragGestures { change, dragAmount ->
                         change.consume()
-                        onDrag(dragAmount.x, dragAmount.y)
+                        onDrag(dragAmount)
                     }
                 },
             shape = RoundedCornerShape(8.dp),
@@ -91,7 +92,7 @@ fun EditorControlBar(
                     DividerDefaults.color
                 )
 
-                if (isCollapsed) {
+                if (!isCollapsed) {
                     // 2. Add Tap
                     ControlIconButton(
                         icon = Icons.Default.Add,
