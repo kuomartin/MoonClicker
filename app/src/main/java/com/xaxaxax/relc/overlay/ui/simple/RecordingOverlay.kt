@@ -1,4 +1,4 @@
-package com.xaxaxax.relc.overlay
+package com.xaxaxax.relc.overlay.ui.simple
 
 import android.os.SystemClock
 import androidx.compose.foundation.Canvas
@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.style.TextAlign
 import com.xaxaxax.relc.script.simple.SimpleSwipePayload
 
 @Composable
@@ -97,7 +98,7 @@ fun RecordingOverlay(
             color = Color.White,
             modifier = Modifier.align(Alignment.Center),
             style = MaterialTheme.typography.titleMedium,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            textAlign = TextAlign.Center
         )
     }
 }

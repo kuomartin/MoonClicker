@@ -1,4 +1,4 @@
-package com.xaxaxax.relc.overlay
+package com.xaxaxax.relc.overlay.ui.simple
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -17,7 +17,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 @Composable
-fun FloatingTarget(
+fun FloatingTap(
     index: Int,
     onDrag: (Float, Float) -> Unit,
     modifier: Modifier = Modifier

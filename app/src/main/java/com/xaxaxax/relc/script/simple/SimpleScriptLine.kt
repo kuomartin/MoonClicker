@@ -1,5 +1,7 @@
 package com.xaxaxax.relc.script.simple
 
+import kotlinx.serialization.Serializable
+
 /**
  * `verb:repeat:delayBetweenRepeatsMs:delayAfterStepMs:payload`
  *
@@ -40,6 +42,7 @@ enum class SimpleScriptVerb {
     }
 }
 
+@Serializable
 data class ParsedSimpleLine(
     val verb: SimpleScriptVerb,
     val repeatCount: Int,

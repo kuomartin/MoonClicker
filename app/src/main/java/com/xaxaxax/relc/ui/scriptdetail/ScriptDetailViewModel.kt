@@ -4,7 +4,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.xaxaxax.relc.script.LoopMode
-import com.xaxaxax.relc.script.ScriptCodeType
+import com.xaxaxax.relc.script.ScriptConfig.ScriptCodeType
 import com.xaxaxax.relc.script.ScriptConfig
 import com.xaxaxax.relc.script.ScriptManager
 import com.xaxaxax.relc.script.ScriptRepository
@@ -54,16 +54,11 @@ class ScriptDetailViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             if (scriptId == "new") {
-                val newCfg = ScriptConfig(
+                val newCfg = ScriptConfig.Lua(
                     id = UUID.randomUUID().toString(),
                     name = "New Script",
                     description = "",
-                    type = ScriptCodeType.LUA,
-                    init = null,
                     code = "log(\"Hello ReLC\")\n",
-                    clean = null,
-                    alwaysRunClean = false,
-                    loopMode = LoopMode.None,
                 )
                 _config.value = newCfg
                 _initialConfig.value = newCfg

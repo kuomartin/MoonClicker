@@ -5,8 +5,9 @@ import com.xaxaxax.relc.script.ScriptConfig
 import com.xaxaxax.relc.script.SimpleScriptProgress
 import com.xaxaxax.relc.script.simple.ParsedSimpleLine
 import com.xaxaxax.relc.script.simple.SimplePhysicalKey
-import com.xaxaxax.relc.script.simple.SimpleScriptCodec
+import com.xaxaxax.relc.script.simple.SimpleScriptBodyJson
 import com.xaxaxax.relc.script.simple.SimpleScriptVerb
+import com.xaxaxax.relc.script.simple.encodeToLine
 import com.xaxaxax.relc.script.simple.parseSimpleScriptLine
 import com.xaxaxax.relc.script.simple.parseSwipePayload
 import com.xaxaxax.relc.script.simple.parseTapPayload
@@ -20,7 +21,10 @@ class SimpleScriptRunner(
 
     override suspend fun run(config: ScriptConfig) {
         val body = try {
-            SimpleScriptCodec.decode(config.code)
+            require(config is ScriptConfig.Simple)
+            SimpleScriptBodyJson(
+                config.steps.map { it.encodeToLine() }
+            )
         } catch (e: Exception) {
             ctx.onLog("Invalid SIMPLE JSON: ${e.message}")
             throw e

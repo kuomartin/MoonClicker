@@ -29,10 +29,9 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.xaxaxax.relc.script.LoopMode
-import com.xaxaxax.relc.script.ScriptCodeType
 import com.xaxaxax.relc.script.ScriptConfig
 import com.xaxaxax.relc.script.ScriptState
-import kotlin.time.Duration.Companion.seconds
+import com.xaxaxax.relc.ui.theme.ReLCTheme
 
 @Composable
 fun ScriptsScreen(
@@ -109,7 +108,7 @@ fun ScriptItem(
                     Text(text = script.description, style = MaterialTheme.typography.bodyMedium)
                 }
                 Text(
-                    text = "${script.type.name} · ${script.loopMode.string}",
+                    text = script.type.name,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -138,30 +137,21 @@ fun ScriptItem(
 @Preview(showBackground = true)
 @Composable
 fun ScriptsScreenPreview() {
-    com.xaxaxax.relc.ui.theme.ReLCTheme {
+    ReLCTheme {
         ScriptsScreenContent(
             scripts = listOf(
-                ScriptConfig(
+                ScriptConfig.Lua(
                     id = "1",
                     name = "Test Script 1",
                     description = "This is a test script.",
-                    type = ScriptCodeType.LUA,
-                    init = null,
-                    code = "print('hello')",
-                    clean = null,
-                    alwaysRunClean = false,
-                    loopMode = LoopMode.None,
+                    code = ""
                 ),
-                ScriptConfig(
+                ScriptConfig.Simple(
                     id = "2",
                     name = "Test Script 2",
                     description = "Another test script.",
-                    type = ScriptCodeType.LUA,
-                    init = null,
-                    code = "print('world')",
-                    clean = null,
-                    alwaysRunClean = false,
-                    loopMode = LoopMode.Inf(1.seconds),
+                    steps = listOf(),
+                    loopMode = LoopMode.None,
                 )
             ),
             scriptStates = mapOf("1" to ScriptState.RUNNING),

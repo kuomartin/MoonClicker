@@ -10,7 +10,7 @@ data class SimpleScriptProgress(
 data class RunningScriptHudUi(
     val scriptId: String,
     val name: String,
-    val codeType: ScriptCodeType,
+    val codeType: ScriptConfig.ScriptCodeType,
     val state: ScriptState,
     val progress: SimpleScriptProgress?,
     val sessionStartElapsedRealtime: Long,

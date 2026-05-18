@@ -1,4 +1,4 @@
-package com.xaxaxax.relc.overlay
+package com.xaxaxax.relc.overlay.ui.simple
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
@@ -24,9 +24,14 @@ import androidx.compose.material3.DividerDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.colorResource
@@ -36,28 +41,20 @@ import androidx.compose.ui.unit.dp
 import com.xaxaxax.relc.R
 import com.xaxaxax.relc.ui.theme.ReLCTheme
 
-data class EditorControlUiState(
-    val isRunning: Boolean = false,
-    val isRecording: Boolean = false,
-    val isCapturing: Boolean = false,
-    val isTriggerLoopActive: Boolean = false,
-    val isCollapsed: Boolean = false,
-)
-
 @Composable
 fun EditorControlBar(
-    uiState: EditorControlUiState,
+    uiState: SimpleOverlayViewModel.UiState,
     onStartStopClick: () -> Unit,
     onAddTapClick: () -> Unit,
     onRecordSwipeClick: () -> Unit,
     onRemoveClick: () -> Unit,
     onSaveClick: () -> Unit,
     onCloseClick: () -> Unit,
-    onToggleCollapse: () -> Unit,
     onMoreClick: () -> Unit,
     modifier: Modifier = Modifier,
     onDrag: (Float, Float) -> Unit = { _, _ -> }
 ) {
+    var isCollapsed by remember { mutableStateOf(false) }
     Column(
         modifier = modifier.wrapContentWidth(),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -94,7 +91,7 @@ fun EditorControlBar(
                     DividerDefaults.color
                 )
 
-                if (!uiState.isCollapsed) {
+                if (isCollapsed) {
                     // 2. Add Tap
                     ControlIconButton(
                         icon = Icons.Default.Add,
@@ -133,7 +130,7 @@ fun EditorControlBar(
                     ControlIconButton(
                         painter = painterResource(R.drawable.ic_visibility_off),
                         contentDescription = "Hide",
-                        onClick = onToggleCollapse
+                        onClick = {isCollapsed = true}
                     )
 
                     // 7. More
@@ -147,7 +144,7 @@ fun EditorControlBar(
                     ControlIconButton(
                         painter = painterResource(R.drawable.ic_visibility),
                         contentDescription = "Show",
-                        onClick = onToggleCollapse
+                        onClick = {isCollapsed = false}
                     )
                 }
 
@@ -171,7 +168,7 @@ fun EditorControlBar(
 @Composable
 private fun ControlIconButton(
     icon: ImageVector? = null,
-    painter: androidx.compose.ui.graphics.painter.Painter? = null,
+    painter: Painter? = null,
     contentDescription: String,
     onClick: () -> Unit,
     enabled: Boolean = true,
@@ -208,10 +205,9 @@ private fun EditorControlBarPreview() {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             // Expanded
             EditorControlBar(
-                uiState = EditorControlUiState(
+                uiState = SimpleOverlayViewModel.UiState(
                     isRunning = false,
-                    isRecording = false,
-                    isCollapsed = false
+                    isRecording = false
                 ),
                 onStartStopClick = {},
                 onAddTapClick = {},
@@ -219,15 +215,13 @@ private fun EditorControlBarPreview() {
                 onRemoveClick = {},
                 onSaveClick = {},
                 onCloseClick = {},
-                onToggleCollapse = {},
                 onMoreClick = {}
             )
             // Collapsed
             EditorControlBar(
-                uiState = EditorControlUiState(
+                uiState = SimpleOverlayViewModel.UiState(
                     isRunning = true,
                     isRecording = false,
-                    isCollapsed = true
                 ),
                 onStartStopClick = {},
                 onAddTapClick = {},
@@ -235,7 +229,6 @@ private fun EditorControlBarPreview() {
                 onRemoveClick = {},
                 onSaveClick = {},
                 onCloseClick = {},
-                onToggleCollapse = {},
                 onMoreClick = {}
             )
         }

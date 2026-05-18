@@ -44,12 +44,15 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import com.xaxaxax.relc.script.LoopMode
-import com.xaxaxax.relc.script.ScriptCodeType
-import com.xaxaxax.relc.script.ScriptConfig
-import com.xaxaxax.relc.script.ScriptState
 import com.xaxaxax.relc.overlay.startClickAssistOverlay
+import com.xaxaxax.relc.script.ScriptConfig
+import com.xaxaxax.relc.script.ScriptConfig.ScriptCodeType
+import com.xaxaxax.relc.script.ScriptState
+import com.xaxaxax.relc.script.simple.ParsedSimpleLine
+import com.xaxaxax.relc.script.simple.SimpleScriptBodyJson
 import com.xaxaxax.relc.script.simple.SimpleScriptCodec
+import com.xaxaxax.relc.script.simple.encodeToLine
+import com.xaxaxax.relc.script.simple.parseSimpleScriptLine
 import com.xaxaxax.relc.ui.component.Section
 import com.xaxaxax.relc.ui.scriptdetail.component.ScriptTypeSegmentedButton
 import com.xaxaxax.relc.ui.theme.ReLCTheme
@@ -261,39 +264,48 @@ private fun ConfigPage(
         Section(name = "基本資訊") {
             FormOutlinedField(
                 value = currentConfig.name,
-                onValueChange = { v -> onUpdateConfig { it.copy(name = v) } },
+                onValueChange = { name ->
+                    onUpdateConfig {
+                        when (it) {
+                            is ScriptConfig.Lua -> it.copy(name = name)
+                            is ScriptConfig.Simple -> it.copy(name = name)
+                        }
+                    }
+                },
                 label = "名稱",
             )
             FormOutlinedField(
                 value = currentConfig.description,
-                onValueChange = { v -> onUpdateConfig { it.copy(description = v) } },
+                onValueChange = { description ->
+                    onUpdateConfig {
+                        when (it) {
+                            is ScriptConfig.Lua -> it.copy(description = description)
+                            is ScriptConfig.Simple -> it.copy(description = description)
+                        }
+                    }
+                },
                 label = "描述",
             )
         }
 
         Section(name = "執行策略") {
-            ScriptTypeSegmentedButton(currentType = currentConfig.type){ newType ->
+            ScriptTypeSegmentedButton(currentType = currentConfig.type) { newType ->
                 if (newType == currentConfig.type) return@ScriptTypeSegmentedButton
-                onUpdateConfig { cfg ->
-                    when (newType) {
-                        ScriptCodeType.LUA -> cfg.copy(
-                            type = ScriptCodeType.LUA,
-                            code = cfg.code.ifBlank { "log(\"hello\")\n" },
-                        )
-
-                        ScriptCodeType.SIMPLE -> cfg.copy(
-                            type = ScriptCodeType.SIMPLE,
-                            code = SimpleScriptCodec.emptyBodyJson(),
-                        )
+                onUpdateConfig {
+                    when (it) {
+                        // TODO
+                        is ScriptConfig.Lua -> it.copy()
+                        is ScriptConfig.Simple -> it.copy()
                     }
                 }
             }
-            MacroLoopEditor(
-                loopMode = currentConfig.loopMode,
-                onLoopModeChange = { mode ->
-                    onUpdateConfig { it.copy(loopMode = mode) }
-                },
-            )
+            if (currentConfig is ScriptConfig.Simple)
+                MacroLoopEditor(
+                    loopMode = currentConfig.loopMode,
+                    onLoopModeChange = { mode ->
+                        onUpdateConfig { (it as? ScriptConfig.Simple)?.copy(loopMode = mode) ?: it }
+                    },
+                )
         }
     }
 }
@@ -309,52 +321,30 @@ private fun EditorPage(
             .padding(bottom = 80.dp) // Space for FAB
     ) {
         Section(name = "內容") {
-            when (currentConfig.type) {
-                ScriptCodeType.LUA -> {
+            when (currentConfig) {
+                is ScriptConfig.Lua -> {
                     Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                         FormOutlinedField(
-                            value = currentConfig.init.orEmpty(),
-                            onValueChange = { v ->
-                                onUpdateConfig { it.copy(init = v.ifBlank { null }) }
-                            },
-                            label = "Init（Lua，可選）",
-                            minLines = 2,
-                            singleLine = false,
-                        )
-                        FormOutlinedField(
                             value = currentConfig.code,
-                            onValueChange = { v ->
-                                onUpdateConfig { it.copy(code = v) }
+                            onValueChange = { code ->
+                                onUpdateConfig { it.copyToLua(code = code) }
                             },
                             label = "Lua",
                             minLines = 12,
                             singleLine = false,
                         )
-                        FormOutlinedField(
-                            value = currentConfig.clean.orEmpty(),
-                            onValueChange = { v ->
-                                onUpdateConfig { it.copy(clean = v.ifBlank { null }) }
-                            },
-                            label = "Clean（Lua，可選）",
-                            minLines = 2,
-                            singleLine = false,
-                        )
-                        AlwaysRunCleanRow(
-                            checked = currentConfig.alwaysRunClean,
-                            onCheckedChange = { checked ->
-                                onUpdateConfig { it.copy(alwaysRunClean = checked) }
-                            },
-                        )
                     }
                 }
 
-                ScriptCodeType.SIMPLE -> {
+                is ScriptConfig.Simple -> {
                     SimpleScriptEditor(
                         scriptId = currentConfig.id,
-                        code = currentConfig.code,
+                        code = SimpleScriptCodec.encode(
+                            SimpleScriptBodyJson(currentConfig.steps.map { it.encodeToLine() })
+                        ),
                         onBodyChanged = { body ->
-                            onUpdateConfig {
-                                it.copy(code = SimpleScriptCodec.encode(body))
+                            onUpdateConfig { cfg ->
+                                cfg.copyToSimple(steps = body.steps.map { parseSimpleScriptLine(it) })
                             }
                         },
                     )
@@ -370,16 +360,11 @@ fun ScriptDetailScreenPreview() {
     ReLCTheme {
         Surface {
             ScriptDetailScreenContent(
-                config = ScriptConfig(
+                config = ScriptConfig.Lua(
                     id = "1",
                     name = "My Awesome Script",
                     description = "",
-                    type = ScriptCodeType.LUA,
-                    init = null,
                     code = "log('Running script...')\ndisplayId = 0\ninput.tap(50, 500, 500)\nsleep(1000)\nlog('Done!')",
-                    clean = null,
-                    alwaysRunClean = false,
-                    loopMode = LoopMode.None,
                 ),
                 state = ScriptState.IDLE,
                 latestLog = "[Lua] Running script...",
@@ -393,24 +378,55 @@ fun ScriptDetailScreenPreview() {
         }
     }
 }
+
 @Preview(showBackground = true)
 @Composable
 fun EditorPagePreview() {
     ReLCTheme {
         Surface {
             EditorPage(
-                currentConfig = ScriptConfig(
+                currentConfig = ScriptConfig.Simple(
                     id = "1",
                     name = "My Awesome Script",
                     description = "",
-                    type = ScriptCodeType.SIMPLE,
-                    init = null,
-                    code = SimpleScriptCodec.emptyBodyJson(),
-                    clean = null,
-                    alwaysRunClean = false,
-                    loopMode = LoopMode.None,
-                ),{}
+                    steps = emptyList()
+                ), {}
             )
         }
+    }
+}
+//id: String = this.id,name: String = this.name,description: String = this.description
+
+private fun ScriptConfig.copyToLua(
+    id: String = this.id,
+    name: String = this.name,
+    description: String = this.description,
+    code: String? = null
+): ScriptConfig.Lua {
+    return when (this) {
+        is ScriptConfig.Simple -> ScriptConfig.Lua(id, name, description, code ?: "")
+        is ScriptConfig.Lua -> this.copy(
+            id = id,
+            name = name,
+            description = description,
+            code = code ?: this.code
+        )
+    }
+}
+
+private fun ScriptConfig.copyToSimple(
+    id: String = this.id,
+    name: String = this.name,
+    description: String = this.description,
+    steps :List<ParsedSimpleLine>?=null
+): ScriptConfig.Simple {
+    return when (this) {
+        is ScriptConfig.Lua -> ScriptConfig.Simple(id, name, description, steps?:emptyList())
+        is ScriptConfig.Simple -> this.copy(
+            id = id,
+            name = name,
+            description = description,
+            steps = steps?:this.steps
+        )
     }
 }

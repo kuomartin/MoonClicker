@@ -17,7 +17,7 @@ import androidx.savedstate.setViewTreeSavedStateRegistryOwner
  * WindowManager 浮窗不在 Activity View 樹：Compose 需要可在 View 樹傳播的
  * Lifecycle + SavedState（較新 UI 也會檢查 ViewModelStore）。
  */
-internal class OverlayCompositionOwner :
+class OverlayCompositionOwner :
     LifecycleOwner,
     ViewModelStoreOwner,
     SavedStateRegistryOwner {

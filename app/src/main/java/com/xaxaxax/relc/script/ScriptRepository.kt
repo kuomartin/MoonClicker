@@ -1,8 +1,6 @@
 package com.xaxaxax.relc.script
 
 import android.content.Context
-import com.xaxaxax.relc.script.simple.SimpleScriptBodyJson
-import com.xaxaxax.relc.script.simple.SimpleScriptCodec
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -12,7 +10,6 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import timber.log.Timber
 import java.io.File
-import java.util.UUID
 
 class ScriptRepository(private val context: Context) {
     private val scope = CoroutineScope(Dispatchers.IO)
@@ -45,42 +42,7 @@ class ScriptRepository(private val context: Context) {
     }
 
     private fun loadDefaults() {
-        _scripts.value = listOf(
-            ScriptConfig(
-                id = UUID.randomUUID().toString(),
-                name = "Demo Tap Script",
-                description = "Lua taps center",
-                type = ScriptCodeType.LUA,
-                init = null,
-                code = """
-                    log("Starting tap script")
-                    displayId = 0
-                    input.tap(50, 540, 960)
-                    sleep(1000)
-                    log("Tap script finished")
-                """.trimIndent(),
-                clean = null,
-                alwaysRunClean = false,
-                loopMode = LoopMode.None,
-            ),
-            ScriptConfig(
-                id = UUID.randomUUID().toString(),
-                name = "Simple Tap Demo",
-                description = "JSON SIMPLE script",
-                type = ScriptCodeType.SIMPLE,
-                init = null,
-                code = SimpleScriptCodec.encode(
-                    SimpleScriptBodyJson(
-                        steps = listOf(
-                            "tap:1:0:500:540,960",
-                        ),
-                    ),
-                ),
-                clean = null,
-                alwaysRunClean = false,
-                loopMode = LoopMode.None,
-            ),
-        )
+        _scripts.value = listOf()
         saveToDisk()
     }
 

@@ -1,4 +1,4 @@
-package com.xaxaxax.relc.overlay
+package com.xaxaxax.relc.overlay.ui.simple
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -95,5 +95,6 @@ fun FloatingSwipe(
                     fontSize = 12.sp
                 )
             }
-        }    }
+        }
+    }
 }

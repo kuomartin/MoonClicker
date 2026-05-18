@@ -48,9 +48,9 @@ class ScriptManager(private val context: Context) {
         IRelcV2Service.Stub::asInterface
     )
 
-    private val runnerFactories: Map<ScriptCodeType, ScriptRunnerFactory> = mapOf(
-        ScriptCodeType.LUA to NativeLuaScriptRunnerFactory(),
-        ScriptCodeType.SIMPLE to SimpleScriptRunnerFactory(),
+    private val runnerFactories: Map<ScriptConfig.ScriptCodeType, ScriptRunnerFactory> = mapOf(
+        ScriptConfig.ScriptCodeType.LUA to NativeLuaScriptRunnerFactory(),
+        ScriptConfig.ScriptCodeType.SIMPLE to SimpleScriptRunnerFactory(),
     )
 
     fun startScript(config: ScriptConfig) {
@@ -75,7 +75,7 @@ class ScriptManager(private val context: Context) {
             try {
                 serviceFlow.runWhenAlive { service ->
                     val emitSimpleProgress =
-                        if (config.type == ScriptCodeType.SIMPLE) {
+                        if (config.type == ScriptConfig.ScriptCodeType.SIMPLE) {
                             { p: SimpleScriptProgress ->
                                 _hudUi.value = RunningScriptHudUi(
                                     scriptId = config.id,
