@@ -55,6 +55,13 @@ class LuaUiManager {
             if (new is DynamicContainer && current is DynamicContainer)
                 new.addAll(current)
             _elements[id] = new
+
+            _elements.values.filterIsInstance<DynamicContainer>().forEach { container ->
+                val index = container.indexOf(current)
+                if (index != -1) {
+                    container[index] = new
+                }
+            }
             // TODO check if it keeps remember state
             Timber.d("LuaUiManager: Updated $id")
         } catch (e: Exception) {

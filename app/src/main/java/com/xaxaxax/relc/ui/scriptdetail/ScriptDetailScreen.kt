@@ -70,7 +70,7 @@ fun ScriptDetailScreen(
     val ctx = LocalContext.current
 
     val overlayLaunch: (() -> Unit)? =
-        config?.takeIf { it.type == ScriptCodeType.SIMPLE }?.let { sc ->
+        config?.let { sc ->
             {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
                     !Settings.canDrawOverlays(ctx)
@@ -132,7 +132,16 @@ fun ScriptDetailScreen(
         onNavigateBack = { tryNavigateBack() },
         onUpdateConfig = { viewModel.updateConfig(it) },
         onSave = { viewModel.saveScript() },
-        onPlay = { config?.let { viewModel.scriptManager.startScript(it) } },
+        onPlay = {
+            config?.let { sc ->
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(ctx)) {
+                    Toast.makeText(ctx, "需要「疊加顯示」權限以顯示 UI", Toast.LENGTH_SHORT).show()
+                } else {
+                    startClickAssistOverlay(ctx, sc.id)
+                }
+                viewModel.scriptManager.startScript(sc)
+            }
+        },
         onStop = { config?.let { viewModel.scriptManager.stopScript(it.id) } },
         onLaunchFloatingAssist = overlayLaunch,
     )

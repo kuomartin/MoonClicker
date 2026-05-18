@@ -34,6 +34,7 @@ class ScriptsViewModel @Inject constructor(
 
     fun startScript(config: ScriptConfig) {
         startClickAssistOverlay(context, config.id)
+        scriptManager.startScript(config)
     }
 
     fun stopScript(id: String) {

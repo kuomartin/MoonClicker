@@ -159,17 +159,32 @@ private class ElementParam(json: String) {
                 )
         }
     }
+    private fun parseColor(c: Any?): Color? {
+        return when (c) {
+            is Number -> {
+                val intValue = c.toLong().toInt()
+                if (c.toLong() in 1..0xFFFFFFL) {
+                    Color(intValue or -0x1000000)
+                } else {
+                    Color(intValue)
+                }
+            }
+            is String -> try { Color(c.toColorInt()) } catch (e: Exception) { null }
+            else -> null
+        }
+    }
+
     val border: Border by lazy {
         val obj = jsonObj.optJSONObject("border")
         val width = obj?.opt("width") as? Int
-        val color = obj?.opt("color") as? Int
-        Border(width = width ?: 0, color = Color(color ?: 0))
+        val colorObj = obj?.opt("color")
+        Border(width = width ?: 0, color = parseColor(colorObj) ?: Color.Unspecified)
     }
     val background: Background by lazy {
         val obj = jsonObj.optJSONObject("background")
-        val color = obj?.opt("color") as? Int
+        val colorObj = obj?.opt("color")
         val rounding = obj?.opt("rounding") as? Int
-        Background(color = Color(color ?: 0), rounding = rounding ?: 0)
+        Background(color = parseColor(colorObj) ?: Color.Unspecified, rounding = rounding ?: 0)
     }
     val width: Int? by lazy { jsonObj.opt("width") as? Int }
     val height: Int? by lazy { jsonObj.opt("height") as? Int }
@@ -242,10 +257,6 @@ private class ElementParam(json: String) {
     }
     val src: String? by lazy { jsonObj.opt("src") as? String }
     val color: Color? by lazy {
-        when (val c = jsonObj.opt("color")) {
-            is Int -> Color(c)
-            is String -> Color(c.toColorInt())
-            else -> null
-        }
+        parseColor(jsonObj.opt("color"))
     }
 }

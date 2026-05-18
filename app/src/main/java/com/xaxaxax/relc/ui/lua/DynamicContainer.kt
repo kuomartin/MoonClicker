@@ -1,8 +1,10 @@
 package com.xaxaxax.relc.ui.lua
 
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.snapshots.SnapshotStateList
+
 interface DynamicContainer : MutableList<DynamicElement>
 
-@Suppress("JavaDefaultMethodsNotOverriddenByDelegation")
-class DynamicContainerImpl(elements: MutableList<DynamicElement> = mutableListOf()) :
+class DynamicContainerImpl(elements: SnapshotStateList<DynamicElement> = mutableStateListOf()) :
     DynamicContainer,
     MutableList<DynamicElement> by elements
