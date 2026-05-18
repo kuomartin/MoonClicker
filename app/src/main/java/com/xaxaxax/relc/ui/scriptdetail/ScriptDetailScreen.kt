@@ -301,10 +301,9 @@ private fun ConfigPage(
             ScriptTypeSegmentedButton(currentType = currentConfig.type) { newType ->
                 if (newType == currentConfig.type) return@ScriptTypeSegmentedButton
                 onUpdateConfig {
-                    when (it) {
-                        // TODO
-                        is ScriptConfig.Lua -> it.copy()
-                        is ScriptConfig.Simple -> it.copy()
+                    when (newType) {
+                        ScriptCodeType.LUA -> it.copyToLua()
+                        ScriptCodeType.SIMPLE -> it.copyToSimple()
                     }
                 }
             }
@@ -427,15 +426,15 @@ private fun ScriptConfig.copyToSimple(
     id: String = this.id,
     name: String = this.name,
     description: String = this.description,
-    steps :List<ParsedSimpleLine>?=null
+    steps: List<ParsedSimpleLine>? = null
 ): ScriptConfig.Simple {
     return when (this) {
-        is ScriptConfig.Lua -> ScriptConfig.Simple(id, name, description, steps?:emptyList())
+        is ScriptConfig.Lua -> ScriptConfig.Simple(id, name, description, steps ?: emptyList())
         is ScriptConfig.Simple -> this.copy(
             id = id,
             name = name,
             description = description,
-            steps = steps?:this.steps
+            steps = steps ?: this.steps
         )
     }
 }
