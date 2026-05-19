@@ -1,6 +1,5 @@
 package com.xaxaxax.relc.overlay
 
-import android.R
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -14,27 +13,40 @@ import android.util.DisplayMetrics
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
-import androidx.compose.runtime.MutableState
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.ComposeView
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
+import com.xaxaxax.relc.R
 import com.xaxaxax.relc.RelcActivity
+import com.xaxaxax.relc.getDefaultLayoutParams
 import com.xaxaxax.relc.lua.LuaNative
 import com.xaxaxax.relc.overlay.ui.OverlayWindowScope
+import com.xaxaxax.relc.overlay.ui.addComposable
 import com.xaxaxax.relc.overlay.ui.addView
+import com.xaxaxax.relc.overlay.ui.removeView
 import com.xaxaxax.relc.overlay.ui.simple.SimpleOverlay
 import com.xaxaxax.relc.overlay.ui.simple.ViewKeyType
 import com.xaxaxax.relc.overlay.ui.updateViewLayout
 import com.xaxaxax.relc.script.ScriptConfig
 import com.xaxaxax.relc.script.ScriptManager
 import com.xaxaxax.relc.script.ScriptRepository
-import com.xaxaxax.relc.ui.lua.LuaUiManagerView
+import com.xaxaxax.relc.ui.lua.DynamicElement
+import com.xaxaxax.relc.ui.lua.LuaUiScope
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
+import java.io.File
 import javax.inject.Inject
 
 fun startClickAssistOverlay(context: Context, scriptId: String) {
@@ -72,8 +84,7 @@ class ClickAssistOverlayService : LifecycleService(), OverlayWindowScope<ViewKey
 
 
     private var scriptId: String? = null
-    private var currentConfig: MutableState<ScriptConfig> =
-        mutableStateOf(ScriptConfig.Simple.Empty)
+    private var currentConfig = MutableStateFlow<ScriptConfig>(ScriptConfig.Simple.Empty)
 
     override fun onCreate() {
         super.onCreate()
@@ -96,6 +107,12 @@ class ClickAssistOverlayService : LifecycleService(), OverlayWindowScope<ViewKey
             scriptRepository.getScript(id)?.let {
                 currentConfig.value = it
             }
+        }
+        lifecycleScope.launch {
+            currentConfig
+                .collect {
+
+                }
         }
 
         val notification = createNotification()
@@ -121,7 +138,8 @@ class ClickAssistOverlayService : LifecycleService(), OverlayWindowScope<ViewKey
         }
         val view = ComposeView(this).apply {
             setContent {
-                when (currentConfig.value.type) {
+                val config = currentConfig.collectAsState()
+                when (config.value.type) {
                     ScriptConfig.ScriptCodeType.SIMPLE -> {
                         val factory = object : androidx.lifecycle.ViewModelProvider.Factory {
                             override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
@@ -141,6 +159,7 @@ class ClickAssistOverlayService : LifecycleService(), OverlayWindowScope<ViewKey
                             viewModel = viewModel,
                             onClose = {
                                 removeView(this@apply)
+                                stopSelf()
                             },
                             onDrag = { delta ->
                                 this@ClickAssistOverlayService.updateViewLayout(ViewKeyType.Root) { params ->
@@ -153,15 +172,81 @@ class ClickAssistOverlayService : LifecycleService(), OverlayWindowScope<ViewKey
                         )
                     }
 
-                    ScriptConfig.ScriptCodeType.LUA -> LuaUiManagerView(
-                        manager = LuaNative.uiManager,
-                        luaNative = LuaNative
-                    )
+                    ScriptConfig.ScriptCodeType.LUA ->
+                        LuaUiOverlay()
                 }
 
             }
         }
         addView(ViewKeyType.Root, view, params)
+    }
+
+    @Composable
+    private fun LuaUiOverlay() {
+        val context = this
+        val scope = remember {
+            object : LuaUiScope {
+                override val rootPath: File = context.filesDir
+                override fun sendUIEvent(id: String, event: String) {
+                    LuaNative.sendUIEvent(id, event)
+                }
+            }
+        }
+
+        // Keep track of positions so they don't reset when elements are updated
+        val positions = remember { mutableMapOf<String, Offset>() }
+
+        LuaNative.uiManager.elements.forEach { (id, element) ->
+            key(id) {
+                LuaWindow(
+                    id = id,
+                    element = element,
+                    scope = scope,
+                    initialPosition = positions.getOrPut(id) { Offset(100f, 100f) },
+                    onPositionChanged = { newPos ->
+                        positions[id] = newPos
+                    }
+                )
+            }
+        }
+    }
+
+    @Composable
+    private fun LuaWindow(
+        id: String,
+        element: DynamicElement,
+        scope: LuaUiScope,
+        initialPosition: Offset,
+        onPositionChanged: (Offset) -> Unit
+    ) {
+        val key = ViewKeyType.LuaRoot(id)
+        val offset = remember { mutableStateOf(initialPosition) }
+
+        DisposableEffect(id) {
+            val params = getDefaultLayoutParams().apply {
+                x = offset.value.x.toInt()
+                y = offset.value.y.toInt()
+            }
+            addComposable(key, params) {
+                with(scope) {
+                    element.GetComposable(Modifier.pointerInput(id) {
+                        detectDragGestures { change, dragAmount ->
+                            change.consume()
+                            offset.value += dragAmount
+                            updateViewLayout(key) {
+                                it.x = offset.value.x.toInt()
+                                it.y = offset.value.y.toInt()
+                                it
+                            }
+                            onPositionChanged(offset.value)
+                        }
+                    })
+                }
+            }
+            onDispose {
+                removeView(key)
+            }
+        }
     }
 
     private fun createNotificationChannel() {
@@ -194,6 +279,9 @@ class ClickAssistOverlayService : LifecycleService(), OverlayWindowScope<ViewKey
 
     override fun onDestroy() {
         overlayOwner.stop()
+        views.forEach { _, (view, _) ->
+            windowManager.removeView(view)
+        }
         super.onDestroy()
     }
 

@@ -1,8 +1,6 @@
 package com.xaxaxax.relc.overlay.ui.simple
 
 import android.content.Context
-import android.graphics.PixelFormat
-import android.view.Gravity
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.compose.runtime.getValue
@@ -11,8 +9,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.xaxaxax.relc.getDefaultLayoutParams
 import com.xaxaxax.relc.overlay.ui.OverlayWindowScope
 import com.xaxaxax.relc.overlay.ui.addComposable
+import com.xaxaxax.relc.overlay.ui.bringToFront
 import com.xaxaxax.relc.overlay.ui.removeView
 import com.xaxaxax.relc.overlay.ui.updateViewLayout
 import com.xaxaxax.relc.script.ScriptConfig
@@ -36,7 +36,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
 import kotlin.uuid.ExperimentalUuidApi
-import kotlin.uuid.Uuid
 
 
 @HiltViewModel
@@ -49,21 +48,22 @@ class SimpleOverlayViewModel @Inject constructor(
     data class UiState(
         val isRunning: Boolean = false,
         val isRecording: Boolean = false,
+        val isCollapsed: Boolean = false,
         val isEditing: Boolean = false,
         val config: ScriptConfig.Simple = ScriptConfig.Simple.Empty,
     )
 
     private var runningConfig: ScriptConfig.Simple? = null
-
-    private val isRecording = MutableStateFlow(false)
+    private val isRecordingFlow = MutableStateFlow(false)
+    private val isCollapsed = MutableStateFlow(false)
     private val isEditing = MutableStateFlow(false)
     private val currentConfig = MutableStateFlow(ScriptConfig.Simple.Empty)
 
     val uiState: StateFlow<UiState> = combine(
-        isRecording, isEditing, currentConfig, scriptManager.scriptStates
-    ) { recording, editing, currentConfig, scripts ->
+        isRecordingFlow, isEditing, isCollapsed, currentConfig, scriptManager.scriptStates
+    ) { recording, editing, collapsed, currentConfig, scripts ->
         val state = scripts[currentConfig.id]
-        UiState(state == ScriptState.RUNNING, recording, editing, currentConfig)
+        UiState(state == ScriptState.RUNNING, recording, collapsed, editing, currentConfig)
     }
         .stateIn(
             viewModelScope,
@@ -72,8 +72,10 @@ class SimpleOverlayViewModel @Inject constructor(
         )
 
 
+    context(overlayWindowScope: OverlayWindowScope<ViewKeyType>)
     fun exitEditScreen() {
         isEditing.value = false
+        updatePreviewViews()
     }
 
     fun updateConfig(config: ScriptConfig.Simple) {
@@ -88,15 +90,16 @@ class SimpleOverlayViewModel @Inject constructor(
     context(overlayWindowScope: OverlayWindowScope<ViewKeyType>)
     fun startScript() {
         syncWindowToLine()
-        val tempId = Uuid.random()
-        val runningConfig = currentConfig.value.copy(
-            id = tempId.toHexDashString()
-        ).also { runningConfig = it }
-        scriptManager.startScript(runningConfig)
+        val configToRun = currentConfig.value
+        runningConfig = configToRun
+        scriptManager.startScript(configToRun)
+        updatePreviewViews()
     }
 
+    context(overlayWindowScope: OverlayWindowScope<ViewKeyType>)
     fun stopScript() {
         runningConfig?.let { scriptManager.stopScript(it.id) }
+        updatePreviewViews()
     }
 
     context(overlayWindowScope: OverlayWindowScope<ViewKeyType>)
@@ -106,6 +109,7 @@ class SimpleOverlayViewModel @Inject constructor(
             steps = currentConfig.value.steps + line
         )
         addLineToWindow(index, line)
+        updatePreviewViews()
     }
 
     context(overlayWindowScope: OverlayWindowScope<ViewKeyType>)
@@ -131,7 +135,7 @@ class SimpleOverlayViewModel @Inject constructor(
         val x = overlayWindowScope.metrics.widthPixels
         val y = overlayWindowScope.metrics.heightPixels
         val line = ParsedSimpleLine(
-            verb = SimpleScriptVerb.SWIPE,
+            verb = SimpleScriptVerb.TAP,
             repeatCount = 1,
             delayBetweenRepeatsMs = 0,
             delayAfterStepMs = 0,
@@ -140,8 +144,10 @@ class SimpleOverlayViewModel @Inject constructor(
         addScriptLine(line)
     }
 
+    context(overlayWindowScope: OverlayWindowScope<ViewKeyType>)
     fun startRecording() {
-        isRecording.value = true
+        isRecordingFlow.value = true
+        updatePreviewViews()
     }
 
     context(overlayWindowScope: OverlayWindowScope<ViewKeyType>)
@@ -156,11 +162,61 @@ class SimpleOverlayViewModel @Inject constructor(
             )
             addScriptLine(line)
         }
-        isRecording.value = false
+        isRecordingFlow.value = false
+        updatePreviewViews()
+        overlayWindowScope.bringToFront(ViewKeyType.Root)
     }
 
+    context(overlayWindowScope: OverlayWindowScope<ViewKeyType>)
     fun startEdit() {
         isEditing.value = true
+        updatePreviewViews()
+    }
+
+    context(overlayWindowScope: OverlayWindowScope<ViewKeyType>)
+    fun setCollapsed(collapsed: Boolean) {
+        isCollapsed.value = collapsed
+        updatePreviewViews()
+    }
+
+    /**
+     * Reactively updates all preview views (alpha and touchability)
+     * based on current collapsed and running states.
+     */
+    context(overlayWindowScope: OverlayWindowScope<ViewKeyType>)
+    fun updatePreviewViews() {
+        val ui = uiState.value
+        val visible = !ui.isCollapsed && !ui.isEditing && !ui.isRecording
+        val touchable = visible && !ui.isRunning
+
+        currentConfig.value.steps.forEachIndexed { index, line ->
+            val key = keyOf(index, line) ?: return@forEachIndexed
+            if (!overlayWindowScope.views.containsKey(key)) {
+                addLineToWindow(index, line)
+            }
+            overlayWindowScope.updateViewLayout(key) { params ->
+                params.alpha = if (visible) 1.0f else 0.0f
+                if (touchable) {
+                    params.flags =
+                        params.flags and (WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE).inv()
+                } else {
+                    params.flags = params.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                }
+                params
+            }
+        }
+
+        // Manage Root Visibility during recording
+        overlayWindowScope.updateViewLayout(ViewKeyType.Root) { params ->
+            params.alpha = if (ui.isRecording) 0.0f else 1.0f
+            if (ui.isRecording) {
+                params.flags = params.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+            } else {
+                params.flags =
+                    params.flags and (WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE).inv()
+            }
+            params
+        }
     }
 
     context(overlayWindowScope: OverlayWindowScope<ViewKeyType>)
@@ -179,7 +235,6 @@ class SimpleOverlayViewModel @Inject constructor(
 
                 SimpleScriptVerb.SWIPE,
                 SimpleScriptVerb.SWIPE_RAW -> {
-                    val key = ViewKeyType.Swipe(index)
                     val padding = dpToPx(18)
                     val swipe = parseSwipePayload(line.payload)
                     val box = getSwipeBoundingBox(swipe.points)
@@ -204,7 +259,10 @@ class SimpleOverlayViewModel @Inject constructor(
                 val padding = dpToPx(16)
                 val tap = parseTapPayload(line.payload)
                 val key = ViewKeyType.Tap(index)
-                val params = getDefaultLayoutParams()
+                val params = getDefaultLayoutParams().apply {
+                    x = tap.x - padding
+                    y = tap.y - padding
+                }
                 overlayWindowScope.addComposable(key, params) {
                     var x by remember { mutableFloatStateOf(tap.x.toFloat() - padding) }
                     var y by remember { mutableFloatStateOf(tap.y.toFloat() - padding) }
@@ -236,9 +294,12 @@ class SimpleOverlayViewModel @Inject constructor(
                 overlayWindowScope.addComposable(key, params) {
                     var x by remember { mutableFloatStateOf(box.left.toFloat() - padding) }
                     var y by remember { mutableFloatStateOf(box.top.toFloat() - padding) }
-                    FloatingTap(
+                    FloatingSwipe(
                         index = index,
-                        onDrag = { dx, dy ->
+                        payload = swipe,
+                        offsetX = box.left - padding,
+                        offsetY = box.top - padding,
+                        onPanDrag = { dx, dy ->
                             x += dx
                             y += dy
                             overlayWindowScope.updateViewLayout(key) {
@@ -263,18 +324,6 @@ class SimpleOverlayViewModel @Inject constructor(
 
         else -> null
     }
-}
-
-private fun getDefaultLayoutParams() = WindowManager.LayoutParams(
-    WindowManager.LayoutParams.WRAP_CONTENT,
-    WindowManager.LayoutParams.WRAP_CONTENT,
-    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-    PixelFormat.TRANSLUCENT
-).apply {
-    gravity = Gravity.TOP or Gravity.START
 }
 
 private fun getSwipeBoundingBox(points: List<Pair<Int, Int>>): android.graphics.Rect {

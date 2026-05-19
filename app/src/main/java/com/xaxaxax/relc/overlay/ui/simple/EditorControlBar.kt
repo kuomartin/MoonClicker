@@ -24,10 +24,6 @@ import androidx.compose.material3.DividerDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -50,12 +46,12 @@ fun EditorControlBar(
     onRecordSwipeClick: () -> Unit,
     onRemoveClick: () -> Unit,
     onSaveClick: () -> Unit,
+    onCollapsedChange: (Boolean) -> Unit,
     onCloseClick: () -> Unit,
     onMoreClick: () -> Unit,
     modifier: Modifier = Modifier,
-    onDrag: (Offset) -> Unit={}
+    onDrag: (Offset) -> Unit = {}
 ) {
-    var isCollapsed by remember { mutableStateOf(false) }
     Column(
         modifier = modifier.wrapContentWidth(),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -92,7 +88,7 @@ fun EditorControlBar(
                     DividerDefaults.color
                 )
 
-                if (!isCollapsed) {
+                if (!uiState.isCollapsed) {
                     // 2. Add Tap
                     ControlIconButton(
                         icon = Icons.Default.Add,
@@ -131,7 +127,7 @@ fun EditorControlBar(
                     ControlIconButton(
                         painter = painterResource(R.drawable.ic_visibility_off),
                         contentDescription = "Hide",
-                        onClick = {isCollapsed = true}
+                        onClick = { onCollapsedChange(true) }
                     )
 
                     // 7. More
@@ -145,7 +141,7 @@ fun EditorControlBar(
                     ControlIconButton(
                         painter = painterResource(R.drawable.ic_visibility),
                         contentDescription = "Show",
-                        onClick = {isCollapsed = false}
+                        onClick = { onCollapsedChange(false) }
                     )
                 }
 
@@ -215,6 +211,7 @@ private fun EditorControlBarPreview() {
                 onRecordSwipeClick = {},
                 onRemoveClick = {},
                 onSaveClick = {},
+                onCollapsedChange = {},
                 onCloseClick = {},
                 onMoreClick = {}
             )
@@ -229,6 +226,7 @@ private fun EditorControlBarPreview() {
                 onRecordSwipeClick = {},
                 onRemoveClick = {},
                 onSaveClick = {},
+                onCollapsedChange = {},
                 onCloseClick = {},
                 onMoreClick = {}
             )

@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 
 class DynamicRow(
     override val id: String,
@@ -18,13 +19,13 @@ class DynamicRow(
 ) : DynamicElement("row"), DynamicContainer by DynamicContainerImpl() {
     context(uiScope: LuaUiScope)
     @Composable
-    override fun GetComposable() {
+    override fun GetComposable(modifier: Modifier) {
         Row(
-            modifier = modifier,
+            modifier = modifier.applyModifier(),
             horizontalArrangement = horizontalArrangement,
             verticalAlignment = verticalAlignment
         ) {
-            this@DynamicRow.forEach { it.GetComposable() }
+            this@DynamicRow.forEach { it.GetComposable(Modifier) }
         }
     }
 }

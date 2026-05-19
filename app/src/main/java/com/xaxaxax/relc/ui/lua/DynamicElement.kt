@@ -34,10 +34,10 @@ sealed class DynamicElement(val type: String) {
     abstract val height: Int?
     var clickable: Boolean = false
 
+    @Composable
     context(uiScope: LuaUiScope)
-    val modifier: Modifier
-        get() = Modifier
-            .padding(padding)
+    fun Modifier.applyModifier(): Modifier =
+        padding(padding)
             .border(border.width.dp, border.color)
             .background(
                 color = background.color,
@@ -49,9 +49,9 @@ sealed class DynamicElement(val type: String) {
             }
             .clickable(enabled = clickable) { uiScope.sendUIEvent(id, "click") }
 
-    context(uiScope: LuaUiScope)
     @Composable
-    abstract fun GetComposable()
+    context(uiScope: LuaUiScope)
+    abstract fun GetComposable(modifier: Modifier)
 
     companion object {
         fun fromJsonExp(id: String, json: String): DynamicElement {
@@ -159,6 +159,7 @@ private class ElementParam(json: String) {
                 )
         }
     }
+
     private fun parseColor(c: Any?): Color? {
         return when (c) {
             is Number -> {
@@ -169,7 +170,13 @@ private class ElementParam(json: String) {
                     Color(intValue)
                 }
             }
-            is String -> try { Color(c.toColorInt()) } catch (e: Exception) { null }
+
+            is String -> try {
+                Color(c.toColorInt())
+            } catch (e: Exception) {
+                null
+            }
+
             else -> null
         }
     }

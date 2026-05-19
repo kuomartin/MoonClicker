@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.xaxaxax.relc.lua.LuaNative
 import timber.log.Timber
@@ -28,8 +29,8 @@ fun LuaUiManagerView(
     }
     Row {
         with(scope) {
-            manager.elements.filterKeys { k -> k.startsWith("__root") }.values.forEach { element ->
-                element.GetComposable()
+            manager.roots.forEach { element ->
+                element.GetComposable(Modifier)
             }
         }
     }

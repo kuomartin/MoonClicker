@@ -54,3 +54,10 @@ fun <K> OverlayWindowScope<K>.removeView(key: K) {
         manager.removeView(view)
     }
 }
+
+
+fun <K> OverlayWindowScope<K>.bringToFront(key: K) {
+    val (view, params) = views[key] ?: return
+    manager.removeView(view)
+    manager.addView(view, params)
+}

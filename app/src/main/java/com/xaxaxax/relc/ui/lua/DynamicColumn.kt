@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 
 class DynamicColumn(
     override val id: String,
@@ -18,13 +19,13 @@ class DynamicColumn(
 ) : DynamicElement("column"), DynamicContainer by DynamicContainerImpl() {
     context(uiScope: LuaUiScope)
     @Composable
-    override fun GetComposable() {
+    override fun GetComposable(modifier: Modifier) {
         Column(
-            modifier = modifier,
+            modifier = modifier.applyModifier(),
             verticalArrangement = verticalArrangement,
             horizontalAlignment = horizontalAlignment
         ) {
-            this@DynamicColumn.forEach { it.GetComposable() }
+            this@DynamicColumn.forEach { it.GetComposable(Modifier) }
         }
     }
 }

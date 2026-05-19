@@ -10,7 +10,9 @@ class LuaUiManager {
     // 使用 Compose 的 mutableStateMapOf，確保狀態變化能自動觸發重繪
     private val _elements = mutableStateMapOf<String, DynamicElement>()
     val elements: Map<String, DynamicElement> get() = _elements
-    private var rootId = 0
+    private val _rootIds = mutableListOf<String>()
+    val roots
+        get() = _rootIds.mapNotNull { _elements[it] }
 
     /**
      * 新增或覆蓋 UI 節點
@@ -27,12 +29,8 @@ class LuaUiManager {
                 }
 
                 parentId == null -> {
-                    val newRootId = "__root#${rootId++}"
-                    val newRoot = DynamicBox(newRootId)
-                    _elements[newRootId] = newRoot
-                    Timber.d("LuaUiManager: Create new ${newRoot.id}")
-                    newRoot.add(element)
-                    Timber.d("LuaUiManager: Added $id (${element.type}) under ${newRoot.id}")
+                    _rootIds.add(id)
+                    Timber.d("LuaUiManager: Added $id (${element.type}) as root")
                 }
 
                 else -> {

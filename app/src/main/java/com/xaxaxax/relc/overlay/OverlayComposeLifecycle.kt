@@ -21,14 +21,11 @@ class OverlayCompositionOwner :
     LifecycleOwner,
     ViewModelStoreOwner,
     SavedStateRegistryOwner {
-
     private val registry = LifecycleRegistry(this)
     private val savedStateRegistryController = SavedStateRegistryController.create(this)
-
     override val lifecycle: Lifecycle get() = registry
     override val viewModelStore = ViewModelStore()
     override val savedStateRegistry: SavedStateRegistry get() = savedStateRegistryController.savedStateRegistry
-
     fun start() {
         savedStateRegistryController.performRestore(null)
         registry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)

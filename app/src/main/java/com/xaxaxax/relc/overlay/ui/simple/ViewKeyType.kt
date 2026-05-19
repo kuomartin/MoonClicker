@@ -5,4 +5,7 @@ sealed interface ViewKeyType {
     data class Swipe(val index: Int) : ViewKeyType
 
     object Root : ViewKeyType
+    object Recording : ViewKeyType
+    data class LuaRoot(val id: String) : ViewKeyType
+    data class Spec(val id: String) : ViewKeyType
 }

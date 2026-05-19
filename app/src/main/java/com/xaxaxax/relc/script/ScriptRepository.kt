@@ -23,13 +23,17 @@ class ScriptRepository(private val context: Context) {
     val scripts: StateFlow<List<ScriptConfig>> = _scripts.asStateFlow()
 
     init {
-        loadScripts()
+        scope.launch {
+            loadScripts()
+        }
     }
 
-    private fun loadScripts() {
+    private suspend fun loadScripts() {
         if (scriptFile.exists()) {
             try {
-                val content = scriptFile.readText()
+                val content = kotlinx.coroutines.withContext(Dispatchers.IO) {
+                    scriptFile.readText()
+                }
                 _scripts.value = json.decodeFromString<List<ScriptConfig>>(content)
                 Timber.d("Scripts loaded from disk: ${_scripts.value.size}")
             } catch (e: Exception) {

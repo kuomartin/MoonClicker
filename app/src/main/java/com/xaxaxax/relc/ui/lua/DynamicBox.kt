@@ -3,6 +3,7 @@ package com.xaxaxax.relc.ui.lua
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
 class DynamicBox(
@@ -16,11 +17,11 @@ class DynamicBox(
 
     context(uiScope: LuaUiScope)
     @Composable
-    override fun GetComposable() {
+    override fun GetComposable(modifier: Modifier) {
         Box(
             modifier = modifier,
         ) {
-            this@DynamicBox.forEach { it.GetComposable() }
+            this@DynamicBox.forEach { it.GetComposable(Modifier) }
         }
     }
 }
