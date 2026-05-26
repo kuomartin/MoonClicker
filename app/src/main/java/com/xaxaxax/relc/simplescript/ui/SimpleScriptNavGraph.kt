@@ -29,7 +29,8 @@ import com.xaxaxax.relc.simplescript.ui.viewmodel.SimpleScriptViewModel
 fun NavGraphBuilder.simpleScriptNavGraph(
     navController: NavHostController,
     onStartPointSelecting: () -> Unit = {},
-    onStartCropping: () -> Unit = {}
+    onStartCropping: () -> Unit = {},
+    onCloseEditor: () -> Unit = {}
 ) {
     composable<SimpleScriptsRoute> {
         val viewModel: SimpleScriptViewModel = hiltViewModel()
@@ -60,16 +61,14 @@ fun NavGraphBuilder.simpleScriptNavGraph(
         val currentScript by viewModel.currentScript.collectAsStateWithLifecycle()
 
         if (currentScript != null) {
-            BackHandler {
-                viewModel.saveCurrentScript()
-                navController.popBackStack()
-            }
-
             ScriptEditorScreen(
                 script = currentScript!!,
-                onBack = {
+                isDirty = viewModel.isDirty(),
+                onClose = {
+                    onCloseEditor()
+                },
+                onSave = {
                     viewModel.saveCurrentScript()
-                    navController.popBackStack()
                 },
                 onNameChange = { name -> viewModel.updateCurrentScript(currentScript!!.copy(name = name)) },
                 onFpsChange = { fps -> viewModel.updateCurrentScript(currentScript!!.copy(fps = fps)) },
@@ -85,8 +84,7 @@ fun NavGraphBuilder.simpleScriptNavGraph(
                     viewModel.updateCurrentScript(currentScript!!.copy(events = currentScript!!.events - event))
                 }
             )
-        } else {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        } else {            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()
             }
         }

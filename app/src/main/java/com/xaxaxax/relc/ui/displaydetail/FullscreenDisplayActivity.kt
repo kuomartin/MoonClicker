@@ -598,21 +598,8 @@ fun FullscreenDisplayScreen(
                         simpleScriptNavGraph(
                             navController = navController,
                             onStartPointSelecting = { viewModel.startPointSelecting() },
-                            onStartCropping = { viewModel.startCropping() }
-                        )
-                    }
-
-                    // Close Button
-                    IconButton(
-                        onClick = { viewModel.setEditorExpanded(false) },
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Close Editor",
-                            tint = androidx.compose.material3.MaterialTheme.colorScheme.onBackground
+                            onStartCropping = { viewModel.startCropping() },
+                            onCloseEditor = { viewModel.setEditorExpanded(false) }
                         )
                     }
                 }

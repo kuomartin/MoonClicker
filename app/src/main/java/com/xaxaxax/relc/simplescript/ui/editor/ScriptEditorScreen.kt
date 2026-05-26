@@ -18,11 +18,16 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.xaxaxax.relc.simplescript.domain.model.*
 
+import androidx.compose.material.icons.filled.Save
+import androidx.activity.compose.BackHandler
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScriptEditorScreen(
     script: Script,
-    onBack: () -> Unit,
+    isDirty: Boolean,
+    onClose: () -> Unit,
+    onSave: () -> Unit,
     onNameChange: (String) -> Unit,
     onFpsChange: (Int) -> Unit,
     onUpdateVariables: (List<Variable>) -> Unit,
@@ -34,6 +39,19 @@ fun ScriptEditorScreen(
     var showVariableDialog by remember { mutableStateOf(false) }
     var variableToEdit by remember { mutableStateOf<Variable?>(null) }
     var variableIndexToEdit by remember { mutableStateOf(-1) }
+    var showDiscardDialog by remember { mutableStateOf(false) }
+
+    val handleBackPress = {
+        if (isDirty) {
+            showDiscardDialog = true
+        } else {
+            onClose()
+        }
+    }
+
+    BackHandler(enabled = true) {
+        handleBackPress()
+    }
 
     Scaffold(
         modifier = modifier,
@@ -41,8 +59,13 @@ fun ScriptEditorScreen(
             TopAppBar(
                 title = { Text("Edit Script") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    IconButton(onClick = handleBackPress) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Close")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = onSave, enabled = isDirty) {
+                        Icon(Icons.Default.Save, contentDescription = "Save")
                     }
                 }
             )
@@ -149,9 +172,29 @@ fun ScriptEditorScreen(
                 onDismiss = { showVariableDialog = false }
             )
         }
+
+        if (showDiscardDialog) {
+            AlertDialog(
+                onDismissRequest = { showDiscardDialog = false },
+                title = { Text("Discard Changes?") },
+                text = { Text("You have unsaved changes. Are you sure you want to discard them and leave?") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showDiscardDialog = false
+                        onClose()
+                    }) {
+                        Text("Discard", color = MaterialTheme.colorScheme.error)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDiscardDialog = false }) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
     }
 }
-
 @Composable
 fun SectionHeader(title: String, onAddClick: () -> Unit) {
     Row(
@@ -250,7 +293,9 @@ fun ScriptEditorScreenPreview() {
                     )
                 )
             ),
-            onBack = {},
+            isDirty = false,
+            onClose = {},
+            onSave = {},
             onNameChange = {},
             onFpsChange = {},
             onUpdateVariables = {},

@@ -29,6 +29,9 @@ interface VariableDao {
 
     @Delete
     fun deleteVariable(variable: VariableEntity)
+
+    @Query("DELETE FROM variable WHERE script_id = :scriptId")
+    fun deleteVariablesByScriptId(scriptId: Long)
 }
 
 @Dao
@@ -41,6 +44,9 @@ interface EventDao {
 
     @Delete
     fun deleteEvent(event: EventEntity)
+
+    @Query("DELETE FROM event WHERE script_id = :scriptId")
+    fun deleteEventsByScriptId(scriptId: Long)
 }
 
 @Dao
@@ -53,6 +59,9 @@ interface ConditionDao {
 
     @Delete
     fun deleteCondition(condition: ConditionEntity)
+
+    @Query("DELETE FROM condition WHERE event_id = :eventId")
+    fun deleteConditionsByEventId(eventId: Long)
 }
 
 @Dao
@@ -65,4 +74,7 @@ interface ActionDao {
 
     @Delete
     fun deleteAction(action: ActionEntity)
+
+    @Query("DELETE FROM action WHERE event_id = :eventId")
+    fun deleteActionsByEventId(eventId: Long)
 }

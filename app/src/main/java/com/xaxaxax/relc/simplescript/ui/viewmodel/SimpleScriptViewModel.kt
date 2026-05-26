@@ -24,6 +24,8 @@ class SimpleScriptViewModel @Inject constructor(
     private val _currentScript = MutableStateFlow<Script?>(null)
     val currentScript: StateFlow<Script?> = _currentScript.asStateFlow()
 
+    private val _originalScript = MutableStateFlow<Script?>(null)
+
     private var isLoaded = false
 
     fun loadScript(scriptId: Long?) {
@@ -33,20 +35,28 @@ class SimpleScriptViewModel @Inject constructor(
         viewModelScope.launch {
             if (scriptId == null || scriptId == 0L) {
                 // New Script
-                _currentScript.value = Script(name = "")
+                val newScript = Script(name = "")
+                _currentScript.value = newScript
+                _originalScript.value = newScript.copy()
             } else {
-                _currentScript.value = repository.getScriptWithChildren(scriptId)
+                val loaded = repository.getScriptWithChildren(scriptId)
+                _currentScript.value = loaded
+                _originalScript.value = loaded?.copy()
             }
         }
+    }
+
+    fun isDirty(): Boolean {
+        return _currentScript.value != _originalScript.value
     }
 
     fun saveCurrentScript() {
         val script = _currentScript.value ?: return
         viewModelScope.launch {
             repository.saveScript(script)
+            _originalScript.value = script.copy()
         }
     }
-
     fun updateCurrentScript(updatedScript: Script) {
         _currentScript.value = updatedScript
     }

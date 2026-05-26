@@ -38,6 +38,16 @@ class ScriptRepository(private val db: SimpleScriptDatabase) {
         db.withTransaction {
             val scriptId = db.scriptDao().insertScript(script.toEntity())
 
+            // Delete old events and their children
+            val oldEvents = db.eventDao().getEventsForScript(scriptId)
+            oldEvents.forEach { oldEvent ->
+                db.conditionDao().deleteConditionsByEventId(oldEvent.id)
+                db.actionDao().deleteActionsByEventId(oldEvent.id)
+            }
+            db.eventDao().deleteEventsByScriptId(scriptId)
+            db.variableDao().deleteVariablesByScriptId(scriptId)
+
+            // Insert new data
             script.variables.forEach { variable ->
                 db.variableDao().insertVariable(variable.toEntity(scriptId))
             }
