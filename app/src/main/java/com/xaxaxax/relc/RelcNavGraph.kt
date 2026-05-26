@@ -29,8 +29,12 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import com.xaxaxax.relc.simplescript.domain.model.Event
 import com.xaxaxax.relc.simplescript.domain.model.Variable
+import com.xaxaxax.relc.simplescript.domain.model.Condition
+import com.xaxaxax.relc.simplescript.domain.model.Action
 import com.xaxaxax.relc.simplescript.ui.editor.EventEditorScreen
 import com.xaxaxax.relc.simplescript.ui.editor.ScriptEditorScreen
+import com.xaxaxax.relc.simplescript.ui.editor.ConditionEditorDialog
+import com.xaxaxax.relc.simplescript.ui.editor.ActionEditorDialog
 import com.xaxaxax.relc.simplescript.ui.editor.VariableEditorDialog
 import com.xaxaxax.relc.simplescript.ui.list.ScriptListScreen
 import com.xaxaxax.relc.simplescript.ui.viewmodel.SimpleScriptViewModel
@@ -213,6 +217,14 @@ fun RelcNavGraph() {
                     )
                 }
 
+                var showConditionDialog by remember { mutableStateOf(false) }
+                var conditionToEdit by remember { mutableStateOf<Condition?>(null) }
+                var conditionIndexToEdit by remember { mutableStateOf(-1) }
+
+                var showActionDialog by remember { mutableStateOf(false) }
+                var actionToEdit by remember { mutableStateOf<Action?>(null) }
+                var actionIndexToEdit by remember { mutableStateOf(-1) }
+
                 if (currentScript != null) {
                     EventEditorScreen(
                         event = localEvent,
@@ -230,17 +242,66 @@ fun RelcNavGraph() {
                         onNameChange = { localEvent = localEvent.copy(name = it) },
                         onEnabledChange = { localEvent = localEvent.copy(enabledOnStart = it) },
                         onOperatorChange = { localEvent = localEvent.copy(conditionOperator = it) },
-                        onAddCondition = { /* TODO: Nav to Condition Selector/Editor */ },
-                        onEditCondition = { /* TODO: Nav to Condition Selector/Editor */ },
-                        onDeleteCondition = { cond ->
-                            localEvent = localEvent.copy(conditions = localEvent.conditions - cond)
+                        onAddCondition = {
+                            conditionToEdit = null
+                            conditionIndexToEdit = -1
+                            showConditionDialog = true
                         },
-                        onAddAction = { /* TODO: Nav to Action Selector/Editor */ },
-                        onEditAction = { /* TODO: Nav to Action Selector/Editor */ },
-                        onDeleteAction = { act ->
-                            localEvent = localEvent.copy(actions = localEvent.actions - act)
-                        }
+                        onEditCondition = { cond ->
+                            conditionToEdit = cond
+                            conditionIndexToEdit = localEvent.conditions.indexOf(cond)
+                            showConditionDialog = true
+                        },
+                        onDeleteCondition = { cond -> localEvent = localEvent.copy(conditions = localEvent.conditions - cond) },
+                        onAddAction = {
+                            actionToEdit = null
+                            actionIndexToEdit = -1
+                            showActionDialog = true
+                        },
+                        onEditAction = { act ->
+                            actionToEdit = act
+                            actionIndexToEdit = localEvent.actions.indexOf(act)
+                            showActionDialog = true
+                        },
+                        onDeleteAction = { act -> localEvent = localEvent.copy(actions = localEvent.actions - act) }
                     )
+
+                    if (showConditionDialog) {
+                        ConditionEditorDialog(
+                            initialCondition = conditionToEdit,
+                            availableVariables = currentScript!!.variables,
+                            onSave = { newCond ->
+                                val updatedConditions = localEvent.conditions.toMutableList()
+                                if (conditionIndexToEdit >= 0) {
+                                    updatedConditions[conditionIndexToEdit] = newCond
+                                } else {
+                                    updatedConditions.add(newCond)
+                                }
+                                localEvent = localEvent.copy(conditions = updatedConditions)
+                                showConditionDialog = false
+                            },
+                            onDismiss = { showConditionDialog = false }
+                        )
+                    }
+
+                    if (showActionDialog) {
+                        ActionEditorDialog(
+                            initialAction = actionToEdit,
+                            availableVariables = currentScript!!.variables,
+                            availableEvents = currentScript!!.events,
+                            onSave = { newAct ->
+                                val updatedActions = localEvent.actions.toMutableList()
+                                if (actionIndexToEdit >= 0) {
+                                    updatedActions[actionIndexToEdit] = newAct
+                                } else {
+                                    updatedActions.add(newAct)
+                                }
+                                localEvent = localEvent.copy(actions = updatedActions)
+                                showActionDialog = false
+                            },
+                            onDismiss = { showActionDialog = false }
+                        )
+                    }
                 } else {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator()
