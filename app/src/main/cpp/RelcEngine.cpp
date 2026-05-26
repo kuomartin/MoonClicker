@@ -32,6 +32,9 @@ RelcEngine::RelcEngine(JNIEnv *env, jobject service, jobject detector) : javaVM(
     uiAddMethodId = env->GetMethodID(luaNativeClass, "uiAdd", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
     uiUpdateMethodId = env->GetMethodID(luaNativeClass, "uiUpdate", "(Ljava/lang/String;Ljava/lang/String;)V");
     uiRemoveMethodId = env->GetMethodID(luaNativeClass, "uiRemove", "(Ljava/lang/String;)V");
+    showNotificationMethodId = env->GetMethodID(luaNativeClass, "showNotification", "(Ljava/lang/String;Ljava/lang/String;)V");
+    startIntentMethodId = env->GetMethodID(luaNativeClass, "startIntent", "(Ljava/lang/String;)V");
+    systemActionMethodId = env->GetMethodID(luaNativeClass, "systemAction", "(Ljava/lang/String;)V");
 }
 
 RelcEngine::~RelcEngine() {
@@ -43,7 +46,8 @@ RelcEngine::~RelcEngine() {
     }
 }
 
-bool RelcEngine::start(int width, int height, const std::string &scriptPath) {
+bool RelcEngine::start(int displayId, int width, int height, const std::string &scriptPath) {
+    this->displayId = displayId;
     this->scriptPath = scriptPath;
     size_t lastSlash = scriptPath.find_last_of("/\\");
     if (lastSlash != std::string::npos) {
@@ -71,7 +75,38 @@ bool RelcEngine::start(int width, int height, const std::string &scriptPath) {
     lua_pushlightuserdata(L, this);
     lua_pushcclosure(L, lua_swipe, 1);
     lua_setfield(L, -2, "swipe");
+
+    lua_pushlightuserdata(L, this);
+    lua_pushcclosure(L, lua_input_click, 1);
+    lua_setfield(L, -2, "click");
     lua_pop(L, 1);
+
+    // system module
+    lua_newtable(L);
+    lua_pushlightuserdata(L, this);
+    lua_pushcclosure(L, lua_system_action, 1);
+    lua_setfield(L, -2, "action");
+
+    lua_pushlightuserdata(L, this);
+    lua_pushcclosure(L, lua_system_startIntent, 1);
+    lua_setfield(L, -2, "startIntent");
+
+    lua_pushlightuserdata(L, this);
+    lua_pushcclosure(L, lua_system_notification, 1);
+    lua_setfield(L, -2, "notification");
+    lua_setglobal(L, "system");
+
+    // wait function
+    lua_pushlightuserdata(L, this);
+    lua_pushcclosure(L, lua_wait, 1);
+    lua_setglobal(L, "wait");
+
+    // screen module
+    lua_newtable(L);
+    lua_pushlightuserdata(L, this);
+    lua_pushcclosure(L, lua_screen_findImage, 1);
+    lua_setfield(L, -2, "findImage");
+    lua_setglobal(L, "screen");
 
     // match.wait
     lua_getglobal(L, "match");
@@ -134,6 +169,23 @@ bool RelcEngine::start(int width, int height, const std::string &scriptPath) {
         if (!isRunning) return;
         processFrame(frame);
     });
+
+    if (displayId != -1) {
+        JNIEnv *env;
+        bool attached = false;
+        int res = javaVM->GetEnv((void **) &env, JNI_VERSION_1_6);
+        if (res == JNI_EDETACHED) {
+            if (javaVM->AttachCurrentThread(&env, nullptr) == JNI_OK) attached = true;
+        }
+
+        if (res == JNI_OK || attached) {
+            ANativeWindow *window = imageReader->getWindow();
+            jobject surface = ANativeWindow_toSurface(env, window);
+            sinkHandle = addVirtualDisplaySurface(displayId, surface);
+            env->DeleteLocalRef(surface);
+            if (attached) javaVM->DetachCurrentThread();
+        }
+    }
 
     isRunning = true;
     luaThread = std::thread(&RelcEngine::luaThreadLoop, this, scriptPath);
@@ -383,9 +435,10 @@ void RelcEngine::parseConfigFromLua() {
             if (lua_istable(L, -1)) {
                 SearchTemplate t;
 
-                // Format: { name, roi, threshold, grayscale, enabled }
+                // Format: { name = '...', img = '...', mask = {x, y, w, h}, threshold = 0.8, grayscale = false, enabled = true }
+                
                 // 1. name
-                lua_rawgeti(L, -1, 1);
+                lua_getfield(L, -1, "name");
                 const char* nameStr = lua_tostring(L, -1);
                 if (nameStr) t.name = nameStr;
                 lua_pop(L, 1);
@@ -395,8 +448,16 @@ void RelcEngine::parseConfigFromLua() {
                     continue;
                 }
 
-                // 2. roi
-                lua_rawgeti(L, -1, 2);
+                // 2. img (filename)
+                std::string imgFileName = t.name + ".png"; // default
+                lua_getfield(L, -1, "img");
+                if (lua_isstring(L, -1)) {
+                    imgFileName = lua_tostring(L, -1);
+                }
+                lua_pop(L, 1);
+
+                // 3. mask (roi)
+                lua_getfield(L, -1, "mask");
                 if (lua_istable(L, -1)) {
                     lua_rawgeti(L, -1, 1); t.roi.x = static_cast<int>(lua_tointeger(L, -1)); lua_pop(L, 1);
                     lua_rawgeti(L, -1, 2); t.roi.y = static_cast<int>(lua_tointeger(L, -1)); lua_pop(L, 1);
@@ -407,24 +468,26 @@ void RelcEngine::parseConfigFromLua() {
                 }
                 lua_pop(L, 1);
 
-                // 3. threshold
-                lua_rawgeti(L, -1, 3);
-                t.threshold = luaL_optnumber(L, -1, 0.8);
+                // 4. threshold
+                lua_getfield(L, -1, "threshold");
+                if (lua_isnumber(L, -1)) t.threshold = lua_tonumber(L, -1);
+                else t.threshold = 0.8;
                 lua_pop(L, 1);
 
-                // 4. grayscale
-                lua_rawgeti(L, -1, 4);
-                t.grayscale = lua_toboolean(L, -1);
+                // 5. grayscale
+                lua_getfield(L, -1, "grayscale");
+                if (lua_isboolean(L, -1)) t.grayscale = lua_toboolean(L, -1);
+                else t.grayscale = false;
                 lua_pop(L, 1);
 
-                // 5. enabled (default true)
-                lua_rawgeti(L, -1, 5);
+                // 6. enabled
+                lua_getfield(L, -1, "enabled");
                 if (lua_isboolean(L, -1)) t.enabled = lua_toboolean(L, -1);
                 else t.enabled = true;
                 lua_pop(L, 1);
 
                 // Load image
-                std::string path = scriptDir + t.name + ".png";
+                std::string path = scriptDir + imgFileName;
                 if (templateCache.find(path) == templateCache.end()) {
                     cv::Mat img = cv::imread(path, cv::IMREAD_UNCHANGED);
                     if (!img.empty()) {
@@ -761,11 +824,11 @@ int RelcEngine::lua_swipe(lua_State *L) {
             auto innerN = static_cast<int>(lua_rawlen(L, -1));
             for (int j = 1; j <= innerN; j++) {
                 lua_rawgeti(L, -1, j);
-                points.push_back(static_cast<int>(luaL_checkinteger(L, -1)));
+                points.push_back(static_cast<int>(luaL_checknumber(L, -1)));
                 lua_pop(L, 1);
             }
         } else {
-            points.push_back(static_cast<int>(luaL_checkinteger(L, -1)));
+            points.push_back(static_cast<int>(luaL_checknumber(L, -1)));
         }
         lua_pop(L, 1);
     }
@@ -853,4 +916,106 @@ int RelcEngine::lua_ui_remove(lua_State *L) {
 
     if (attached) self->javaVM->DetachCurrentThread();
     return 0;
+}
+
+int RelcEngine::lua_input_click(lua_State *L) {
+    auto *self = static_cast<RelcEngine *>(lua_touserdata(L, lua_upvalueindex(1)));
+    auto x = static_cast<int>(luaL_checknumber(L, 1));
+    auto y = static_cast<int>(luaL_checknumber(L, 2));
+
+    std::vector<int> points = {x, y, x, y};
+    self->multiTouchSwipe(1, points, 50, false);
+    return 0;
+}
+
+int RelcEngine::lua_system_action(lua_State *L) {
+    auto *self = static_cast<RelcEngine *>(lua_touserdata(L, lua_upvalueindex(1)));
+    const char *action = luaL_checkstring(L, 1);
+
+    JNIEnv *env;
+    bool attached = false;
+    if (self->javaVM->GetEnv((void **) &env, JNI_VERSION_1_6) == JNI_EDETACHED) {
+        if (self->javaVM->AttachCurrentThread(&env, nullptr) != JNI_OK) return 0;
+        attached = true;
+    }
+
+    jstring jAction = env->NewStringUTF(action);
+    env->CallVoidMethod(self->luaNativeObj, self->systemActionMethodId, jAction);
+    env->DeleteLocalRef(jAction);
+
+    if (attached) self->javaVM->DetachCurrentThread();
+    return 0;
+}
+
+int RelcEngine::lua_system_startIntent(lua_State *L) {
+    auto *self = static_cast<RelcEngine *>(lua_touserdata(L, lua_upvalueindex(1)));
+    const char *uri = luaL_checkstring(L, 1);
+
+    JNIEnv *env;
+    bool attached = false;
+    if (self->javaVM->GetEnv((void **) &env, JNI_VERSION_1_6) == JNI_EDETACHED) {
+        if (self->javaVM->AttachCurrentThread(&env, nullptr) != JNI_OK) return 0;
+        attached = true;
+    }
+
+    jstring jUri = env->NewStringUTF(uri);
+    env->CallVoidMethod(self->luaNativeObj, self->startIntentMethodId, jUri);
+    env->DeleteLocalRef(jUri);
+
+    if (attached) self->javaVM->DetachCurrentThread();
+    return 0;
+}
+
+int RelcEngine::lua_system_notification(lua_State *L) {
+    auto *self = static_cast<RelcEngine *>(lua_touserdata(L, lua_upvalueindex(1)));
+    const char *title = luaL_checkstring(L, 1);
+    const char *text = luaL_checkstring(L, 2);
+
+    JNIEnv *env;
+    bool attached = false;
+    if (self->javaVM->GetEnv((void **) &env, JNI_VERSION_1_6) == JNI_EDETACHED) {
+        if (self->javaVM->AttachCurrentThread(&env, nullptr) != JNI_OK) return 0;
+        attached = true;
+    }
+
+    jstring jTitle = env->NewStringUTF(title);
+    jstring jText = env->NewStringUTF(text);
+    env->CallVoidMethod(self->luaNativeObj, self->showNotificationMethodId, jTitle, jText);
+    env->DeleteLocalRef(jTitle);
+    env->DeleteLocalRef(jText);
+
+    if (attached) self->javaVM->DetachCurrentThread();
+    return 0;
+}
+
+int RelcEngine::lua_wait(lua_State *L) {
+    auto ms = static_cast<long>(luaL_checkinteger(L, 1));
+    std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+    return 0;
+}
+
+int RelcEngine::lua_screen_findImage(lua_State *L) {
+    auto *self = static_cast<RelcEngine *>(lua_touserdata(L, lua_upvalueindex(1)));
+    const char *name = luaL_checkstring(L, 1);
+
+    std::lock_guard<std::mutex> lock(self->resultMutex);
+    for (const auto &item : self->latestResult.matches) {
+        if (item.name == name && item.found) {
+            lua_newtable(L);
+            lua_pushboolean(L, true);
+            lua_setfield(L, -2, "found");
+            lua_pushnumber(L, item.x);
+            lua_setfield(L, -2, "x");
+            lua_pushnumber(L, item.y);
+            lua_setfield(L, -2, "y");
+            lua_pushnumber(L, item.confidence);
+            lua_setfield(L, -2, "confidence");
+            return 1;
+        }
+    }
+    
+    lua_newtable(L);
+    lua_pushboolean(L, false);
+    lua_setfield(L, -2, "found");
+    return 1;
 }

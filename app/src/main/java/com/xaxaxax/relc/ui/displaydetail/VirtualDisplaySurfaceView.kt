@@ -38,6 +38,7 @@ fun VirtualDisplaySurfaceView(
     config: DisplayConfig,
     isReadOnly: Boolean,
     modifier: Modifier = Modifier,
+    onSurfaceViewCreated: (SurfaceView) -> Unit = {}
 ) {
     // 預先準備好矩陣與座標矩形，避免在 onTouch 中頻繁分配記憶體
     val touchMatrix = remember { Matrix() }
@@ -97,6 +98,7 @@ fun VirtualDisplaySurfaceView(
                         }
                         true
                     }
+                    onSurfaceViewCreated(this)
                 }
             },
             update = { view ->

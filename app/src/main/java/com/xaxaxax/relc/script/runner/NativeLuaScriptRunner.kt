@@ -19,7 +19,7 @@ class NativeLuaScriptRunner(
         val scriptFile = File(ctx.context.filesDir, "script_${config.id}.lua")
         scriptFile.writeText(config.code)
 
-        LuaNative.startEngineWithService(v2Service, width, height, scriptFile.absolutePath)
+        LuaNative.startEngineWithService(v2Service, -1, width, height, scriptFile.absolutePath)
         try {
             while (ctx.isActive() && LuaNative.isEngineRunning()) {
                 delay(500.milliseconds)

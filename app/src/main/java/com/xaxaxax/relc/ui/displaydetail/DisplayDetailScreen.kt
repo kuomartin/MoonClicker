@@ -26,6 +26,9 @@ import com.xaxaxax.relc.IRelcV2Service
 import com.xaxaxax.relc.RelcV2Service
 import com.xaxaxax.relc.shizuku.UserService
 
+import androidx.compose.material3.OutlinedTextField
+import java.io.File
+
 @Composable
 fun DisplayDetailScreen(
     id: String, onNavigateBack: () -> Unit,
@@ -34,6 +37,7 @@ fun DisplayDetailScreen(
     val context = LocalContext.current
     val displayId = id.toIntOrNull() ?: -1
     var isReadOnly by remember { mutableStateOf(false) }
+    var scriptName by remember { mutableStateOf("default_script") }
 
     val scope = rememberCoroutineScope()
     val serviceFlow = remember {
@@ -62,10 +66,20 @@ fun DisplayDetailScreen(
                 Text(text = "Read-Only Mode")
             }
 
+            OutlinedTextField(
+                value = scriptName,
+                onValueChange = { scriptName = it },
+                label = { Text("Script Name") }
+            )
+
             Button(onClick = {
+                val scriptDir = File(context.filesDir, "scripts/$scriptName")
+                if (!scriptDir.exists()) scriptDir.mkdirs()
+
                 val intent = Intent(context, FullscreenDisplayActivity::class.java).apply {
                     putExtra("displayId", displayId)
                     putExtra("isReadOnly", isReadOnly)
+                    putExtra("scriptDir", scriptDir.absolutePath)
                 }
                 context.startActivity(intent)
             }) {

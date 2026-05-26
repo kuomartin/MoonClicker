@@ -49,7 +49,7 @@ public:
 
     ~RelcEngine();
 
-    bool start(int width, int height, const std::string &scriptPath);
+    bool start(int displayId, int width, int height, const std::string &scriptPath);
 
     void stop();
 
@@ -108,6 +108,14 @@ private:
     static int lua_ui_update(lua_State *L);
     static int lua_ui_remove(lua_State *L);
 
+    // Klick'r equivalent APIs
+    static int lua_input_click(lua_State *L);
+    static int lua_system_action(lua_State *L); // handles home, back, recents
+    static int lua_system_startIntent(lua_State *L);
+    static int lua_system_notification(lua_State *L);
+    static int lua_wait(lua_State *L);
+    static int lua_screen_findImage(lua_State *L);
+
     std::unique_ptr<LuaEngine> luaEngine;
     std::unique_ptr<NativeImageReader> imageReader;
 
@@ -134,6 +142,10 @@ private:
     jmethodID uiUpdateMethodId;
     jmethodID uiRemoveMethodId;
     
+    jmethodID showNotificationMethodId;
+    jmethodID startIntentMethodId;
+    jmethodID systemActionMethodId;
+
     int displayId;
     int sinkHandle;
 

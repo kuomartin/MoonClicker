@@ -21,17 +21,25 @@ import javax.inject.Inject
 class FullscreenDisplayViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
+    enum class ExecutionState {
+        IDLE, RUNNING, CROPPING
+    }
+
     data class UiState(
         val isReadOnly: Boolean = false,
         val menuExpanded: Boolean = false,
         val menuOffsetX: Float = 0f,
         val menuOffsetY: Float = 0f,
         val showAppList: Boolean = false,
-        val apps: List<AppEntry> = emptyList()
+        val apps: List<AppEntry> = emptyList(),
+        val executionState: ExecutionState = ExecutionState.IDLE
     )
 
     private val _uiState = MutableStateFlow(UiState())
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
+
+    private val _capturedBitmap = MutableStateFlow<android.graphics.Bitmap?>(null)
+    val capturedBitmap: StateFlow<android.graphics.Bitmap?> = _capturedBitmap.asStateFlow()
 
     private val serviceFlow = UserService.create(
         viewModelScope,
@@ -55,6 +63,69 @@ class FullscreenDisplayViewModel @Inject constructor(
 
     fun toggleReadOnly() {
         _uiState.value = _uiState.value.copy(isReadOnly = !_uiState.value.isReadOnly)
+    }
+
+    fun startExecution(displayId: Int, width: Int, height: Int, scriptDir: String) {
+        viewModelScope.launch {
+            serviceFlow.runWhenAlive { service ->
+                com.xaxaxax.relc.lua.LuaNative.stop()
+                val mainScript = java.io.File(scriptDir, "main.lua").absolutePath
+                val success = com.xaxaxax.relc.lua.LuaNative.startEngineWithService(service, displayId, width, height, mainScript)
+                if (success != null) {
+                    _uiState.value = _uiState.value.copy(executionState = ExecutionState.RUNNING)
+                } else {
+                    Timber.e("Failed to start Lua engine")
+                }
+            }
+        }
+    }
+
+    fun stopExecution() {
+        com.xaxaxax.relc.lua.LuaNative.stop()
+        _uiState.value = _uiState.value.copy(executionState = ExecutionState.IDLE)
+    }
+
+    fun startCropping() {
+        _uiState.value = _uiState.value.copy(executionState = ExecutionState.CROPPING)
+        // trigger is handled by Activity passing Bitmap to setCapturedBitmap
+    }
+
+    fun setCapturedBitmap(bitmap: android.graphics.Bitmap) {
+        _capturedBitmap.value = bitmap
+    }
+
+    fun cancelCropping() {
+        _uiState.value = _uiState.value.copy(executionState = ExecutionState.IDLE)
+        _capturedBitmap.value = null
+    }
+
+    fun saveCroppedImage(scriptDir: String, name: String, cropRect: android.graphics.Rect): Boolean {
+        val bitmap = _capturedBitmap.value ?: return false
+        try {
+            // Ensure cropRect is within bounds
+            val left = cropRect.left.coerceAtLeast(0)
+            val top = cropRect.top.coerceAtLeast(0)
+            val right = cropRect.right.coerceAtMost(bitmap.width)
+            val bottom = cropRect.bottom.coerceAtMost(bitmap.height)
+            val width = right - left
+            val height = bottom - top
+
+            if (width <= 0 || height <= 0) return false
+
+            val croppedBitmap = android.graphics.Bitmap.createBitmap(bitmap, left, top, width, height)
+            val templateDir = java.io.File(scriptDir)
+            if (!templateDir.exists()) templateDir.mkdirs()
+
+            val file = java.io.File(templateDir, "$name.png")
+            java.io.FileOutputStream(file).use { out ->
+                croppedBitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
+            }
+            cancelCropping()
+            return true
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to save cropped image")
+            return false
+        }
     }
 
     fun setMenuExpanded(expanded: Boolean) {

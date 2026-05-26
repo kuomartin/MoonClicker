@@ -71,6 +71,7 @@ Java_com_xaxaxax_relc_lua_LuaNative_startEngine(
         JNIEnv *env,
         jobject thiz,
         jobject service, // Now IRelcV2Service
+        jint displayId,
         jint width,
         jint height,
         jstring scriptPath) {
@@ -82,7 +83,7 @@ Java_com_xaxaxax_relc_lua_LuaNative_startEngine(
     gEngine = new RelcEngine(env, service, thiz);
 
     const char *nativeScriptPath = env->GetStringUTFChars(scriptPath, nullptr);
-    bool success = gEngine->start(width, height, nativeScriptPath);
+    bool success = gEngine->start(displayId, width, height, nativeScriptPath);
     env->ReleaseStringUTFChars(scriptPath, nativeScriptPath);
 
     if (!success) {
