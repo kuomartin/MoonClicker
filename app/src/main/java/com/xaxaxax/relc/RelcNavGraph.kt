@@ -1,5 +1,8 @@
 package com.xaxaxax.relc
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.adaptive.currentWindowAdaptiveInfo
@@ -7,7 +10,15 @@ import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffo
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffoldDefaults
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -15,29 +26,19 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.navigation.toRoute
-import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.xaxaxax.relc.simplescript.domain.model.Event
+import com.xaxaxax.relc.simplescript.domain.model.Variable
+import com.xaxaxax.relc.simplescript.ui.editor.EventEditorScreen
+import com.xaxaxax.relc.simplescript.ui.editor.ScriptEditorScreen
+import com.xaxaxax.relc.simplescript.ui.editor.VariableEditorDialog
+import com.xaxaxax.relc.simplescript.ui.list.ScriptListScreen
+import com.xaxaxax.relc.simplescript.ui.viewmodel.SimpleScriptViewModel
 import com.xaxaxax.relc.ui.displaydetail.DisplayDetailScreen
 import com.xaxaxax.relc.ui.displays.DisplaysScreen
 import com.xaxaxax.relc.ui.scriptdetail.ScriptDetailScreen
 import com.xaxaxax.relc.ui.scripts.ScriptsScreen
 import com.xaxaxax.relc.ui.setting.SettingsScreen
-import com.xaxaxax.relc.simplescript.ui.viewmodel.SimpleScriptViewModel
-import com.xaxaxax.relc.simplescript.ui.list.ScriptListScreen
-import com.xaxaxax.relc.simplescript.ui.editor.ScriptEditorScreen
-import com.xaxaxax.relc.simplescript.ui.editor.EventEditorScreen
-import com.xaxaxax.relc.simplescript.domain.model.*
 
 @Composable
 fun RelcNavGraph() {
@@ -47,9 +48,9 @@ fun RelcNavGraph() {
 
     val isDetailScreen = currentDestination?.hierarchy?.any {
         it.hasRoute(DisplayDetailRoute::class) ||
-        it.hasRoute(ScriptDetailRoute::class) ||
-        it.hasRoute(SimpleScriptEditorRoute::class) ||
-        it.hasRoute(SimpleEventEditorRoute::class)
+                it.hasRoute(ScriptDetailRoute::class) ||
+                it.hasRoute(SimpleScriptEditorRoute::class) ||
+                it.hasRoute(SimpleEventEditorRoute::class)
     } == true
 
     val layoutType = if (isDetailScreen) {
@@ -156,6 +157,10 @@ fun RelcNavGraph() {
 
                 val currentScript by viewModel.currentScript.collectAsStateWithLifecycle()
 
+                var showVariableDialog by remember { mutableStateOf(false) }
+                var variableToEdit by remember { mutableStateOf<Variable?>(null) }
+                var variableIndexToEdit by remember { mutableStateOf(-1) }
+
                 if (currentScript != null) {
                     ScriptEditorScreen(
                         script = currentScript!!,
@@ -165,9 +170,19 @@ fun RelcNavGraph() {
                         },
                         onNameChange = { name -> viewModel.updateCurrentScript(currentScript!!.copy(name = name)) },
                         onFpsChange = { fps -> viewModel.updateCurrentScript(currentScript!!.copy(fps = fps)) },
-                        onAddVariable = {},
-                        onEditVariable = {},
-                        onDeleteVariable = {},
+                        onAddVariable = {
+                            variableToEdit = null
+                            variableIndexToEdit = -1
+                            showVariableDialog = true
+                        },
+                        onEditVariable = { variable ->
+                            variableIndexToEdit = currentScript!!.variables.indexOf(variable)
+                            variableToEdit = variable
+                            showVariableDialog = true
+                        },
+                        onDeleteVariable = { variable ->
+                            viewModel.updateCurrentScript(currentScript!!.copy(variables = currentScript!!.variables - variable))
+                        },
                         onAddEvent = {
                             navController.navigate(SimpleEventEditorRoute(-1)) // -1 for new
                         },
@@ -179,6 +194,23 @@ fun RelcNavGraph() {
                             viewModel.updateCurrentScript(currentScript!!.copy(events = currentScript!!.events - event))
                         }
                     )
+
+                    if (showVariableDialog) {
+                        VariableEditorDialog(
+                            initialVariable = variableToEdit,
+                            onSave = { newVar ->
+                                val updatedVars = currentScript!!.variables.toMutableList()
+                                if (variableIndexToEdit >= 0) {
+                                    updatedVars[variableIndexToEdit] = newVar
+                                } else {
+                                    updatedVars.add(newVar)
+                                }
+                                viewModel.updateCurrentScript(currentScript!!.copy(variables = updatedVars))
+                                showVariableDialog = false
+                            },
+                            onDismiss = { showVariableDialog = false }
+                        )
+                    }
                 } else {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator()
@@ -233,10 +265,14 @@ fun RelcNavGraph() {
                         onOperatorChange = { localEvent = localEvent.copy(conditionOperator = it) },
                         onAddCondition = { /* TODO: Nav to Condition Selector/Editor */ },
                         onEditCondition = { /* TODO: Nav to Condition Selector/Editor */ },
-                        onDeleteCondition = { cond -> localEvent = localEvent.copy(conditions = localEvent.conditions - cond) },
+                        onDeleteCondition = { cond ->
+                            localEvent = localEvent.copy(conditions = localEvent.conditions - cond)
+                        },
                         onAddAction = { /* TODO: Nav to Action Selector/Editor */ },
                         onEditAction = { /* TODO: Nav to Action Selector/Editor */ },
-                        onDeleteAction = { act -> localEvent = localEvent.copy(actions = localEvent.actions - act) }
+                        onDeleteAction = { act ->
+                            localEvent = localEvent.copy(actions = localEvent.actions - act)
+                        }
                     )
                 } else {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
