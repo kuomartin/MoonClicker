@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Crop
 import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.Menu
@@ -583,18 +584,34 @@ fun FullscreenDisplayScreen(
                 modifier = Modifier.fillMaxSize(),
                 elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
             ) {
-                // The nested NavHost handles its own state
-                val navController = rememberNavController()
-                NavHost(
-                    navController = navController,
-                    startDestination = SimpleScriptsRoute,
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    simpleScriptNavGraph(
+                Box(modifier = Modifier.fillMaxSize()) {
+                    // The nested NavHost handles its own state
+                    val navController = rememberNavController()
+                    NavHost(
                         navController = navController,
-                        onStartPointSelecting = { viewModel.startPointSelecting() },
-                        onStartCropping = { viewModel.startCropping() }
-                    )
+                        startDestination = SimpleScriptsRoute,
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        simpleScriptNavGraph(
+                            navController = navController,
+                            onStartPointSelecting = { viewModel.startPointSelecting() },
+                            onStartCropping = { viewModel.startCropping() }
+                        )
+                    }
+
+                    // Close Button
+                    IconButton(
+                        onClick = { viewModel.setEditorExpanded(false) },
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Close Editor",
+                            tint = androidx.compose.material3.MaterialTheme.colorScheme.onBackground
+                        )
+                    }
                 }
             }
         }
