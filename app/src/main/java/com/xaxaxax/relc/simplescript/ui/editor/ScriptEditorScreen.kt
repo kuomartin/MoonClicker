@@ -10,7 +10,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -25,14 +25,16 @@ fun ScriptEditorScreen(
     onBack: () -> Unit,
     onNameChange: (String) -> Unit,
     onFpsChange: (Int) -> Unit,
-    onAddVariable: () -> Unit,
-    onEditVariable: (Variable) -> Unit,
-    onDeleteVariable: (Variable) -> Unit,
+    onUpdateVariables: (List<Variable>) -> Unit,
     onAddEvent: () -> Unit,
     onEditEvent: (Event) -> Unit,
     onDeleteEvent: (Event) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var showVariableDialog by remember { mutableStateOf(false) }
+    var variableToEdit by remember { mutableStateOf<Variable?>(null) }
+    var variableIndexToEdit by remember { mutableStateOf(-1) }
+
     Scaffold(
         modifier = modifier,
         topBar = {
@@ -88,13 +90,21 @@ fun ScriptEditorScreen(
 
             // Variables Section
             item {
-                SectionHeader(title = "Variables", onAddClick = onAddVariable)
+                SectionHeader(title = "Variables", onAddClick = {
+                    variableToEdit = null
+                    variableIndexToEdit = -1
+                    showVariableDialog = true
+                })
             }
             items(script.variables) { variable ->
                 VariableListItem(
                     variable = variable,
-                    onEdit = { onEditVariable(variable) },
-                    onDelete = { onDeleteVariable(variable) }
+                    onEdit = {
+                        variableToEdit = variable
+                        variableIndexToEdit = script.variables.indexOf(variable)
+                        showVariableDialog = true
+                    },
+                    onDelete = { onUpdateVariables(script.variables - variable) }
                 )
             }
             if (script.variables.isEmpty()) {
@@ -121,6 +131,23 @@ fun ScriptEditorScreen(
             }
 
             item { Spacer(modifier = Modifier.height(32.dp)) }
+        }
+
+        if (showVariableDialog) {
+            VariableEditorDialog(
+                initialVariable = variableToEdit,
+                onSave = { newVar ->
+                    val updatedVars = script.variables.toMutableList()
+                    if (variableIndexToEdit >= 0) {
+                        updatedVars[variableIndexToEdit] = newVar
+                    } else {
+                        updatedVars.add(newVar)
+                    }
+                    onUpdateVariables(updatedVars)
+                    showVariableDialog = false
+                },
+                onDismiss = { showVariableDialog = false }
+            )
         }
     }
 }
@@ -226,9 +253,7 @@ fun ScriptEditorScreenPreview() {
             onBack = {},
             onNameChange = {},
             onFpsChange = {},
-            onAddVariable = {},
-            onEditVariable = {},
-            onDeleteVariable = {},
+            onUpdateVariables = {},
             onAddEvent = {},
             onEditEvent = {},
             onDeleteEvent = {}

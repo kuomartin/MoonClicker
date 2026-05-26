@@ -157,10 +157,6 @@ fun RelcNavGraph() {
 
                 val currentScript by viewModel.currentScript.collectAsStateWithLifecycle()
 
-                var showVariableDialog by remember { mutableStateOf(false) }
-                var variableToEdit by remember { mutableStateOf<Variable?>(null) }
-                var variableIndexToEdit by remember { mutableStateOf(-1) }
-
                 if (currentScript != null) {
                     ScriptEditorScreen(
                         script = currentScript!!,
@@ -170,19 +166,7 @@ fun RelcNavGraph() {
                         },
                         onNameChange = { name -> viewModel.updateCurrentScript(currentScript!!.copy(name = name)) },
                         onFpsChange = { fps -> viewModel.updateCurrentScript(currentScript!!.copy(fps = fps)) },
-                        onAddVariable = {
-                            variableToEdit = null
-                            variableIndexToEdit = -1
-                            showVariableDialog = true
-                        },
-                        onEditVariable = { variable ->
-                            variableIndexToEdit = currentScript!!.variables.indexOf(variable)
-                            variableToEdit = variable
-                            showVariableDialog = true
-                        },
-                        onDeleteVariable = { variable ->
-                            viewModel.updateCurrentScript(currentScript!!.copy(variables = currentScript!!.variables - variable))
-                        },
+                        onUpdateVariables = { vars -> viewModel.updateCurrentScript(currentScript!!.copy(variables = vars)) },
                         onAddEvent = {
                             navController.navigate(SimpleEventEditorRoute(-1)) // -1 for new
                         },
@@ -194,23 +178,6 @@ fun RelcNavGraph() {
                             viewModel.updateCurrentScript(currentScript!!.copy(events = currentScript!!.events - event))
                         }
                     )
-
-                    if (showVariableDialog) {
-                        VariableEditorDialog(
-                            initialVariable = variableToEdit,
-                            onSave = { newVar ->
-                                val updatedVars = currentScript!!.variables.toMutableList()
-                                if (variableIndexToEdit >= 0) {
-                                    updatedVars[variableIndexToEdit] = newVar
-                                } else {
-                                    updatedVars.add(newVar)
-                                }
-                                viewModel.updateCurrentScript(currentScript!!.copy(variables = updatedVars))
-                                showVariableDialog = false
-                            },
-                            onDismiss = { showVariableDialog = false }
-                        )
-                    }
                 } else {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator()
