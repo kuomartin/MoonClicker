@@ -10,59 +10,59 @@ interface ScriptDao {
     fun getAllScripts(): Flow<List<ScriptEntity>>
 
     @Query("SELECT * FROM script WHERE id = :scriptId")
-    suspend fun getScriptById(scriptId: Long): ScriptEntity?
+    fun getScriptById(scriptId: Long): ScriptEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertScript(script: ScriptEntity): Long
+    fun insertScript(script: ScriptEntity): Long
 
     @Delete
-    suspend fun deleteScript(script: ScriptEntity): Int
+    fun deleteScript(script: ScriptEntity)
 }
 
 @Dao
 interface VariableDao {
     @Query("SELECT * FROM variable WHERE script_id = :scriptId")
-    suspend fun getVariablesForScript(scriptId: Long): List<VariableEntity>
+    fun getVariablesForScript(scriptId: Long): List<VariableEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertVariable(variable: VariableEntity): Long
+    fun insertVariable(variable: VariableEntity): Long
 
     @Delete
-    suspend fun deleteVariable(variable: VariableEntity): Int
+    fun deleteVariable(variable: VariableEntity)
 }
 
 @Dao
 interface EventDao {
     @Query("SELECT * FROM event WHERE script_id = :scriptId")
-    suspend fun getEventsForScript(scriptId: Long): List<EventEntity>
+    fun getEventsForScript(scriptId: Long): List<EventEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertEvent(event: EventEntity): Long
+    fun insertEvent(event: EventEntity): Long
 
     @Delete
-    suspend fun deleteEvent(event: EventEntity): Int
+    fun deleteEvent(event: EventEntity)
 }
 
 @Dao
 interface ConditionDao {
     @Query("SELECT * FROM condition WHERE event_id = :eventId")
-    suspend fun getConditionsForEvent(eventId: Long): List<ConditionEntity>
+    fun getConditionsForEvent(eventId: Long): List<ConditionEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertCondition(condition: ConditionEntity): Long
+    fun insertCondition(condition: ConditionEntity): Long
 
     @Delete
-    suspend fun deleteCondition(condition: ConditionEntity): Int
+    fun deleteCondition(condition: ConditionEntity)
 }
 
 @Dao
 interface ActionDao {
     @Query("SELECT * FROM action WHERE event_id = :eventId ORDER BY order_index ASC")
-    suspend fun getActionsForEvent(eventId: Long): List<ActionEntity>
+    fun getActionsForEvent(eventId: Long): List<ActionEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertAction(action: ActionEntity): Long
+    fun insertAction(action: ActionEntity): Long
 
     @Delete
-    suspend fun deleteAction(action: ActionEntity): Int
+    fun deleteAction(action: ActionEntity)
 }

@@ -80,23 +80,22 @@
 你可以定義以下函數，引擎會在特定時間點呼叫它們：
 
 *   **`on_start()`**: 腳本載入後第一次執行前呼叫。
-*   **`on_tick(dt)`**: 每秒約呼叫 15 次（15 FPS 邏輯循環），`dt` 為間隔時間。
-*   **`on_match(name, results)`**: 當畫面辨識到任何模板時主動呼叫。
-    *   `name`: 匹配到的第一個模板名稱。
-    *   `results`: 完整的匹配結果 table。
+*   **`on_tick(matches, tick_num)`**: 每秒約呼叫 15 次（15 FPS 邏輯循環）。
+    *   `matches`: 一個包含目前畫面所有辨識到目標的 table。
+    *   `tick_num`: 自腳本啟動以來的累計跳動次數。
 
 ---
 
-## 範例腳本：自動啟動、監控與超時處理
+## 範例腳本：自動啟動、監控與處理
 
-這個範例展示了如何利用 `on_start` 初始化、`on_match` 處理圖像辨識，以及 `on_tick` 處理超時邏輯。
+這個範例展示了如何利用 `on_start` 初始化，以及在 `on_tick` 中同時處理圖像辨識與計時邏輯。
 
 ```lua
 match.templates = {
     { name = "登入按鈕", target = "/data/local/tmp/login.png", threshold = 0.8 }
 }
 
-local last_seen_time = 0
+local last_seen_tick = 0
 
 function on_start()
     log("開始執行自動登入...")
@@ -104,24 +103,18 @@ function on_start()
     display.launch("com.example.game", dId)
 end
 
-function on_tick(dt)
-    last_seen_time = last_seen_time + dt
-    
-    -- 如果超過 10 秒沒看到任何目標，每 10 秒輸出一次警告
-    if last_seen_time > 10 then
-        log("警告：已超過 10 秒未辨識到任何目標...")
-        last_seen_time = 0 -- 重置計時以避免日誌洗版
-    end
-end
-
-function on_match(name, results)
-    -- 只要有匹配，就重置計時器
-    last_seen_time = 0
-
-    if name == "登入按鈕" then
-        local btn = results[name]
+function on_tick(matches, tick)
+    -- 如果看到目標，更新最後看到的時間
+    if matches["登入按鈕"] and matches["登入按鈕"].found then
+        last_seen_tick = tick
         log("看到登入按鈕了，點擊它！")
-        input.swipe(-1, {btn.x, btn.y}, 100)
+        input.swipe(-1, {matches["登入按鈕"].x, matches["登入按鈕"].y}, 100)
+    end
+    
+    -- 如果超過 150 ticks (約 10 秒) 沒看到任何目標，輸出警告
+    if tick - last_seen_tick > 150 then
+        log("警告：已超過 10 秒未辨識到任何目標...")
+        last_seen_tick = tick -- 重置計時以避免日誌洗版
     end
 end
 ```

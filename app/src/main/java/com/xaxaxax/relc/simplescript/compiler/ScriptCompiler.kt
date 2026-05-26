@@ -9,6 +9,8 @@ class ScriptCompiler {
 
         // 1. Script Variables
         luaCode.append("-- ### Global Variables ###\n")
+        luaCode.append("local var_last_match_x = 0\n")
+        luaCode.append("local var_last_match_y = 0\n")
         for (variable in script.variables) {
             val initVal = if (variable.type == VariableType.INT) {
                 variable.initialValue.toInt().toString()
@@ -24,7 +26,7 @@ class ScriptCompiler {
         luaCode.append("local events_state = {\n")
         for (event in script.events) {
             val enabled = if (event.enabledOnStart) "true" else "false"
-            luaCode.append("    [\"${event.name}\"] = { enabled = $enabled, timer = 0.0 },\n")
+            luaCode.append("    [\"${event.name}\"] = { enabled = $enabled, start_tick = 0 },\n")
         }
         luaCode.append("}\n\n")
 
@@ -40,7 +42,7 @@ class ScriptCompiler {
         }
         luaCode.append("}\n\n")
 
-        // 4. Action Compiling logic (Forward declaration for events)
+        // 4. Action Compiling logic
         luaCode.append("-- ### Actions Implementation ###\n")
         for (event in script.events) {
             luaCode.append("local function execute_actions_${event.name.replace(" ", "_")}()\n")
@@ -52,99 +54,67 @@ class ScriptCompiler {
         }
 
 
-        // 5. on_tick (For timers and variable conditions)
+        // 5. on_tick (Central Logic)
         luaCode.append("-- ### on_tick Logic ###\n")
-        luaCode.append("function on_tick(dt)\n")
+        luaCode.append("function on_tick(matches, tick)\n")
         for (event in script.events) {
-            // Only process if enabled and it has non-template conditions
-            val hasNonTemplateConditions = event.conditions.any { it !is TemplateMatchCondition }
-
             luaCode.append("    if events_state[\"${event.name}\"].enabled then\n")
-            luaCode.append("        events_state[\"${event.name}\"].timer = events_state[\"${event.name}\"].timer + dt\n")
 
-            if (hasNonTemplateConditions) {
-                val conditionChecks = event.conditions.filter { it !is TemplateMatchCondition }.map { compileCondition(it, event.name) }
-                if (conditionChecks.isNotEmpty()) {
-                    val logicalOp = if (event.conditionOperator == LogicalOperator.AND) " and " else " or "
-                    val checkConditionStr = conditionChecks.joinToString(logicalOp)
-
-                    luaCode.append("        if $checkConditionStr then\n")
-                    // If it also requires template match, we can't execute here yet. This might need state machine if mixed.
-                    // For now, assume if it has mixed, AND means we need all, OR means we can execute if one triggers.
-                    // SimpleScript usually separates them. Let's assume if it triggers here, it executes.
-                    val requiresTemplate = event.conditions.any { it is TemplateMatchCondition }
-                    if (!requiresTemplate || event.conditionOperator == LogicalOperator.OR) {
-                        luaCode.append("            execute_actions_${event.name.replace(" ", "_")}()\n")
+            val conditionStrings = event.conditions.map { condition ->
+                when (condition) {
+                    is TemplateMatchCondition -> {
+                        val templateName = "${event.name}_${condition.hashCode()}"
+                        "(matches[\"$templateName\"] and matches[\"$templateName\"].found)"
                     }
-                    luaCode.append("        end\n")
+                    is VariableCondition -> {
+                        "(var_${condition.variableA} ${condition.operator.symbol} ${formatValue(condition.target)})"
+                    }
+                    is TimerCondition -> {
+                        val durationTicks = when (condition.unit) {
+                            TimeUnit.MS -> (condition.duration / (1000f / script.fps)).toInt()
+                            TimeUnit.FRAME -> condition.duration.toInt()
+                            TimeUnit.S -> (condition.duration * script.fps).toInt()
+                            TimeUnit.M -> (condition.duration * 60f * script.fps).toInt()
+                            TimeUnit.H -> (condition.duration * 3600f * script.fps).toInt()
+                        }
+                        "(tick - events_state[\"${event.name}\"].start_tick >= $durationTicks)"
+                    }
                 }
             }
+
+            if (conditionStrings.isNotEmpty()) {
+                val logicalOp = if (event.conditionOperator == LogicalOperator.AND) " and " else " or "
+                val checkConditionStr = conditionStrings.joinToString(logicalOp)
+
+                luaCode.append("        if $checkConditionStr then\n")
+
+                // If it was a template match, update the global last_match vars
+                val templateConditions = event.conditions.filterIsInstance<TemplateMatchCondition>()
+                if (templateConditions.isNotEmpty()) {
+                    for (condition in templateConditions) {
+                        val templateName = "${event.name}_${condition.hashCode()}"
+                        luaCode.append("            if matches[\"$templateName\"] and matches[\"$templateName\"].found then\n")
+                        luaCode.append("                var_last_match_x = matches[\"$templateName\"].x\n")
+                        luaCode.append("                var_last_match_y = matches[\"$templateName\"].y\n")
+                        luaCode.append("            end\n")
+                    }
+                }
+
+                luaCode.append("            execute_actions_${event.name.replace(" ", "_")}()\n")
+                luaCode.append("        end\n")
+            }
+
             luaCode.append("    end\n")
         }
         luaCode.append("end\n\n")
 
-        // 6. on_match (For template match conditions)
-        luaCode.append("-- ### on_match Logic ###\n")
-        luaCode.append("function on_match(name, results)\n")
-        luaCode.append("    local triggered_event = \"\"\n")
-        for (event in script.events) {
-             val templateConditions = event.conditions.filterIsInstance<TemplateMatchCondition>()
-             if (templateConditions.isNotEmpty()) {
-                 for (condition in templateConditions) {
-                     val templateName = "${event.name}_${condition.hashCode()}"
-                     luaCode.append("    if events_state[\"${event.name}\"].enabled and name == \"$templateName\" then\n")
-                     luaCode.append("        triggered_event = \"${event.name}\"\n")
-                     luaCode.append("        local match_res = results[\"$templateName\"]\n")
-                     luaCode.append("        -- Save match position to global vars for point references if needed\n")
-                     luaCode.append("        var_last_match_x = match_res.x\n")
-                     luaCode.append("        var_last_match_y = match_res.y\n")
-
-                     // Check if other conditions are met if AND is used
-                     val otherConditions = event.conditions.filter { it !is TemplateMatchCondition }.map { compileCondition(it, event.name) }
-                     if (otherConditions.isNotEmpty() && event.conditionOperator == LogicalOperator.AND) {
-                         val checkConditionStr = otherConditions.joinToString(" and ")
-                         luaCode.append("        if $checkConditionStr then\n")
-                         luaCode.append("            execute_actions_${event.name.replace(" ", "_")}()\n")
-                         luaCode.append("        end\n")
-                     } else {
-                         luaCode.append("        execute_actions_${event.name.replace(" ", "_")}()\n")
-                     }
-
-                     luaCode.append("    end\n")
-                 }
-             }
-        }
-        luaCode.append("end\n\n")
-
-        // 7. on_start
+        // 6. on_start
         luaCode.append("-- ### on_start ###\n")
         luaCode.append("function on_start()\n")
         luaCode.append("    log(\"Script '${script.name}' started.\")\n")
         luaCode.append("end\n")
 
         return luaCode.toString()
-    }
-
-    private fun compileCondition(condition: Condition, eventName: String): String {
-        return when (condition) {
-            is TemplateMatchCondition -> {
-                // Handled in on_match
-                "true"
-            }
-            is VariableCondition -> {
-                "var_${condition.variableA} ${condition.operator.symbol} ${formatValue(condition.target)}"
-            }
-            is TimerCondition -> {
-                val durationS = when (condition.unit) {
-                    TimeUnit.MS -> condition.duration / 1000f
-                    TimeUnit.FRAME -> condition.duration / 15f // Assuming 15fps as default
-                    TimeUnit.S -> condition.duration
-                    TimeUnit.M -> condition.duration * 60f
-                    TimeUnit.H -> condition.duration * 3600f
-                }
-                "events_state[\"$eventName\"].timer >= $durationS"
-            }
-        }
     }
 
     private fun compileAction(action: Action): String {
@@ -156,9 +126,6 @@ class ScriptCompiler {
                 "input.swipe(-1, {${formatValue(action.point1.x)}, ${formatValue(action.point1.y)}, ${formatValue(action.point2.x)}, ${formatValue(action.point2.y)}}, ${action.duration})"
             }
             is WaitAction -> {
-                // Not perfectly supported by standard sleep in lua in same thread if it blocks on_tick,
-                // but usually os.execute sleep or a busy loop might be used.
-                // Assuming a sleep function is available or will block execution intentionally.
                 val durationMs = when (action.unit) {
                     TimeUnit.MS -> action.duration
                     TimeUnit.FRAME -> action.duration * (1000 / 15)
@@ -180,7 +147,7 @@ class ScriptCompiler {
                 when (action.operator) {
                     EventOperator.ON -> "events_state[\"${action.eventName}\"].enabled = true"
                     EventOperator.OFF -> "events_state[\"${action.eventName}\"].enabled = false"
-                    EventOperator.RESET -> "events_state[\"${action.eventName}\"].timer = 0.0"
+                    EventOperator.RESET -> "events_state[\"${action.eventName}\"].start_tick = tick" // RESET should reset to current tick
                 }
             }
             is SystemBtnAction -> {
@@ -199,7 +166,6 @@ class ScriptCompiler {
     }
 
     private fun formatValue(value: String): String {
-        // If it starts with a letter, assume it's a variable reference
         return if (value.matches(Regex("^[a-zA-Z_].*"))) {
             "var_$value"
         } else {
