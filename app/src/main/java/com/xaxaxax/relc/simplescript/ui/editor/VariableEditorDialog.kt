@@ -89,7 +89,7 @@ fun VariableEditorDialog(
     )
 }
 
-@Preview
+@Preview(showBackground = true)
 @Composable
 fun VariableEditorDialogPreview() {
     MaterialTheme {

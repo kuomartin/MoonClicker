@@ -112,7 +112,9 @@ fun ConditionEditorDialog(
                                 readOnly = true,
                                 label = { Text("Operator") },
                                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = opExpanded) },
-                                modifier = Modifier.menuAnchor().fillMaxWidth()
+                                modifier = Modifier
+                                    .menuAnchor()
+                                    .fillMaxWidth()
                             )
                             ExposedDropdownMenu(expanded = opExpanded, onDismissRequest = { opExpanded = false }) {
                                 CompareOperator.entries.forEach { op ->
@@ -147,7 +149,9 @@ fun ConditionEditorDialog(
                                 readOnly = true,
                                 label = { Text("Unit") },
                                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = unitExpanded) },
-                                modifier = Modifier.menuAnchor().fillMaxWidth()
+                                modifier = Modifier
+                                    .menuAnchor()
+                                    .fillMaxWidth()
                             )
                             ExposedDropdownMenu(expanded = unitExpanded, onDismissRequest = { unitExpanded = false }) {
                                 TimeUnit.entries.forEach { unit ->
@@ -194,12 +198,14 @@ fun ConditionEditorDialog(
 @Composable
 fun ConditionEditorDialogPreview_Image() {
     MaterialTheme {
-        ConditionEditorDialog(
-            initialCondition = TemplateMatchCondition("/sdcard/test.png", threshold = 0.85f),
-            availableVariables = emptyList(),
-            onSave = {},
-            onDismiss = {}
-        )
+        Box(Modifier.fillMaxSize()){
+            ConditionEditorDialog(
+                initialCondition = TemplateMatchCondition("/sdcard/test.png", threshold = 0.85f),
+                availableVariables = emptyList(),
+                onSave = {},
+                onDismiss = {}
+            )
+        }
     }
 }
 
@@ -207,11 +213,13 @@ fun ConditionEditorDialogPreview_Image() {
 @Composable
 fun ConditionEditorDialogPreview_New() {
     MaterialTheme {
-        ConditionEditorDialog(
-            initialCondition = null,
-            availableVariables = listOf(Variable("HP", VariableType.INT, 100)),
-            onSave = {},
-            onDismiss = {}
-        )
+        Box(Modifier.fillMaxSize()){
+            ConditionEditorDialog(
+                initialCondition = null,
+                availableVariables = listOf(Variable("HP", VariableType.INT, 100)),
+                onSave = {},
+                onDismiss = {}
+            )
+        }
     }
 }
