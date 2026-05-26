@@ -36,6 +36,8 @@ import com.xaxaxax.relc.SimpleScriptEditorRoute
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -572,21 +574,22 @@ fun FullscreenDisplayScreen(
         }
 
         // Editor Overlay
-        AnimatedVisibility(
-            visible = uiState.showEditor,
-            enter = slideInVertically(initialOffsetY = { it }),
-            exit = slideOutVertically(targetOffsetY = { it }),
+        val editorOffsetY by animateFloatAsState(
+            targetValue = if (uiState.showEditor) 0f else 3000f,
+            animationSpec = androidx.compose.animation.core.tween(durationMillis = 300),
+            label = "editorOffset"
+        )
+
+        Card(
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+            colors = CardDefaults.cardColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.background),
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxHeight(0.75f)
                 .fillMaxWidth()
+                .graphicsLayer { translationY = editorOffsetY },
+            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
         ) {
-            Card(
-                shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-                colors = CardDefaults.cardColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.background),
-                modifier = Modifier.fillMaxSize(),
-                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
-            ) {
                 Box(modifier = Modifier.fillMaxSize()) {
                     // The nested NavHost handles its own state
                     val navController = rememberNavController()
@@ -606,4 +609,3 @@ fun FullscreenDisplayScreen(
             }
         }
     }
-}
