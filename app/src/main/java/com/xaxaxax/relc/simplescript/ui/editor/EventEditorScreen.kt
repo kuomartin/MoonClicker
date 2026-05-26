@@ -81,24 +81,34 @@ fun EventEditorScreen(
                             )
                         }
                         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                        Text("Conditions Operator", fontWeight = FontWeight.SemiBold)
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                RadioButton(
-                                    selected = event.conditionOperator == LogicalOperator.AND,
-                                    onClick = { onOperatorChange(LogicalOperator.AND) }
+                            Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                                Text("Conditions Operator", fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    "Determine how multiple conditions trigger the event",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                                Text("AND (All must match)")
                             }
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                RadioButton(
+                            SingleChoiceSegmentedButtonRow {
+                                SegmentedButton(
+                                    selected = event.conditionOperator == LogicalOperator.AND,
+                                    onClick = { onOperatorChange(LogicalOperator.AND) },
+                                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2)
+                                ) {
+                                    Text("AND")
+                                }
+                                SegmentedButton(
                                     selected = event.conditionOperator == LogicalOperator.OR,
-                                    onClick = { onOperatorChange(LogicalOperator.OR) }
-                                )
-                                Text("OR (Any can match)")
+                                    onClick = { onOperatorChange(LogicalOperator.OR) },
+                                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2)
+                                ) {
+                                    Text("OR")
+                                }
                             }
                         }
                     }
