@@ -178,3 +178,31 @@ fun ActionEditorDialog(
         }
     )
 }
+
+@Preview
+@Composable
+fun ActionEditorDialogPreview_Click() {
+    MaterialTheme {
+        ActionEditorDialog(
+            initialAction = ClickAction(PointConfig("500", "btn_y"), 150),
+            availableVariables = listOf(Variable("btn_y", VariableType.INT, 200)),
+            availableEvents = emptyList(),
+            onSave = {},
+            onDismiss = {}
+        )
+    }
+}
+
+@Preview
+@Composable
+fun ActionEditorDialogPreview_New() {
+    MaterialTheme {
+        ActionEditorDialog(
+            initialAction = null,
+            availableVariables = emptyList(),
+            availableEvents = emptyList(),
+            onSave = {},
+            onDismiss = {}
+        )
+    }
+}

@@ -199,7 +199,7 @@ fun RelcNavGraph() {
                 // but since currentScript is just state, hiltViewModel() on a different route will create a new instance!
                 // To fix this, we can scope it to the navController graph.
                 val parentEntry = remember(backStackEntry) {
-                    navController.getBackStackEntry(SimpleScriptsRoute::class)
+                    navController.getBackStackEntry(SimpleScriptEditorRoute::class)
                 }
                 val viewModel: SimpleScriptViewModel = hiltViewModel(parentEntry)
                 val currentScript by viewModel.currentScript.collectAsStateWithLifecycle()

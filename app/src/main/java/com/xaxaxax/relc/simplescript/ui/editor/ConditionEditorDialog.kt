@@ -189,3 +189,29 @@ fun ConditionEditorDialog(
         }
     )
 }
+
+@Preview
+@Composable
+fun ConditionEditorDialogPreview_Image() {
+    MaterialTheme {
+        ConditionEditorDialog(
+            initialCondition = TemplateMatchCondition("/sdcard/test.png", threshold = 0.85f),
+            availableVariables = emptyList(),
+            onSave = {},
+            onDismiss = {}
+        )
+    }
+}
+
+@Preview
+@Composable
+fun ConditionEditorDialogPreview_New() {
+    MaterialTheme {
+        ConditionEditorDialog(
+            initialCondition = null,
+            availableVariables = listOf(Variable("HP", VariableType.INT, 100)),
+            onSave = {},
+            onDismiss = {}
+        )
+    }
+}
