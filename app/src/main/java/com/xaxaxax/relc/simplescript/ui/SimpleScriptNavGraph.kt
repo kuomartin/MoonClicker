@@ -1,5 +1,6 @@
 package com.xaxaxax.relc.simplescript.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
@@ -59,6 +60,11 @@ fun NavGraphBuilder.simpleScriptNavGraph(
         val currentScript by viewModel.currentScript.collectAsStateWithLifecycle()
 
         if (currentScript != null) {
+            BackHandler {
+                viewModel.saveCurrentScript()
+                navController.popBackStack()
+            }
+
             ScriptEditorScreen(
                 script = currentScript!!,
                 onBack = {
@@ -115,6 +121,17 @@ fun NavGraphBuilder.simpleScriptNavGraph(
         var actionIndexToEdit by remember { mutableStateOf(-1) }
 
         if (currentScript != null) {
+            BackHandler {
+                val updatedEvents = currentScript!!.events.toMutableList()
+                if (eventIndex >= 0 && eventIndex < updatedEvents.size) {
+                    updatedEvents[eventIndex] = localEvent
+                } else {
+                    updatedEvents.add(localEvent)
+                }
+                viewModel.updateCurrentScript(currentScript!!.copy(events = updatedEvents))
+                navController.popBackStack()
+            }
+
             EventEditorScreen(
                 event = localEvent,
                 onBack = {

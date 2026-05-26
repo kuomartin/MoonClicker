@@ -24,7 +24,12 @@ class SimpleScriptViewModel @Inject constructor(
     private val _currentScript = MutableStateFlow<Script?>(null)
     val currentScript: StateFlow<Script?> = _currentScript.asStateFlow()
 
+    private var isLoaded = false
+
     fun loadScript(scriptId: Long?) {
+        if (isLoaded) return
+        isLoaded = true
+
         viewModelScope.launch {
             if (scriptId == null || scriptId == 0L) {
                 // New Script
