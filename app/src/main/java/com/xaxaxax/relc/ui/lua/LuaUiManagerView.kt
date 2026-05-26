@@ -1,6 +1,7 @@
 package com.xaxaxax.relc.ui.lua
 
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -13,12 +14,14 @@ import java.io.File
 @Composable
 fun LuaUiManagerView(
     manager: LuaUiManager,
-    luaNative: LuaNative
+    luaNative: LuaNative,
+    scriptDir: String
 ) {
     val context = LocalContext.current
-    val scope = remember(context, luaNative) {
+    val scope = remember(context, luaNative, scriptDir) {
         object : LuaUiScope {
-            override val rootPath: File = context.filesDir
+            override val rootPath: File = File(scriptDir)
+            override val sharedData: Map<String, Any> = LuaNative.sharedData
             override fun sendUIEvent(id: String, event: String) {
                 luaNative.sendUIEvent(id, "click")
             }
@@ -27,7 +30,7 @@ fun LuaUiManagerView(
     LaunchedEffect(Unit) {
         Timber.d("Use LuaUiManagerView")
     }
-    Row {
+    Box(modifier = Modifier.fillMaxSize()) {
         with(scope) {
             manager.roots.forEach { element ->
                 element.GetComposable(Modifier)

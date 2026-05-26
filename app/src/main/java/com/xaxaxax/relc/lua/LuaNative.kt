@@ -14,6 +14,9 @@ object LuaNative {
     val uiManager = com.xaxaxax.relc.ui.lua.LuaUiManager()
     private var appContext: android.content.Context? = null
 
+    // Shared state between Lua and Kotlin
+    val sharedData = androidx.compose.runtime.mutableStateMapOf<String, Any>()
+
     fun initContext(context: android.content.Context) {
         appContext = context.applicationContext
     }
@@ -35,7 +38,8 @@ object LuaNative {
         Timber.d("LuaNative startIntent: $uri")
         val ctx = appContext ?: return
         try {
-            val intent = android.content.Intent.parseUri(uri, android.content.Intent.URI_INTENT_SCHEME)
+            val intent =
+                android.content.Intent.parseUri(uri, android.content.Intent.URI_INTENT_SCHEME)
             intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
             ctx.startActivity(intent)
         } catch (e: Exception) {
@@ -48,12 +52,34 @@ object LuaNative {
         val service = currentService ?: return
         val targetDisplay = if (currentDisplayId != -1) currentDisplayId else 0
         when (action) {
-            "home" -> service.injectKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_HOME), targetDisplay)
+            "home" -> service.injectKeyEvent(
+                android.view.KeyEvent(
+                    android.view.KeyEvent.ACTION_DOWN,
+                    android.view.KeyEvent.KEYCODE_HOME
+                ), targetDisplay
+            )
+
             "back" -> {
-                service.injectKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_BACK), targetDisplay)
-                service.injectKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_BACK), targetDisplay)
+                service.injectKeyEvent(
+                    android.view.KeyEvent(
+                        android.view.KeyEvent.ACTION_DOWN,
+                        android.view.KeyEvent.KEYCODE_BACK
+                    ), targetDisplay
+                )
+                service.injectKeyEvent(
+                    android.view.KeyEvent(
+                        android.view.KeyEvent.ACTION_UP,
+                        android.view.KeyEvent.KEYCODE_BACK
+                    ), targetDisplay
+                )
             }
-            "recents" -> service.injectKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_APP_SWITCH), targetDisplay)
+
+            "recents" -> service.injectKeyEvent(
+                android.view.KeyEvent(
+                    android.view.KeyEvent.ACTION_DOWN,
+                    android.view.KeyEvent.KEYCODE_APP_SWITCH
+                ), targetDisplay
+            )
         }
     }
 
@@ -135,5 +161,17 @@ object LuaNative {
     fun uiRemove(id: String) {
         Timber.d("LuaNative uiRemove: id=$id")
         uiManager.remove(id)
+    }
+
+    /**
+     * 更新共享數據 (被 C++ 引擎呼叫)
+     */
+    fun setSharedData(key: String, value: Any?) {
+//        Timber.v("LuaNative setSharedData: $key = $value")
+        if (value == null) {
+            sharedData.remove(key)
+        } else {
+            sharedData[key] = value
+        }
     }
 }

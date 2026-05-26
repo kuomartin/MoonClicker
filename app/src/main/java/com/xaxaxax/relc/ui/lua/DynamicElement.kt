@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -27,27 +28,59 @@ data class Background(val color: Color = Color.Unspecified, val rounding: Int = 
 
 sealed class DynamicElement(val type: String) {
     abstract val id: String
+    abstract val x: Any?
+    abstract val y: Any?
     abstract val padding: PaddingValues
     abstract val border: Border
     abstract val background: Background
-    abstract val width: Int?
-    abstract val height: Int?
+    abstract val width: Any?
+    abstract val height: Any?
     var clickable: Boolean = false
+
+    protected fun resolveInt(value: Any?, sharedData: Map<String, Any>): Int? {
+        if (value == null || value == org.json.JSONObject.NULL) return null
+        return when (value) {
+            is Number -> value.toInt()
+            is String -> if (value.startsWith("$")) {
+                sharedData[value.substring(1)]?.let {
+                    when (it) {
+                        is Number -> it.toInt()
+                        is String -> it.toDoubleOrNull()?.toInt()
+                        else -> null
+                    }
+                }
+            } else value.toDoubleOrNull()?.toInt()
+            else -> null
+        }
+    }
 
     @Composable
     context(uiScope: LuaUiScope)
-    fun Modifier.applyModifier(): Modifier =
-        padding(padding)
+    fun Modifier.applyModifier(): Modifier {
+        val density = androidx.compose.ui.platform.LocalDensity.current
+        val resolvedX = resolveInt(x, uiScope.sharedData)
+        val resolvedY = resolveInt(y, uiScope.sharedData)
+        val resolvedW = resolveInt(width, uiScope.sharedData)
+        val resolvedH = resolveInt(height, uiScope.sharedData)
+
+        return (if (resolvedX != null || resolvedY != null) {
+            this.offset(
+                x = resolvedX?.let { with(density) { it.toDp() } } ?: 0.dp,
+                y = resolvedY?.let { with(density) { it.toDp() } } ?: 0.dp
+            )
+        } else this)
+            .padding(padding)
             .border(border.width.dp, border.color)
             .background(
                 color = background.color,
                 shape = RoundedCornerShape(background.rounding.dp)
             )
             .let { m ->
-                val finalM = width?.let { w -> m.width(w.dp) } ?: m
-                height?.let { h -> finalM.height(h.dp) } ?: finalM
+                val finalM = resolvedW?.let { w -> with(density) { m.width(w.toDp()) } } ?: m
+                resolvedH?.let { h -> with(density) { finalM.height(h.toDp()) } } ?: finalM
             }
             .clickable(enabled = clickable) { uiScope.sendUIEvent(id, "click") }
+    }
 
     @Composable
     context(uiScope: LuaUiScope)
@@ -60,6 +93,8 @@ sealed class DynamicElement(val type: String) {
                 "row" -> {
                     DynamicRow(
                         id = id,
+                        x = param.x,
+                        y = param.y,
                         padding = param.padding,
                         border = param.border,
                         background = param.background,
@@ -73,6 +108,8 @@ sealed class DynamicElement(val type: String) {
                 "column" -> {
                     DynamicColumn(
                         id = id,
+                        x = param.x,
+                        y = param.y,
                         padding = param.padding,
                         border = param.border,
                         background = param.background,
@@ -86,6 +123,8 @@ sealed class DynamicElement(val type: String) {
                 "text" -> {
                     DynamicText(
                         id = id,
+                        x = param.x,
+                        y = param.y,
                         padding = param.padding,
                         border = param.border,
                         background = param.background,
@@ -93,6 +132,7 @@ sealed class DynamicElement(val type: String) {
                         height = param.height,
                         text = param.text,
                         size = param.size,
+                        color = param.color ?: Color.Unspecified,
                         fontFamily = param.fontFamily,
                         fontWeight = param.fontWeight
                     )
@@ -101,6 +141,8 @@ sealed class DynamicElement(val type: String) {
                 "image" -> {
                     DynamicImage(
                         id = id,
+                        x = param.x,
+                        y = param.y,
                         padding = param.padding,
                         border = param.border,
                         background = param.background,
@@ -114,6 +156,8 @@ sealed class DynamicElement(val type: String) {
                 "box" -> {
                     DynamicBox(
                         id = id,
+                        x = param.x,
+                        y = param.y,
                         padding = param.padding,
                         border = param.border,
                         background = param.background,
@@ -193,8 +237,10 @@ private class ElementParam(json: String) {
         val rounding = obj?.opt("rounding") as? Int
         Background(color = parseColor(colorObj) ?: Color.Unspecified, rounding = rounding ?: 0)
     }
-    val width: Int? by lazy { jsonObj.opt("width") as? Int }
-    val height: Int? by lazy { jsonObj.opt("height") as? Int }
+    val x: Any? by lazy { jsonObj.opt("x") }
+    val y: Any? by lazy { jsonObj.opt("y") }
+    val width: Any? by lazy { jsonObj.opt("width") }
+    val height: Any? by lazy { jsonObj.opt("height") }
     val clickable: Boolean? by lazy { jsonObj.opt("clickable") as? Boolean }
     val verticalAlignment: Alignment.Vertical by lazy {
         when (jsonObj.opt("alignment")) {

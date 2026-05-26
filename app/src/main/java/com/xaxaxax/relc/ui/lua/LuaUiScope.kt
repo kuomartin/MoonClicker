@@ -4,5 +4,6 @@ import java.io.File
 
 interface LuaUiScope {
     fun sendUIEvent(id: String, event: String)
-    val rootPath: File
+    val rootPath: java.io.File
+    val sharedData: Map<String, Any>
 }

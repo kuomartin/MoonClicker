@@ -1,5 +1,6 @@
 package com.xaxaxax.relc.ui.displaydetail
 
+import android.content.Context
 import android.view.Surface
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
@@ -10,6 +11,7 @@ import com.xaxaxax.relc.input.InputController
 import com.xaxaxax.relc.shizuku.UserService
 import com.xaxaxax.relc.shizuku.runWhenAlive
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -19,6 +21,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class FullscreenDisplayViewModel @Inject constructor(
+    @ApplicationContext context: Context,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     enum class ExecutionState {
@@ -70,11 +73,71 @@ class FullscreenDisplayViewModel @Inject constructor(
             serviceFlow.runWhenAlive { service ->
                 com.xaxaxax.relc.lua.LuaNative.stop()
                 val mainScript = java.io.File(scriptDir, "main.lua").absolutePath
-                val success = com.xaxaxax.relc.lua.LuaNative.startEngineWithService(service, displayId, width, height, mainScript)
+                val success = com.xaxaxax.relc.lua.LuaNative.startEngineWithService(
+                    service,
+                    displayId,
+                    width,
+                    height,
+                    mainScript
+                )
                 if (success != null) {
                     _uiState.value = _uiState.value.copy(executionState = ExecutionState.RUNNING)
                 } else {
                     Timber.e("Failed to start Lua engine")
+                }
+            }
+        }
+    }
+
+    fun startTemplateTest(
+        displayId: Int,
+        width: Int,
+        height: Int,
+        scriptDir: String,
+        templateName: String
+    ) {
+        viewModelScope.launch {
+            serviceFlow.runWhenAlive { service ->
+                com.xaxaxax.relc.lua.LuaNative.stop()
+                val testScript = java.io.File(scriptDir, "_test.lua")
+                val templatePath =
+                    if (templateName.endsWith(".png")) templateName else "$templateName.png"
+                val content = $$"""
+                            config = { fps=60, scale=0.5, templates = { { name = 'target', path = '$$templatePath', threshold = 0,grayscale = true} } }
+
+                            function on_start()
+
+                                ui.add(nil, 'test_rect', [[ { 'type': 'box', 'x': '$m_x', 'y': '$m_y', 'width': '$m_w', 'height': '$m_h', 'border': { 'width': 2, 'color': '#FF0000' } } ]])
+                                ui.add('test_rect', 'test_text', [[ { 'type': 'text', 'text': '$m_c', 'color': '#FF0000', 'background': { 'color': '#80000000' } } ]])
+                            end
+
+                            function on_tick(matches, tick)
+                                if tick % 60 == 0 then log("Lua Tick: " .. tick) end
+                                local m = matches.target
+                                if m and m.found then
+                                    app.set_data('m_x', m.x - m.width/2)
+                                    app.set_data('m_y', m.y - m.height/2)
+                                    app.set_data('m_w', m.width)
+                                    app.set_data('m_h', m.height)
+                                    app.set_data('m_c', string.format('%.2f', m.confidence))
+                                else
+                                    app.set_data('m_w', 0)
+                                    app.set_data('m_h', 0)
+                                end
+                            end
+                            """.trimIndent()
+                testScript.writeText(content)
+                val success = com.xaxaxax.relc.lua.LuaNative.startEngineWithService(
+                    service,
+                    displayId,
+                    width,
+                    height,
+                    testScript.absolutePath
+                )
+                if (success != null) {
+                    _uiState.value = _uiState.value.copy(executionState = ExecutionState.RUNNING)
+                } else {
+                    Timber.e("Failed to start Lua engine for testing")
                 }
             }
         }
@@ -99,7 +162,11 @@ class FullscreenDisplayViewModel @Inject constructor(
         _capturedBitmap.value = null
     }
 
-    fun saveCroppedImage(scriptDir: String, name: String, cropRect: android.graphics.Rect): Boolean {
+    fun saveCroppedImage(
+        scriptDir: String,
+        name: String,
+        cropRect: android.graphics.Rect
+    ): Boolean {
         val bitmap = _capturedBitmap.value ?: return false
         try {
             // Ensure cropRect is within bounds
@@ -112,7 +179,8 @@ class FullscreenDisplayViewModel @Inject constructor(
 
             if (width <= 0 || height <= 0) return false
 
-            val croppedBitmap = android.graphics.Bitmap.createBitmap(bitmap, left, top, width, height)
+            val croppedBitmap =
+                android.graphics.Bitmap.createBitmap(bitmap, left, top, width, height)
             val templateDir = java.io.File(scriptDir)
             if (!templateDir.exists()) templateDir.mkdirs()
 

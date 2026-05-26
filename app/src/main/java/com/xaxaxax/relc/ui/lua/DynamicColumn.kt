@@ -9,11 +9,13 @@ import androidx.compose.ui.Modifier
 
 class DynamicColumn(
     override val id: String,
+    override val x: Any?,
+    override val y: Any?,
     override val padding: PaddingValues,
     override val border: Border,
     override val background: Background,
-    override val width: Int?,
-    override val height: Int?,
+    override val width: Any?,
+    override val height: Any?,
     val horizontalAlignment: Alignment.Horizontal,
     val verticalArrangement: Arrangement.Vertical,
 ) : DynamicElement("column"), DynamicContainer by DynamicContainerImpl() {

@@ -36,6 +36,8 @@ struct MatchResultItem {
     bool found;
     double x;
     double y;
+    double width;
+    double height;
     double confidence;
 };
 
@@ -108,6 +110,9 @@ private:
     static int lua_ui_update(lua_State *L);
     static int lua_ui_remove(lua_State *L);
 
+    // Bridge API
+    static int lua_bridge_set(lua_State *L);
+
     // Klick'r equivalent APIs
     static int lua_input_click(lua_State *L);
     static int lua_system_action(lua_State *L); // handles home, back, recents
@@ -122,6 +127,7 @@ private:
     std::string scriptPath;
     std::string scriptDir;
 
+    double imageScale;
     int tickIntervalMs;
     long tickNum;
 
@@ -141,10 +147,16 @@ private:
     jmethodID uiAddMethodId;
     jmethodID uiUpdateMethodId;
     jmethodID uiRemoveMethodId;
+    jmethodID setSharedDataMethodId;
     
     jmethodID showNotificationMethodId;
     jmethodID startIntentMethodId;
     jmethodID systemActionMethodId;
+
+    jclass doubleClass;
+    jmethodID doubleConstructor;
+    jclass booleanClass;
+    jmethodID booleanConstructor;
 
     int displayId;
     int sinkHandle;

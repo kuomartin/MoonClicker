@@ -10,7 +10,7 @@ class LuaUiManager {
     // 使用 Compose 的 mutableStateMapOf，確保狀態變化能自動觸發重繪
     private val _elements = mutableStateMapOf<String, DynamicElement>()
     val elements: Map<String, DynamicElement> get() = _elements
-    private val _rootIds = mutableListOf<String>()
+    private val _rootIds = androidx.compose.runtime.mutableStateListOf<String>()
     val roots
         get() = _rootIds.mapNotNull { _elements[it] }
 

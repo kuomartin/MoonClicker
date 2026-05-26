@@ -182,6 +182,7 @@ class ClickAssistOverlayService : AccessibilityService(), OverlayWindowScope<Vie
         val scope = remember {
             object : LuaUiScope {
                 override val rootPath: File = context.filesDir
+                override val sharedData: Map<String, Any> = LuaNative.sharedData
                 override fun sendUIEvent(id: String, event: String) {
                     LuaNative.sendUIEvent(id, event)
                 }

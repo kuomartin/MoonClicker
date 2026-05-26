@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Crop
+import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Pause
@@ -106,6 +107,9 @@ fun FullscreenDisplayScreen(
     val capturedBitmap by viewModel.capturedBitmap.collectAsState()
     val surfaceViewRef = remember { mutableStateOf<android.view.SurfaceView?>(null) }
 
+    var showTemplateSelector by remember { mutableStateOf(false) }
+    var availableTemplates by remember { mutableStateOf<List<String>>(emptyList()) }
+
     LaunchedEffect(uiState.executionState) {
         if (uiState.executionState == FullscreenDisplayViewModel.ExecutionState.CROPPING && capturedBitmap == null) {
             val surfaceView = surfaceViewRef.value
@@ -147,6 +151,12 @@ fun FullscreenDisplayScreen(
                 isReadOnly = uiState.isReadOnly,
                 modifier = Modifier.fillMaxSize(),
                 onSurfaceViewCreated = { surfaceViewRef.value = it }
+            )
+
+            com.xaxaxax.relc.ui.lua.LuaUiManagerView(
+                manager = com.xaxaxax.relc.lua.LuaNative.uiManager,
+                luaNative = com.xaxaxax.relc.lua.LuaNative,
+                scriptDir = scriptDir
             )
         }
 
@@ -360,36 +370,40 @@ fun FullscreenDisplayScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
                     ) {
-                        // Play
-                        if (uiState.executionState == FullscreenDisplayViewModel.ExecutionState.IDLE) {
-                            IconButton(onClick = {
+                        // Start/Stop
+                        IconButton(onClick = {
+                            if (uiState.executionState == FullscreenDisplayViewModel.ExecutionState.RUNNING) {
+                                viewModel.stopExecution()
+                            } else {
                                 val metrics = activity?.resources?.displayMetrics
                                 if (metrics != null) {
                                     viewModel.startExecution(targetDisplayId, metrics.widthPixels, metrics.heightPixels, scriptDir)
                                 }
-                            }) {
-                                Icon(
-                                    imageVector = Icons.Default.PlayArrow,
-                                    contentDescription = "Start Execution",
-                                    tint = Color.White
-                                )
                             }
-                        }
-
-                        // Stop
-                        IconButton(onClick = { viewModel.stopExecution() }) {
+                        }) {
                             Icon(
-                                imageVector = Icons.Default.Stop,
-                                contentDescription = "Stop",
+                                imageVector = if (uiState.executionState == FullscreenDisplayViewModel.ExecutionState.RUNNING)
+                                    Icons.Default.Stop else Icons.Default.PlayArrow,
+                                contentDescription = if (uiState.executionState == FullscreenDisplayViewModel.ExecutionState.RUNNING)
+                                    "Stop" else "Start",
                                 tint = Color.White
                             )
                         }
 
-                        // Capture (Crop)
+                        // Screenshot
                         IconButton(onClick = { viewModel.startCropping() }) {
                             Icon(
                                 imageVector = Icons.Default.Crop,
-                                contentDescription = "Capture",
+                                contentDescription = "Screenshot",
+                                tint = Color.White
+                            )
+                        }
+
+                        // Exit
+                        IconButton(onClick = { activity?.finish() }) {
+                            Icon(
+                                imageVector = Icons.Default.ExitToApp,
+                                contentDescription = "Exit",
                                 tint = Color.White
                             )
                         }
@@ -412,6 +426,18 @@ fun FullscreenDisplayScreen(
                                     onClick = {
                                         viewModel.setMenuExpanded(false)
                                         viewModel.openAppList()
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Test Template") },
+                                    onClick = {
+                                        viewModel.setMenuExpanded(false)
+                                        val dir = java.io.File(scriptDir)
+                                        if (dir.exists()) {
+                                            availableTemplates = dir.listFiles { _, name -> name.endsWith(".png") }
+                                                ?.map { it.name } ?: emptyList()
+                                            showTemplateSelector = true
+                                        }
                                     }
                                 )
                                 DropdownMenuItem(
@@ -463,6 +489,46 @@ fun FullscreenDisplayScreen(
                 },
                 confirmButton = {
                     TextButton(onClick = { viewModel.closeAppList() }) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
+
+        if (showTemplateSelector) {
+            AlertDialog(
+                onDismissRequest = { showTemplateSelector = false },
+                title = { Text("Select Template to Test") },
+                text = {
+                    if (availableTemplates.isEmpty()) {
+                        Text("No templates found in script directory.")
+                    } else {
+                        LazyColumn(modifier = Modifier.heightIn(max = 400.dp)) {
+                            items(availableTemplates) { template ->
+                                TextButton(
+                                    onClick = {
+                                        val metrics = activity?.resources?.displayMetrics
+                                        if (metrics != null) {
+                                            viewModel.startTemplateTest(
+                                                targetDisplayId,
+                                                metrics.widthPixels,
+                                                metrics.heightPixels,
+                                                scriptDir,
+                                                template
+                                            )
+                                        }
+                                        showTemplateSelector = false
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(template, modifier = Modifier.fillMaxWidth())
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showTemplateSelector = false }) {
                         Text("Cancel")
                     }
                 }
