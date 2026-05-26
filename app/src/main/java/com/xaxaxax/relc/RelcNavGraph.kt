@@ -34,8 +34,6 @@ import com.xaxaxax.relc.simplescript.domain.model.Condition
 import com.xaxaxax.relc.simplescript.domain.model.Action
 import com.xaxaxax.relc.simplescript.ui.editor.EventEditorScreen
 import com.xaxaxax.relc.simplescript.ui.editor.ScriptEditorScreen
-import com.xaxaxax.relc.simplescript.ui.editor.ConditionEditorDialog
-import com.xaxaxax.relc.simplescript.ui.editor.ActionEditorDialog
 import com.xaxaxax.relc.simplescript.ui.editor.VariableEditorDialog
 import com.xaxaxax.relc.simplescript.ui.list.ScriptListScreen
 import com.xaxaxax.relc.simplescript.ui.viewmodel.SimpleScriptViewModel

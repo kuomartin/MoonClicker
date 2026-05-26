@@ -19,8 +19,10 @@ import com.xaxaxax.relc.SimpleScriptsRoute
 import com.xaxaxax.relc.simplescript.domain.model.Action
 import com.xaxaxax.relc.simplescript.domain.model.Condition
 import com.xaxaxax.relc.simplescript.domain.model.Event
-import com.xaxaxax.relc.simplescript.ui.editor.ActionEditorDialog
-import com.xaxaxax.relc.simplescript.ui.editor.ConditionEditorDialog
+import com.xaxaxax.relc.simplescript.ui.editor.ConditionEditorScreen
+import com.xaxaxax.relc.simplescript.ui.editor.ActionEditorScreen
+import com.xaxaxax.relc.SimpleConditionEditorRoute
+import com.xaxaxax.relc.SimpleActionEditorRoute
 import com.xaxaxax.relc.simplescript.ui.editor.EventEditorScreen
 import com.xaxaxax.relc.simplescript.ui.editor.ScriptEditorScreen
 import com.xaxaxax.relc.simplescript.ui.list.ScriptListScreen
@@ -93,131 +95,150 @@ fun NavGraphBuilder.simpleScriptNavGraph(
 
     composable<SimpleEventEditorRoute> { backStackEntry ->
         val route = backStackEntry.toRoute<SimpleEventEditorRoute>()
-
-        val parentEntry = remember(backStackEntry) {
-            navController.getBackStackEntry(SimpleScriptEditorRoute::class)
-        }
+        val parentEntry = remember(backStackEntry) { navController.getBackStackEntry(SimpleScriptEditorRoute::class) }
         val viewModel: SimpleScriptViewModel = hiltViewModel(parentEntry)
         val currentScript by viewModel.currentScript.collectAsStateWithLifecycle()
 
         val eventIndex = route.eventIndex
-        var localEvent by remember(currentScript, eventIndex) {
-            mutableStateOf<Event>(
-                if (eventIndex >= 0 && currentScript != null && eventIndex < currentScript!!.events.size) {
-                    currentScript!!.events[eventIndex]
-                } else {
-                    Event(name = "New Event")
-                }
-            )
-        }
-
-        var showConditionDialog by remember { mutableStateOf(false) }
-        var conditionToEdit by remember { mutableStateOf<Condition?>(null) }
-        var conditionIndexToEdit by remember { mutableStateOf(-1) }
-
-        var showActionDialog by remember { mutableStateOf(false) }
-        var actionToEdit by remember { mutableStateOf<Action?>(null) }
-        var actionIndexToEdit by remember { mutableStateOf(-1) }
 
         if (currentScript != null) {
-            BackHandler {
+            val localEvent = if (eventIndex >= 0 && eventIndex < currentScript!!.events.size) {
+                currentScript!!.events[eventIndex]
+            } else {
+                Event(name = "New Event")
+            }
+
+            val updateEventInScript = { updatedEvent: Event ->
                 val updatedEvents = currentScript!!.events.toMutableList()
                 if (eventIndex >= 0 && eventIndex < updatedEvents.size) {
-                    updatedEvents[eventIndex] = localEvent
+                    updatedEvents[eventIndex] = updatedEvent
                 } else {
-                    updatedEvents.add(localEvent)
+                    updatedEvents.add(updatedEvent)
                 }
                 viewModel.updateCurrentScript(currentScript!!.copy(events = updatedEvents))
+            }
+
+            BackHandler {
+                updateEventInScript(localEvent)
                 navController.popBackStack()
             }
 
             EventEditorScreen(
                 event = localEvent,
                 onBack = {
-                    val updatedEvents = currentScript!!.events.toMutableList()
-                    if (eventIndex >= 0 && eventIndex < updatedEvents.size) {
-                        updatedEvents[eventIndex] = localEvent
-                    } else {
-                        updatedEvents.add(localEvent)
-                    }
-                    viewModel.updateCurrentScript(currentScript!!.copy(events = updatedEvents))
+                    updateEventInScript(localEvent)
                     navController.popBackStack()
                 },
-                onNameChange = { localEvent = localEvent.copy(name = it) },
-                onEnabledChange = { localEvent = localEvent.copy(enabledOnStart = it) },
-                onOperatorChange = { localEvent = localEvent.copy(conditionOperator = it) },
+                onNameChange = { updateEventInScript(localEvent.copy(name = it)) },
+                onEnabledChange = { updateEventInScript(localEvent.copy(enabledOnStart = it)) },
+                onOperatorChange = { updateEventInScript(localEvent.copy(conditionOperator = it)) },
                 onAddCondition = {
-                    conditionToEdit = null
-                    conditionIndexToEdit = -1
-                    showConditionDialog = true
+                    // Need to ensure the event is saved to the script list before navigating to a child index.
+                    updateEventInScript(localEvent)
+                    val targetEventIndex = if (eventIndex >= 0) eventIndex else currentScript!!.events.size - 1
+                    navController.navigate(SimpleConditionEditorRoute(targetEventIndex, -1))
                 },
                 onEditCondition = { cond ->
-                    conditionToEdit = cond
-                    conditionIndexToEdit = localEvent.conditions.indexOf(cond)
-                    showConditionDialog = true
+                    updateEventInScript(localEvent)
+                    val targetEventIndex = if (eventIndex >= 0) eventIndex else currentScript!!.events.size - 1
+                    navController.navigate(SimpleConditionEditorRoute(targetEventIndex, localEvent.conditions.indexOf(cond)))
                 },
-                onDeleteCondition = { cond -> localEvent = localEvent.copy(conditions = localEvent.conditions - cond) },
+                onDeleteCondition = { cond -> updateEventInScript(localEvent.copy(conditions = localEvent.conditions - cond)) },
                 onAddAction = {
-                    actionToEdit = null
-                    actionIndexToEdit = -1
-                    showActionDialog = true
+                    updateEventInScript(localEvent)
+                    val targetEventIndex = if (eventIndex >= 0) eventIndex else currentScript!!.events.size - 1
+                    navController.navigate(SimpleActionEditorRoute(targetEventIndex, -1))
                 },
                 onEditAction = { act ->
-                    actionToEdit = act
-                    actionIndexToEdit = localEvent.actions.indexOf(act)
-                    showActionDialog = true
+                    updateEventInScript(localEvent)
+                    val targetEventIndex = if (eventIndex >= 0) eventIndex else currentScript!!.events.size - 1
+                    navController.navigate(SimpleActionEditorRoute(targetEventIndex, localEvent.actions.indexOf(act)))
                 },
-                onDeleteAction = { act -> localEvent = localEvent.copy(actions = localEvent.actions - act) }
+                onDeleteAction = { act -> updateEventInScript(localEvent.copy(actions = localEvent.actions - act)) }
             )
-
-            if (showConditionDialog) {
-                ConditionEditorDialog(
-                    initialCondition = conditionToEdit,
-                    availableVariables = currentScript!!.variables,
-                    onSave = { newCond ->
-                        val updatedConditions = localEvent.conditions.toMutableList()
-                        if (conditionIndexToEdit >= 0) {
-                            updatedConditions[conditionIndexToEdit] = newCond
-                        } else {
-                            updatedConditions.add(newCond)
-                        }
-                        localEvent = localEvent.copy(conditions = updatedConditions)
-                        showConditionDialog = false
-                    },
-                    onDismiss = { showConditionDialog = false },
-                    onCaptureArea = {
-                        showConditionDialog = false
-                        onStartCropping()
-                    }
-                )
-            }
-
-            if (showActionDialog) {
-                ActionEditorDialog(
-                    initialAction = actionToEdit,
-                    availableVariables = currentScript!!.variables,
-                    availableEvents = currentScript!!.events,
-                    onSave = { newAct ->
-                        val updatedActions = localEvent.actions.toMutableList()
-                        if (actionIndexToEdit >= 0) {
-                            updatedActions[actionIndexToEdit] = newAct
-                        } else {
-                            updatedActions.add(newAct)
-                        }
-                        localEvent = localEvent.copy(actions = updatedActions)
-                        showActionDialog = false
-                    },
-                    onDismiss = { showActionDialog = false },
-                    onSelectPoint = {
-                        showActionDialog = false
-                        onStartPointSelecting()
-                    }
-                )
-            }
         } else {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()
             }
+        }
+    }
+
+    composable<SimpleConditionEditorRoute> { backStackEntry ->
+        val route = backStackEntry.toRoute<SimpleConditionEditorRoute>()
+        val parentEntry = remember(backStackEntry) { navController.getBackStackEntry(SimpleScriptEditorRoute::class) }
+        val viewModel: SimpleScriptViewModel = hiltViewModel(parentEntry)
+        val currentScript by viewModel.currentScript.collectAsStateWithLifecycle()
+
+        if (currentScript != null && route.eventIndex >= 0 && route.eventIndex < currentScript!!.events.size) {
+            val event = currentScript!!.events[route.eventIndex]
+            val initialCondition = if (route.conditionIndex >= 0 && route.conditionIndex < event.conditions.size) {
+                event.conditions[route.conditionIndex]
+            } else null
+
+            ConditionEditorScreen(
+                initialCondition = initialCondition,
+                availableVariables = currentScript!!.variables,
+                onBack = { navController.popBackStack() },
+                onSave = { newCond ->
+                    val updatedConditions = event.conditions.toMutableList()
+                    if (route.conditionIndex >= 0 && route.conditionIndex < updatedConditions.size) {
+                        updatedConditions[route.conditionIndex] = newCond
+                    } else {
+                        updatedConditions.add(newCond)
+                    }
+                    val updatedEvent = event.copy(conditions = updatedConditions)
+                    val updatedEvents = currentScript!!.events.toMutableList()
+                    updatedEvents[route.eventIndex] = updatedEvent
+                    viewModel.updateCurrentScript(currentScript!!.copy(events = updatedEvents))
+                    navController.popBackStack()
+                },
+                onCaptureArea = {
+                    // For now we just trigger capture. We might need to remember that we were capturing a condition.
+                    // Ideally we pass a callback or save state, but triggering cropping hides the NavHost, we will come back here.
+                    onStartCropping()
+                }
+            )
+        } else {
+            navController.popBackStack()
+        }
+    }
+
+    composable<SimpleActionEditorRoute> { backStackEntry ->
+        val route = backStackEntry.toRoute<SimpleActionEditorRoute>()
+        val parentEntry = remember(backStackEntry) { navController.getBackStackEntry(SimpleScriptEditorRoute::class) }
+        val viewModel: SimpleScriptViewModel = hiltViewModel(parentEntry)
+        val currentScript by viewModel.currentScript.collectAsStateWithLifecycle()
+
+        if (currentScript != null && route.eventIndex >= 0 && route.eventIndex < currentScript!!.events.size) {
+            val event = currentScript!!.events[route.eventIndex]
+            val initialAction = if (route.actionIndex >= 0 && route.actionIndex < event.actions.size) {
+                event.actions[route.actionIndex]
+            } else null
+
+            ActionEditorScreen(
+                initialAction = initialAction,
+                availableVariables = currentScript!!.variables,
+                availableEvents = currentScript!!.events,
+                onBack = { navController.popBackStack() },
+                onSave = { newAct ->
+                    val updatedActions = event.actions.toMutableList()
+                    if (route.actionIndex >= 0 && route.actionIndex < updatedActions.size) {
+                        updatedActions[route.actionIndex] = newAct
+                    } else {
+                        updatedActions.add(newAct)
+                    }
+                    val updatedEvent = event.copy(actions = updatedActions)
+                    val updatedEvents = currentScript!!.events.toMutableList()
+                    updatedEvents[route.eventIndex] = updatedEvent
+                    viewModel.updateCurrentScript(currentScript!!.copy(events = updatedEvents))
+                    navController.popBackStack()
+                },
+                onSelectPoint = {
+                    onStartPointSelecting()
+                }
+            )
+        } else {
+            navController.popBackStack()
         }
     }
 }
