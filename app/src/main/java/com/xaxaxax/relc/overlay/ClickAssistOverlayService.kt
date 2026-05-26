@@ -1,18 +1,15 @@
 package com.xaxaxax.relc.overlay
 
-import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
+import android.accessibilityservice.AccessibilityService
 import android.content.Context
 import android.content.Intent
 import android.graphics.PixelFormat
 import android.os.Build
-import android.os.IBinder
 import android.util.DisplayMetrics
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
+import android.view.accessibility.AccessibilityEvent
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -24,11 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.ComposeView
-import androidx.core.app.NotificationCompat
-import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
-import com.xaxaxax.relc.R
-import com.xaxaxax.relc.RelcActivity
 import com.xaxaxax.relc.getDefaultLayoutParams
 import com.xaxaxax.relc.lua.LuaNative
 import com.xaxaxax.relc.overlay.ui.OverlayWindowScope
@@ -46,22 +39,12 @@ import com.xaxaxax.relc.ui.lua.LuaUiScope
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import java.io.File
 import javax.inject.Inject
 
-fun startClickAssistOverlay(context: Context, scriptId: String) {
-    val intent = Intent(context, ClickAssistOverlayService::class.java).apply {
-        putExtra("SCRIPT_ID", scriptId)
-    }
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-        context.startForegroundService(intent)
-    } else {
-        context.startService(intent)
-    }
-}
-
 @AndroidEntryPoint
-class ClickAssistOverlayService : LifecycleService(), OverlayWindowScope<ViewKeyType> {
+class ClickAssistOverlayService : AccessibilityService(), OverlayWindowScope<ViewKeyType> {
 
     @Inject
     lateinit var scriptManager: ScriptManager
@@ -86,41 +69,54 @@ class ClickAssistOverlayService : LifecycleService(), OverlayWindowScope<ViewKey
     private var scriptId: String? = null
     private var currentConfig = MutableStateFlow<ScriptConfig>(ScriptConfig.Simple.Empty)
 
-    override fun onCreate() {
-        super.onCreate()
+    override fun onServiceConnected() {
+        super.onServiceConnected()
+        Timber.d("AccessibilityService connected")
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         overlayOwner.start()
-        createNotificationChannel()
+        OverlayServiceProvider.setService(this)
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val result = super.onStartCommand(intent, flags, startId)
-        val id = intent?.getStringExtra("SCRIPT_ID")
-        if (id == null) {
-            stopSelf()
-            return START_NOT_STICKY
-        }
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        // We don't need to process events for now
+    }
+
+    override fun onInterrupt() {
+        Timber.d("AccessibilityService interrupted")
+    }
+
+    override fun onUnbind(intent: Intent?): Boolean {
+        Timber.d("AccessibilityService unbound")
+        OverlayServiceProvider.setService(null)
+        hideOverlay()
+        overlayOwner.stop()
+        return super.onUnbind(intent)
+    }
+
+    fun showOverlayForScript(id: String) {
         if (scriptId != id) {
             scriptId = id
         }
-        lifecycleScope.launch {
+
+        // Ensure we clean up any existing views before showing a new one
+        hideOverlay()
+
+        // This is a coroutine launched on AccessibilityService's lifecycleScope, which is valid since it is a Service (though AccessibilityService doesn't have a default lifecycleScope, we might need to implement LifecycleOwner or use a custom scope. Wait, AccessibilityService doesn't implement LifecycleOwner. Let me use overlayOwner.lifecycleScope)
+        overlayOwner.lifecycleScope.launch {
             scriptRepository.getScript(id)?.let {
                 currentConfig.value = it
             }
         }
-        lifecycleScope.launch {
-            currentConfig
-                .collect {
-
-                }
-        }
-
-        val notification = createNotification()
-        startForeground(NOTIFICATION_ID, notification)
 
         showControlBar()
+    }
 
-        return result
+    fun hideOverlay() {
+        // A helper to remove all views
+        val keys = views.keys.toList()
+        for (key in keys) {
+            removeView(key)
+        }
     }
 
     private fun showControlBar() {
@@ -128,7 +124,7 @@ class ClickAssistOverlayService : LifecycleService(), OverlayWindowScope<ViewKey
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         ).apply {
@@ -158,8 +154,7 @@ class ClickAssistOverlayService : LifecycleService(), OverlayWindowScope<ViewKey
                         SimpleOverlay(
                             viewModel = viewModel,
                             onClose = {
-                                removeView(this@apply)
-                                stopSelf()
+                                hideOverlay()
                             },
                             onDrag = { delta ->
                                 this@ClickAssistOverlayService.updateViewLayout(ViewKeyType.Root) { params ->
@@ -224,6 +219,7 @@ class ClickAssistOverlayService : LifecycleService(), OverlayWindowScope<ViewKey
 
         DisposableEffect(id) {
             val params = getDefaultLayoutParams().apply {
+                type = WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY
                 x = offset.value.x.toInt()
                 y = offset.value.y.toInt()
             }
@@ -247,51 +243,5 @@ class ClickAssistOverlayService : LifecycleService(), OverlayWindowScope<ViewKey
                 removeView(key)
             }
         }
-    }
-
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                "Click Assistant Overlay",
-                NotificationManager.IMPORTANCE_LOW
-            )
-            val manager = getSystemService(NotificationManager::class.java)
-            manager?.createNotificationChannel(channel)
-        }
-    }
-
-    private fun createNotification(): Notification {
-        val intent = Intent(this, RelcActivity::class.java)
-        val pendingIntent = PendingIntent.getActivity(
-            this, 0, intent,
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
-        )
-
-        return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Click Assistant Overlay")
-            .setContentText("Overlay editor is active")
-            .setSmallIcon(R.drawable.ic_menu_edit)
-            .setContentIntent(pendingIntent)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .build()
-    }
-
-    override fun onDestroy() {
-        overlayOwner.stop()
-        views.forEach { _, (view, _) ->
-            windowManager.removeView(view)
-        }
-        super.onDestroy()
-    }
-
-    override fun onBind(intent: Intent): IBinder? {
-        super.onBind(intent)
-        return null
-    }
-
-    companion object {
-        private const val NOTIFICATION_ID = 1001
-        private const val CHANNEL_ID = "click_assistant_overlay"
     }
 }

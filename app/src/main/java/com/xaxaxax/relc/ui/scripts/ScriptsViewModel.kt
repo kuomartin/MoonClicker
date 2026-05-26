@@ -3,7 +3,6 @@ package com.xaxaxax.relc.ui.scripts
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.xaxaxax.relc.overlay.startClickAssistOverlay
 import com.xaxaxax.relc.script.ScriptConfig
 import com.xaxaxax.relc.script.ScriptManager
 import com.xaxaxax.relc.script.ScriptRepository
@@ -33,7 +32,10 @@ class ScriptsViewModel @Inject constructor(
     )
 
     fun startScript(config: ScriptConfig) {
-        startClickAssistOverlay(context, config.id)
+        val success = com.xaxaxax.relc.overlay.OverlayServiceProvider.showOverlay(config.id)
+        if (!success) {
+            android.widget.Toast.makeText(context, "請先在設定中開啟無障礙服務", android.widget.Toast.LENGTH_SHORT).show()
+        }
         scriptManager.startScript(config)
     }
 

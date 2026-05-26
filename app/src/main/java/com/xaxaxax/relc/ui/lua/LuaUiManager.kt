@@ -25,16 +25,16 @@ class LuaUiManager {
             when {
                 parent is DynamicContainer -> {
                     parent.add(element)
-                    Timber.d("LuaUiManager: Added $id (${element.type}) under $parentId")
+                    Timber.d("LuaUiManager: Added [${element.type}]$id under $parentId")
                 }
 
                 parentId == null -> {
                     _rootIds.add(id)
-                    Timber.d("LuaUiManager: Added $id (${element.type}) as root")
+                    Timber.d("LuaUiManager: Added [${element.type}]$id as root")
                 }
 
                 else -> {
-                    Timber.d("LuaUiManager: Failed to add $id (${element.type}) under $parentId, parentId not found")
+                    Timber.d("LuaUiManager: Failed to add [${element.type}]$id under $parentId, parentId not found")
                     _elements.remove(id)
                 }
             }
@@ -60,7 +60,6 @@ class LuaUiManager {
                     container[index] = new
                 }
             }
-            // TODO check if it keeps remember state
             Timber.d("LuaUiManager: Updated $id")
         } catch (e: Exception) {
             Timber.e(e, "LuaUiManager: Failed to update $id")
