@@ -4,17 +4,14 @@ import androidx.room.withTransaction
 import com.xaxaxax.relc.simplescript.data.database.SimpleScriptDatabase
 import com.xaxaxax.relc.simplescript.domain.model.*
 import com.xaxaxax.relc.simplescript.data.mapper.*
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 
 class ScriptRepository(private val db: SimpleScriptDatabase) {
 
     fun getAllScripts(): Flow<List<Script>> {
-        // Note: Map operation within flow cannot run suspend directly without flatMapLatest or map returning Flow,
-        // but since we only need a basic list update, we'll keep it simple for now,
-        // or actually, Room allows relational queries. Let's fix this naive implementation by returning Flow of Scripts.
-        // For simplicity, we just fetch entities here and assume children are fetched on demand if needed,
-        // or we use a proper relations POJO. For now let's just map the root entities.
         return db.scriptDao().getAllScripts().map { scriptEntities ->
             scriptEntities.map { entity ->
                 entity.toDomain(emptyList(), emptyList()) // Needs a relations class to be reactive on children
@@ -22,8 +19,8 @@ class ScriptRepository(private val db: SimpleScriptDatabase) {
         }
     }
 
-    suspend fun getScriptWithChildren(scriptId: Long): Script? {
-        val scriptEntity = db.scriptDao().getScriptById(scriptId) ?: return null
+    suspend fun getScriptWithChildren(scriptId: Long): Script? = withContext(Dispatchers.IO) {
+        val scriptEntity = db.scriptDao().getScriptById(scriptId) ?: return@withContext null
 
         val variables = db.variableDao().getVariablesForScript(scriptId).map { it.toDomain() }
 
@@ -34,10 +31,10 @@ class ScriptRepository(private val db: SimpleScriptDatabase) {
             eventEntity.toDomain(conditions, actions)
         }
 
-        return scriptEntity.toDomain(variables, events)
+        scriptEntity.toDomain(variables, events)
     }
 
-    suspend fun saveScript(script: Script) {
+    suspend fun saveScript(script: Script) = withContext(Dispatchers.IO) {
         db.withTransaction {
             val scriptId = db.scriptDao().insertScript(script.toEntity())
 
