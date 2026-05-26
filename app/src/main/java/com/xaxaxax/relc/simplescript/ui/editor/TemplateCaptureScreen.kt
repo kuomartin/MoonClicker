@@ -23,8 +23,14 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
+
+// Represents which part of the bounding box is being dragged
+enum class DragTarget {
+    NONE, CENTER, TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT, TOP, BOTTOM, LEFT, RIGHT
+}
 
 @Composable
 fun TemplateCaptureScreen(
@@ -32,29 +38,109 @@ fun TemplateCaptureScreen(
     onCancel: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var startOffset by remember { mutableStateOf<Offset?>(null) }
-    var endOffset by remember { mutableStateOf<Offset?>(null) }
+    // We store the actual current rectangle
+    var rectLeft by remember { mutableStateOf(-1f) }
+    var rectTop by remember { mutableStateOf(-1f) }
+    var rectRight by remember { mutableStateOf(-1f) }
+    var rectBottom by remember { mutableStateOf(-1f) }
 
-    val density = LocalDensity.current
+    var dragTarget by remember { mutableStateOf(DragTarget.NONE) }
+    val touchSlop = with(LocalDensity.current) { 24.dp.toPx() } // Generous hit area for corners/edges
 
     Box(
         modifier = modifier
             .fillMaxSize()
             // In a real app, the background would be a screenshot image.
-            // For preview, we just use a dark gradient or color.
             .background(Color.DarkGray)
             .pointerInput(Unit) {
                 detectDragGestures(
                     onDragStart = { offset ->
-                        startOffset = offset
-                        endOffset = offset
+                        if (rectLeft == -1f) {
+                            // Initial draw
+                            rectLeft = offset.x
+                            rectTop = offset.y
+                            rectRight = offset.x
+                            rectBottom = offset.y
+                            dragTarget = DragTarget.BOTTOM_RIGHT // Conceptually pulling to the bottom right
+                        } else {
+                            // Determine what we are dragging based on proximity
+                            val l = min(rectLeft, rectRight)
+                            val r = max(rectLeft, rectRight)
+                            val t = min(rectTop, rectBottom)
+                            val b = max(rectTop, rectBottom)
+
+                            val nearLeft = abs(offset.x - l) < touchSlop
+                            val nearRight = abs(offset.x - r) < touchSlop
+                            val nearTop = abs(offset.y - t) < touchSlop
+                            val nearBottom = abs(offset.y - b) < touchSlop
+                            val inside = offset.x in (l + touchSlop)..(r - touchSlop) && offset.y in (t + touchSlop)..(b - touchSlop)
+
+                            dragTarget = when {
+                                nearTop && nearLeft -> DragTarget.TOP_LEFT
+                                nearTop && nearRight -> DragTarget.TOP_RIGHT
+                                nearBottom && nearLeft -> DragTarget.BOTTOM_LEFT
+                                nearBottom && nearRight -> DragTarget.BOTTOM_RIGHT
+                                nearTop -> DragTarget.TOP
+                                nearBottom -> DragTarget.BOTTOM
+                                nearLeft -> DragTarget.LEFT
+                                nearRight -> DragTarget.RIGHT
+                                inside -> DragTarget.CENTER
+                                else -> {
+                                    // Start a new box if clicking way outside
+                                    rectLeft = offset.x
+                                    rectTop = offset.y
+                                    rectRight = offset.x
+                                    rectBottom = offset.y
+                                    DragTarget.BOTTOM_RIGHT
+                                }
+                            }
+                        }
                     },
-                    onDrag = { change, _ ->
+                    onDrag = { change, dragAmount ->
                         change.consume()
-                        endOffset = change.position
+                        when (dragTarget) {
+                            DragTarget.CENTER -> {
+                                rectLeft += dragAmount.x
+                                rectRight += dragAmount.x
+                                rectTop += dragAmount.y
+                                rectBottom += dragAmount.y
+                            }
+                            DragTarget.TOP_LEFT -> {
+                                rectLeft += dragAmount.x
+                                rectTop += dragAmount.y
+                            }
+                            DragTarget.TOP_RIGHT -> {
+                                rectRight += dragAmount.x
+                                rectTop += dragAmount.y
+                            }
+                            DragTarget.BOTTOM_LEFT -> {
+                                rectLeft += dragAmount.x
+                                rectBottom += dragAmount.y
+                            }
+                            DragTarget.BOTTOM_RIGHT -> {
+                                rectRight += dragAmount.x
+                                rectBottom += dragAmount.y
+                            }
+                            DragTarget.TOP -> rectTop += dragAmount.y
+                            DragTarget.BOTTOM -> rectBottom += dragAmount.y
+                            DragTarget.LEFT -> rectLeft += dragAmount.x
+                            DragTarget.RIGHT -> rectRight += dragAmount.x
+                            DragTarget.NONE -> {}
+                        }
                     },
                     onDragEnd = {
-                        // Optional: Handle drag end
+                        dragTarget = DragTarget.NONE
+                        // Normalize coordinates so left < right and top < bottom
+                        if (rectLeft != -1f) {
+                            val l = min(rectLeft, rectRight)
+                            val r = max(rectLeft, rectRight)
+                            val t = min(rectTop, rectBottom)
+                            val b = max(rectTop, rectBottom)
+                            rectLeft = l
+                            rectRight = r
+                            rectTop = t
+                            rectBottom = b
+                        }
                     }
                 )
             }
@@ -65,34 +151,37 @@ fun TemplateCaptureScreen(
                 .fillMaxSize()
                 .graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)
         ) {
-            // Draw semi-transparent dark overlay over the whole screen
             drawRect(color = Color.Black.copy(alpha = 0.6f))
 
-            // If we have a selection box, "cut out" the hole
-            if (startOffset != null && endOffset != null) {
-                val left = min(startOffset!!.x, endOffset!!.x)
-                val top = min(startOffset!!.y, endOffset!!.y)
-                val right = max(startOffset!!.x, endOffset!!.x)
-                val bottom = max(startOffset!!.y, endOffset!!.y)
+            if (rectLeft != -1f) {
+                val left = min(rectLeft, rectRight)
+                val top = min(rectTop, rectBottom)
+                val right = max(rectLeft, rectRight)
+                val bottom = max(rectTop, rectBottom)
                 val width = right - left
                 val height = bottom - top
 
                 if (width > 0 && height > 0) {
-                    // Cut out the hole
                     drawRect(
                         color = Color.Transparent,
                         topLeft = Offset(left, top),
                         size = Size(width, height),
                         blendMode = BlendMode.Clear
                     )
-
-                    // Draw a highly visible border around the crop area
+                    
                     drawRect(
                         color = Color.Green,
                         topLeft = Offset(left, top),
                         size = Size(width, height),
                         style = Stroke(width = 2.dp.toPx())
                     )
+                    
+                    // Draw corner handles
+                    val handleRadius = 6.dp.toPx()
+                    drawCircle(Color.White, radius = handleRadius, center = Offset(left, top))
+                    drawCircle(Color.White, radius = handleRadius, center = Offset(right, top))
+                    drawCircle(Color.White, radius = handleRadius, center = Offset(left, bottom))
+                    drawCircle(Color.White, radius = handleRadius, center = Offset(right, bottom))
                 }
             }
         }
@@ -117,20 +206,16 @@ fun TemplateCaptureScreen(
 
             Button(
                 onClick = {
-                    if (startOffset != null && endOffset != null) {
-                        val left = min(startOffset!!.x, endOffset!!.x)
-                        val top = min(startOffset!!.y, endOffset!!.y)
-                        val right = max(startOffset!!.x, endOffset!!.x)
-                        val bottom = max(startOffset!!.y, endOffset!!.y)
-
-                        // Convert Compose Float coordinates to Android Rect (Integers)
+                    if (rectLeft != -1f) {
+                        val left = min(rectLeft, rectRight)
+                        val top = min(rectTop, rectBottom)
+                        val right = max(rectLeft, rectRight)
+                        val bottom = max(rectTop, rectBottom)
                         val rect = Rect(left.toInt(), top.toInt(), right.toInt(), bottom.toInt())
                         onCapture(rect)
                     }
                 },
-                enabled = startOffset != null && endOffset != null &&
-                          Math.abs(startOffset!!.x - endOffset!!.x) > 10 &&
-                          Math.abs(startOffset!!.y - endOffset!!.y) > 10,
+                enabled = rectLeft != -1f && abs(rectLeft - rectRight) > 10 && abs(rectTop - rectBottom) > 10,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.onPrimary
@@ -140,9 +225,9 @@ fun TemplateCaptureScreen(
                 Text("Capture")
             }
         }
-
-        // Instructional Hint (Fades out or stays at top)
-        if (startOffset == null) {
+        
+        // Instructional Hint
+        if (rectLeft == -1f) {
             Text(
                 text = "Drag to select an area",
                 color = Color.White,
@@ -167,6 +252,3 @@ fun TemplateCaptureScreenInitialPreview() {
         )
     }
 }
-
-// In a real app we'd mock the drag state, but for a simple preview
-// we can wrap it to inject state or just show the initial state.
