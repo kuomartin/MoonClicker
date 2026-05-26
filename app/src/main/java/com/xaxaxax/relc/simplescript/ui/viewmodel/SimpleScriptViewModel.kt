@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+import kotlinx.coroutines.flow.combine
+
 @HiltViewModel
 class SimpleScriptViewModel @Inject constructor(
     private val repository: ScriptRepository
@@ -25,6 +27,10 @@ class SimpleScriptViewModel @Inject constructor(
     val currentScript: StateFlow<Script?> = _currentScript.asStateFlow()
 
     private val _originalScript = MutableStateFlow<Script?>(null)
+
+    val isDirty: StateFlow<Boolean> = combine(_currentScript, _originalScript) { current, original ->
+        current != null && current != original
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     private var isLoaded = false
 
@@ -46,17 +52,16 @@ class SimpleScriptViewModel @Inject constructor(
         }
     }
 
-    fun isDirty(): Boolean {
-        return _currentScript.value != _originalScript.value
-    }
-
     fun saveCurrentScript() {
         val script = _currentScript.value ?: return
         viewModelScope.launch {
-            repository.saveScript(script)
-            _originalScript.value = script.copy()
+            val savedId = repository.saveScript(script)
+            val updatedScript = script.copy(id = savedId)
+            _currentScript.value = updatedScript
+            _originalScript.value = updatedScript.copy()
         }
     }
+
     fun updateCurrentScript(updatedScript: Script) {
         _currentScript.value = updatedScript
     }

@@ -59,11 +59,12 @@ fun NavGraphBuilder.simpleScriptNavGraph(
         }
 
         val currentScript by viewModel.currentScript.collectAsStateWithLifecycle()
+        val isDirty by viewModel.isDirty.collectAsStateWithLifecycle()
 
         if (currentScript != null) {
             ScriptEditorScreen(
                 script = currentScript!!,
-                isDirty = viewModel.isDirty(),
+                isDirty = isDirty,
                 onClose = {
                     onCloseEditor()
                 },

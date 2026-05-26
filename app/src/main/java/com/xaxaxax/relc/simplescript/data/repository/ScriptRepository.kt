@@ -34,7 +34,7 @@ class ScriptRepository(private val db: SimpleScriptDatabase) {
         scriptEntity.toDomain(variables, events)
     }
 
-    suspend fun saveScript(script: Script) = withContext(Dispatchers.IO) {
+    suspend fun saveScript(script: Script): Long = withContext(Dispatchers.IO) {
         db.withTransaction {
             val scriptId = db.scriptDao().insertScript(script.toEntity())
 
@@ -63,6 +63,7 @@ class ScriptRepository(private val db: SimpleScriptDatabase) {
                     db.actionDao().insertAction(action.toEntity(eventId, index))
                 }
             }
+
+            scriptId
         }
-    }
-}
+    }}
