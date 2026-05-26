@@ -32,6 +32,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.rememberNavController
 import com.xaxaxax.relc.simplescript.ui.simpleScriptNavGraph
 import com.xaxaxax.relc.SimpleScriptsRoute
+import com.xaxaxax.relc.SimpleScriptEditorRoute
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
@@ -77,6 +78,7 @@ class FullscreenDisplayActivity : ComponentActivity() {
 
         val displayId = intent.getIntExtra("displayId", -1)
         val scriptDir = intent.getStringExtra("scriptDir") ?: ""
+        val scriptId = intent.getLongExtra("scriptId", 0L)
         if (displayId == -1) {
             Timber.e("No displayId provided to FullscreenDisplayActivity")
             finish()
@@ -92,7 +94,7 @@ class FullscreenDisplayActivity : ComponentActivity() {
 
         setContent {
             ReLCTheme {
-                FullscreenDisplayScreen(displayId, scriptDir)
+                FullscreenDisplayScreen(displayId, scriptDir, scriptId)
             }
         }
     }
@@ -109,6 +111,7 @@ enum class DragHandle {
 fun FullscreenDisplayScreen(
     targetDisplayId: Int,
     scriptDir: String,
+    scriptId: Long,
     viewModel: FullscreenDisplayViewModel = hiltViewModel()
 ) {
     val activity = LocalActivity.current
@@ -589,7 +592,7 @@ fun FullscreenDisplayScreen(
                     val navController = rememberNavController()
                     NavHost(
                         navController = navController,
-                        startDestination = SimpleScriptsRoute,
+                        startDestination = SimpleScriptEditorRoute(scriptId),
                         modifier = Modifier.fillMaxSize()
                     ) {
                         simpleScriptNavGraph(

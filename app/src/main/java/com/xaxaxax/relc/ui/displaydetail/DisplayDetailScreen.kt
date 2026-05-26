@@ -29,15 +29,36 @@ import com.xaxaxax.relc.shizuku.UserService
 import androidx.compose.material3.OutlinedTextField
 import java.io.File
 
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.xaxaxax.relc.simplescript.ui.viewmodel.SimpleScriptViewModel
+import com.xaxaxax.relc.simplescript.domain.model.Script
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DisplayDetailScreen(
     id: String, onNavigateBack: () -> Unit,
-    viewModel: DisplayDetailScreenViewModel = hiltViewModel()
+    viewModel: DisplayDetailScreenViewModel = hiltViewModel(),
+    simpleScriptViewModel: SimpleScriptViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
     val displayId = id.toIntOrNull() ?: -1
     var isReadOnly by remember { mutableStateOf(false) }
-    var scriptName by remember { mutableStateOf("default_script") }
+
+    val scripts by simpleScriptViewModel.scripts.collectAsStateWithLifecycle()
+    var selectedScript by remember { mutableStateOf<Script?>(null) }
+    var expanded by remember { mutableStateOf(false) }
+
+    // Initialize with the first script if available and nothing is selected
+    LaunchedEffect(scripts) {
+        if (selectedScript == null && scripts.isNotEmpty()) {
+            selectedScript = scripts.first()
+        }
+    }
 
     val scope = rememberCoroutineScope()
     val serviceFlow = remember {
@@ -66,23 +87,50 @@ fun DisplayDetailScreen(
                 Text(text = "Read-Only Mode")
             }
 
-            OutlinedTextField(
-                value = scriptName,
-                onValueChange = { scriptName = it },
-                label = { Text("Script Name") }
-            )
-
-            Button(onClick = {
-                val scriptDir = File(context.filesDir, "scripts/$scriptName")
-                if (!scriptDir.exists()) scriptDir.mkdirs()
-
-                val intent = Intent(context, FullscreenDisplayActivity::class.java).apply {
-                    putExtra("displayId", displayId)
-                    putExtra("isReadOnly", isReadOnly)
-                    putExtra("scriptDir", scriptDir.absolutePath)
+            ExposedDropdownMenuBox(
+                expanded = expanded,
+                onExpandedChange = { expanded = it }
+            ) {
+                OutlinedTextField(
+                    value = selectedScript?.name ?: "No Script Selected",
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Script Name") },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                    modifier = Modifier.menuAnchor()
+                )
+                ExposedDropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false }
+                ) {
+                    scripts.forEach { script ->
+                        DropdownMenuItem(
+                            text = { Text(script.name) },
+                            onClick = {
+                                selectedScript = script
+                                expanded = false
+                            }
+                        )
+                    }
                 }
-                context.startActivity(intent)
-            }) {
+            }
+
+            Button(
+                onClick = {
+                    val scriptName = selectedScript?.name ?: "default_script"
+                    val scriptDir = File(context.filesDir, "scripts/$scriptName")
+                    if (!scriptDir.exists()) scriptDir.mkdirs()
+
+                    val intent = Intent(context, FullscreenDisplayActivity::class.java).apply {
+                        putExtra("displayId", displayId)
+                        putExtra("isReadOnly", isReadOnly)
+                        putExtra("scriptDir", scriptDir.absolutePath)
+                        putExtra("scriptId", selectedScript?.id ?: 0L)
+                    }
+                    context.startActivity(intent)
+                },
+                enabled = selectedScript != null
+            ) {
                 Text("Open Fullscreen")
             }
 

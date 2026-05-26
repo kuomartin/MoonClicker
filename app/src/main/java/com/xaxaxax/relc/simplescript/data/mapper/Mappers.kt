@@ -7,6 +7,7 @@ import org.json.JSONObject
 
 fun ScriptEntity.toDomain(variables: List<Variable>, events: List<Event>): Script {
     return Script(
+        id = id,
         name = name,
         fps = fps,
         variables = variables,
@@ -77,13 +78,22 @@ fun ActionEntity.toDomain(): Action {
             eventName = json.getString("eventName"),
             operator = EventOperator.valueOf(json.getString("operator"))
         )
+        "SYSTEM_BTN" -> SystemBtnAction(
+            op = SystemOperation.valueOf(json.getString("op"))
+        )
+        "FOR_LOOP" -> ForLoopAction(
+            variableName = json.optString("variableName", "i"),
+            from = json.optString("from", "1"),
+            to = json.optString("to", "10"),
+            actions = emptyList() // Flattened or recursive parsing needed for real support
+        )
         else -> throw IllegalArgumentException("Unknown action type: $type")
     }
 }
 
 // Map Domain back to Entity
 fun Script.toEntity(): ScriptEntity {
-    return ScriptEntity(name = name, fps = fps)
+    return ScriptEntity(id = id, name = name, fps = fps)
 }
 
 fun Variable.toEntity(scriptId: Long): VariableEntity {
