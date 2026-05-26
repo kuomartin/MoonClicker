@@ -9,7 +9,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
@@ -24,7 +26,14 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Settings
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.rememberNavController
+import com.xaxaxax.relc.simplescript.ui.simpleScriptNavGraph
+import com.xaxaxax.relc.SimpleScriptsRoute
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -399,6 +408,15 @@ fun FullscreenDisplayScreen(
                             )
                         }
 
+                        // Edit Script
+                        IconButton(onClick = { viewModel.setEditorExpanded(!uiState.showEditor) }) {
+                            Icon(
+                                imageVector = Icons.Default.Settings,
+                                contentDescription = "Edit Script",
+                                tint = Color.White
+                            )
+                        }
+
                         // Exit
                         IconButton(onClick = { activity?.finish() }) {
                             Icon(
@@ -533,6 +551,52 @@ fun FullscreenDisplayScreen(
                     }
                 }
             )
+        }
+
+        if (uiState.executionState == FullscreenDisplayViewModel.ExecutionState.POINT_SELECTING) {
+            com.xaxaxax.relc.simplescript.ui.editor.PointConfigScreen(
+                initialPoint = null, // Or parse from ViewModel if editing
+                availableVariables = emptyList(), // TODO: Get from ScriptViewModel if possible
+                onSave = { point ->
+                    // To truly save back to the dialog, we need a SharedViewModel or callback.
+                    // For this prototype iteration, we will just log and cancel to test flow.
+                    Timber.d("Point saved: ${point.x}, ${point.y}")
+                    viewModel.cancelPointSelecting()
+                },
+                onCancel = { viewModel.cancelPointSelecting() }
+            )
+        }
+
+        // Editor Overlay
+        AnimatedVisibility(
+            visible = uiState.showEditor,
+            enter = slideInVertically(initialOffsetY = { it }),
+            exit = slideOutVertically(targetOffsetY = { it }),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxHeight(0.75f)
+                .fillMaxWidth()
+        ) {
+            Card(
+                shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+                colors = CardDefaults.cardColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.background),
+                modifier = Modifier.fillMaxSize(),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+            ) {
+                // The nested NavHost handles its own state
+                val navController = rememberNavController()
+                NavHost(
+                    navController = navController,
+                    startDestination = SimpleScriptsRoute,
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    simpleScriptNavGraph(
+                        navController = navController,
+                        onStartPointSelecting = { viewModel.startPointSelecting() },
+                        onStartCropping = { viewModel.startCropping() }
+                    )
+                }
+            }
         }
     }
 }

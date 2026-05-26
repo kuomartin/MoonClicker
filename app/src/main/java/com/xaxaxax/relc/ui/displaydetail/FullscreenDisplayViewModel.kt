@@ -25,7 +25,7 @@ class FullscreenDisplayViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     enum class ExecutionState {
-        IDLE, RUNNING, CROPPING
+        IDLE, RUNNING, CROPPING, POINT_SELECTING
     }
 
     data class UiState(
@@ -35,7 +35,8 @@ class FullscreenDisplayViewModel @Inject constructor(
         val menuOffsetY: Float = 0f,
         val showAppList: Boolean = false,
         val apps: List<AppEntry> = emptyList(),
-        val executionState: ExecutionState = ExecutionState.IDLE
+        val executionState: ExecutionState = ExecutionState.IDLE,
+        val showEditor: Boolean = false
     )
 
     private val _uiState = MutableStateFlow(UiState())
@@ -149,7 +150,7 @@ class FullscreenDisplayViewModel @Inject constructor(
     }
 
     fun startCropping() {
-        _uiState.value = _uiState.value.copy(executionState = ExecutionState.CROPPING)
+        _uiState.value = _uiState.value.copy(executionState = ExecutionState.CROPPING, showEditor = false)
         // trigger is handled by Activity passing Bitmap to setCapturedBitmap
     }
 
@@ -158,7 +159,7 @@ class FullscreenDisplayViewModel @Inject constructor(
     }
 
     fun cancelCropping() {
-        _uiState.value = _uiState.value.copy(executionState = ExecutionState.IDLE)
+        _uiState.value = _uiState.value.copy(executionState = ExecutionState.IDLE, showEditor = true)
         _capturedBitmap.value = null
     }
 
@@ -198,6 +199,18 @@ class FullscreenDisplayViewModel @Inject constructor(
 
     fun setMenuExpanded(expanded: Boolean) {
         _uiState.value = _uiState.value.copy(menuExpanded = expanded)
+    }
+
+    fun setEditorExpanded(expanded: Boolean) {
+        _uiState.value = _uiState.value.copy(showEditor = expanded)
+    }
+
+    fun startPointSelecting() {
+        _uiState.value = _uiState.value.copy(executionState = ExecutionState.POINT_SELECTING, showEditor = false)
+    }
+
+    fun cancelPointSelecting() {
+        _uiState.value = _uiState.value.copy(executionState = ExecutionState.IDLE, showEditor = true)
     }
 
     fun updateMenuOffset(dragAmountX: Float, dragAmountY: Float) {
