@@ -14,6 +14,7 @@ enum class TopLevelDestination(
 ) {
     DISPLAYS(DisplaysRoute, Icons.Default.Tv, "Displays"),
     SCRIPTS(ScriptsRoute, Icons.Default.Code, "Scripts"),
+    SIMPLE_SCRIPTS(SimpleScriptsRoute, Icons.Default.Code, "Simple V2"),
     SETTINGS(SettingsRoute, Icons.Default.Settings, "Settings")
 }
 
@@ -26,6 +27,9 @@ object DisplaysRoute
 object ScriptsRoute
 
 @Serializable
+object SimpleScriptsRoute
+
+@Serializable
 object SettingsRoute
 
 // --- 子頁面 (Sub-pages) ---
@@ -34,3 +38,9 @@ data class DisplayDetailRoute(val id: String)
 
 @Serializable
 data class ScriptDetailRoute(val id: String)
+
+@Serializable
+data class SimpleScriptEditorRoute(val scriptId: Long)
+
+@Serializable
+data class SimpleEventEditorRoute(val eventIndex: Int)
