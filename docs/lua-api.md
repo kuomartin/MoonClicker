@@ -11,38 +11,43 @@
 ---
 
 ## 2. 輸入模組 (input)
-### `input.swipe(pointerId, points, duration, keep)`
-執行單點或多點滑動（或點擊）。
-*   **參數**:
-    *   `pointerId` (number): 手指 ID (通常從 0 開始，-1 代表由系統分配)。
-    *   `points` (table): 座標點清單。格式為 `{x1, y1, x2, y2, ...}` 或雙層 table `{{x1, y1}, {x2, y2}}`。
-    *   `duration` (number, 選填): 滑動持續時間（毫秒），預設為 0。
-    *   `keep` (boolean, 選填): 結束後是否保持手指按下狀態，預設為 `false`。
-*   **範例**: 
-    ```lua
-    -- 在 (100, 100) 點擊一下
-    input.swipe(0, {100, 100}, 50)
-    -- 從 (100, 100) 滑動到 (500, 500)，耗時 500ms
-    input.swipe(0, {100, 100, 500, 500}, 500)
-    ```
+### `input.tap(durationMs, x, y, displayId)`
+在指定顯示器上執行單點點擊，包含保持時間。若毫秒為 0 則立即放開。
+
+### `input.swipePolyline(durationMs, points, displayId)`
+沿由 {x1, y1, x2, y2, ...} 座標點組成的折線，依照歐氏距離 (L2) 以均勻速率完成滑動。
+
+### `input.swipePolylineL1(durationMs, points, displayId)`
+同樣的幾何路徑，但每段的貢獻距離以曼哈頓距離 (L1) 計算。
+
+### `input.script`（多點觸控輔助）
+支援多點觸控的腳本控制。呼叫時需指派不同 pointerId。
+- `input.script.down(pointerId, x, y, displayId)` – 暫時按下某個點
+- `input.script.move(pointerId, x, y, displayId)` – 移動指定 pointer
+- `input.script.up(pointerId, displayId)` – 抬起指定 pointer
+
+### 參考其他 API
+- `input.decode` 等較低階工具尚未公開，請以上列高階 API 為主。
 
 ---
 
 ## 3. 顯示模組 (display)
-### `display.create(width, height, densityDpi, flags)`
+### `display.create(width, height, densityDpi = 440, flags = 16)`
 建立一個新的虛擬顯示器 (Virtual Display)。畫面會自動串接到 C++ 辨識引擎。
 *   **參數**:
-    *   `width`, `height` (number): 解析度。
-    *   `densityDpi` (number, 選填): 螢幕密度，預設 440。
-    *   `flags` (number, 選填): 系統旗標，預設 16 (PUBLIC)。
-*   **傳回值**: `displayId` (number) 或 `nil` (失敗)。
+    * `width`, `height` (number): 解析度。
+    * `densityDpi` (number, 選填): 螢幕密度，預設 440。
+    * `flags` (number, 選填): 系統旗標，預設 16 (PUBLIC)。
+*   **傳回值**: `displayId` (number) 或 `-1` (失敗)。
 
-### `display.launch(packageName, displayId)`
+> 備註：`display.create` 的底層對應為原生虛擬顯示器建立，內部會建立 Surface 作為渲染來源，Surface 的熱替換交由 DisplaySink 控制。
+
+### `display.launchInDisplay(packageName, displayId)`
 在指定的顯示器中啟動應用程式。
 *   **參數**:
-    *   `packageName` (string): 應用程式包名 (e.g., "com.android.settings")。
-    *   `displayId` (number, 選填): 目標顯示器 ID，預設為最近建立的 ID。
-*   **傳回值**: `boolean` (是否成功啟動)。
+    * `packageName` (string): 應用程式包名 (e.g., "com.android.settings").
+    * `displayId` (number, 選填): 目標顯示器 ID，預設為最近建立的 ID。
+*   **傳回值**: `boolean` (是否啟動成功)。
 
 ### `display.get_all()`
 取得目前系統中所有的虛擬顯示器 ID。
@@ -100,7 +105,7 @@ local last_seen_tick = 0
 function on_start()
     log("開始執行自動登入...")
     local dId = display.create(1080, 1920)
-    display.launch("com.example.game", dId)
+    display.launchInDisplay("com.example.game", dId)
 end
 
 function on_tick(matches, tick)
@@ -108,7 +113,7 @@ function on_tick(matches, tick)
     if matches["登入按鈕"] and matches["登入按鈕"].found then
         last_seen_tick = tick
         log("看到登入按鈕了，點擊它！")
-        input.swipe(-1, {matches["登入按鈕"].x, matches["登入按鈕"].y}, 100)
+        input.swipePolyline(100, {{matches["登入按鈕"].x, matches["登入按鈕"].y}, {matches["登入按鈕"].x, matches["登入按鈕"].y}}, dId)
     end
     
     -- 如果超過 150 ticks (約 10 秒) 沒看到任何目標，輸出警告
@@ -118,3 +123,5 @@ function on_tick(matches, tick)
     end
 end
 ```
+
+

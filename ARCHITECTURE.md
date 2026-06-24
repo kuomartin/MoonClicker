@@ -1,6 +1,10 @@
 # ReLC Architecture
 
+本文件描述 ReLC 的整體架構、核心模組與資料流，以及與外部元件（如 Shizuku、OpenCV、Lua 引擎等）的介面契約。內容以實作現況為基礎，並提供未來演進的路徑與風險點。
+
 ## 功能目標對應關係
+
+下列組合對應到系統的核心能力與元件，方便定位需求實作的範圍與優先順序：
 
 | 組合 | 效果 | 核心元件 |
 |------|------|---------|
@@ -14,322 +18,97 @@
 
 ## 系統架構總覽
 
+以下為系統核心元件的結構與資料流，涵蓋 App Process 與 Shizuku IPC 的跨進程協作，以及虛擬顯示器與渲染/輸出路徑的組合。
+
+```mermaid
+graph TD
+  App[App Process (normal uid)]
+  UI[UI Layer (Compose)]
+  VM[ViewModel Layer]
+  SD[DisplaySink (NoOpSink / H264Sink / DirectSink)]
+  (Distributor)-->VD[VirtualDisplay]
+  AIDL[IRelcShizukuService / IRelcV2Service]
+  NIC[InputController]
+  Script[Script Engine]
+  Vision[VisionEngine(OpenCV)]
+  Stream[Streaming Pipeline]
+
+  UI -->|observes| VM
+  VM --> Shizuku[Shizuku IPC] --> VD
+  VD --> SD
+  SD --> Surface[Surface]
+  VD --> Stream
+  Stream --> Player[Video Player UI / FrameGrabber]
+  Script --> VD
+  NIC --> Shizuku
+  Vision --> Stream
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                           App Process (normal uid)                      │
-│                                                                         │
-│  ┌─────────────────────────────────────────────────────────────────┐   │
-│  │                        UI Layer (Compose)                        │   │
-│  │   SettingsScreen │ VirtualDisplayScreen │ ScriptScreen          │   │
-│  └───────────────────────────┬─────────────────────────────────────┘   │
-│                              │ observe StateFlow                        │
-│  ┌───────────────────────────▼─────────────────────────────────────┐   │
-│  │                      ViewModel Layer                             │   │
-│  │   MainViewModel │ VirtualDisplayViewModel │ ScriptViewModel     │   │
-│  └──────┬──────────────────────┬──────────────────┬────────────────┘   │
-│         │                      │                  │                     │
-│  ┌──────▼──────┐  ┌────────────▼────────┐  ┌─────▼──────────────┐    │
-│  │  Shizuku    │  │ VirtualDisplay      │  │  Script Engine     │    │
-│  │  Manager   │  │ Controller          │  │  (LuaJ)            │    │
-│  └──────┬──────┘  └────────────┬────────┘  └─────┬──────────────┘    │
-│         │                      │                  │                     │
-│         │              ┌───────▼──────────────────▼──────────┐        │
-│         │              │           DisplaySink (可插拔)        │        │
-│         │              │  NoOpSink │ H264Sink │ DirectSink    │        │
-│         │              └───────┬──────────────────────────────┘        │
-│         │                      │                                        │
-│         │              ┌───────▼──────────────────────────────┐        │
-│         │              │         Stream Pipeline               │        │
-│         │              │  H264Encoder → LocalSocketServer     │        │
-│         │              └───────────────┬──────────────────────┘        │
-│         │                              │ UNIX socket                    │
-│         │              ┌───────────────▼──────────────────────┐        │
-│         │              │         Stream Consumer               │        │
-│         │              │  VideoPlayer │ FrameGrabber          │        │
-│         │              │                    │                  │        │
-│         │              │             VisionEngine              │        │
-│         │              └──────────────────────────────────────┘        │
-└─────────│────────────────────────────────────────────────────────────┘
-          │ AIDL Binder (Shizuku IPC)
-┌─────────▼──────────────────────────────────────────────────────────────┐
-│                  Shizuku User Service (shell uid)                       │
-│                                                                         │
-│  IRelcShizukuService.Stub                                              │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌──────────────────────┐  │
-│  │  DisplayManager │  │  InputManager   │  │  ActivityTaskManager │  │
-│  │  .createVirtual │  │  .injectInput   │  │  .startActivity      │  │
-│  │  Display()      │  │  Event()        │  │  (in display)        │  │
-│  └─────────────────┘  └─────────────────┘  └──────────────────────┘  │
-└────────────────────────────────────────────────────────────────────────┘
-```
+
+注意：此 Diagram 以 Mermeid 語法呈現，實際部署中分散在 Kotlin/Java 與原生層之間，Surface 與 LocalSocket 的實際路徑由虛擬顯示器與分發器共同管理。
+
+## 核心元件與職責
+
+- App Process UI Layer
+  - Compose UI 負責顯示設定、虛擬顯示器清單、與腳本執行介面等。
+  - 透過 ViewModel 與 Script Engine 的事件串接，提供使用者操作的實時反饋。
+
+- Shizuku IPC 與服務層
+  - RelcShizukuService（舊版本）與 RelcV2Service（新版，包含原生加速）負責與系統互動、虛擬顯示器管理、啟動應用、以及輸入事件注入。
+  - IRelcShizukuService / IRelcV2Service 為 AIDL 介面契約，暴露虛擬顯示、輸入、啟動等能力。
+
+- Virtual Display 子系統
+  - DisplaySink：可插拔輸出端，實作包括 NoOpSink、H264EncoderSink、DirectSink 等，允許在執行期間熱替換輸出端。
+  - VirtualDisplayController：生命週期管理，負責建立、附著、替換 sink 與銷毀虛擬顯示器。
+  - GLES Distributor：原生 C++/OpenGL 的分發器，用於多客戶端同時渲染虛擬顯示內容，並提供 Surface 作為輸入來源。
+
+- Streaming Pipeline（串流路徑）
+  - VirtualDisplay 渲染到 H264EncoderSink，產生 H.264 無封包資料，經 LocalSocketServer/Client 傳輸，供 VideoPlayerUI 與 VisionEngine 使用。
+  - 封包格式與流協定（CONFIG/VIDEO/PING）在原生層定義。
+
+- 輸入模組
+  - InputController 封裝對 IRelcV2Service 的輸入事件注入（觸控、滑動、按鍵），並支援多點觸控。
+  - 多點觸控腳本控制（MultiTouchScriptController）提供腳本驅動的多點事件序列。
+
+- 腳本引擎與 UI 桥接
+  - ScriptEngine（Lua 原生引擎）與 ScriptManager/ScriptRunner 負責腳本生命週期。
+  - LuaNative 與 LuaUiManager 提供 Lua 腳本與 Compose UI 的動態橋接能力，能動態新增/更新 HUD 與控制元件。
+
+- 視覺辨識與工具
+  - VisionEngine（OpenCV）提供模板比對／影像辨識能力，OpenCV 模組由原生層實作並透過 JNI/本地橋接暴露。
+  - OCR 與 物件偵測等進階能力預留：ML Kit OCR、TFLite 模型等可按需求動態下載與裝載。
+
+- Overlay UI
+  - 懸浮 UI 與控制條等，使用 Compose 實作，與核心功能解耦，提升使用者操作性。
+
+- API 與邊界
+  - IRelcShizukuService / IRelcV2Service 作為穩定的 IPC 界面，負責跨進程通訊與虛擬顯示器的管理。
+  - DisplaySink 與 VirtualDisplayController 提供清晰的外部 API，便於未來勞動條件下的替換實作。
+
+## 系統資料流與介面契約
+
+- 資料流：UI/UX 操作透過 ScriptEngine 與 InputController 對虛擬顯示器發起操作，虛擬顯示器透過 GLES Distributor 將內容輸出，流向 VideoPlayerUI/FrameGrabber 及 VisionEngine。
+- 介面契約：AIDL 介面（IRelcShizukuService、IRelcV2Service）界定顯示、輸入、啟動等核心能力。
+- UI 桥接：LuaNative 與 LuaUiManager 負責 Lua 與 Compose UI 的雙向橋接，Lua 腳本可動態操作 HUD、觸控控制與監控介面。
+
+## 版本與相容性重點
+
+- V1 與 V2 的演進：V2 引入原生加速與更細緻的輸入模型（多點觸控、插值式滑動等），同時補充原生層的 GLES Distributor，以提高渲染效率與多客戶端同步能力。
+- API 穩定性：目前的 API 設計以模組化、契約導向，未來如需拓展 vision 模組，建議以 match / vision 為獨立模組，提供版本化暴露。
+- 相容性風險：Android 版本差異（P、R、TIRAMISU、UPSIDE_DOWN_CAKE 等）對虛擬顯示旗標與系統服務的支援差異，需要持續測試與調整旗標組合。
+
+## 依賴與建置
+
+- Lua 腳本引擎：org.luaj:luaj-jse:3.0.1
+- 視覺處理：OpenCV（OpenCV Android SDK）
+- OCR（選配）：ML Kit Text Recognition
+- Coroutines：kotlinx-coroutines-android
+- 原生層：GlesDistributor、RelcEngine、LuaEngine 等多檔案，使用 CMake/NDK 編譯與穩定性調校。
+
+## 風險與待解決事項
+
+- 原生與 Kotlin 的整合穩定性：跨 JNI 與原生函式呼叫的錯誤處理與資源釋放需嚴格管理。
+- Heat/性能管控：H264 流與多畫面共享可能會消耗較高的 CPU/GPU 資源，需要動態調整解析度、編碼參數與 sink 的切換策略。
+- 腳本生態：Lua API 的穩定演進與版本相容性，需搭配測試覆蓋不同場景。
+- 模型與模型下載：OCR/TFLite/OpenCV 模型檔需動態下載與快取機制，避免首開啟時耗時過長。
 
 ---
-
-## Package 結構（單 Gradle Module）
-
-目前保持單 module 架構，依 package 做邏輯隔離：
-
-```
-com.xaxaxax.relc/
-│
-├── core/
-│   ├── DisplayConfig.kt          # data class (name, width, height, densityDpi)
-│   └── ...
-│
-├── shizuku/
-│   └── (目前主要實作在 RelcShizukuService.kt 中)
-│
-├── display/
-│   ├── VirtualDisplayController.kt  # 生命週期管理，組合 Shizuku + Sink
-│   ├── DisplaySink.kt               # interface: 可插拔輸出端
-│   ├── NoOpSink.kt                  # 純背景執行（無捕捉）
-│   ├── H264EncoderSink.kt           # MediaCodec H.264 編碼
-│   └── DirectSink.kt                # 直接輸出至 Surface
-│
-├── input/
-│   └── InputController.kt        # 封裝 InputManager，支援 displayId & 多點觸控
-│
-├── script/
-│   ├── ScriptEngine.kt           # LuaJ 執行環境與 API 暴露
-│   ├── ScriptManager.kt          # 腳本生命週期管理
-│   ├── ScriptRepository.kt       # 腳本持久化
-│   └── runner/                   # 不同模式的腳本執行器
-│
-├── overlay/                      # 懸浮窗 UI 組件
-│   ├── ClickAssistOverlayService.kt
-│   ├── CompactControlBar.kt
-│   └── ...
-│
-└── ui/                           # 主要 App UI (Compose)
-    ├── theme/
-    ├── displays/                 # 虛擬顯示器列表
-    ├── scripts/                  # 腳本列表
-    └── ...
-```
-
----
-
-## 核心元件設計
-
-### 1. AIDL 擴充 `IRelcShizukuService`
-
-```aidl
-// IRelcShizukuService.aidl
-interface IRelcShizukuService {
-    boolean setOverlayAllowed(String packageName);
-    boolean grantRuntimePermission(String packageName, String permissionName);
-
-    // VirtualDisplay 管理
-    int createVirtualDisplay(String name, int width, int height, int densityDpi, in Surface surface, boolean destroyContent, boolean sytemDecorations);
-    boolean setVirtualDisplaySurface(int displayId, in Surface surface);  // 熱插拔 sink
-    boolean destroyVirtualDisplay(int displayId);
-    int[] getVirtualDisplays();
-
-    // 在指定 Display 中啟動 App
-    boolean launchInDisplay(String packageName, int displayId);
-    List<String> getLauncherApps();
-
-    // Input 注入
-    boolean injectMotionEvent(in MotionEvent event, int displayId);
-    boolean injectKeyEvent(in KeyEvent event, int displayId);
-
-    String debug(String input);
-    void destroy();
-}
-```
-
-### 2. DisplaySink — 可插拔輸出端
-
-```
-VirtualDisplay 的 Surface 來源由 DisplaySink 提供，
-可在運行時透過 setVirtualDisplaySurface() 熱替換：
-
-NoOpSink           → surface = null  （純背景，不捕捉畫面）
-H264EncoderSink    → surface = MediaCodec inputSurface
-DirectSink         → surface = 外部傳入的 Surface
-```
-
-```kotlin
-// display/DisplaySink.kt
-interface DisplaySink {
-    fun acquireSurface(): Surface?   // null = 不需要畫面捕捉
-    fun start()
-    fun stop()
-    fun release()
-}
-```
-
-### 3. Streaming Pipeline (H264EncoderSink 路徑)
-
-```
-VirtualDisplay
-    │  (renders to)
-    ▼
-MediaCodec inputSurface       ← H264EncoderSink.inputSurface
-    │  (H.264 NAL units)
-    ▼
-onEncodedFrame(ByteBuffer, BufferInfo)
-    │
-    ▼
-(待實作：LocalSocketServer / 傳輸層)
-```
-
-### 4. Stream Protocol 封包格式
-
-```
-每個封包：
-┌──────────────┬────────┬────────────┬──────────────┬─────────────────┐
-│  Magic (4B)  │Type(1B)│Timestamp(8B)│DataLen (4B) │  Data (N bytes) │
-│  0x52454C43  │        │   ms        │             │                 │
-│  "RELC"      │        │             │             │                 │
-└──────────────┴────────┴────────────┴──────────────┴─────────────────┘
-
-Type:
-  0x01 = CONFIG  → JSON: { width, height, codec:"h264", fps, bitrate }
-  0x02 = VIDEO   → H.264 access unit (SPS/PPS/IDR/P-frame)
-  0x03 = PING    → keepalive
-```
-
-> 第一個封包固定為 CONFIG，之後全部是 VIDEO。
-
-### 5. VirtualDisplayController 生命週期
-
-```kotlin
-// display/VirtualDisplayController.kt
-class VirtualDisplayController(private val service: IRelcShizukuService) {
-    var displayId: Int = Display.INVALID_DISPLAY
-    private var sink: DisplaySink = NoOpSink()
-
-    fun create(config: DisplayConfig, sink: DisplaySink = NoOpSink()) {
-        this.sink = sink
-        displayId = service.createVirtualDisplay(
-            config.name, config.width, config.height, config.densityDpi,
-            sink.acquireSurface(), false, false
-        )
-        sink.start()
-    }
-
-    /** 連接到現有的顯示器 */
-    fun attach(existingDisplayId: Int, sink: DisplaySink = NoOpSink()) {
-        this.sink = sink
-        this.displayId = existingDisplayId
-        service.setVirtualDisplaySurface(displayId, sink.acquireSurface())
-        sink.start()
-    }
-
-    fun replaceSink(newSink: DisplaySink) {
-        sink.stop(); sink.release()
-        sink = newSink
-        service.setVirtualDisplaySurface(displayId, newSink.acquireSurface())
-        newSink.start()
-    }
-
-    fun destroy() {
-        sink.stop(); sink.release()
-        service.destroyVirtualDisplay(displayId)
-        displayId = Display.INVALID_DISPLAY
-    }
-}
-```
-
-### 6. Script Engine (LuaJ)
-
-**依賴**：`org.luaj:luaj-jse:3.0.1`
-
-Lua 可用 API：
-
-```lua
--- 在虛擬顯示器啟動 APP
-display.launch("com.example.app", id)
-
--- 腳本可指定全域 displayId，供 input API 使用
-displayId = id
-
--- 輸入操作
-input.tap(durationMs, x, y)
-input.swipe(durationMs, x1, y1, x2, y2, ...)      -- 至少兩點，L2 弧長
-input.swipe_l1(durationMs, x1, y1, x2, y2, ...)   -- 至少兩點，L1 弧長
-
--- 多點觸控 (pointerId, x, y)
-input.down(0, 100, 100)
-input.move(0, 200, 200)
-input.up(0)
-
--- 工具
-sleep(1000)   -- ms
-log("message")
-```
-
-> **待實作**：`display.create/destroy`, `screen.capture`, `vision.*`
-
-### 7. Vision Engine
-
-| 功能 | 實作方案 | APK 影響 |
-|------|---------|---------|
-| 模板比對 (findTemplate) | OpenCV Android SDK | +20MB |
-| OCR | ML Kit Text Recognition | 動態下載 |
-| 物件偵測 | TFLite (選配) | 依模型大小 |
-
-FrameGrabber 透過 LocalSocket 接收 H.264 stream，使用 `ImageReader` 或自訂 `SurfaceTexture → Bitmap` pipeline 提供幀給 VisionEngine。
-
----
-
-## 各組合的初始化流程
-
-### 組合 1+4+5：腳本自動化
-
-```
-App 啟動
-  └─► ShizukuManager.connect()
-  └─► ShizukuUserService.connect<IRelcShizukuService>()
-  └─► VirtualDisplayController.create(config, sink=NoOpSink)
-  └─► service.launchInDisplay("target.app", displayId)
-  └─► ScriptRunner.run("script.lua")
-        └─► displayId = … ; input.tap(durationMs, x, y)   ← InputController → Shizuku
-```
-
-### 組合 1+2+5+6：視覺自動化
-
-```
-App 啟動
-  └─► 同上建立 VirtualDisplay，sink=H264Sink
-  └─► LocalSocketClient 連接
-  └─► FrameGrabber 訂閱 frames
-  └─► ScriptRunner.run("vision_script.lua")
-        └─► local bmp = screen.capture(id)
-        └─► local pos = vision.find(bmp, "button.png")
-        └─► input.tap(50, pos.x, pos.y)   -- 事先設定全域 displayId
-```
-
----
-
-## 依賴清單（待加入 build.gradle.kts）
-
-```kotlin
-// Lua 腳本引擎
-implementation("org.luaj:luaj-jse:3.0.1")
-
-// 視覺：OpenCV
-implementation("org.opencv:opencv:4.9.0")
-
-// 視覺：ML Kit OCR（選配）
-implementation("com.google.mlkit:text-recognition:16.0.1")
-
-// Coroutines（應已有）
-implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
-```
-
----
-
-## 實作順序建議
-
-| 階段 | 工作 | 狀態 |
-|------|------|------|
-| **P1** | 擴充 AIDL + 實作 `createVirtualDisplay` / `launchInDisplay` | ✅ |
-| **P1** | 修復 `InputManager` displayId（down/move 都要設） | ✅ |
-| **P2** | `VirtualDisplayController` + `DisplaySink` 介面 + `NoOpSink` / `H264EncoderSink` | ✅ |
-| **P2** | `H264Encoder` + `LocalSocketServer/Client` + `H264Decoder` | 🚧 進行中 |
-| **P2** | `VideoPlayerScreen`（Compose + SurfaceView） | 🚧 進行中 |
-| **P3** | `ScriptEngine` (LuaJ) + `ScriptApi` + `ScriptRunner` | 🚧 核心已完成 |
-| **P4** | `FrameGrabber` + `VisionEngine` (OpenCV 模板比對) | ⏳ 待辦 |
-| **P4** | ML Kit OCR 整合 | ⏳ 待辦 |
