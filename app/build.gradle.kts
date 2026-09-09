@@ -22,37 +22,6 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         targetSdk = libs.versions.targetSdk.get().toInt()
-
-        externalNativeBuild {
-            cmake {
-                cppFlags("-std=c++17")
-                arguments(
-                    "-DANDROID_STL=c++_shared",
-                    "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON",
-                    "-DOpenCV_DIR=~/OpenCV-android-sdk/sdk/native/jni",
-                    "-DCMAKE_SHARED_LINKER_FLAGS=-Wl,-z,max-page-size=16384"
-                )
-            }
-        }
-    }
-
-    sourceSets {
-        getByName("main") {
-            jniLibs.directories += "~/OpenCV-android-sdk/sdk/native/libs"
-        }
-    }
-
-    packaging {
-        jniLibs {
-            useLegacyPackaging = false
-        }
-    }
-
-    externalNativeBuild {
-        cmake {
-            path = file("src/main/cpp/CMakeLists.txt")
-            version = "3.22.1"
-        }
     }
 
     buildTypes {

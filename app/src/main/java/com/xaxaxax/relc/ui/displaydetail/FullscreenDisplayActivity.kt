@@ -169,7 +169,7 @@ fun FullscreenDisplayScreen(
             )
 
             com.xaxaxax.relc.ui.lua.LuaUiManagerView(
-                manager = com.xaxaxax.relc.lua.LuaNative.uiManager,
+                manager = com.xaxaxax.relc.ui.lua.LuaUiManager.instance,
                 luaNative = com.xaxaxax.relc.lua.LuaNative,
                 scriptDir = scriptDir
             )
