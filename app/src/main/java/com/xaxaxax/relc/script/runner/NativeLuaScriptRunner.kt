@@ -1,10 +1,14 @@
 package com.xaxaxax.relc.script.runner
 
+import com.xaxaxax.relc.engine.state.EngineRunState
+import com.xaxaxax.relc.engine.state.EngineStateRepository
 import com.xaxaxax.relc.lua.LuaNative
 import com.xaxaxax.relc.script.ScriptConfig
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import java.io.File
-import kotlin.time.Duration.Companion.milliseconds
+
+class ScriptExecutionException(message: String) : Exception(message)
 
 class NativeLuaScriptRunner(
     private val ctx: ScriptRunContext,
@@ -21,8 +25,11 @@ class NativeLuaScriptRunner(
 
         LuaNative.startEngineWithService(v2Service, -1, width, height, scriptFile.absolutePath)
         try {
-            while (ctx.isActive() && LuaNative.isEngineRunning()) {
-                delay(500.milliseconds)
+            val finalRunState = EngineStateRepository.state
+                .map { it.runState }
+                .first { it is EngineRunState.Finished || it is EngineRunState.Error || it is EngineRunState.Stopped }
+            if (finalRunState is EngineRunState.Error) {
+                throw ScriptExecutionException(finalRunState.message)
             }
         } finally {
             LuaNative.stop()

@@ -2,6 +2,7 @@ package com.xaxaxax.relc.lua
 
 import android.view.Surface
 import com.xaxaxax.relc.IRelcV2Service
+import com.xaxaxax.relc.engine.state.EngineStateRepository
 import timber.log.Timber
 
 /**
@@ -102,6 +103,7 @@ object LuaNative {
         this.currentService = service
         this.currentDisplayId = displayId
         uiSink?.clear()
+        EngineStateRepository.reset()
         return startEngine(service, displayId, width, height, scriptPath)
     }
 
@@ -161,6 +163,15 @@ object LuaNative {
     fun uiRemove(id: String) {
         Timber.d("LuaNative uiRemove: id=$id")
         uiSink?.remove(id)
+    }
+
+    /**
+     * 引擎狀態事件 (被 C++ 引擎呼叫)，轉發給 [EngineStateRepository]。
+     * @param type 對應 [com.xaxaxax.relc.engine.state.EngineEventType]
+     */
+    fun onEngineEvent(type: Int, payload: String) {
+        Timber.d("LuaNative onEngineEvent: type=$type, payload=$payload")
+        EngineStateRepository.onEvent(type, payload)
     }
 
     /**
