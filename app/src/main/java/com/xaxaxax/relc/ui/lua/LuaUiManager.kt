@@ -1,7 +1,7 @@
 package com.xaxaxax.relc.ui.lua
 
 import androidx.compose.runtime.mutableStateMapOf
-import com.xaxaxax.relc.lua.LuaNative
+import com.xaxaxax.relc.engine.LuaEngineControl
 import com.xaxaxax.relc.lua.LuaUiSink
 import timber.log.Timber
 
@@ -10,7 +10,7 @@ import timber.log.Timber
  */
 class LuaUiManager : LuaUiSink {
     companion object {
-        val instance: LuaUiManager by lazy { LuaUiManager().also { LuaNative.uiSink = it } }
+        val instance: LuaUiManager by lazy { LuaUiManager().also { LuaEngineControl.uiSink = it } }
     }
 
     // 使用 Compose 的 mutableStateMapOf，確保狀態變化能自動觸發重繪

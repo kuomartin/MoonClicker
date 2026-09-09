@@ -23,7 +23,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.ComposeView
 import androidx.lifecycle.lifecycleScope
 import com.xaxaxax.relc.getDefaultLayoutParams
-import com.xaxaxax.relc.lua.LuaNative
+import com.xaxaxax.relc.engine.LuaEngineControl
 import com.xaxaxax.relc.overlay.ui.OverlayWindowScope
 import com.xaxaxax.relc.overlay.ui.addComposable
 import com.xaxaxax.relc.overlay.ui.addView
@@ -182,9 +182,9 @@ class ClickAssistOverlayService : AccessibilityService(), OverlayWindowScope<Vie
         val scope = remember {
             object : LuaUiScope {
                 override val rootPath: File = context.filesDir
-                override val sharedData: Map<String, Any> = LuaNative.sharedData
+                override val sharedData: Map<String, Any> = LuaEngineControl.sharedData
                 override fun sendUIEvent(id: String, event: String) {
-                    LuaNative.sendUIEvent(id, event)
+                    LuaEngineControl.sendUIEvent(id, event)
                 }
             }
         }

@@ -1,8 +1,8 @@
 package com.xaxaxax.relc.script.runner
 
+import com.xaxaxax.relc.engine.LuaEngineControl
 import com.xaxaxax.relc.engine.state.EngineRunState
 import com.xaxaxax.relc.engine.state.EngineStateRepository
-import com.xaxaxax.relc.lua.LuaNative
 import com.xaxaxax.relc.script.ScriptConfig
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -23,7 +23,7 @@ class NativeLuaScriptRunner(
         val scriptFile = File(ctx.context.filesDir, "script_${config.id}.lua")
         scriptFile.writeText(config.code)
 
-        LuaNative.startEngineWithService(v2Service, -1, width, height, scriptFile.absolutePath)
+        LuaEngineControl.startEngineWithService(v2Service, -1, width, height, scriptFile.absolutePath)
         try {
             val finalRunState = EngineStateRepository.state
                 .map { it.runState }
@@ -32,7 +32,7 @@ class NativeLuaScriptRunner(
                 throw ScriptExecutionException(finalRunState.message)
             }
         } finally {
-            LuaNative.stop()
+            LuaEngineControl.stop()
         }
     }
 }
