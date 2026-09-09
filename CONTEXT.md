@@ -35,11 +35,15 @@ The `:engine` Gradle module — the sole boundary allowed to touch native intern
 _Avoid_: Native layer, backend module.
 
 **EngineStateRepository**:
-The Engine Module's single observable source of truth — a `StateFlow<EngineState>` aggregating run state, per-virtual-display state, latest match result, and error detail. Fed by native events rather than polled.
+The Engine Module's single observable source of truth — a `StateFlow<EngineState>` aggregating run state (idle/starting/running/finished/error/stopped, with error detail) and the latest match result. Fed by native events rather than polled. Does not yet cover per-virtual-display state — see [ADR-0006](docs/adr/0006-module-split-and-engine-facade.md)'s scope note.
 _Avoid_: Engine status, native state holder.
 
+**LuaEngineControl**:
+The public facade over `LuaNative` (the Engine Module's JNI bridge, `internal` to `:engine`). Other modules start/stop the engine, send UI events, and read `sharedData` through this — never through `LuaNative` directly. See [ADR-0006](docs/adr/0006-module-split-and-engine-facade.md).
+_Avoid_: The JNI bridge, LuaNative (when describing what other modules call).
+
 **LuaUiManager**:
-The bridge that lets a running Lua script add or update Compose UI elements (HUD, controls) at runtime.
+The bridge (in `:overlay`) that lets a running Lua script add or update Compose UI elements (HUD, controls) at runtime, registered as `LuaNative`'s `LuaUiSink` from `RelcApplication.onCreate`.
 
 **VisionEngine**:
 The native OpenCV-backed component that performs template matching against a virtual display's frames, exposed to scripts as the `match.*` API. See [ADR-0003](docs/adr/0003-opencv-for-vision-matching.md).
@@ -50,4 +54,8 @@ The current Shizuku-hosted service exposing virtual display, input, and launch c
 _Avoid_: Shizuku service (ambiguous between V1/V2), backend service.
 
 **Overlay UI**:
-Floating, always-on-top Compose UI (control bar, HUD) rendered by the `:overlay` module's `ClickAssistOverlayService` (an AccessibilityService), observing the Engine Module only through `EngineStateRepository`. See [ADR-0006](docs/adr/0006-module-split-and-engine-facade.md).
+Floating, always-on-top Compose UI (control bar, HUD) rendered by the `:overlay` module's `ClickAssistOverlayService` (an AccessibilityService), which reaches the Engine Module only through `LuaEngineControl` — never `LuaNative` directly. Its content is pluggable per script type via `OverlayContentExtension`, so the service itself never references the legacy Simple Script editor UI that stays in `:app`. See [ADR-0006](docs/adr/0006-module-split-and-engine-facade.md).
+
+**OverlayContentExtension**:
+The seam that lets `:overlay`'s `ClickAssistOverlayService` render script-type-specific content without depending on that type's implementation. Registered via Hilt multibinding, keyed by a plain string matching `ScriptConfig.ScriptCodeType.name` (`:overlay` doesn't depend on `ScriptConfig`). `:overlay` registers the Lua-UI renderer; `:app` registers the legacy Simple Script renderer. See [ADR-0006](docs/adr/0006-module-split-and-engine-facade.md).
+_Avoid_: Overlay renderer, content provider (ambiguous with Android's ContentProvider).
