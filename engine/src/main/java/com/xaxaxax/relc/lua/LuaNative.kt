@@ -8,7 +8,7 @@ import timber.log.Timber
 /**
  * 原生 OpenCV 辨識包裝類
  */
-object LuaNative {
+internal object LuaNative {
 
     private var currentService: IRelcV2Service? = null
     private var currentDisplayId: Int = -1

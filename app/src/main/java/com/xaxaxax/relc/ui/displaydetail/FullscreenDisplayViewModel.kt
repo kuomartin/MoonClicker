@@ -72,9 +72,9 @@ class FullscreenDisplayViewModel @Inject constructor(
     fun startExecution(displayId: Int, width: Int, height: Int, scriptDir: String) {
         viewModelScope.launch {
             serviceFlow.runWhenAlive { service ->
-                com.xaxaxax.relc.lua.LuaNative.stop()
+                com.xaxaxax.relc.engine.LuaEngineControl.stop()
                 val mainScript = java.io.File(scriptDir, "main.lua").absolutePath
-                val success = com.xaxaxax.relc.lua.LuaNative.startEngineWithService(
+                val success = com.xaxaxax.relc.engine.LuaEngineControl.startEngineWithService(
                     service,
                     displayId,
                     width,
@@ -99,7 +99,7 @@ class FullscreenDisplayViewModel @Inject constructor(
     ) {
         viewModelScope.launch {
             serviceFlow.runWhenAlive { service ->
-                com.xaxaxax.relc.lua.LuaNative.stop()
+                com.xaxaxax.relc.engine.LuaEngineControl.stop()
                 val testScript = java.io.File(scriptDir, "_test.lua")
                 val templatePath =
                     if (templateName.endsWith(".png")) templateName else "$templateName.png"
@@ -128,7 +128,7 @@ class FullscreenDisplayViewModel @Inject constructor(
                             end
                             """.trimIndent()
                 testScript.writeText(content)
-                val success = com.xaxaxax.relc.lua.LuaNative.startEngineWithService(
+                val success = com.xaxaxax.relc.engine.LuaEngineControl.startEngineWithService(
                     service,
                     displayId,
                     width,
@@ -145,7 +145,7 @@ class FullscreenDisplayViewModel @Inject constructor(
     }
 
     fun stopExecution() {
-        com.xaxaxax.relc.lua.LuaNative.stop()
+        com.xaxaxax.relc.engine.LuaEngineControl.stop()
         _uiState.value = _uiState.value.copy(executionState = ExecutionState.IDLE)
     }
 

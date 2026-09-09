@@ -7,23 +7,22 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import com.xaxaxax.relc.lua.LuaNative
+import com.xaxaxax.relc.engine.LuaEngineControl
 import timber.log.Timber
 import java.io.File
 
 @Composable
 fun LuaUiManagerView(
     manager: LuaUiManager,
-    luaNative: LuaNative,
     scriptDir: String
 ) {
     val context = LocalContext.current
-    val scope = remember(context, luaNative, scriptDir) {
+    val scope = remember(context, scriptDir) {
         object : LuaUiScope {
             override val rootPath: File = File(scriptDir)
-            override val sharedData: Map<String, Any> = LuaNative.sharedData
+            override val sharedData: Map<String, Any> = LuaEngineControl.sharedData
             override fun sendUIEvent(id: String, event: String) {
-                luaNative.sendUIEvent(id, "click")
+                LuaEngineControl.sendUIEvent(id, "click")
             }
         }
     }
