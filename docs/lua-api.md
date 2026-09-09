@@ -1,6 +1,8 @@
 # ReLC Lua API 參考手冊 (v2)
 
-目前所有的 API 分為四大模組：**日誌 (Log)**、**輸入 (Input)**、**顯示 (Display)** 以及 **圖像匹配 (Match)**。
+> 本文件描述的是**原生 Lua 引擎**（`RelcEngine.cpp`，透過 `NativeLuaScriptRunner` 執行 `.lua` 腳本）實際綁定的函式。另外還有一套獨立的、JSON 為基礎的「SIMPLE」腳本格式（`SimpleScriptRunner.kt`），其 Kotlin `InputController` 提供 `swipePolyline`/`swipePolylineL1` 等函式，但那**不是** Lua API，不在本文件範圍內。
+
+目前所有的 API 分為五大模組：**日誌 (Log)**、**輸入 (Input)**、**顯示 (Display)**、**圖像匹配 (Match / Screen)** 以及 **設定 (Config)**。
 
 ## 1. 全域函數 (Global)
 ### `log(message)`
@@ -11,23 +13,13 @@
 ---
 
 ## 2. 輸入模組 (input)
-### `input.tap(durationMs, x, y, displayId)`
-在指定顯示器上執行單點點擊，包含保持時間。若毫秒為 0 則立即放開。
+### `input.click(x, y)`
+在目前顯示器上執行單點點擊（內部以 50ms 的按下-放開模擬）。
 
-### `input.swipePolyline(durationMs, points, displayId)`
-沿由 {x1, y1, x2, y2, ...} 座標點組成的折線，依照歐氏距離 (L2) 以均勻速率完成滑動。
+### `input.swipe(pointerId, points, durationMs, keep)`
+以指定 `pointerId` 沿座標點序列滑動。`points` 可以是扁平的 `{x1, y1, x2, y2, ...}`，也可以是巢狀的 `{{x1,y1}, {x2,y2}, ...}`。`keep` (boolean) 為 `true` 時，滑動結束後保持按住（不放開）。
 
-### `input.swipePolylineL1(durationMs, points, displayId)`
-同樣的幾何路徑，但每段的貢獻距離以曼哈頓距離 (L1) 計算。
-
-### `input.script`（多點觸控輔助）
-支援多點觸控的腳本控制。呼叫時需指派不同 pointerId。
-- `input.script.down(pointerId, x, y, displayId)` – 暫時按下某個點
-- `input.script.move(pointerId, x, y, displayId)` – 移動指定 pointer
-- `input.script.up(pointerId, displayId)` – 抬起指定 pointer
-
-### 參考其他 API
-- `input.decode` 等較低階工具尚未公開，請以上列高階 API 為主。
+> 備註：目前引擎綁定沒有 `displayId` 參數、也沒有 `input.tap`、`input.swipePolyline(L1)`、`input.script.*`——這些名稱只存在於 SIMPLE 腳本格式（見上方提示），Lua 引擎不提供。
 
 ---
 
@@ -55,8 +47,8 @@
 
 ---
 
-## 4. 圖像匹配模組 (match)
-此模組透過 C++ 與 OpenCV 進行底層加速。
+## 4. 圖像匹配模組 (match / screen)
+此模組透過 C++ 與 OpenCV 進行底層加速，每幀執行 `cv::matchTemplate`（TM_CCOEFF_NORMED）。
 
 ### `match.templates` (Table 屬性)
 定義要搜尋的目標模板。
@@ -79,9 +71,27 @@
     end
     ```
 
+### `match.enable(name)` / `match.disable(name)`
+啟用／停用單一模板的比對（不需要重新指派整個 `match.templates`）。
+
+### `match.set_enabled(name, enabled)`
+`match.enable`/`match.disable` 的底層函式，直接指定 boolean 狀態。
+
+### `screen.findImage(name)`
+同步查詢單一模板目前是否已被辨識到（不掛起腳本），是 `match.wait()` 的輕量替代方案。
+*   **傳回值**: `{ found = true, x, y, confidence }` 或 `{ found = false }`。
+
 ---
 
-## 5. 腳本生命週期回呼 (Callbacks)
+## 5. 設定模組 (config)
+`config` 是 `match.templates` 之外，另一種指定模板與調校比對迴圈的方式；若同時存在，`config.templates` 優先於 `match.templates`。
+*   **`config.templates`**: 與 `match.templates` 相同結構。
+*   **`config.fps`** (number): 比對迴圈的執行頻率（預設約 15 FPS）。
+*   **`config.scale`** (number): 比對前畫面縮放比例，用於降低運算量。
+
+---
+
+## 6. 腳本生命週期回呼 (Callbacks)
 你可以定義以下函數，引擎會在特定時間點呼叫它們：
 
 *   **`on_start()`**: 腳本載入後第一次執行前呼叫。
@@ -113,9 +123,9 @@ function on_tick(matches, tick)
     if matches["登入按鈕"] and matches["登入按鈕"].found then
         last_seen_tick = tick
         log("看到登入按鈕了，點擊它！")
-        input.swipePolyline(100, {{matches["登入按鈕"].x, matches["登入按鈕"].y}, {matches["登入按鈕"].x, matches["登入按鈕"].y}}, dId)
+        input.click(matches["登入按鈕"].x, matches["登入按鈕"].y)
     end
-    
+
     -- 如果超過 150 ticks (約 10 秒) 沒看到任何目標，輸出警告
     if tick - last_seen_tick > 150 then
         log("警告：已超過 10 秒未辨識到任何目標...")
@@ -123,5 +133,3 @@ function on_tick(matches, tick)
     end
 end
 ```
-
-

@@ -1,5 +1,5 @@
 [versions]
-agp = "9.3.0-alpha06"
+agp = "9.3.0"
 coilCompose = "3.4.0"
 minSdk = "27"
 targetSdk = "37"
