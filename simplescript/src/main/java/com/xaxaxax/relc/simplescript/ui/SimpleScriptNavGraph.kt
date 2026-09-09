@@ -13,16 +13,11 @@ import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.composable
 import androidx.navigation.toRoute
-import com.xaxaxax.relc.SimpleEventEditorRoute
-import com.xaxaxax.relc.SimpleScriptEditorRoute
-import com.xaxaxax.relc.SimpleScriptsRoute
 import com.xaxaxax.relc.simplescript.domain.model.Action
 import com.xaxaxax.relc.simplescript.domain.model.Condition
 import com.xaxaxax.relc.simplescript.domain.model.Event
 import com.xaxaxax.relc.simplescript.ui.editor.ConditionEditorScreen
 import com.xaxaxax.relc.simplescript.ui.editor.ActionEditorScreen
-import com.xaxaxax.relc.SimpleConditionEditorRoute
-import com.xaxaxax.relc.SimpleActionEditorRoute
 import com.xaxaxax.relc.simplescript.ui.editor.EventEditorScreen
 import com.xaxaxax.relc.simplescript.ui.editor.ScriptEditorScreen
 import com.xaxaxax.relc.simplescript.ui.list.ScriptListScreen
