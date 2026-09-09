@@ -38,7 +38,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import com.xaxaxax.relc.overlay.OverlayServiceProvider
 import com.xaxaxax.relc.script.ScriptConfig
 import com.xaxaxax.relc.script.ScriptState
 import com.xaxaxax.relc.ui.component.Section
@@ -68,7 +67,7 @@ fun ScriptDetailScreen(
                     ).show()
                 } else {
                     viewModel.saveScript()
-                    val success = OverlayServiceProvider.showOverlay(sc.id)
+                    val success = viewModel.showOverlay()
                     if (!success) {
                         android.widget.Toast.makeText(ctx, "請先在設定中開啟無障礙服務", android.widget.Toast.LENGTH_SHORT).show()
                     }
@@ -126,7 +125,7 @@ fun ScriptDetailScreen(
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(ctx)) {
                     Toast.makeText(ctx, "需要「疊加顯示」權限以顯示 UI", Toast.LENGTH_SHORT).show()
                 } else {
-                    val success = OverlayServiceProvider.showOverlay(sc.id)
+                    val success = viewModel.showOverlay()
                     if (!success) {
                         android.widget.Toast.makeText(ctx, "請先在設定中開啟無障礙服務", android.widget.Toast.LENGTH_SHORT).show()
                     }
