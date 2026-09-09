@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -22,6 +23,7 @@ fun ScriptListScreen(
     onAddScript: () -> Unit,
     onScriptClick: (Script) -> Unit,
     onDeleteScript: (Script) -> Unit,
+    onRunScript: (Script) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Scaffold(
@@ -58,7 +60,8 @@ fun ScriptListScreen(
                     ScriptListItem(
                         script = script,
                         onClick = { onScriptClick(script) },
-                        onDelete = { onDeleteScript(script) }
+                        onDelete = { onDeleteScript(script) },
+                        onRun = { onRunScript(script) }
                     )
                 }
             }
@@ -71,6 +74,7 @@ fun ScriptListItem(
     script: Script,
     onClick: () -> Unit,
     onDelete: () -> Unit,
+    onRun: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -96,6 +100,9 @@ fun ScriptListItem(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+            IconButton(onClick = onRun) {
+                Icon(Icons.Default.PlayArrow, contentDescription = "Run")
             }
             IconButton(onClick = onDelete) {
                 Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)

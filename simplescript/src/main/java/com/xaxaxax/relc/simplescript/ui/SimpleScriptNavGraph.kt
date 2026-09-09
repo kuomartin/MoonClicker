@@ -16,6 +16,7 @@ import androidx.navigation.toRoute
 import com.xaxaxax.relc.simplescript.domain.model.Action
 import com.xaxaxax.relc.simplescript.domain.model.Condition
 import com.xaxaxax.relc.simplescript.domain.model.Event
+import com.xaxaxax.relc.simplescript.domain.model.Script
 import com.xaxaxax.relc.simplescript.ui.editor.ConditionEditorScreen
 import com.xaxaxax.relc.simplescript.ui.editor.ActionEditorScreen
 import com.xaxaxax.relc.simplescript.ui.editor.EventEditorScreen
@@ -27,7 +28,8 @@ fun NavGraphBuilder.simpleScriptNavGraph(
     navController: NavHostController,
     onStartPointSelecting: () -> Unit = {},
     onStartCropping: () -> Unit = {},
-    onCloseEditor: () -> Unit = {}
+    onCloseEditor: () -> Unit = {},
+    onRunScript: (Script) -> Unit = {}
 ) {
     composable<SimpleScriptsRoute> {
         val viewModel: SimpleScriptViewModel = hiltViewModel()
@@ -43,7 +45,8 @@ fun NavGraphBuilder.simpleScriptNavGraph(
             },
             onDeleteScript = {
                 // TODO: Implement delete
-            }
+            },
+            onRunScript = { script -> onRunScript(script) }
         )
     }
 
@@ -80,7 +83,8 @@ fun NavGraphBuilder.simpleScriptNavGraph(
                 },
                 onDeleteEvent = { event ->
                     viewModel.updateCurrentScript(currentScript!!.copy(events = currentScript!!.events - event))
-                }
+                },
+                onRun = { onRunScript(currentScript!!) }
             )
         } else {            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()
