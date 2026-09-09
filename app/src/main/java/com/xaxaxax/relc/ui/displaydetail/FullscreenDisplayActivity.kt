@@ -31,8 +31,8 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.rememberNavController
 import com.xaxaxax.relc.simplescript.ui.simpleScriptNavGraph
-import com.xaxaxax.relc.SimpleScriptsRoute
-import com.xaxaxax.relc.SimpleScriptEditorRoute
+import com.xaxaxax.relc.simplescript.ui.SimpleScriptsRoute
+import com.xaxaxax.relc.simplescript.ui.SimpleScriptEditorRoute
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically

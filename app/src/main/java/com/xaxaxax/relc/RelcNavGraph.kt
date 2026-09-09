@@ -28,6 +28,8 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import com.xaxaxax.relc.simplescript.ui.simpleScriptNavGraph
+import com.xaxaxax.relc.simplescript.ui.SimpleEventEditorRoute
+import com.xaxaxax.relc.simplescript.ui.SimpleScriptEditorRoute
 import com.xaxaxax.relc.simplescript.domain.model.Event
 import com.xaxaxax.relc.simplescript.domain.model.Variable
 import com.xaxaxax.relc.simplescript.domain.model.Condition
