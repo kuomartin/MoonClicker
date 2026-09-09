@@ -192,7 +192,7 @@ class ClickAssistOverlayService : AccessibilityService(), OverlayWindowScope<Vie
         // Keep track of positions so they don't reset when elements are updated
         val positions = remember { mutableMapOf<String, Offset>() }
 
-        LuaNative.uiManager.elements.forEach { (id, element) ->
+        com.xaxaxax.relc.ui.lua.LuaUiManager.instance.elements.forEach { (id, element) ->
             key(id) {
                 LuaWindow(
                     id = id,

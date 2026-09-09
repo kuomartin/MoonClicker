@@ -1,12 +1,18 @@
 package com.xaxaxax.relc.ui.lua
 
 import androidx.compose.runtime.mutableStateMapOf
+import com.xaxaxax.relc.lua.LuaNative
+import com.xaxaxax.relc.lua.LuaUiSink
 import timber.log.Timber
 
 /**
  * 管理所有由 Lua 腳本生成的 UI 節點
  */
-class LuaUiManager {
+class LuaUiManager : LuaUiSink {
+    companion object {
+        val instance: LuaUiManager by lazy { LuaUiManager().also { LuaNative.uiSink = it } }
+    }
+
     // 使用 Compose 的 mutableStateMapOf，確保狀態變化能自動觸發重繪
     private val _elements = mutableStateMapOf<String, DynamicElement>()
     val elements: Map<String, DynamicElement> get() = _elements
@@ -17,7 +23,7 @@ class LuaUiManager {
     /**
      * 新增或覆蓋 UI 節點
      */
-    fun add(parentId: String?, id: String, jsonExp: String) {
+    override fun add(parentId: String?, id: String, jsonExp: String) {
         try {
             val element = DynamicElement.fromJsonExp(id, jsonExp)
             _elements[id] = element
@@ -46,7 +52,7 @@ class LuaUiManager {
     /**
      * 更新現有 UI 節點的屬性 (合併更新)
      */
-    fun update(id: String, jsonExp: String) {
+    override fun update(id: String, jsonExp: String) {
         val current = _elements[id] ?: return
         try {
             val new = DynamicElement.fromJsonExp(id, jsonExp)
@@ -69,7 +75,7 @@ class LuaUiManager {
     /**
      * 移除 UI 節點
      */
-    fun remove(id: String) {
+    override fun remove(id: String) {
         val current = _elements.remove(id)
         Timber.d("LuaUiManager: Removed $id")
         if (current != null) {
@@ -83,7 +89,7 @@ class LuaUiManager {
     /**
      * 清空所有節點
      */
-    fun clear() {
+    override fun clear() {
         _elements.clear()
     }
 }

@@ -4,7 +4,7 @@ import com.xaxaxax.relc.input.InputController
 import com.xaxaxax.relc.script.ScriptConfig
 import com.xaxaxax.relc.script.SimpleScriptProgress
 import com.xaxaxax.relc.script.simple.ParsedSimpleLine
-import com.xaxaxax.relc.script.simple.SimplePhysicalKey
+import com.xaxaxax.relc.input.SimplePhysicalKey
 import com.xaxaxax.relc.script.simple.SimpleScriptBodyJson
 import com.xaxaxax.relc.script.simple.SimpleScriptVerb
 import com.xaxaxax.relc.script.simple.encodeToLine

@@ -6,7 +6,6 @@ import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
 import com.xaxaxax.relc.IRelcV2Service
-import com.xaxaxax.relc.script.simple.SimplePhysicalKey
 import timber.log.Timber
 import kotlin.math.abs
 import kotlin.math.hypot

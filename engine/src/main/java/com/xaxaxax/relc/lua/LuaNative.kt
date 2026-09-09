@@ -11,7 +11,7 @@ object LuaNative {
 
     private var currentService: IRelcV2Service? = null
     private var currentDisplayId: Int = -1
-    val uiManager = com.xaxaxax.relc.ui.lua.LuaUiManager()
+    var uiSink: LuaUiSink? = null
     private var appContext: android.content.Context? = null
 
     // Shared state between Lua and Kotlin
@@ -101,7 +101,7 @@ object LuaNative {
     ): Surface? {
         this.currentService = service
         this.currentDisplayId = displayId
-        uiManager.clear()
+        uiSink?.clear()
         return startEngine(service, displayId, width, height, scriptPath)
     }
 
@@ -120,7 +120,7 @@ object LuaNative {
 
     fun stop() {
         stopEngine()
-        uiManager.clear()
+        uiSink?.clear()
     }
 
     /**
@@ -141,7 +141,7 @@ object LuaNative {
      */
     fun uiAdd(parentId: String?, id: String, jsonExp: String) {
         Timber.d("LuaNative uiAdd: parentId=$parentId, id=$id, jsonExp=$jsonExp")
-        uiManager.add(parentId, id, jsonExp)
+        uiSink?.add(parentId, id, jsonExp)
     }
 
     /**
@@ -151,7 +151,7 @@ object LuaNative {
      */
     fun uiUpdate(id: String, jsonExp: String) {
         Timber.d("LuaNative uiUpdate: id=$id, jsonExp=$jsonExp")
-        uiManager.update(id, jsonExp)
+        uiSink?.update(id, jsonExp)
     }
 
     /**
@@ -160,7 +160,7 @@ object LuaNative {
      */
     fun uiRemove(id: String) {
         Timber.d("LuaNative uiRemove: id=$id")
-        uiManager.remove(id)
+        uiSink?.remove(id)
     }
 
     /**

@@ -1,4 +1,4 @@
-package com.xaxaxax.relc.script.simple
+package com.xaxaxax.relc.input
 
 import android.view.KeyEvent
 
