@@ -3,6 +3,44 @@
 #include <opencv2/imgcodecs.hpp>
 #include <android/native_window_jni.h>
 #include <android/log.h>
+#include <sstream>
+
+// Must match com.xaxaxax.relc.engine.state.EngineEventType
+namespace EngineEventType {
+    constexpr int RUNNING = 0;
+    constexpr int FINISHED = 1;
+    constexpr int ERROR = 2;
+    constexpr int STOPPED = 3;
+    constexpr int MATCH_RESULT = 4;
+}
+
+namespace {
+    std::string jsonEscape(const std::string &s) {
+        std::string out;
+        out.reserve(s.size());
+        for (char c: s) {
+            if (c == '"' || c == '\\') out += '\\';
+            out += c;
+        }
+        return out;
+    }
+
+    std::string matchResultsToJson(const std::vector<MatchResultItem> &matches) {
+        std::ostringstream out;
+        out << '[';
+        for (size_t i = 0; i < matches.size(); ++i) {
+            const auto &m = matches[i];
+            if (i > 0) out << ',';
+            out << "{\"name\":\"" << jsonEscape(m.name) << "\",\"found\":"
+                << (m.found ? "true" : "false")
+                << ",\"x\":" << m.x << ",\"y\":" << m.y
+                << ",\"width\":" << m.width << ",\"height\":" << m.height
+                << ",\"confidence\":" << m.confidence << '}';
+        }
+        out << ']';
+        return out.str();
+    }
+}
 
 RelcEngine::RelcEngine(JNIEnv *env, jobject service, jobject detector) : javaVM(nullptr),
                                                                          displayId(-1),
@@ -37,6 +75,8 @@ RelcEngine::RelcEngine(JNIEnv *env, jobject service, jobject detector) : javaVM(
     uiRemoveMethodId = env->GetMethodID(luaNativeClass, "uiRemove", "(Ljava/lang/String;)V");
     setSharedDataMethodId = env->GetMethodID(luaNativeClass, "setSharedData",
                                              "(Ljava/lang/String;Ljava/lang/Object;)V");
+    onEngineEventMethodId = env->GetMethodID(luaNativeClass, "onEngineEvent",
+                                             "(ILjava/lang/String;)V");
     showNotificationMethodId = env->GetMethodID(luaNativeClass, "showNotification",
                                                 "(Ljava/lang/String;Ljava/lang/String;)V");
     startIntentMethodId = env->GetMethodID(luaNativeClass, "startIntent", "(Ljava/lang/String;)V");
@@ -222,6 +262,21 @@ void RelcEngine::pushUIEvent(const std::string &elementId, const std::string &ev
     uiEventQueue.push({elementId, eventType});
 }
 
+void RelcEngine::pushEngineEvent(int type, const std::string &payload) {
+    JNIEnv *env;
+    bool attached = false;
+    if (javaVM->GetEnv((void **) &env, JNI_VERSION_1_6) == JNI_EDETACHED) {
+        if (javaVM->AttachCurrentThread(&env, nullptr) != JNI_OK) return;
+        attached = true;
+    }
+
+    jstring jPayload = env->NewStringUTF(payload.c_str());
+    env->CallVoidMethod(luaNativeObj, onEngineEventMethodId, type, jPayload);
+    env->DeleteLocalRef(jPayload);
+
+    if (attached) javaVM->DetachCurrentThread();
+}
+
 void RelcEngine::luaThreadLoop(const std::string &scriptPath) {
     JNIEnv *env;
     if (javaVM->AttachCurrentThread(&env, nullptr) != JNI_OK) {
@@ -232,6 +287,7 @@ void RelcEngine::luaThreadLoop(const std::string &scriptPath) {
 
     if (!luaEngine->loadFile(scriptPath)) {
         isRunning = false;
+        pushEngineEvent(EngineEventType::ERROR, "Failed to load script: " + scriptPath);
         javaVM->DetachCurrentThread();
         return;
     }
@@ -239,6 +295,7 @@ void RelcEngine::luaThreadLoop(const std::string &scriptPath) {
     lua_State *coL = luaEngine->getCoroutineState();
     if (!coL) {
         isRunning = false;
+        pushEngineEvent(EngineEventType::ERROR, "Failed to obtain Lua coroutine state");
         javaVM->DetachCurrentThread();
         return;
     }
@@ -252,8 +309,11 @@ void RelcEngine::luaThreadLoop(const std::string &scriptPath) {
     int nres = 0;
     int status = lua_resume(coL, gL, 0, &nres);
     if (status != LUA_OK && status != LUA_YIELD) {
-        LOGE("Script execution error (init): %s", lua_tostring(coL, -1));
+        std::string message = lua_tostring(coL, -1) ? lua_tostring(coL, -1) : "unknown error";
+        LOGE("Script execution error (init): %s", message.c_str());
         isRunning = false;
+        pushEngineEvent(EngineEventType::ERROR, message);
+        javaVM->DetachCurrentThread();
         return;
     }
 
@@ -271,7 +331,10 @@ void RelcEngine::luaThreadLoop(const std::string &scriptPath) {
         lua_pop(gL, 1);
     }
 
+    pushEngineEvent(EngineEventType::RUNNING, "");
+
     // Main Ticker Loop
+    bool exitedByErrorOrFinish = false;
     auto lastTickTime = std::chrono::steady_clock::now();
     while (isRunning) {
         auto start = std::chrono::steady_clock::now();
@@ -329,6 +392,10 @@ void RelcEngine::luaThreadLoop(const std::string &scriptPath) {
                 matchesCopy = latestResult.matches;
             }
 
+            if (!matchesCopy.empty()) {
+                pushEngineEvent(EngineEventType::MATCH_RESULT, matchResultsToJson(matchesCopy));
+            }
+
             for (const auto &m: matchesCopy) {
                 lua_newtable(gL);
                 lua_pushboolean(gL, true);
@@ -364,8 +431,11 @@ void RelcEngine::luaThreadLoop(const std::string &scriptPath) {
             int resume_status = lua_resume(coL, gL, 0, &nres_loop);
 
             if (resume_status != LUA_OK && resume_status != LUA_YIELD) {
-                LOGE("Script execution error: %s", lua_tostring(coL, -1));
+                std::string message = lua_tostring(coL, -1) ? lua_tostring(coL, -1) : "unknown error";
+                LOGE("Script execution error: %s", message.c_str());
                 isRunning = false;
+                pushEngineEvent(EngineEventType::ERROR, message);
+                exitedByErrorOrFinish = true;
                 break;
             }
         }
@@ -378,6 +448,8 @@ void RelcEngine::luaThreadLoop(const std::string &scriptPath) {
             if (!hasOnTick) {
                 LOGD("Script finished execution");
                 isRunning = false;
+                pushEngineEvent(EngineEventType::FINISHED, "");
+                exitedByErrorOrFinish = true;
                 break;
             }
         }
@@ -388,6 +460,11 @@ void RelcEngine::luaThreadLoop(const std::string &scriptPath) {
             std::this_thread::sleep_for(
                     std::chrono::milliseconds(tickIntervalMs - elapsed.count()));
         }
+    }
+    if (!exitedByErrorOrFinish) {
+        // Loop condition (isRunning) went false without hitting the error/finish
+        // breaks above, meaning stop() was called externally.
+        pushEngineEvent(EngineEventType::STOPPED, "");
     }
     javaVM->DetachCurrentThread();
 }

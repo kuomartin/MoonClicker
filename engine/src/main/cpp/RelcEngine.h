@@ -60,6 +60,9 @@ public:
     // UI Event Queue
     void pushUIEvent(const std::string& elementId, const std::string& eventType);
 
+    // Engine state event upcall (see LuaNative.onEngineEvent / EngineEventType)
+    void pushEngineEvent(int type, const std::string &payload);
+
     // Helpers for Lua callbacks
     bool multiTouchSwipe(int pointerId, const std::vector<int> &points, long duration, bool keep);
 
@@ -148,6 +151,7 @@ private:
     jmethodID uiUpdateMethodId;
     jmethodID uiRemoveMethodId;
     jmethodID setSharedDataMethodId;
+    jmethodID onEngineEventMethodId;
     
     jmethodID showNotificationMethodId;
     jmethodID startIntentMethodId;
