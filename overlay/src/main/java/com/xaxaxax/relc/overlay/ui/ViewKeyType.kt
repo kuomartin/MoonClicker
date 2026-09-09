@@ -1,4 +1,4 @@
-package com.xaxaxax.relc.overlay.ui.simple
+package com.xaxaxax.relc.overlay.ui
 
 sealed interface ViewKeyType {
     data class Tap(val index: Int) : ViewKeyType
