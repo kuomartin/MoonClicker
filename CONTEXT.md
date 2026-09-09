@@ -30,6 +30,14 @@ _Avoid_: Touch injector, event sender.
 The embedded Lua runtime that drives automation — it owns virtual displays, input, and vision matching from a user-authored script. See [ADR-0002](docs/adr/0002-lua-as-scripting-engine.md).
 _Avoid_: Automation engine, macro engine.
 
+**Engine Module**:
+The `:engine` Gradle module — the sole boundary allowed to touch native internals (the Script Engine, VisionEngine, RelcV2Service). Other modules observe it only through `EngineStateRepository`; they never reach into its internals directly. See [ADR-0006](docs/adr/0006-module-split-and-engine-facade.md).
+_Avoid_: Native layer, backend module.
+
+**EngineStateRepository**:
+The Engine Module's single observable source of truth — a `StateFlow<EngineState>` aggregating run state, per-virtual-display state, latest match result, and error detail. Fed by native events rather than polled.
+_Avoid_: Engine status, native state holder.
+
 **LuaUiManager**:
 The bridge that lets a running Lua script add or update Compose UI elements (HUD, controls) at runtime.
 
@@ -42,4 +50,4 @@ The current Shizuku-hosted service exposing virtual display, input, and launch c
 _Avoid_: Shizuku service (ambiguous between V1/V2), backend service.
 
 **Overlay UI**:
-Floating, always-on-top Compose UI (control bar, HUD) decoupled from the core automation logic.
+Floating, always-on-top Compose UI (control bar, HUD) rendered by the `:overlay` module's `ClickAssistOverlayService` (an AccessibilityService), observing the Engine Module only through `EngineStateRepository`. See [ADR-0006](docs/adr/0006-module-split-and-engine-facade.md).
