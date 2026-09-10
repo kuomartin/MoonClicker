@@ -36,9 +36,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import com.xaxaxax.relc.R
 import com.xaxaxax.relc.script.LoopMode
 import com.xaxaxax.relc.script.ScriptConfig
 import com.xaxaxax.relc.script.ScriptState
@@ -195,7 +197,7 @@ private fun RunningBadge() {
         )
         Spacer(modifier = Modifier.width(6.dp))
         Text(
-            text = "執行中",
+            text = stringResource(R.string.script_running_badge),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onPrimaryContainer
         )

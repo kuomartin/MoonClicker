@@ -47,22 +47,27 @@ import com.xaxaxax.relc.ui.setting.SettingsScreen
 
 @Composable
 fun RelcNavGraph(
-    pendingNavTarget: Any? = null,
-    onNavTargetHandled: () -> Unit = {},
+    openScriptsPage: Boolean = false,
+    onScriptsPageOpened: () -> Unit = {},
 ) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
 
-    // Deep link from the script status notification ("查看狀態" / tapping the notification).
-    LaunchedEffect(pendingNavTarget) {
-        val target = pendingNavTarget ?: return@LaunchedEffect
-        navController.navigate(target) {
+    /** Shared by the navigation bar and the notification deep link below. */
+    fun navigateToTopLevel(route: Any) {
+        navController.navigate(route) {
             popUpTo(navController.graph.findStartDestination().id) { saveState = true }
             launchSingleTop = true
             restoreState = true
         }
-        onNavTargetHandled()
+    }
+
+    // Deep link from the script status notification ("查看狀態" / tapping the notification).
+    LaunchedEffect(openScriptsPage) {
+        if (!openScriptsPage) return@LaunchedEffect
+        navigateToTopLevel(ScriptsRoute)
+        onScriptsPageOpened()
     }
 
     val isDetailScreen = currentDestination?.hierarchy?.any {
@@ -92,15 +97,7 @@ fun RelcNavGraph(
                     icon = { Icon(destination.icon, contentDescription = destination.label) },
                     label = { Text(destination.label) },
                     selected = isSelected,
-                    onClick = {
-                        navController.navigate(destination.route) {
-                            popUpTo(navController.graph.findStartDestination().id) {
-                                saveState = true
-                            }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    }
+                    onClick = { navigateToTopLevel(destination.route) }
                 )
             }
         }

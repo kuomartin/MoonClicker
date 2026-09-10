@@ -12,4 +12,5 @@
     <string name="script_status_title">%1$d 個腳本執行中</string>
     <string name="script_status_action_view">查看狀態</string>
     <string name="script_status_action_stop_all">停止所有</string>
+    <string name="script_running_badge">執行中</string>
 </resources>
