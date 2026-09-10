@@ -2,114 +2,226 @@ package com.xaxaxax.relc.ui.displaydetail
 
 import android.annotation.SuppressLint
 import android.graphics.Matrix
-import android.graphics.RectF
+import android.hardware.display.DisplayManager
+import android.os.Handler
+import android.os.Looper
+import android.graphics.SurfaceTexture
 import android.view.Surface
-import android.view.SurfaceHolder
-import android.view.SurfaceView
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.width
-import androidx.compose.material3.Surface
+import android.view.TextureView
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInteropFilter
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.viewinterop.AndroidView
-import com.xaxaxax.relc.core.DisplayConfig
 import com.xaxaxax.relc.input.InputController
 import timber.log.Timber
+import kotlin.math.roundToInt
 
 /**
- * 把 SurfaceView 的生命週期跟 VirtualDisplayController 串接起來。
- * 同時攔截觸控事件並透過 InputController 轉發。
+ * 把鏡像 view 的生命週期跟虛擬顯示串接起來，並攔截觸控事件轉發給 [InputController]。
  *
- * 使用 Matrix 處理座標變換（包含縮放與平移），確保座標對應精確。
- *
- * @param controller 已建立（State.CREATED）的 VirtualDisplayController
- * @param inputController 用於注入事件的控制器
- * @param config 虛擬螢幕的配置，用於計算座標縮放
+ * 幾何全部來自單一的 [Viewport]（見地圖 #9 / #12）：呈現與觸控讀同一個 instance，
+ * 因此不可能不一致。`Viewport` 的輸入取自公開的 `Display` API，不需要任何 AIDL。
  */
-@SuppressLint("ClickableViewAccessibility")
 @Composable
 fun VirtualDisplaySurfaceView(
     targetDisplayId: Int,
     addSurface: (Surface) -> Unit,
     removeSurface: (Surface) -> Unit,
     inputController: InputController,
-    config: DisplayConfig,
     isReadOnly: Boolean,
     modifier: Modifier = Modifier,
-    onSurfaceViewCreated: (SurfaceView) -> Unit = {}
+    onTextureViewCreated: (TextureView) -> Unit = {},
 ) {
-    // 預先準備好矩陣與座標矩形，避免在 onTouch 中頻繁分配記憶體
-    val touchMatrix = remember { Matrix() }
-    val srcRect = remember { RectF() }
-    val dstRect = remember { RectF(0f, 0f, config.width.toFloat(), config.height.toFloat()) }
+    val geometry = rememberDisplayGeometry(targetDisplayId)
 
-    // SurfaceHolder.Callback 的 instance 在 recomposition 間保持穩定
+    BoxWithConstraints(modifier.background(Color.Black)) {
+        val viewport = viewportOf(
+            surfaceWidth = geometry.surfaceWidth,
+            surfaceHeight = geometry.surfaceHeight,
+            rotation = geometry.rotation,
+            viewWidth = constraints.maxWidth,
+            viewHeight = constraints.maxHeight,
+        )
+        if (viewport.isEmpty) return@BoxWithConstraints
 
-    val callback = remember {
-        object : SurfaceHolder.Callback {
-            override fun surfaceCreated(holder: SurfaceHolder) {
-                Timber.d("VirtualDisplaySurfaceView: surfaceCreated")
-                runCatching {
-                    addSurface(holder.surface)
-                }.onFailure {
-                    Timber.e(it, "replaceSink(DirectSink) failed")
+        val density = LocalDensity.current
+        Box(
+            modifier = Modifier
+                .offset {
+                    IntOffset(viewport.contentLeft.roundToInt(), viewport.contentTop.roundToInt())
                 }
-            }
+                .size(
+                    with(density) { viewport.contentWidth.toDp() },
+                    with(density) { viewport.contentHeight.toDp() },
+                )
+        ) {
+            MirrorSurface(
+                surfaceWidth = geometry.surfaceWidth,
+                surfaceHeight = geometry.surfaceHeight,
+                viewport = viewport,
+                addSurface = addSurface,
+                removeSurface = removeSurface,
+                onTextureViewCreated = onTextureViewCreated,
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    // requiredSize 而非 size：旋轉前的佈局框比父層還長，size() 會被父層
+                    // constraints 夾住（實測會被壓成正方形），requiredSize 才忽略父層。
+                    .requiredSize(
+                        with(density) { viewport.surfaceViewWidth.toDp() },
+                        with(density) { viewport.surfaceViewHeight.toDp() },
+                    ),
+            )
 
-            override fun surfaceChanged(
-                holder: SurfaceHolder, format: Int, width: Int, height: Int
-            ) {
-                Timber.d("VirtualDisplaySurfaceView: surfaceChanged ${width}x${height}")
-            }
+            // 觸控節點：未旋轉，且尺寸正好等於內容矩形（見 #15）。因此黑邊上的觸控
+            // 根本不會抵達；而手勢一旦在此開始，拖出邊界仍會繼續送達（view 系統的
+            // 手勢捕獲保證）——#12 Q9 要的不對稱語意由結構取得，不需狀態記帳。
+            TouchForwarder(
+                targetDisplayId = targetDisplayId,
+                inputController = inputController,
+                viewport = viewport,
+                isReadOnly = isReadOnly,
+                modifier = Modifier.matchParentSize(),
+            )
+        }
+    }
+}
 
-            override fun surfaceDestroyed(holder: SurfaceHolder) {
-                Timber.d("VirtualDisplaySurfaceView: surfaceDestroyed")
+@Composable
+private fun MirrorSurface(
+    surfaceWidth: Int,
+    surfaceHeight: Int,
+    viewport: Viewport,
+    addSurface: (Surface) -> Unit,
+    removeSurface: (Surface) -> Unit,
+    onTextureViewCreated: (TextureView) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    // TextureView 而非 SurfaceView：SurfaceView 的 surface 是獨立硬體圖層，**不吃 view 的
+    // 旋轉變換**（真機實測：佈局框有換、畫面仍側躺）。TextureView 走一般 view 繪製路徑，
+    // graphicsLayer 的旋轉才會真的套用。見 #13 Q2 的備案。
+    val listener = remember(addSurface, removeSurface) {
+        object : TextureView.SurfaceTextureListener {
+            private var surface: Surface? = null
+
+            override fun onSurfaceTextureAvailable(texture: SurfaceTexture, width: Int, height: Int) {
                 runCatching {
-                    removeSurface(holder.surface)
-                }.onFailure {
-                    Timber.e(it, "replaceSink(NoOpSink) failed")
-                }
+                    Surface(texture).also { surface = it; addSurface(it) }
+                }.onFailure { Timber.e(it, "addSurface failed") }
             }
+
+            override fun onSurfaceTextureSizeChanged(texture: SurfaceTexture, width: Int, height: Int) {
+                Timber.d("MirrorSurface: sizeChanged ${width}x$height")
+            }
+
+            override fun onSurfaceTextureDestroyed(texture: SurfaceTexture): Boolean {
+                surface?.let { current ->
+                    runCatching { removeSurface(current) }
+                        .onFailure { Timber.e(it, "removeSurface failed") }
+                    current.release()
+                }
+                surface = null
+                return true
+            }
+
+            override fun onSurfaceTextureUpdated(texture: SurfaceTexture) = Unit
         }
     }
 
-    Surface(modifier) {
-        val dpWidth = with(LocalDensity.current) { config.width.toDp() }
-        val dpHeight = with(LocalDensity.current) { config.height.toDp() }
-        AndroidView(
-            modifier = Modifier
-                .width(dpWidth)
-                .height(dpHeight),
-            factory = { context ->
-                SurfaceView(context).apply {
-                    // 讓 Surface buffer 與 VirtualDisplay 邏輯解析度一致，避免 VD→較小 consumer
-                    // 時系統縮放路徑出現類似 crop 的裁切；畫面改由 HWC 縮進 View 區域。
-                    holder.setFixedSize(config.width, config.height)
-                    holder.addCallback(callback)
-                    srcRect.set(this.x, this.y, this.width.toFloat(), this.height.toFloat())
-                    touchMatrix.setRectToRect(srcRect, dstRect, Matrix.ScaleToFit.FILL)
-
-                    setOnTouchListener { _, event ->
-                        if (isReadOnly) return@setOnTouchListener false
-                        if (targetDisplayId != -1) {
-                            inputController.injectMotionEvent(event, targetDisplayId, touchMatrix)
-                        }
-                        true
-                    }
-                    onSurfaceViewCreated(this)
-                }
-            },
-            update = { view ->
-                view.setOnTouchListener { _, event ->
-                    if (isReadOnly) return@setOnTouchListener false
-                    if (targetDisplayId != -1) {
-                        inputController.injectMotionEvent(event, targetDisplayId, touchMatrix)
-                    }
-                    true
-                }
+    AndroidView(
+        // 影格在 surface 空間、內容躺著（地圖 #9 前提 8），套上反向旋轉才會正立。
+        modifier = modifier.graphicsLayer { rotationZ = viewport.viewRotationDegrees },
+        factory = { context ->
+            TextureView(context).apply {
+                surfaceTextureListener = listener
+                onTextureViewCreated(this)
             }
-        )
+        },
+        update = { view ->
+            // buffer 尺寸恆為虛擬顯示建立時的大小，不隨旋轉改變（#11 實測）。
+            view.surfaceTexture?.setDefaultBufferSize(surfaceWidth, surfaceHeight)
+        },
+    )
+}
+
+@OptIn(ExperimentalComposeUiApi::class)
+@SuppressLint("ClickableViewAccessibility")
+@Composable
+private fun TouchForwarder(
+    targetDisplayId: Int,
+    inputController: InputController,
+    viewport: Viewport,
+    isReadOnly: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    // 節點座標已是內容矩形內的相對座標，故只需縮放即可得到邏輯座標——觸控路徑上
+    // 沒有旋轉（旋轉被畫面側的 graphicsLayer 吸收掉了）。
+    val transform = remember(viewport.scale) {
+        Matrix().apply { setScale(1f / viewport.scale, 1f / viewport.scale) }
     }
+    Box(
+        modifier.pointerInteropFilter { event ->
+            if (isReadOnly || targetDisplayId == -1) {
+                false
+            } else {
+                inputController.injectMotionEvent(event, targetDisplayId, transform)
+                true
+            }
+        }
+    )
+}
+
+/** 虛擬顯示的 surface 尺寸與當前方向，全部取自公開的 `Display` API（見 #13）。 */
+private data class DisplayGeometry(
+    val surfaceWidth: Int,
+    val surfaceHeight: Int,
+    val rotation: Int,
+)
+
+@Composable
+private fun rememberDisplayGeometry(displayId: Int): DisplayGeometry {
+    val context = LocalContext.current
+    val displayManager = remember(context) { context.getSystemService(DisplayManager::class.java) }
+    var geometry by remember(displayId) {
+        mutableStateOf(displayManager.readGeometry(displayId))
+    }
+
+    DisposableEffect(displayManager, displayId) {
+        val listener = object : DisplayManager.DisplayListener {
+            override fun onDisplayAdded(id: Int) = Unit
+            override fun onDisplayRemoved(id: Int) = Unit
+            override fun onDisplayChanged(id: Int) {
+                if (id == displayId) geometry = displayManager.readGeometry(displayId)
+            }
+        }
+        displayManager.registerDisplayListener(listener, Handler(Looper.getMainLooper()))
+        onDispose { displayManager.unregisterDisplayListener(listener) }
+    }
+
+    return geometry
+}
+
+private fun DisplayManager.readGeometry(displayId: Int): DisplayGeometry {
+    val display = getDisplay(displayId) ?: return DisplayGeometry(0, 0, 0)
+    // getMode() 回報建立時的 surface 尺寸，不隨旋轉改變；getRealSize() 回報的邏輯尺寸
+    // 才會交換長寬。兩者不可混用（#13 實測）。
+    val mode = display.mode
+    return DisplayGeometry(mode.physicalWidth, mode.physicalHeight, display.rotation)
 }
