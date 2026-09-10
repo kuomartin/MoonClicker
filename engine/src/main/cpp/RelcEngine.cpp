@@ -68,11 +68,6 @@ RelcEngine::RelcEngine(JNIEnv *env, jobject service, jobject detector) : javaVM(
     getVirtualDisplaysMethodId = env->GetMethodID(serviceClass, "getVirtualDisplays", "()[I");
 
     jclass luaNativeClass = env->GetObjectClass(luaNativeObj);
-    uiAddMethodId = env->GetMethodID(luaNativeClass, "uiAdd",
-                                     "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
-    uiUpdateMethodId = env->GetMethodID(luaNativeClass, "uiUpdate",
-                                        "(Ljava/lang/String;Ljava/lang/String;)V");
-    uiRemoveMethodId = env->GetMethodID(luaNativeClass, "uiRemove", "(Ljava/lang/String;)V");
     setSharedDataMethodId = env->GetMethodID(luaNativeClass, "setSharedData",
                                              "(Ljava/lang/String;Ljava/lang/Object;)V");
     onEngineEventMethodId = env->GetMethodID(luaNativeClass, "onEngineEvent",
@@ -203,22 +198,6 @@ bool RelcEngine::start(int displayId, int width, int height, const std::string &
 
     lua_setglobal(L, "display");
 
-    // ui module
-    lua_newtable(L);
-    lua_pushlightuserdata(L, this);
-    lua_pushcclosure(L, lua_ui_add, 1);
-    lua_setfield(L, -2, "add");
-
-    lua_pushlightuserdata(L, this);
-    lua_pushcclosure(L, lua_ui_update, 1);
-    lua_setfield(L, -2, "update");
-
-    lua_pushlightuserdata(L, this);
-    lua_pushcclosure(L, lua_ui_remove, 1);
-    lua_setfield(L, -2, "remove");
-
-    lua_setglobal(L, "ui");
-
     // app module
     lua_newtable(L);
     lua_pushlightuserdata(L, this);
@@ -255,11 +234,6 @@ bool RelcEngine::start(int displayId, int width, int height, const std::string &
     luaThread = std::thread(&RelcEngine::luaThreadLoop, this, scriptPath);
 
     return true;
-}
-
-void RelcEngine::pushUIEvent(const std::string &elementId, const std::string &eventType) {
-    std::lock_guard<std::mutex> lock(uiEventMutex);
-    uiEventQueue.push({elementId, eventType});
 }
 
 void RelcEngine::pushEngineEvent(int type, const std::string &payload) {
@@ -346,40 +320,6 @@ void RelcEngine::luaThreadLoop(const std::string &scriptPath) {
         lastTickTime = start;
 
         tickNum++;
-
-        // 3.5 Process on_event(events, tick_num)
-        lua_getglobal(gL, "on_event");
-        if (lua_isfunction(gL, -1)) {
-            lua_newtable(gL);
-            int eventIndex = 1;
-
-            {
-                std::lock_guard<std::mutex> lock(uiEventMutex);
-                while (!uiEventQueue.empty()) {
-                    auto ev = uiEventQueue.front();
-                    uiEventQueue.pop();
-
-                    lua_newtable(gL);
-                    lua_pushstring(gL, ev.elementId.c_str());
-                    lua_setfield(gL, -2, "id");
-                    lua_pushstring(gL, ev.eventType.c_str());
-                    lua_setfield(gL, -2, "type");
-
-                    lua_rawseti(gL, -2, eventIndex++);
-                }
-            }
-
-            lua_pushinteger(gL, tickNum);
-
-            if (lua_pcall(gL, 2, 0, 0) != LUA_OK) {
-                LOGE("on_event error: %s", lua_tostring(gL, -1));
-                lua_pop(gL, 1);
-            }
-        } else {
-            lua_pop(gL, 1);
-            std::lock_guard<std::mutex> lock(uiEventMutex);
-            while (!uiEventQueue.empty()) uiEventQueue.pop();
-        }
 
         // 4. Process on_tick(matches, tick_num)
         lua_getglobal(gL, "on_tick");
@@ -1055,81 +995,6 @@ int RelcEngine::lua_swipe(lua_State *L) {
 int RelcEngine::lua_log(lua_State *L) {
     const char *msg = luaL_checkstring(L, 1);
     __android_log_print(ANDROID_LOG_DEBUG, "LuaScript", "[NativeLog] %s", msg);
-    return 0;
-}
-
-int RelcEngine::lua_ui_add(lua_State *L) {
-    auto *self = static_cast<RelcEngine *>(lua_touserdata(L, lua_upvalueindex(1)));
-
-    // Signature: ui.add(parentId, id, jsonExp)
-    const char *parentId = nullptr;
-    if (!lua_isnil(L, 1)) {
-        parentId = luaL_checkstring(L, 1);
-    }
-    const char *id = luaL_checkstring(L, 2);
-    const char *jsonExp = luaL_checkstring(L, 3);
-
-    JNIEnv *env;
-    bool attached = false;
-    if (self->javaVM->GetEnv((void **) &env, JNI_VERSION_1_6) == JNI_EDETACHED) {
-        if (self->javaVM->AttachCurrentThread(&env, nullptr) != JNI_OK) return 0;
-        attached = true;
-    }
-
-    jstring jParentId = parentId ? env->NewStringUTF(parentId) : nullptr;
-    jstring jId = env->NewStringUTF(id);
-    jstring jJsonExp = env->NewStringUTF(jsonExp);
-
-    env->CallVoidMethod(self->luaNativeObj, self->uiAddMethodId, jParentId, jId, jJsonExp);
-
-    if (jParentId) env->DeleteLocalRef(jParentId);
-    env->DeleteLocalRef(jId);
-    env->DeleteLocalRef(jJsonExp);
-
-    if (attached) self->javaVM->DetachCurrentThread();
-    return 0;
-}
-
-int RelcEngine::lua_ui_update(lua_State *L) {
-    auto *self = static_cast<RelcEngine *>(lua_touserdata(L, lua_upvalueindex(1)));
-    const char *id = luaL_checkstring(L, 1);
-    const char *jsonExp = luaL_checkstring(L, 2);
-
-    JNIEnv *env;
-    bool attached = false;
-    if (self->javaVM->GetEnv((void **) &env, JNI_VERSION_1_6) == JNI_EDETACHED) {
-        if (self->javaVM->AttachCurrentThread(&env, nullptr) != JNI_OK) return 0;
-        attached = true;
-    }
-
-    jstring jId = env->NewStringUTF(id);
-    jstring jJsonExp = env->NewStringUTF(jsonExp);
-
-    env->CallVoidMethod(self->luaNativeObj, self->uiUpdateMethodId, jId, jJsonExp);
-
-    env->DeleteLocalRef(jId);
-    env->DeleteLocalRef(jJsonExp);
-
-    if (attached) self->javaVM->DetachCurrentThread();
-    return 0;
-}
-
-int RelcEngine::lua_ui_remove(lua_State *L) {
-    auto *self = static_cast<RelcEngine *>(lua_touserdata(L, lua_upvalueindex(1)));
-    const char *id = luaL_checkstring(L, 1);
-
-    JNIEnv *env;
-    bool attached = false;
-    if (self->javaVM->GetEnv((void **) &env, JNI_VERSION_1_6) == JNI_EDETACHED) {
-        if (self->javaVM->AttachCurrentThread(&env, nullptr) != JNI_OK) return 0;
-        attached = true;
-    }
-
-    jstring jId = env->NewStringUTF(id);
-    env->CallVoidMethod(self->luaNativeObj, self->uiRemoveMethodId, jId);
-    env->DeleteLocalRef(jId);
-
-    if (attached) self->javaVM->DetachCurrentThread();
     return 0;
 }
 

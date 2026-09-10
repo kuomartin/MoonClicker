@@ -106,24 +106,14 @@ class FullscreenDisplayViewModel @Inject constructor(
                 val content = $$"""
                             config = { fps=60, scale=0.5, templates = { { name = 'target', path = '$$templatePath', threshold = 0,grayscale = true} } }
 
-                            function on_start()
-
-                                ui.add(nil, 'test_rect', [[ { 'type': 'box', 'x': '$m_x', 'y': '$m_y', 'width': '$m_w', 'height': '$m_h', 'border': { 'width': 2, 'color': '#FF0000' } } ]])
-                                ui.add('test_rect', 'test_text', [[ { 'type': 'text', 'text': '$m_c', 'color': '#FF0000', 'background': { 'color': '#80000000' } } ]])
-                            end
-
                             function on_tick(matches, tick)
                                 if tick % 60 == 0 then log("Lua Tick: " .. tick) end
                                 local m = matches.target
                                 if m and m.found then
-                                    app.set_data('m_x', m.x - m.width/2)
-                                    app.set_data('m_y', m.y - m.height/2)
-                                    app.set_data('m_w', m.width)
-                                    app.set_data('m_h', m.height)
-                                    app.set_data('m_c', string.format('%.2f', m.confidence))
-                                else
-                                    app.set_data('m_w', 0)
-                                    app.set_data('m_h', 0)
+                                    log(string.format(
+                                        'match: x=%d y=%d w=%d h=%d confidence=%.2f',
+                                        m.x - m.width/2, m.y - m.height/2, m.width, m.height, m.confidence
+                                    ))
                                 end
                             end
                             """.trimIndent()

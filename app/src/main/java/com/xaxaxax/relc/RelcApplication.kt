@@ -1,9 +1,10 @@
 package com.xaxaxax.relc
 
 import android.app.Application
-import com.xaxaxax.relc.ui.lua.LuaUiManager
+import com.xaxaxax.relc.notification.ScriptStatusNotifier
 import dagger.hilt.android.HiltAndroidApp
 import timber.log.Timber
+import javax.inject.Inject
 
 @HiltAndroidApp
 class RelcApplication : Application() {
@@ -12,13 +13,16 @@ class RelcApplication : Application() {
             private set
     }
 
+    @Inject
+    lateinit var scriptStatusNotifier: ScriptStatusNotifier
+
     override fun onCreate() {
         super.onCreate()
         instance = this
         if (BuildConfig.DEBUG) Timber.plant(Timber.DebugTree())
-        // Eagerly registers LuaUiManager.instance as LuaNative's uiSink so
-        // native ui.add/update/remove calls are never dropped before any
-        // overlay UI has composed.
-        LuaUiManager.instance
+        // Mirrors running scripts into the status notification for the whole process
+        // lifetime — this is the only surface that shows a script is running while the
+        // user is in another app.
+        scriptStatusNotifier.start()
     }
 }
