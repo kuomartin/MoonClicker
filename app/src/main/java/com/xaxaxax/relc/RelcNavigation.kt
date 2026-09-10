@@ -5,7 +5,6 @@ import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.ui.graphics.vector.ImageVector
-import com.xaxaxax.relc.simplescript.ui.SimpleScriptsRoute
 import kotlinx.serialization.Serializable
 
 enum class TopLevelDestination(
@@ -15,7 +14,6 @@ enum class TopLevelDestination(
 ) {
     DISPLAYS(DisplaysRoute, Icons.Default.Tv, "Displays"),
     SCRIPTS(ScriptsRoute, Icons.Default.Code, "Scripts"),
-    SIMPLE_SCRIPTS(SimpleScriptsRoute, Icons.Default.Code, "Simple V2"),
     SETTINGS(SettingsRoute, Icons.Default.Settings, "Settings")
 }
 
@@ -36,7 +34,3 @@ data class DisplayDetailRoute(val id: String)
 
 @Serializable
 data class ScriptDetailRoute(val id: String)
-
-// SimpleScriptEditorRoute/SimpleEventEditorRoute/SimpleConditionEditorRoute/
-// SimpleActionEditorRoute live in :simplescript (com.xaxaxax.relc.simplescript.ui)
-// alongside SimpleScriptsRoute above.
