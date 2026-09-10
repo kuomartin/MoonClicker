@@ -27,18 +27,6 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
-import com.xaxaxax.relc.simplescript.ui.simpleScriptNavGraph
-import com.xaxaxax.relc.simplescript.ui.SimpleEventEditorRoute
-import com.xaxaxax.relc.simplescript.ui.SimpleScriptEditorRoute
-import com.xaxaxax.relc.simplescript.domain.model.Event
-import com.xaxaxax.relc.simplescript.domain.model.Variable
-import com.xaxaxax.relc.simplescript.domain.model.Condition
-import com.xaxaxax.relc.simplescript.domain.model.Action
-import com.xaxaxax.relc.simplescript.ui.editor.EventEditorScreen
-import com.xaxaxax.relc.simplescript.ui.editor.ScriptEditorScreen
-import com.xaxaxax.relc.simplescript.ui.editor.VariableEditorDialog
-import com.xaxaxax.relc.simplescript.ui.list.ScriptListScreen
-import com.xaxaxax.relc.simplescript.ui.viewmodel.SimpleScriptViewModel
 import com.xaxaxax.relc.ui.displaydetail.DisplayDetailScreen
 import com.xaxaxax.relc.ui.displays.DisplaysScreen
 import com.xaxaxax.relc.ui.scriptdetail.ScriptDetailScreen
@@ -72,9 +60,7 @@ fun RelcNavGraph(
 
     val isDetailScreen = currentDestination?.hierarchy?.any {
         it.hasRoute(DisplayDetailRoute::class) ||
-                it.hasRoute(ScriptDetailRoute::class) ||
-                it.hasRoute(SimpleScriptEditorRoute::class) ||
-                it.hasRoute(SimpleEventEditorRoute::class)
+                it.hasRoute(ScriptDetailRoute::class)
     } == true
 
     val layoutType = if (isDetailScreen) {
@@ -138,16 +124,6 @@ fun RelcNavGraph(
                     onNavigateBack = { navController.popBackStack() }
                 )
             }
-
-            // --- SIMPLE SCRIPTS V2 群組 ---
-            // SimpleScriptsRoute is now handled within FullscreenDisplayActivity,
-            // or if we want to enter it from the main nav graph, we can use simpleScriptNavGraph here too!
-            simpleScriptNavGraph(
-                navController = navController,
-                onStartPointSelecting = {},
-                onStartCropping = {},
-                onCloseEditor = { navController.popBackStack() }
-            )
 
             // --- SETTINGS 群組 ---
             composable<SettingsRoute> {

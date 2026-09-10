@@ -26,4 +26,3 @@ rootProject.name = "ReLC"
 include(":app")
 include(":hidden-api")
 include(":engine")
-include(":simplescript")
