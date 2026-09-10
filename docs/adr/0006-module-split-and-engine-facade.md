@@ -12,4 +12,4 @@ Moving `ClickAssistOverlayService` into `:overlay` surfaced a coupling this ADR 
 
 ## Status
 
-Accepted, partly superseded by [ADR-0007](0007-drop-lua-overlay-ui-for-status-notification.md): the `:overlay` module, `OverlayController`, and the `OverlayContentExtension` seam described above no longer exist. The `:engine`/`:simplescript`/`:app` split, `LuaEngineControl`, and `EngineStateRepository` are unaffected.
+Accepted, partly superseded by [ADR-0007](0007-drop-lua-overlay-ui-for-status-notification.md) and [ADR-0008](0008-remove-simplescript-module.md): the `:overlay` module, `OverlayController`, and the `OverlayContentExtension` seam described above no longer exist, and neither does `:simplescript` — the paragraph above about `FullscreenDisplayViewModel.runScript`/`ScriptCompiler` making `simplescript.*` scripts runnable describes work that was deleted the same day it landed. The `:engine`/`:app` split, `LuaEngineControl`, and `EngineStateRepository` are unaffected.

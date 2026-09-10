@@ -8,12 +8,8 @@ import androidx.lifecycle.viewModelScope
 import com.xaxaxax.relc.IRelcV2Service
 import com.xaxaxax.relc.RelcV2Service
 import com.xaxaxax.relc.input.InputController
-import com.xaxaxax.relc.script.ScriptConfig
-import com.xaxaxax.relc.script.ScriptManager
 import com.xaxaxax.relc.shizuku.UserService
 import com.xaxaxax.relc.shizuku.runWhenAlive
-import com.xaxaxax.relc.simplescript.compiler.ScriptCompiler
-import com.xaxaxax.relc.simplescript.domain.model.Script
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -26,11 +22,10 @@ import javax.inject.Inject
 @HiltViewModel
 class FullscreenDisplayViewModel @Inject constructor(
     @ApplicationContext context: Context,
-    savedStateHandle: SavedStateHandle,
-    private val scriptManager: ScriptManager
+    savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     enum class ExecutionState {
-        IDLE, RUNNING, CROPPING, POINT_SELECTING
+        IDLE, RUNNING, CROPPING
     }
 
     data class UiState(
@@ -40,8 +35,7 @@ class FullscreenDisplayViewModel @Inject constructor(
         val menuOffsetY: Float = 0f,
         val showAppList: Boolean = false,
         val apps: List<AppEntry> = emptyList(),
-        val executionState: ExecutionState = ExecutionState.IDLE,
-        val showEditor: Boolean = false
+        val executionState: ExecutionState = ExecutionState.IDLE
     )
 
     private val _uiState = MutableStateFlow(UiState())
@@ -139,26 +133,13 @@ class FullscreenDisplayViewModel @Inject constructor(
         }
     }
 
-    fun runScript(script: Script) {
-        val code = ScriptCompiler().compile(script)
-        scriptManager.startScript(
-            ScriptConfig.Lua(
-                id = "simplescript_${script.id}",
-                name = script.name,
-                description = "",
-                code = code
-            )
-        )
-        _uiState.value = _uiState.value.copy(executionState = ExecutionState.RUNNING, showEditor = false)
-    }
-
     fun stopExecution() {
         com.xaxaxax.relc.engine.LuaEngineControl.stop()
         _uiState.value = _uiState.value.copy(executionState = ExecutionState.IDLE)
     }
 
     fun startCropping() {
-        _uiState.value = _uiState.value.copy(executionState = ExecutionState.CROPPING, showEditor = false)
+        _uiState.value = _uiState.value.copy(executionState = ExecutionState.CROPPING)
         // trigger is handled by Activity passing Bitmap to setCapturedBitmap
     }
 
@@ -167,7 +148,7 @@ class FullscreenDisplayViewModel @Inject constructor(
     }
 
     fun cancelCropping() {
-        _uiState.value = _uiState.value.copy(executionState = ExecutionState.IDLE, showEditor = true)
+        _uiState.value = _uiState.value.copy(executionState = ExecutionState.IDLE)
         _capturedBitmap.value = null
     }
 
@@ -207,18 +188,6 @@ class FullscreenDisplayViewModel @Inject constructor(
 
     fun setMenuExpanded(expanded: Boolean) {
         _uiState.value = _uiState.value.copy(menuExpanded = expanded)
-    }
-
-    fun setEditorExpanded(expanded: Boolean) {
-        _uiState.value = _uiState.value.copy(showEditor = expanded)
-    }
-
-    fun startPointSelecting() {
-        _uiState.value = _uiState.value.copy(executionState = ExecutionState.POINT_SELECTING, showEditor = false)
-    }
-
-    fun cancelPointSelecting() {
-        _uiState.value = _uiState.value.copy(executionState = ExecutionState.IDLE, showEditor = true)
     }
 
     fun updateMenuOffset(dragAmountX: Float, dragAmountY: Float) {

@@ -9,7 +9,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -27,17 +26,9 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Settings
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.rememberNavController
-import com.xaxaxax.relc.simplescript.ui.simpleScriptNavGraph
-import com.xaxaxax.relc.simplescript.ui.SimpleScriptsRoute
-import com.xaxaxax.relc.simplescript.ui.SimpleScriptEditorRoute
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -80,7 +71,6 @@ class FullscreenDisplayActivity : ComponentActivity() {
 
         val displayId = intent.getIntExtra("displayId", -1)
         val scriptDir = intent.getStringExtra("scriptDir") ?: ""
-        val scriptId = intent.getLongExtra("scriptId", 0L)
         if (displayId == -1) {
             Timber.e("No displayId provided to FullscreenDisplayActivity")
             finish()
@@ -96,7 +86,7 @@ class FullscreenDisplayActivity : ComponentActivity() {
 
         setContent {
             ReLCTheme {
-                FullscreenDisplayScreen(displayId, scriptDir, scriptId)
+                FullscreenDisplayScreen(displayId, scriptDir)
             }
         }
     }
@@ -113,7 +103,6 @@ enum class DragHandle {
 fun FullscreenDisplayScreen(
     targetDisplayId: Int,
     scriptDir: String,
-    scriptId: Long,
     viewModel: FullscreenDisplayViewModel = hiltViewModel()
 ) {
     val activity = LocalActivity.current
@@ -408,15 +397,6 @@ fun FullscreenDisplayScreen(
                             )
                         }
 
-                        // Edit Script
-                        IconButton(onClick = { viewModel.setEditorExpanded(!uiState.showEditor) }) {
-                            Icon(
-                                imageVector = Icons.Default.Settings,
-                                contentDescription = "Edit Script",
-                                tint = Color.White
-                            )
-                        }
-
                         // Exit
                         IconButton(onClick = { activity?.finish() }) {
                             Icon(
@@ -552,55 +532,5 @@ fun FullscreenDisplayScreen(
                 }
             )
         }
-
-        if (uiState.executionState == FullscreenDisplayViewModel.ExecutionState.POINT_SELECTING) {
-            com.xaxaxax.relc.simplescript.ui.editor.PointConfigScreen(
-                initialPoint = null, // Or parse from ViewModel if editing
-                availableVariables = emptyList(), // TODO: Get from ScriptViewModel if possible
-                onSave = { point ->
-                    // To truly save back to the dialog, we need a SharedViewModel or callback.
-                    // For this prototype iteration, we will just log and cancel to test flow.
-                    Timber.d("Point saved: ${point.x}, ${point.y}")
-                    viewModel.cancelPointSelecting()
-                },
-                onCancel = { viewModel.cancelPointSelecting() }
-            )
-        }
-
-        // Editor Overlay
-        val editorOffsetY by animateFloatAsState(
-            targetValue = if (uiState.showEditor) 0f else 3000f,
-            animationSpec = androidx.compose.animation.core.tween(durationMillis = 300),
-            label = "editorOffset"
-        )
-
-        Card(
-            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-            colors = CardDefaults.cardColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.background),
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxHeight(0.75f)
-                .fillMaxWidth()
-                .graphicsLayer { translationY = editorOffsetY },
-            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
-        ) {
-                Box(modifier = Modifier.fillMaxSize()) {
-                    // The nested NavHost handles its own state
-                    val navController = rememberNavController()
-                    NavHost(
-                        navController = navController,
-                        startDestination = SimpleScriptEditorRoute(scriptId),
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        simpleScriptNavGraph(
-                            navController = navController,
-                            onStartPointSelecting = { viewModel.startPointSelecting() },
-                            onStartCropping = { viewModel.startCropping() },
-                            onCloseEditor = { viewModel.setEditorExpanded(false) },
-                            onRunScript = { script -> viewModel.runScript(script) }
-                        )
-                    }
-                }
-            }
-        }
     }
+}
