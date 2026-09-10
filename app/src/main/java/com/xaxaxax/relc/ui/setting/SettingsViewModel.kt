@@ -3,17 +3,12 @@ package com.xaxaxax.relc.ui.setting
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.provider.Settings
 import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.xaxaxax.relc.IRelcV2Service
-import com.xaxaxax.relc.RelcV2Service
-import com.xaxaxax.relc.shizuku.UserService
 import com.xaxaxax.relc.shizuku.hasShizukuPermission
 import com.xaxaxax.relc.shizuku.isShizukuAvailable
 import com.xaxaxax.relc.shizuku.refreshShizukuPermission
-import com.xaxaxax.relc.shizuku.runWhenAlive
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import jakarta.inject.Inject
@@ -30,7 +25,6 @@ import kotlin.time.Duration.Companion.milliseconds
 data class SettingsUiState(
     val hasShizukuPermission: Boolean = false,
     val isShizukuAvailable: Boolean = false,
-    val hasOverlayPermission: Boolean = false,
     val osAllowSecondaryDisplays: Boolean = false,
     val isRefreshing: Boolean = false
 )
@@ -42,21 +36,18 @@ class SettingsViewModel @Inject constructor(
     @param:ApplicationContext
     private val context: Context
 ) : ViewModel() {
-    private val _hasOverlayPermission = MutableStateFlow(false)
     private val _osAllowSecondaryDisplays = MutableStateFlow(false)
     private val isRefreshing = MutableStateFlow(false)
 
     val uiState: StateFlow<SettingsUiState> = combine(
         hasShizukuPermission,
         isShizukuAvailable,
-        _hasOverlayPermission,
         _osAllowSecondaryDisplays,
         isRefreshing
-    ) { hasShizuku, isShizuku, hasOverlay, allowSecondary, isRefreshing ->
+    ) { hasShizuku, isShizuku, allowSecondary, isRefreshing ->
         SettingsUiState(
             hasShizukuPermission = hasShizuku,
             isShizukuAvailable = isShizuku,
-            hasOverlayPermission = hasOverlay,
             osAllowSecondaryDisplays = allowSecondary,
             isRefreshing = isRefreshing
         )
@@ -79,7 +70,6 @@ class SettingsViewModel @Inject constructor(
                     if (!uiState.value.hasShizukuPermission)
                         refreshShizukuPermission()
                 }
-                _hasOverlayPermission.value = Settings.canDrawOverlays(context)
                 _osAllowSecondaryDisplays.value = context.packageManager.hasSystemFeature(
                     PackageManager.FEATURE_ACTIVITIES_ON_SECONDARY_DISPLAYS
                 )
@@ -98,14 +88,6 @@ class SettingsViewModel @Inject constructor(
     fun requestShizukuPermission() = com.xaxaxax.relc.shizuku.requestShizukuPermission()
 
 
-    fun overlayPermissionIntent(): Intent {
-        val intent = Intent(
-            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-            "package:${context.packageName}".toUri()
-        )
-        return intent
-    }
-
     fun openShizukuIntent(): Intent {
         val intent =
             context.packageManager.getLaunchIntentForPackage("moe.shizuku.privileged.api")
@@ -118,27 +100,6 @@ class SettingsViewModel @Inject constructor(
                     "https://shizuku.rikka.app/download/".toUri()
                 )
         return intent.apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
-    }
-
-
-    fun requestOverlayPermissionByShizuku() {
-        viewModelScope.launch {
-            try {
-                val serviceFlow = UserService.create(
-                    this,
-                    RelcV2Service::class,
-                    IRelcV2Service.Stub::asInterface
-                )
-
-
-                serviceFlow.runWhenAlive { service ->
-                    service.setOverlayAllowed(context.packageName)
-                }
-                refreshPermissions()
-            } catch (t: Throwable) {
-                Timber.e(t, "requestOverlayPermissionByShizuku failed")
-            }
-        }
     }
 
 }

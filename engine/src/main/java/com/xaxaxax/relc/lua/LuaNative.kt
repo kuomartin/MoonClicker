@@ -12,7 +12,6 @@ internal object LuaNative {
 
     private var currentService: IRelcV2Service? = null
     private var currentDisplayId: Int = -1
-    var uiSink: LuaUiSink? = null
     private var appContext: android.content.Context? = null
 
     // Shared state between Lua and Kotlin
@@ -102,7 +101,6 @@ internal object LuaNative {
     ): Surface? {
         this.currentService = service
         this.currentDisplayId = displayId
-        uiSink?.clear()
         EngineStateRepository.reset()
         return startEngine(service, displayId, width, height, scriptPath)
     }
@@ -122,48 +120,12 @@ internal object LuaNative {
 
     fun stop() {
         stopEngine()
-        uiSink?.clear()
     }
 
     /**
      * 檢查原生引擎是否正在運行
      */
     external fun isEngineRunning(): Boolean
-
-    /**
-     * 發送 UI 事件給原生引擎 (由 Compose 觸發)
-     */
-    external fun sendUIEvent(elementId: String, eventType: String)
-
-    /**
-     * 新增 UI 節點 (被 C++ 引擎呼叫)
-     * @param parentId 父節點 ID，若為根節點則傳遞 null 或空字串
-     * @param id 節點的唯一 ID
-     * @param jsonExp 該節點屬性的 JSON 描述字串
-     */
-    fun uiAdd(parentId: String?, id: String, jsonExp: String) {
-        Timber.d("LuaNative uiAdd: parentId=$parentId, id=$id, jsonExp=$jsonExp")
-        uiSink?.add(parentId, id, jsonExp)
-    }
-
-    /**
-     * 更新 UI 節點 (被 C++ 引擎呼叫)
-     * @param id 節點的唯一 ID
-     * @param jsonExp 該節點要更新屬性的 JSON 描述字串
-     */
-    fun uiUpdate(id: String, jsonExp: String) {
-        Timber.d("LuaNative uiUpdate: id=$id, jsonExp=$jsonExp")
-        uiSink?.update(id, jsonExp)
-    }
-
-    /**
-     * 移除 UI 節點 (被 C++ 引擎呼叫)
-     * @param id 要移除的節點 ID
-     */
-    fun uiRemove(id: String) {
-        Timber.d("LuaNative uiRemove: id=$id")
-        uiSink?.remove(id)
-    }
 
     /**
      * 引擎狀態事件 (被 C++ 引擎呼叫)，轉發給 [EngineStateRepository]。

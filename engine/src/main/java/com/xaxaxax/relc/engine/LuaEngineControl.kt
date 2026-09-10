@@ -3,7 +3,6 @@ package com.xaxaxax.relc.engine
 import android.view.Surface
 import com.xaxaxax.relc.IRelcV2Service
 import com.xaxaxax.relc.lua.LuaNative
-import com.xaxaxax.relc.lua.LuaUiSink
 
 /**
  * Public facade over the Lua engine's JNI bridge ([LuaNative]). Other modules should
@@ -15,13 +14,8 @@ import com.xaxaxax.relc.lua.LuaUiSink
  * polling anything on this facade.
  */
 object LuaEngineControl {
+    /** Key/value slice a script publishes via the Lua `app.set_data` API. */
     val sharedData: Map<String, Any> get() = LuaNative.sharedData
-
-    var uiSink: LuaUiSink?
-        get() = LuaNative.uiSink
-        set(value) {
-            LuaNative.uiSink = value
-        }
 
     fun startEngineWithService(
         service: IRelcV2Service,
@@ -32,7 +26,4 @@ object LuaEngineControl {
     ): Surface? = LuaNative.startEngineWithService(service, displayId, width, height, scriptPath)
 
     fun stop() = LuaNative.stop()
-
-    fun sendUIEvent(elementId: String, eventType: String) =
-        LuaNative.sendUIEvent(elementId, eventType)
 }

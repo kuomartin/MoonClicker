@@ -46,10 +46,24 @@ import com.xaxaxax.relc.ui.scripts.ScriptsScreen
 import com.xaxaxax.relc.ui.setting.SettingsScreen
 
 @Composable
-fun RelcNavGraph() {
+fun RelcNavGraph(
+    pendingNavTarget: Any? = null,
+    onNavTargetHandled: () -> Unit = {},
+) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
+
+    // Deep link from the script status notification ("查看狀態" / tapping the notification).
+    LaunchedEffect(pendingNavTarget) {
+        val target = pendingNavTarget ?: return@LaunchedEffect
+        navController.navigate(target) {
+            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+            launchSingleTop = true
+            restoreState = true
+        }
+        onNavTargetHandled()
+    }
 
     val isDetailScreen = currentDestination?.hierarchy?.any {
         it.hasRoute(DisplayDetailRoute::class) ||

@@ -1,6 +1,5 @@
 package com.xaxaxax.relc.ui.setting
 
-import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -39,7 +38,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -57,7 +55,6 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val context = LocalContext.current
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) {
@@ -68,19 +65,7 @@ fun SettingsScreen(
         uiState = uiState,
         onOpenShizuku = { launcher.launch(viewModel.openShizukuIntent()) },
         onRequestShizukuPermission = { viewModel.requestShizukuPermission() },
-        onGrantOverlay = { launcher.launch(viewModel.overlayPermissionIntent()) },
         onRefresh = { viewModel.refreshPermissions(true) },
-        onRequestOverlayPermissionByShizuku = {
-            if (uiState.isShizukuAvailable && uiState.hasShizukuPermission) {
-                viewModel.requestOverlayPermissionByShizuku()
-            } else {
-                Toast.makeText(
-                    context,
-                    "Shizuku permission required for this action",
-                    Toast.LENGTH_SHORT
-                ).show()
-            }
-        }
     )
 }
 
@@ -90,9 +75,7 @@ private fun SettingsScreenContent(
     uiState: SettingsUiState,
     onOpenShizuku: () -> Unit,
     onRequestShizukuPermission: () -> Unit,
-    onGrantOverlay: () -> Unit,
     onRefresh: () -> Unit,
-    onRequestOverlayPermissionByShizuku: () -> Unit,
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val pullRefreshState = rememberPullToRefreshState()
@@ -130,7 +113,6 @@ private fun SettingsScreenContent(
                     Section("Health Check") {
                         val hasAnyFailure = !uiState.isShizukuAvailable ||
                                 !uiState.hasShizukuPermission ||
-                                !uiState.hasOverlayPermission ||
                                 !uiState.osAllowSecondaryDisplays
 
                         if (hasAnyFailure) {
@@ -160,24 +142,6 @@ private fun SettingsScreenContent(
                                         first = false
                                     }
 
-                                    if (!uiState.hasOverlayPermission) {
-                                        if (!first) HorizontalDivider(
-                                            modifier = Modifier.padding(
-                                                horizontal = 16.dp
-                                            )
-                                        )
-                                        val actions =
-                                            mutableListOf("Open Settings" to onGrantOverlay)
-                                        if (uiState.isShizukuAvailable and uiState.hasShizukuPermission)
-                                            actions += "Grant via Shizuku" to onRequestOverlayPermissionByShizuku
-                                        HealthCheckFailedItem(
-                                            painterResource(R.drawable.ic_picture_in_picture),
-                                            "Overlay Permission Required",
-                                            "Needed to display floating controls.",
-                                            actions = actions
-                                        )
-                                        first = false
-                                    }
                                     if (!uiState.osAllowSecondaryDisplays) {
                                         if (!first) HorizontalDivider(
                                             modifier = Modifier.padding(
@@ -199,13 +163,6 @@ private fun SettingsScreenContent(
                                 painter = painterResource(R.drawable.ic_shizuku_icon),
                                 title = "Shizuku Running",
                                 description = "Service is active and authorized."
-                            )
-                        }
-                        if (uiState.hasOverlayPermission) {
-                            HealthCheckGood(
-                                painter = painterResource(R.drawable.ic_picture_in_picture),
-                                title = "Overlay Permission Granted",
-                                description = "Authorized to display over other apps."
                             )
                         }
                     }
@@ -318,17 +275,7 @@ private fun SettingsScreenPreview() {
                         hasShizukuPermission = true
                     )
                 },
-                onGrantOverlay = {
-                    uiState = uiState.copy(
-                        hasOverlayPermission = true
-                    )
-                },
                 onRefresh = { uiState = SettingsUiState() },
-                onRequestOverlayPermissionByShizuku = {
-                    uiState = uiState.copy(
-                        osAllowSecondaryDisplays = true
-                    )
-                }
             )
         }
     }

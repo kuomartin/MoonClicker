@@ -127,4 +127,12 @@ class ScriptManager(private val context: Context) {
         }
     }
 
+    /** Stops every RUNNING script. Backs the "停止所有" status-notification action. */
+    fun stopAllScripts() {
+        _scriptStates.value
+            .filterValues { it == ScriptState.RUNNING }
+            .keys
+            .forEach { stopScript(it) }
+    }
+
 }
