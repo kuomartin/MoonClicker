@@ -8,8 +8,12 @@ import androidx.lifecycle.viewModelScope
 import com.xaxaxax.relc.IRelcV2Service
 import com.xaxaxax.relc.RelcV2Service
 import com.xaxaxax.relc.input.InputController
+import com.xaxaxax.relc.script.ScriptConfig
+import com.xaxaxax.relc.script.ScriptManager
 import com.xaxaxax.relc.shizuku.UserService
 import com.xaxaxax.relc.shizuku.runWhenAlive
+import com.xaxaxax.relc.simplescript.compiler.ScriptCompiler
+import com.xaxaxax.relc.simplescript.domain.model.Script
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,7 +26,8 @@ import javax.inject.Inject
 @HiltViewModel
 class FullscreenDisplayViewModel @Inject constructor(
     @ApplicationContext context: Context,
-    savedStateHandle: SavedStateHandle
+    savedStateHandle: SavedStateHandle,
+    private val scriptManager: ScriptManager
 ) : ViewModel() {
     enum class ExecutionState {
         IDLE, RUNNING, CROPPING, POINT_SELECTING
@@ -142,6 +147,19 @@ class FullscreenDisplayViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    fun runScript(script: Script) {
+        val code = ScriptCompiler().compile(script)
+        scriptManager.startScript(
+            ScriptConfig.Lua(
+                id = "simplescript_${script.id}",
+                name = script.name,
+                description = "",
+                code = code
+            )
+        )
+        _uiState.value = _uiState.value.copy(executionState = ExecutionState.RUNNING, showEditor = false)
     }
 
     fun stopExecution() {
