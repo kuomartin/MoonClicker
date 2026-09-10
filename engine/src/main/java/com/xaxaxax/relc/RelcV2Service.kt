@@ -106,6 +106,7 @@ class RelcV2Service(private val context: Context) : IRelcV2Service.Stub() {
                 "Landroid/content/pm/PackageManager",
                 "Landroid/hardware/input/InputManager",
                 "Landroid/view/MotionEvent",
+                "Landroid/view/WindowManagerGlobal",
             )
         }
     }
