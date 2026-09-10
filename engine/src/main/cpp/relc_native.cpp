@@ -118,22 +118,4 @@ Java_com_xaxaxax_relc_lua_LuaNative_isEngineRunning(
     return JNI_FALSE;
 }
 
-JNIEXPORT void JNICALL
-Java_com_xaxaxax_relc_lua_LuaNative_sendUIEvent(
-        JNIEnv *env, 
-        jobject thiz, 
-        jstring elementId, 
-        jstring eventType) {
-        
-    if (gEngine && gEngine->isEngineRunning()) {
-        const char *cElementId = env->GetStringUTFChars(elementId, nullptr);
-        const char *cEventType = env->GetStringUTFChars(eventType, nullptr);
-        
-        gEngine->pushUIEvent(cElementId, cEventType);
-        
-        env->ReleaseStringUTFChars(elementId, cElementId);
-        env->ReleaseStringUTFChars(eventType, cEventType);
-    }
-}
-
 }

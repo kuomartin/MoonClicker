@@ -79,7 +79,6 @@ dependencies {
     implementation(libs.rikka.shizuku.provider)
     compileOnly(project(":hidden-api"))
     implementation(project(":engine"))
-    implementation(project(":overlay"))
     implementation(project(":simplescript"))
     implementation(libs.rikka.refine.runtime)
     ksp(libs.rikka.refine.annotation.processor)

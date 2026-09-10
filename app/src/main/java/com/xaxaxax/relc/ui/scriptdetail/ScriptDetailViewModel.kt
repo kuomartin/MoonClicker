@@ -3,7 +3,6 @@ package com.xaxaxax.relc.ui.scriptdetail
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.xaxaxax.relc.overlay.OverlayController
 import com.xaxaxax.relc.script.LoopMode
 import com.xaxaxax.relc.script.ScriptConfig.ScriptCodeType
 import com.xaxaxax.relc.script.ScriptConfig
@@ -26,7 +25,6 @@ import javax.inject.Inject
 class ScriptDetailViewModel @Inject constructor(
     private val repository: ScriptRepository,
     val scriptManager: ScriptManager,
-    private val overlayController: OverlayController,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -98,9 +96,4 @@ class ScriptDetailViewModel @Inject constructor(
         }
     }
 
-    /** @return true if the overlay was successfully requested, false if the service isn't running. */
-    fun showOverlay(): Boolean {
-        val config = _config.value ?: return false
-        return overlayController.showOverlay(config.id, config.type.name)
-    }
 }
