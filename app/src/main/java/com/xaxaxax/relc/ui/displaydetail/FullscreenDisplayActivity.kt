@@ -133,7 +133,7 @@ fun FullscreenDisplayScreen(
             .background(Color.Black)
     ) {
         if (inputController != null) {
-            VirtualDisplaySurfaceView(
+            VirtualDisplayMirror(
                 targetDisplayId = targetDisplayId,
                 addSurface = { viewModel.addSurface(targetDisplayId, it) },
                 removeSurface = { viewModel.removeSurface(targetDisplayId, it) },
