@@ -16,6 +16,8 @@ class NativeLuaScriptRunner(
 
     override suspend fun run(config: ScriptConfig) {
         val v2Service = ctx.service
+        // 此路徑以 displayId = -1 啟動，沒有對應的虛擬顯示，故影格尺寸取自 display 0。
+        // 有虛擬顯示的路徑（FullscreenDisplayActivity）必須改傳其 surface 尺寸——見 #19。
         val size = v2Service.getDisplaySize(0)
         val width = size[0]
         val height = size[1]

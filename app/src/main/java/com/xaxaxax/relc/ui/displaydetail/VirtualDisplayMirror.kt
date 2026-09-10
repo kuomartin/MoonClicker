@@ -46,6 +46,7 @@ import kotlin.math.roundToInt
 @Composable
 fun VirtualDisplayMirror(
     targetDisplayId: Int,
+    geometry: DisplayGeometry,
     addSurface: (Surface) -> Unit,
     removeSurface: (Surface) -> Unit,
     inputController: InputController,
@@ -53,9 +54,6 @@ fun VirtualDisplayMirror(
     modifier: Modifier = Modifier,
     onTextureViewCreated: (TextureView) -> Unit = {},
 ) {
-    // TODO(#13 Q3): 完成後回頭評估改由 FullscreenDisplayViewModel 持有這組狀態是否更優。
-    val geometry = rememberDisplayGeometry(targetDisplayId)
-
     BoxWithConstraints(modifier.background(Color.Black)) {
         val viewport = viewportOf(
             surfaceWidth = geometry.surfaceWidth,
@@ -213,7 +211,7 @@ data class DisplayGeometry(
 )
 
 @Composable
-private fun rememberDisplayGeometry(displayId: Int): DisplayGeometry {
+fun rememberDisplayGeometry(displayId: Int): DisplayGeometry {
     val context = LocalContext.current
     val displayManager = remember(context) { context.getSystemService(DisplayManager::class.java) }
     var geometry by remember(displayId) {

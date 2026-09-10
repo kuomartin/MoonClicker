@@ -108,6 +108,8 @@ fun FullscreenDisplayScreen(
     val inputController by viewModel.inputController.collectAsState()
     val capturedBitmap by viewModel.capturedBitmap.collectAsState()
     val textureViewRef = remember { mutableStateOf<android.view.TextureView?>(null) }
+    // 單一來源：鏡像的 Viewport 與（#17 之後）X 的 requestedOrientation 都讀這一份。
+    val geometry = rememberDisplayGeometry(targetDisplayId)
 
     var showTemplateSelector by remember { mutableStateOf(false) }
     var availableTemplates by remember { mutableStateOf<List<String>>(emptyList()) }
@@ -135,6 +137,7 @@ fun FullscreenDisplayScreen(
         if (inputController != null) {
             VirtualDisplayMirror(
                 targetDisplayId = targetDisplayId,
+                geometry = geometry,
                 addSurface = { viewModel.addSurface(targetDisplayId, it) },
                 removeSurface = { viewModel.removeSurface(targetDisplayId, it) },
                 inputController = inputController!!,
@@ -359,10 +362,13 @@ fun FullscreenDisplayScreen(
                             if (uiState.executionState == FullscreenDisplayViewModel.ExecutionState.RUNNING) {
                                 viewModel.stopExecution()
                             } else {
-                                val metrics = activity?.resources?.displayMetrics
-                                if (metrics != null) {
-                                    viewModel.startExecution(targetDisplayId, metrics.widthPixels, metrics.heightPixels, scriptDir)
-                                }
+                                // 影格尺寸必須是虛擬顯示的 surface 尺寸，不是手機的 metrics（#19）。
+                                viewModel.startExecution(
+                                    targetDisplayId,
+                                    geometry.surfaceWidth,
+                                    geometry.surfaceHeight,
+                                    scriptDir,
+                                )
                             }
                         }) {
                             Icon(
@@ -491,16 +497,13 @@ fun FullscreenDisplayScreen(
                             items(availableTemplates) { template ->
                                 TextButton(
                                     onClick = {
-                                        val metrics = activity?.resources?.displayMetrics
-                                        if (metrics != null) {
-                                            viewModel.startTemplateTest(
-                                                targetDisplayId,
-                                                metrics.widthPixels,
-                                                metrics.heightPixels,
-                                                scriptDir,
-                                                template
-                                            )
-                                        }
+                                        viewModel.startTemplateTest(
+                                            targetDisplayId,
+                                            geometry.surfaceWidth,
+                                            geometry.surfaceHeight,
+                                            scriptDir,
+                                            template
+                                        )
                                         showTemplateSelector = false
                                     },
                                     modifier = Modifier.fillMaxWidth()
