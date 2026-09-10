@@ -10,7 +10,11 @@ On the engine side the `ui` Lua table, the three `jmethodID` upcalls behind it, 
 
 ## Scope note
 
-`ScriptManager` and script execution are untouched; this removes one way of *presenting* a run, not the running itself. The notification is driven from an app-scoped observer in `RelcApplication`, not a foreground service, so it reflects script state for exactly as long as the process lives — which is already the lifetime of the scripts themselves.
+`ScriptManager` and script execution are untouched; this removes one way of *presenting* a run, not the running itself. The dead `RunningScriptHudUi`/`hudUi` slice, whose only consumer was the overlay HUD, goes with it.
+
+The notification is driven from an app-scoped observer in `RelcApplication`, not a foreground service, so it reflects script state for exactly as long as the process lives — which is already the lifetime of the scripts themselves. Note the consequence: the removed AccessibilityService incidentally kept the process alive, and `setOngoing(true)` on a plain notification does not, so a long run can now be killed while the user is in another app. Giving script execution a real process anchor (a foreground service) is a separate decision from removing the overlay, and is deliberately not made here.
+
+Because the notification is now the only cross-app run indicator, `RelcActivity` requests `POST_NOTIFICATIONS` at startup rather than letting the feature fail silently on Android 13+.
 
 ## Status
 

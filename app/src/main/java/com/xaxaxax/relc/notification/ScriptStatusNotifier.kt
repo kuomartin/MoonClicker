@@ -19,8 +19,10 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
@@ -50,15 +52,30 @@ class ScriptStatusNotifier @Inject constructor(
     private val scope = CoroutineScope(Dispatchers.Main.immediate + SupervisorJob())
     private val notificationManager = NotificationManagerCompat.from(context)
 
+    /**
+     * Bumped when the notification permission may have changed. Without it a grant that
+     * arrives after scripts are already running would not repost, because the summary
+     * itself has not changed.
+     */
+    private val permissionGeneration = MutableStateFlow(0)
+
     fun start() {
         createChannel()
         scope.launch {
-            combine(repository.scripts, scriptManager.scriptStates) { scripts, states ->
+            val summaries = combine(repository.scripts, scriptManager.scriptStates) { scripts, states ->
                 summarizeRunningScripts(scripts, states)
-            }.distinctUntilChanged().collect { summary ->
-                if (summary == null) cancel() else post(summary)
             }
+            combine(summaries, permissionGeneration) { summary, generation -> summary to generation }
+                .distinctUntilChanged()
+                .collect { (summary, _) ->
+                    if (summary == null) cancel() else post(summary)
+                }
         }
+    }
+
+    /** Call after the user answers the POST_NOTIFICATIONS prompt, so a grant takes effect now. */
+    fun onNotificationPermissionChanged() {
+        permissionGeneration.update { it + 1 }
     }
 
     private fun createChannel() {
@@ -136,10 +153,12 @@ class ScriptStatusNotifier @Inject constructor(
         )
     }
 
-    private fun canPostNotifications(): Boolean = ContextCompat.checkSelfPermission(
-        context,
-        Manifest.permission.POST_NOTIFICATIONS,
-    ) == PackageManager.PERMISSION_GRANTED
+    private fun canPostNotifications(): Boolean =
+        notificationManager.areNotificationsEnabled() &&
+                ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.POST_NOTIFICATIONS,
+                ) == PackageManager.PERMISSION_GRANTED
 
     private companion object {
         const val REQUEST_OPEN_SCRIPTS = 1
