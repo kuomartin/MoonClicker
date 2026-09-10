@@ -42,14 +42,14 @@ class ViewportTest {
     }
 
     @Test
-    fun `surface view layout box is swapped so that rotating it covers the content rect`() {
+    fun `the unrotated layout box is swapped so that rotating it covers the content rect`() {
         val upright = viewportOf(
             surfaceWidth = 1080, surfaceHeight = 2400,
             rotation = 0,
             viewWidth = 1080, viewHeight = 2400,
         )
-        assertEquals(upright.contentWidth, upright.surfaceViewWidth, TOLERANCE)
-        assertEquals(upright.contentHeight, upright.surfaceViewHeight, TOLERANCE)
+        assertEquals(upright.contentWidth, upright.unrotatedWidth, TOLERANCE)
+        assertEquals(upright.contentHeight, upright.unrotatedHeight, TOLERANCE)
 
         val quarterTurned = viewportOf(
             surfaceWidth = 1080, surfaceHeight = 2400,
@@ -57,8 +57,8 @@ class ViewportTest {
             viewWidth = 1080, viewHeight = 2400,
         )
         // 內容區是 1080x486；未旋轉的佈局框必須是 486x1080，轉 -90 後才蓋得住。
-        assertEquals(486f, quarterTurned.surfaceViewWidth, TOLERANCE)
-        assertEquals(1080f, quarterTurned.surfaceViewHeight, TOLERANCE)
+        assertEquals(486f, quarterTurned.unrotatedWidth, TOLERANCE)
+        assertEquals(1080f, quarterTurned.unrotatedHeight, TOLERANCE)
     }
 
     @Test
@@ -162,7 +162,67 @@ class ViewportTest {
         assertEquals(2400f, viewport.contentHeight, TOLERANCE)
     }
 
+    @Test
+    fun `each rotation has its own counter-rotation and layout box`() {
+        // surface 1080x2400 投影進 1440x1440 的 view，scale 恆為 0.6。
+        // 內容尺寸只分得出 {0,2} 與 {1,3}；旋轉角度才分得出全部四個。
+        val expected = mapOf(
+            0 to Rotation(degrees = 0f, contentW = 648f, contentH = 1440f),
+            1 to Rotation(degrees = -90f, contentW = 1440f, contentH = 648f),
+            2 to Rotation(degrees = -180f, contentW = 648f, contentH = 1440f),
+            3 to Rotation(degrees = -270f, contentW = 1440f, contentH = 648f),
+        )
+
+        for ((rotation, want) in expected) {
+            val viewport = viewportOf(1080, 2400, rotation, viewWidth = 1440, viewHeight = 1440)
+            assertEquals("rotation $rotation", want.degrees, viewport.viewRotationDegrees, TOLERANCE)
+            assertEquals("rotation $rotation", want.contentW, viewport.contentWidth, TOLERANCE)
+            assertEquals("rotation $rotation", want.contentH, viewport.contentHeight, TOLERANCE)
+            // 未旋轉的佈局框永遠是內容矩形的「直立」版本，四個方向都一樣。
+            assertEquals("rotation $rotation", 648f, viewport.unrotatedWidth, TOLERANCE)
+            assertEquals("rotation $rotation", 1440f, viewport.unrotatedHeight, TOLERANCE)
+        }
+    }
+
+    @Test
+    fun `mapping to the display and back is a round trip at every rotation`() {
+        for (rotation in 0..3) {
+            val viewport = viewportOf(1080, 2400, rotation, viewWidth = 1440, viewHeight = 1440)
+            val probes = listOf(
+                viewport.contentLeft to viewport.contentTop,
+                viewport.contentLeft + viewport.contentWidth / 3f to
+                    viewport.contentTop + viewport.contentHeight / 7f,
+                viewport.contentLeft + viewport.contentWidth to
+                    viewport.contentTop + viewport.contentHeight,
+            )
+            for ((viewX, viewY) in probes) {
+                val display = viewport.toDisplay(viewX, viewY)
+                val back = viewport.toView(display.x, display.y)
+                assertEquals("rotation $rotation", viewX, back.x, ROUND_TRIP_TOLERANCE)
+                assertEquals("rotation $rotation", viewY, back.y, ROUND_TRIP_TOLERANCE)
+            }
+        }
+    }
+
+    @Test
+    fun `content-local coordinates reach the display by the scale factor alone`() {
+        // TouchForwarder 的 Matrix 只做 setScale(displayPerViewPixel, ...)，因為觸控節點
+        // 收到的座標已是內容矩形內的相對座標。這裡用獨立算出的數字把那個係數釘住。
+        val viewport = viewportOf(1080, 2400, rotation = 1, viewWidth = 1080, viewHeight = 2400)
+
+        // 邏輯 2400x1080 投影成 1080x486，故一個 view 像素等於 1 / 0.45 個邏輯像素。
+        assertEquals(2.2222f, viewport.displayPerViewPixel, TOLERANCE)
+
+        val fromContentOrigin =
+            viewport.toDisplay(viewport.contentLeft + 300f, viewport.contentTop + 120f)
+        assertEquals(666.67f, fromContentOrigin.x, 0.1f)
+        assertEquals(266.67f, fromContentOrigin.y, 0.1f)
+    }
+
+    private data class Rotation(val degrees: Float, val contentW: Float, val contentH: Float)
+
     private companion object {
         const val TOLERANCE = 0.01f
+        const val ROUND_TRIP_TOLERANCE = 1f
     }
 }

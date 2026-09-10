@@ -26,6 +26,10 @@ The path from a virtual display's GLES output through `H264EncoderSink` and a Lo
 Injects touch/swipe/multi-touch events into a specific virtual display via `IRelcV2Service`.
 _Avoid_: Touch injector, event sender.
 
+**Viewport**:
+鏡像一個虛擬顯示時的幾何：它當前的邏輯尺寸與方向，投影到 view 的哪個矩形。同一個 instance 同時服務畫面呈現（內容矩形、反向旋轉角、未旋轉的佈局框）與觸控反向映射（view 座標 → 邏輯座標），因此兩側不可能算出不一致的幾何。純資料，不依賴 `android.graphics`，可在純 JVM 測試中窮舉「旋轉 × 長寬比 × letterbox」的組合。
+_Avoid_: 縮放矩陣、觸控映射（兩者都只講了它的一半）。
+
 **Script Engine**:
 The embedded Lua runtime that drives automation — it owns virtual displays, input, and vision matching from a user-authored script. See [ADR-0002](docs/adr/0002-lua-as-scripting-engine.md).
 _Avoid_: Automation engine, macro engine.

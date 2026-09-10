@@ -2,10 +2,11 @@ package com.xaxaxax.relc.ui.displaydetail
 
 import android.annotation.SuppressLint
 import android.graphics.Matrix
+import android.graphics.Point
+import android.graphics.SurfaceTexture
 import android.hardware.display.DisplayManager
 import android.os.Handler
 import android.os.Looper
-import android.graphics.SurfaceTexture
 import android.view.Surface
 import android.view.TextureView
 import androidx.compose.foundation.background
@@ -19,6 +20,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -38,10 +40,11 @@ import kotlin.math.roundToInt
  * 把鏡像 view 的生命週期跟虛擬顯示串接起來，並攔截觸控事件轉發給 [InputController]。
  *
  * 幾何全部來自單一的 [Viewport]（見地圖 #9 / #12）：呈現與觸控讀同一個 instance，
- * 因此不可能不一致。`Viewport` 的輸入取自公開的 `Display` API，不需要任何 AIDL。
+ * 且座標變換只有 [Viewport.displayPerViewPixel] 一個來源。`Viewport` 的輸入取自公開的
+ * `Display` API，不需要任何 AIDL。
  */
 @Composable
-fun VirtualDisplaySurfaceView(
+fun VirtualDisplayMirror(
     targetDisplayId: Int,
     addSurface: (Surface) -> Unit,
     removeSurface: (Surface) -> Unit,
@@ -50,6 +53,7 @@ fun VirtualDisplaySurfaceView(
     modifier: Modifier = Modifier,
     onTextureViewCreated: (TextureView) -> Unit = {},
 ) {
+    // TODO(#13 Q3): 完成後回頭評估改由 FullscreenDisplayViewModel 持有這組狀態是否更優。
     val geometry = rememberDisplayGeometry(targetDisplayId)
 
     BoxWithConstraints(modifier.background(Color.Black)) {
@@ -74,8 +78,7 @@ fun VirtualDisplaySurfaceView(
                 )
         ) {
             MirrorSurface(
-                surfaceWidth = geometry.surfaceWidth,
-                surfaceHeight = geometry.surfaceHeight,
+                geometry = geometry,
                 viewport = viewport,
                 addSurface = addSurface,
                 removeSurface = removeSurface,
@@ -85,8 +88,8 @@ fun VirtualDisplaySurfaceView(
                     // requiredSize 而非 size：旋轉前的佈局框比父層還長，size() 會被父層
                     // constraints 夾住（實測會被壓成正方形），requiredSize 才忽略父層。
                     .requiredSize(
-                        with(density) { viewport.surfaceViewWidth.toDp() },
-                        with(density) { viewport.surfaceViewHeight.toDp() },
+                        with(density) { viewport.unrotatedWidth.toDp() },
+                        with(density) { viewport.unrotatedHeight.toDp() },
                     ),
             )
 
@@ -106,8 +109,7 @@ fun VirtualDisplaySurfaceView(
 
 @Composable
 private fun MirrorSurface(
-    surfaceWidth: Int,
-    surfaceHeight: Int,
+    geometry: DisplayGeometry,
     viewport: Viewport,
     addSurface: (Surface) -> Unit,
     removeSurface: (Surface) -> Unit,
@@ -117,18 +119,28 @@ private fun MirrorSurface(
     // TextureView 而非 SurfaceView：SurfaceView 的 surface 是獨立硬體圖層，**不吃 view 的
     // 旋轉變換**（真機實測：佈局框有換、畫面仍側躺）。TextureView 走一般 view 繪製路徑，
     // graphicsLayer 的旋轉才會真的套用。見 #13 Q2 的備案。
+    val currentGeometry by rememberUpdatedState(geometry)
     val listener = remember(addSurface, removeSurface) {
         object : TextureView.SurfaceTextureListener {
             private var surface: Surface? = null
 
             override fun onSurfaceTextureAvailable(texture: SurfaceTexture, width: Int, height: Int) {
+                // buffer 尺寸恆為虛擬顯示建立時的大小，不隨旋轉改變（#11 實測）。
+                // **必須在包成 Surface 之前設定**，否則 producer 拿到的是 view 尺寸的 buffer。
+                texture.setDefaultBufferSize(
+                    currentGeometry.surfaceWidth,
+                    currentGeometry.surfaceHeight,
+                )
                 runCatching {
                     Surface(texture).also { surface = it; addSurface(it) }
                 }.onFailure { Timber.e(it, "addSurface failed") }
             }
 
             override fun onSurfaceTextureSizeChanged(texture: SurfaceTexture, width: Int, height: Int) {
-                Timber.d("MirrorSurface: sizeChanged ${width}x$height")
+                texture.setDefaultBufferSize(
+                    currentGeometry.surfaceWidth,
+                    currentGeometry.surfaceHeight,
+                )
             }
 
             override fun onSurfaceTextureDestroyed(texture: SurfaceTexture): Boolean {
@@ -155,8 +167,10 @@ private fun MirrorSurface(
             }
         },
         update = { view ->
-            // buffer 尺寸恆為虛擬顯示建立時的大小，不隨旋轉改變（#11 實測）。
-            view.surfaceTexture?.setDefaultBufferSize(surfaceWidth, surfaceHeight)
+            view.surfaceTexture?.setDefaultBufferSize(
+                geometry.surfaceWidth,
+                geometry.surfaceHeight,
+            )
         },
     )
 }
@@ -172,9 +186,12 @@ private fun TouchForwarder(
     modifier: Modifier = Modifier,
 ) {
     // 節點座標已是內容矩形內的相對座標，故只需縮放即可得到邏輯座標——觸控路徑上
-    // 沒有旋轉（旋轉被畫面側的 graphicsLayer 吸收掉了）。
-    val transform = remember(viewport.scale) {
-        Matrix().apply { setScale(1f / viewport.scale, 1f / viewport.scale) }
+    // 沒有旋轉（旋轉被畫面側的 graphicsLayer 吸收掉了）。縮放係數取自 Viewport 的
+    // displayPerViewPixel，與 Viewport.toDisplay 是同一個來源。
+    val transform = remember(viewport.displayPerViewPixel) {
+        Matrix().apply {
+            setScale(viewport.displayPerViewPixel, viewport.displayPerViewPixel)
+        }
     }
     Box(
         modifier.pointerInteropFilter { event ->
@@ -189,7 +206,7 @@ private fun TouchForwarder(
 }
 
 /** 虛擬顯示的 surface 尺寸與當前方向，全部取自公開的 `Display` API（見 #13）。 */
-private data class DisplayGeometry(
+data class DisplayGeometry(
     val surfaceWidth: Int,
     val surfaceHeight: Int,
     val rotation: Int,
@@ -220,8 +237,24 @@ private fun rememberDisplayGeometry(displayId: Int): DisplayGeometry {
 
 private fun DisplayManager.readGeometry(displayId: Int): DisplayGeometry {
     val display = getDisplay(displayId) ?: return DisplayGeometry(0, 0, 0)
-    // getMode() 回報建立時的 surface 尺寸，不隨旋轉改變；getRealSize() 回報的邏輯尺寸
-    // 才會交換長寬。兩者不可混用（#13 實測）。
+    val rotation = display.rotation
+
+    // getRealSize() 回報的是**邏輯**尺寸，會隨旋轉交換長寬；由它反推 surface 尺寸。
+    val logical = Point().also { @Suppress("DEPRECATION") display.getRealSize(it) }
+    val derivedWidth = if (isQuarterTurn(rotation)) logical.y else logical.x
+    val derivedHeight = if (isQuarterTurn(rotation)) logical.x else logical.y
+
+    // getMode() 回報建立時的 surface 尺寸，不隨旋轉改變。這是實測行為、非文件保證，
+    // 故以反推值為 fallback，並在兩者不一致時示警（#13 Q1）。
     val mode = display.mode
-    return DisplayGeometry(mode.physicalWidth, mode.physicalHeight, display.rotation)
+    if (mode.physicalWidth <= 0 || mode.physicalHeight <= 0) {
+        return DisplayGeometry(derivedWidth, derivedHeight, rotation)
+    }
+    if (mode.physicalWidth != derivedWidth || mode.physicalHeight != derivedHeight) {
+        Timber.w(
+            "Display %d: getMode() says %dx%d but getRealSize() implies %dx%d",
+            displayId, mode.physicalWidth, mode.physicalHeight, derivedWidth, derivedHeight,
+        )
+    }
+    return DisplayGeometry(mode.physicalWidth, mode.physicalHeight, rotation)
 }
