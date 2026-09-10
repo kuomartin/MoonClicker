@@ -111,6 +111,15 @@ fun FullscreenDisplayScreen(
     // 單一來源：鏡像的 Viewport 與（#17 之後）X 的 requestedOrientation 都讀這一份。
     val geometry = rememberDisplayGeometry(targetDisplayId)
 
+    // 方向鏈 Y → VD → X → MainDisplay（#17）。系統負責 WM 仲裁與 MainDisplay 跟隨 X，
+    // 這裡只接兩環：感測器推給虛擬顯示，以及虛擬顯示的 rotation 推給 X。
+    val entryRotation = remember { geometry.rotation }
+    SensorRotationDriver { rotation -> viewModel.setDisplayRotation(targetDisplayId, rotation) }
+    FollowDisplayRotation(activity, geometry.rotation)
+    RestoreDisplayRotationOnExit(entryRotation) { rotation ->
+        viewModel.setDisplayRotation(targetDisplayId, rotation)
+    }
+
     var showTemplateSelector by remember { mutableStateOf(false) }
     var availableTemplates by remember { mutableStateOf<List<String>>(emptyList()) }
 
