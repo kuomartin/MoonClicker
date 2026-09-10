@@ -1,0 +1,21 @@
+# Drop the Lua-driven Overlay UI platform in favour of a status Notification
+
+ReLC started down the path of becoming a platform where a Lua script defines the whole UI: `ui.add/update/remove` in the engine's Lua API upcalled into `LuaNative.uiAdd/uiUpdate/uiRemove`, which fed `LuaUiManager` (a `LuaUiSink`), which rendered a tree of `DynamicElement`s (`DynamicBox`/`Column`/`Row`/`Text`/`Image`) as Compose UI inside an always-on-top window owned by `ClickAssistOverlayService` (an AccessibilityService). We are abandoning that direction. The overlay was never core to what ReLC does — it runs scripts against a virtual display — and keeping it meant maintaining a bespoke JSON UI schema, a second Compose rendering path, and a native `ui` module in the Lua API, all for a HUD. The investment to date was small enough that removing it is cheaper than continuing to carry it.
+
+So the entire overlay-window mechanism is removed, not just the Lua half: `LuaUiManager`, `DynamicElement` and friends, `LuaOverlayContentExtension`, `OverlayController`, `ClickAssistOverlayService`, `OverlayWindowScope`/`WindowParams`/`ViewKeyType`/`OverlayComposeLifecycle`, and with them the `:overlay` Gradle module itself, which had nothing left in it. Run status now lives in a plain system Notification: persistent while any script is RUNNING, with a 「查看狀態」 action and body tap that deep-link to the Scripts page (where running scripts carry an inline 執行中 badge) and a 「停止所有」 action wired to `ScriptManager.stopAllScripts()`. It needs no window permission at all — neither `SYSTEM_ALERT_WINDOW` nor an AccessibilityService — so the "grant overlay permission" Health Check item in Settings and the pending "switch the overlay from AccessibilityService to SYSTEM_ALERT_WINDOW" permission fix are both moot and gone.
+
+`OverlayContentExtension`, the Hilt-multibound seam [ADR-0006](0006-module-split-and-engine-facade.md) introduced so `:overlay` could render legacy Simple Script editor UI without depending on `:app`, dies with it. That seam existed only to keep the overlay window pluggable, and there is no longer an overlay window. Its other consumer — the legacy Simple Script recording/editing overlay in `app/overlay/ui/simple/*` (floating tap/swipe markers, recording banner, editor control bar) — was rendered through the same `ClickAssistOverlayService` window plumbing and is removed along with it. Recording and editing a legacy Simple Script by dragging floating markers over a live screen therefore has no replacement right now; that workflow's future belongs with the `simplescript.*` migration [ADR-0006](0006-module-split-and-engine-facade.md) already scoped as follow-up work, not with a resurrected overlay.
+
+On the engine side the `ui` Lua table, the three `jmethodID` upcalls behind it, and `LuaEngineControl.uiSink`/`LuaUiSink` are gone. `LuaNative.sendUIEvent` and the native `UIEvent` queue behind the `on_event(events, tick)` Lua callback go too: their only event source was a click on a Lua-defined UI element, so with the UI gone `on_event` could never fire again. `app.set_data`/`LuaEngineControl.sharedData` stays — it is a general script-to-Kotlin data channel that merely happened to have the Lua UI as its first reader.
+
+## Scope note
+
+`ScriptManager` and script execution are untouched; this removes one way of *presenting* a run, not the running itself. The dead `RunningScriptHudUi`/`hudUi` slice, whose only consumer was the overlay HUD, goes with it.
+
+The notification is driven from an app-scoped observer in `RelcApplication`, not a foreground service, so it reflects script state for exactly as long as the process lives — which is already the lifetime of the scripts themselves. Note the consequence: the removed AccessibilityService incidentally kept the process alive, and `setOngoing(true)` on a plain notification does not, so a long run can now be killed while the user is in another app. Giving script execution a real process anchor (a foreground service) is a separate decision from removing the overlay, and is deliberately not made here.
+
+Because the notification is now the only cross-app run indicator, `RelcActivity` requests `POST_NOTIFICATIONS` at startup rather than letting the feature fail silently on Android 13+.
+
+## Status
+
+Accepted.

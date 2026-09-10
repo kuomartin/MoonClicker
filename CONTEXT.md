@@ -39,11 +39,8 @@ The Engine Module's single observable source of truth — a `StateFlow<EngineSta
 _Avoid_: Engine status, native state holder.
 
 **LuaEngineControl**:
-The public facade over `LuaNative` (the Engine Module's JNI bridge, `internal` to `:engine`). Other modules start/stop the engine, send UI events, and read `sharedData` through this — never through `LuaNative` directly. See [ADR-0006](docs/adr/0006-module-split-and-engine-facade.md).
+The public facade over `LuaNative` (the Engine Module's JNI bridge, `internal` to `:engine`). Other modules start/stop the engine and read `sharedData` (what a script publishes via the Lua `app.set_data` API) through this — never through `LuaNative` directly. See [ADR-0006](docs/adr/0006-module-split-and-engine-facade.md).
 _Avoid_: The JNI bridge, LuaNative (when describing what other modules call).
-
-**LuaUiManager**:
-The bridge (in `:overlay`) that lets a running Lua script add or update Compose UI elements (HUD, controls) at runtime, registered as `LuaNative`'s `LuaUiSink` from `RelcApplication.onCreate`.
 
 **VisionEngine**:
 The native OpenCV-backed component that performs template matching against a virtual display's frames, exposed to scripts as the `match.*` API. See [ADR-0003](docs/adr/0003-opencv-for-vision-matching.md).
@@ -53,9 +50,6 @@ _Avoid_: Image recognizer, matcher.
 The current Shizuku-hosted service exposing virtual display, input, and launch capabilities over AIDL (`IRelcV2Service`), with native acceleration. Supersedes `RelcShizukuService` (V1), which is deprecated. See [ADR-0001](docs/adr/0001-v2-service-supersedes-v1.md).
 _Avoid_: Shizuku service (ambiguous between V1/V2), backend service.
 
-**Overlay UI**:
-Floating, always-on-top Compose UI (control bar, HUD) rendered by the `:overlay` module's `ClickAssistOverlayService` (an AccessibilityService), which reaches the Engine Module only through `LuaEngineControl` — never `LuaNative` directly. Its content is pluggable per script type via `OverlayContentExtension`, so the service itself never references the legacy Simple Script editor UI that stays in `:app`. See [ADR-0006](docs/adr/0006-module-split-and-engine-facade.md).
-
-**OverlayContentExtension**:
-The seam that lets `:overlay`'s `ClickAssistOverlayService` render script-type-specific content without depending on that type's implementation. Registered via Hilt multibinding, keyed by a plain string matching `ScriptConfig.ScriptCodeType.name` (`:overlay` doesn't depend on `ScriptConfig`). `:overlay` registers the Lua-UI renderer; `:app` registers the legacy Simple Script renderer. See [ADR-0006](docs/adr/0006-module-split-and-engine-facade.md).
-_Avoid_: Overlay renderer, content provider (ambiguous with Android's ContentProvider).
+**Script Status Notification**:
+The persistent system notification that shows which scripts are currently running, posted by `ScriptStatusNotifier` from `ScriptManager.scriptStates` and cancelled when nothing is running. Its body tap and 「查看狀態」 action open the Scripts page; 「停止所有」 stops every running script. It replaced the removed Overlay UI and needs no window permission. See [ADR-0007](docs/adr/0007-drop-lua-overlay-ui-for-status-notification.md).
+_Avoid_: HUD, overlay, floating status.

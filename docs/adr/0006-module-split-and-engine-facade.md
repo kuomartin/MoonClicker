@@ -12,4 +12,4 @@ Moving `ClickAssistOverlayService` into `:overlay` surfaced a coupling this ADR 
 
 ## Status
 
-Accepted.
+Accepted, partly superseded by [ADR-0007](0007-drop-lua-overlay-ui-for-status-notification.md): the `:overlay` module, `OverlayController`, and the `OverlayContentExtension` seam described above no longer exist. The `:engine`/`:simplescript`/`:app` split, `LuaEngineControl`, and `EngineStateRepository` are unaffected.

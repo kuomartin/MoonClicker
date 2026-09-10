@@ -167,11 +167,6 @@ fun FullscreenDisplayScreen(
                 modifier = Modifier.fillMaxSize(),
                 onSurfaceViewCreated = { surfaceViewRef.value = it }
             )
-
-            com.xaxaxax.relc.ui.lua.LuaUiManagerView(
-                manager = com.xaxaxax.relc.ui.lua.LuaUiManager.instance,
-                scriptDir = scriptDir
-            )
         }
 
         if (uiState.executionState == FullscreenDisplayViewModel.ExecutionState.CROPPING) {

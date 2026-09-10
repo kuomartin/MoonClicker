@@ -17,11 +17,6 @@
 #include <unordered_map>
 #include <queue>
 
-struct UIEvent {
-    std::string elementId;
-    std::string eventType;
-};
-
 struct SearchTemplate {
     std::string name;
     cv::Mat image;
@@ -56,9 +51,6 @@ public:
     void stop();
 
     ANativeWindow *getWindow();
-
-    // UI Event Queue
-    void pushUIEvent(const std::string& elementId, const std::string& eventType);
 
     // Engine state event upcall (see LuaNative.onEngineEvent / EngineEventType)
     void pushEngineEvent(int type, const std::string &payload);
@@ -109,9 +101,6 @@ private:
     static int lua_match_disable(lua_State *L);
 
     // Lua UI API
-    static int lua_ui_add(lua_State *L);
-    static int lua_ui_update(lua_State *L);
-    static int lua_ui_remove(lua_State *L);
 
     // Bridge API
     static int lua_bridge_set(lua_State *L);
@@ -147,9 +136,6 @@ private:
     
     // UI Upcalls
     jobject luaNativeObj;
-    jmethodID uiAddMethodId;
-    jmethodID uiUpdateMethodId;
-    jmethodID uiRemoveMethodId;
     jmethodID setSharedDataMethodId;
     jmethodID onEngineEventMethodId;
     
@@ -172,9 +158,6 @@ private:
     std::mutex resultMutex;
     FrameResult latestResult;
     std::atomic<bool> isRunning;
-
-    std::queue<UIEvent> uiEventQueue;
-    std::mutex uiEventMutex;
 };
 
 #endif // RELC_ENGINE_H

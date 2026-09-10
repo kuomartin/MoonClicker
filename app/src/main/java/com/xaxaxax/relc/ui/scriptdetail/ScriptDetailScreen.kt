@@ -1,8 +1,5 @@
 package com.xaxaxax.relc.ui.scriptdetail
 
-import android.os.Build
-import android.provider.Settings
-import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -34,7 +31,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -52,29 +48,6 @@ fun ScriptDetailScreen(
     val config by viewModel.config.collectAsState()
     val state by viewModel.scriptState.collectAsState()
     val logs by viewModel.logs.collectAsState(initial = "")
-    val ctx = LocalContext.current
-
-    val overlayLaunch: (() -> Unit)? =
-        config?.let { sc ->
-            {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
-                    !Settings.canDrawOverlays(ctx)
-                ) {
-                    Toast.makeText(
-                        ctx,
-                        "請先開啟「在其他應用程式上疊加顯示」權限",
-                        Toast.LENGTH_SHORT,
-                    ).show()
-                } else {
-                    viewModel.saveScript()
-                    val success = viewModel.showOverlay()
-                    if (!success) {
-                        android.widget.Toast.makeText(ctx, "請先在設定中開啟無障礙服務", android.widget.Toast.LENGTH_SHORT).show()
-                    }
-                }
-            }
-        }
-
     val hasChanges by viewModel.hasChanges.collectAsState()
     var showExitConfirmation by remember { mutableStateOf(false) }
 
@@ -120,21 +93,8 @@ fun ScriptDetailScreen(
         onNavigateBack = { tryNavigateBack() },
         onUpdateConfig = { newConfig -> viewModel.updateConfig { newConfig } },
         onSave = { viewModel.saveScript() },
-        onPlay = {
-            config?.let { sc ->
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(ctx)) {
-                    Toast.makeText(ctx, "需要「疊加顯示」權限以顯示 UI", Toast.LENGTH_SHORT).show()
-                } else {
-                    val success = viewModel.showOverlay()
-                    if (!success) {
-                        android.widget.Toast.makeText(ctx, "請先在設定中開啟無障礙服務", android.widget.Toast.LENGTH_SHORT).show()
-                    }
-                }
-                viewModel.scriptManager.startScript(sc)
-            }
-        },
+        onPlay = { config?.let { viewModel.scriptManager.startScript(it) } },
         onStop = { config?.let { viewModel.scriptManager.stopScript(it.id) } },
-        onLaunchFloatingAssist = overlayLaunch,
     )
 }
 
@@ -149,7 +109,6 @@ fun ScriptDetailScreenContent(
     onSave: () -> Unit,
     onPlay: () -> Unit,
     onStop: () -> Unit,
-    onLaunchFloatingAssist: (() -> Unit)? = null,
 ) {
     val logLines = remember { mutableStateListOf<String>() }
     LaunchedEffect(latestLog) {
@@ -169,11 +128,6 @@ fun ScriptDetailScreenContent(
                     }
                 },
                 actions = {
-                    if (onLaunchFloatingAssist != null) {
-                        TextButton(onClick = { onLaunchFloatingAssist() }) {
-                            Text("浮窗")
-                        }
-                    }
                     IconButton(onClick = {
                         onSave()
                     }) {
@@ -346,7 +300,6 @@ fun ScriptDetailScreenPreview() {
                 onSave = {},
                 onPlay = {},
                 onStop = {},
-                onLaunchFloatingAssist = null,
             )
         }
     }

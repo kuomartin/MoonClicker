@@ -35,10 +35,6 @@ class ScriptManager(private val context: Context) {
     private val _scriptStates = MutableStateFlow<Map<String, ScriptState>>(emptyMap())
     val scriptStates: StateFlow<Map<String, ScriptState>> = _scriptStates.asStateFlow()
 
-    /** Single HUD slice for overlays; cleared when idle / script ends. */
-    private val _hudUi = MutableStateFlow<RunningScriptHudUi?>(null)
-    val hudUi: StateFlow<RunningScriptHudUi?> = _hudUi.asStateFlow()
-
     private val _logs = MutableSharedFlow<ScriptLog>(extraBufferCapacity = 100)
     val logs: SharedFlow<ScriptLog> = _logs
 
@@ -62,33 +58,10 @@ class ScriptManager(private val context: Context) {
         scriptJobs[config.id]?.cancel()
         _scriptStates.update { it + (config.id to ScriptState.RUNNING) }
         val sessionStart = SystemClock.elapsedRealtime()
-        _hudUi.value = RunningScriptHudUi(
-            scriptId = config.id,
-            name = config.name,
-            codeType = config.type,
-            state = ScriptState.RUNNING,
-            progress = null,
-            sessionStartElapsedRealtime = sessionStart,
-        )
 
         val job = scope.launch {
             try {
                 serviceFlow.runWhenAlive { service ->
-                    val emitSimpleProgress =
-                        if (config.type == ScriptConfig.ScriptCodeType.SIMPLE) {
-                            { p: SimpleScriptProgress ->
-                                _hudUi.value = RunningScriptHudUi(
-                                    scriptId = config.id,
-                                    name = config.name,
-                                    codeType = config.type,
-                                    state = ScriptState.RUNNING,
-                                    progress = p,
-                                    sessionStartElapsedRealtime = sessionStart,
-                                )
-                            }
-                        } else {
-                            null
-                        }
                     val ctx = ScriptRunContext(
                         context = context,
                         service = service,
@@ -97,7 +70,6 @@ class ScriptManager(private val context: Context) {
                         },
                         isActive = { isActive },
                         sessionStartElapsedRealtime = sessionStart,
-                        onSimpleProgress = emitSimpleProgress,
                     )
                     runnerFactories.getValue(config.type).create(ctx).run(config)
                 }
@@ -112,7 +84,6 @@ class ScriptManager(private val context: Context) {
                 _scriptStates.update { it + (config.id to ScriptState.ERROR) }
             } finally {
                 scriptJobs.remove(config.id)
-                _hudUi.value = null
             }
         }
         scriptJobs[config.id] = job
@@ -122,9 +93,14 @@ class ScriptManager(private val context: Context) {
         scriptJobs[scriptId]?.cancel()
         scriptJobs.remove(scriptId)
         _scriptStates.update { it + (scriptId to ScriptState.IDLE) }
-        if (_hudUi.value?.scriptId == scriptId) {
-            _hudUi.value = null
-        }
+    }
+
+    /** Stops every RUNNING script. Backs the "停止所有" status-notification action. */
+    fun stopAllScripts() {
+        _scriptStates.value
+            .filterValues { it == ScriptState.RUNNING }
+            .keys
+            .forEach { stopScript(it) }
     }
 
 }
