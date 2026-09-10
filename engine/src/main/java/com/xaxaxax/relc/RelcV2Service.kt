@@ -14,6 +14,7 @@ import android.content.Intent
 import android.content.pm.PackageManagerHidden
 import android.hardware.display.DisplayManager
 import android.hardware.display.DisplayManagerHidden
+import android.view.WindowManagerGlobal
 import android.hardware.display.VirtualDisplay
 import android.hardware.input.InputManager
 import android.hardware.input.InputManagerHidden
@@ -488,6 +489,43 @@ class RelcV2Service(private val context: Context) : IRelcV2Service.Stub() {
             Timber.d(t, "Failed to inject $event on display#$displayId.")
             false
         }
+    }
+
+    override fun setDisplayRotation(displayId: Int, rotation: Int): Boolean {
+        val quarterTurns = rotation and 3
+        // API 29 起才有 freezeDisplayRotation；27–28 沒有可用的 Java 路徑，退回 command line。
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            try {
+                val wm = WindowManagerGlobal.getWindowManagerService()
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+                    wm.freezeDisplayRotation(displayId, quarterTurns, "ReLC")
+                } else {
+                    @Suppress("DEPRECATION")
+                    wm.freezeDisplayRotation(displayId, quarterTurns)
+                }
+                return true
+            } catch (t: Throwable) {
+                // 版本簽章不符、權限不足、displayId 不存在等——真正的失敗，值得回報。
+                Timber.e(t, "freezeDisplayRotation(%d, %d) failed", displayId, quarterTurns)
+            }
+        }
+        return setDisplayRotationViaShell(displayId, quarterTurns)
+    }
+
+    /**
+     * API 27–28 的退路，以及 Java 路徑失敗時的最後手段。服務以 shell UID 執行，可直接呼叫 `cmd`。
+     */
+    private fun setDisplayRotationViaShell(displayId: Int, quarterTurns: Int): Boolean = try {
+        val process = ProcessBuilder(
+            "cmd", "window", "user-rotation", "-d", displayId.toString(), "lock", quarterTurns.toString()
+        ).redirectErrorStream(true).start()
+        val output = process.inputStream.bufferedReader().use { it.readText() }.trim()
+        val exit = process.waitFor()
+        Timber.d("cmd window user-rotation -d %d lock %d -> exit=%d %s", displayId, quarterTurns, exit, output)
+        exit == 0
+    } catch (t: Throwable) {
+        Timber.e(t, "cmd window user-rotation failed for display %d", displayId)
+        false
     }
 
     override fun getDisplaySize(displayId: Int): IntArray {
