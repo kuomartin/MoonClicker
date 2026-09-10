@@ -9,6 +9,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -34,6 +35,7 @@ fun ScriptEditorScreen(
     onAddEvent: () -> Unit,
     onEditEvent: (Event) -> Unit,
     onDeleteEvent: (Event) -> Unit,
+    onRun: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showVariableDialog by remember { mutableStateOf(false) }
@@ -64,6 +66,9 @@ fun ScriptEditorScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = onRun) {
+                        Icon(Icons.Default.PlayArrow, contentDescription = "Run")
+                    }
                     IconButton(onClick = onSave, enabled = isDirty) {
                         Icon(Icons.Default.Save, contentDescription = "Save")
                     }

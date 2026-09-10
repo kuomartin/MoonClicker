@@ -601,7 +601,8 @@ fun FullscreenDisplayScreen(
                             navController = navController,
                             onStartPointSelecting = { viewModel.startPointSelecting() },
                             onStartCropping = { viewModel.startCropping() },
-                            onCloseEditor = { viewModel.setEditorExpanded(false) }
+                            onCloseEditor = { viewModel.setEditorExpanded(false) },
+                            onRunScript = { script -> viewModel.runScript(script) }
                         )
                     }
                 }
