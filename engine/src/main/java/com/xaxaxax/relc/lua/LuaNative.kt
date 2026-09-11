@@ -102,7 +102,9 @@ internal object LuaNative {
         this.currentService = service
         this.currentDisplayId = displayId
         EngineStateRepository.reset()
-        return startEngine(service, displayId, width, height, scriptPath)
+        val surface = startEngine(service, displayId, width, height, scriptPath)
+        if (surface != null) startTrackingRotation(displayId)
+        return surface
     }
 
     private external fun startEngine(
@@ -118,8 +120,50 @@ internal object LuaNative {
      */
     external fun stopEngine()
 
+    private external fun nativeSetDisplayRotation(rotation: Int)
+
     fun stop() {
+        stopTrackingRotation()
         stopEngine()
+    }
+
+    // --- 虛擬顯示的 rotation ---------------------------------------------------
+    // 影格在 surface 空間、injectMotionEvent 用的是邏輯空間，兩者差一個旋轉（見 issue #19）。
+    // 這裡把當前 rotation 推進 native，讓 match 的輸出直接是邏輯座標。
+    // rotation 由公開的 Display API 取得——比對跑在 app 進程，不需要經過 RelcV2Service。
+
+    private var rotationListener: android.hardware.display.DisplayManager.DisplayListener? = null
+
+    private fun startTrackingRotation(displayId: Int) {
+        stopTrackingRotation()
+        if (displayId < 0) {
+            nativeSetDisplayRotation(0)
+            return
+        }
+        val dm = appContext?.getSystemService(android.hardware.display.DisplayManager::class.java)
+        if (dm == null) {
+            Timber.w("No DisplayManager; match results will not be rotation-corrected")
+            return
+        }
+        nativeSetDisplayRotation(dm.getDisplay(displayId)?.rotation ?: 0)
+
+        val listener = object : android.hardware.display.DisplayManager.DisplayListener {
+            override fun onDisplayAdded(id: Int) = Unit
+            override fun onDisplayRemoved(id: Int) = Unit
+            override fun onDisplayChanged(id: Int) {
+                if (id != displayId) return
+                nativeSetDisplayRotation(dm.getDisplay(displayId)?.rotation ?: 0)
+            }
+        }
+        dm.registerDisplayListener(listener, android.os.Handler(android.os.Looper.getMainLooper()))
+        rotationListener = listener
+    }
+
+    private fun stopTrackingRotation() {
+        val listener = rotationListener ?: return
+        rotationListener = null
+        appContext?.getSystemService(android.hardware.display.DisplayManager::class.java)
+            ?.unregisterDisplayListener(listener)
     }
 
     /**

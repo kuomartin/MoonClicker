@@ -205,6 +205,8 @@ bool RelcEngine::start(int displayId, int width, int height, const std::string &
     lua_setfield(L, -2, "set_data");
     lua_setglobal(L, "app");
 
+    frameWidth = width;
+    frameHeight = height;
     imageReader = std::make_unique<NativeImageReader>(width, height);
     if (!imageReader->init()) return false;
 
@@ -454,6 +456,54 @@ bool RelcEngine::destroyVirtualDisplay() {
     return static_cast<bool>(ok);
 }
 
+void RelcEngine::onDisplayRotationChanged(int rotation) {
+    displayRotation.store(rotation & 3);
+}
+
+// 影格在 surface 空間、內容被旋轉「進」其中；邏輯空間才是 injectMotionEvent 的座標系。
+// 旋轉方向與畫面側套用的 -(rotation * 90) 反向旋轉一致（見 :app 的 Viewport）。
+void RelcEngine::frameToLogical(double fx, double fy, double &lx, double &ly) const {
+    switch (displayRotation.load()) {
+        case 1:
+            lx = fy;
+            ly = frameWidth - fx;
+            break;
+        case 2:
+            lx = frameWidth - fx;
+            ly = frameHeight - fy;
+            break;
+        case 3:
+            lx = frameHeight - fy;
+            ly = fx;
+            break;
+        default:
+            lx = fx;
+            ly = fy;
+            break;
+    }
+}
+
+void RelcEngine::logicalToFrame(double lx, double ly, double &fx, double &fy) const {
+    switch (displayRotation.load()) {
+        case 1:
+            fx = frameWidth - ly;
+            fy = lx;
+            break;
+        case 2:
+            fx = frameWidth - lx;
+            fy = frameHeight - ly;
+            break;
+        case 3:
+            fx = ly;
+            fy = frameHeight - lx;
+            break;
+        default:
+            fx = lx;
+            fy = ly;
+            break;
+    }
+}
+
 ANativeWindow *RelcEngine::getWindow() {
     return imageReader ? imageReader->getWindow() : nullptr;
 }
@@ -684,10 +734,19 @@ void RelcEngine::processFrame(const cv::Mat &frame) {
 
         // Apply ROI if specified (adjust ROI to scale)
         if (t.roi.width > 0 && t.roi.height > 0) {
-            int x = std::max(0, (int) (t.roi.x * imageScale));
-            int y = std::max(0, (int) (t.roi.y * imageScale));
-            int w = std::min((int) (t.roi.width * imageScale), baseFrame.cols - x);
-            int h = std::min((int) (t.roi.height * imageScale), baseFrame.rows - y);
+            // ROI 由腳本以**邏輯**座標指定，先轉回影格空間再套用縮放（#19）。
+            double rx0, ry0, rx1, ry1;
+            logicalToFrame(t.roi.x, t.roi.y, rx0, ry0);
+            logicalToFrame(t.roi.x + t.roi.width, t.roi.y + t.roi.height, rx1, ry1);
+            double frameRoiX = std::min(rx0, rx1);
+            double frameRoiY = std::min(ry0, ry1);
+            double frameRoiW = std::abs(rx1 - rx0);
+            double frameRoiH = std::abs(ry1 - ry0);
+
+            int x = std::max(0, (int) (frameRoiX * imageScale));
+            int y = std::max(0, (int) (frameRoiY * imageScale));
+            int w = std::min((int) (frameRoiW * imageScale), baseFrame.cols - x);
+            int h = std::min((int) (frameRoiH * imageScale), baseFrame.rows - y);
 
             // Ensure ROI is large enough for the template
             if (w < t.image.cols || h < t.image.rows) continue;
@@ -713,10 +772,16 @@ void RelcEngine::processFrame(const cv::Mat &frame) {
             item.name = t.name;
             item.found = true;
             // Scale results back to original size
-            item.x = (maxLoc.x + t.image.cols / 2.0 + offsetX) / imageScale;
-            item.y = (maxLoc.y + t.image.rows / 2.0 + offsetY) / imageScale;
-            item.width = t.image.cols / imageScale; // Original width
-            item.height = t.image.rows / imageScale; // Original height
+            // 影格座標 → 邏輯座標，讓 match 的結果可以直接餵給 tap（#19）。
+            double frameX = (maxLoc.x + t.image.cols / 2.0 + offsetX) / imageScale;
+            double frameY = (maxLoc.y + t.image.rows / 2.0 + offsetY) / imageScale;
+            frameToLogical(frameX, frameY, item.x, item.y);
+
+            double matchWidth = t.image.cols / imageScale;
+            double matchHeight = t.image.rows / imageScale;
+            bool turned = (displayRotation.load() & 1) != 0;
+            item.width = turned ? matchHeight : matchWidth;
+            item.height = turned ? matchWidth : matchHeight;
             item.confidence = maxVal;
             currentFrameResult.matches.push_back(item);
         }

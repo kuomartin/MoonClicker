@@ -26,6 +26,18 @@ The path from a virtual display's GLES output through `H264EncoderSink` and a Lo
 Injects touch/swipe/multi-touch events into a specific virtual display via `IRelcV2Service`.
 _Avoid_: Touch injector, event sender.
 
+**Surface 空間 / 邏輯空間**:
+同一個虛擬顯示的兩個座標系。**Surface 空間**是它建立時的尺寸，影格與 `AImageReader` 都在這裡，旋轉時尺寸不變、內容被轉「進」其中。**邏輯空間**是 WindowManager 眼中的顯示，旋轉 90/270 時長寬互換，`injectMotionEvent` 與 `match.*` 的對外座標都以它為準。兩者在未旋轉時恆等，旋轉時差一個直角——混用即為錯位的來源。
+_Avoid_: 影格座標／畫面座標（沒有指明是哪一個）。
+
+**方向鏈**:
+`Y → VD → X → MainDisplay` 的單向傳遞：虛擬顯示裡的 app 或感測器決定虛擬顯示的方向，`FullscreenDisplayActivity` 跟隨虛擬顯示，實體螢幕再跟隨它。四環中兩環由系統提供（WindowManager 對 app 宣告方向的仲裁、實體螢幕跟隨前景 activity）。鏈失效時（API 27–28、sw ≥ 600dp、使用者關閉自動旋轉）畫面退回 [[Viewport]] 的幾何層，仍然正確、只是不填滿。
+_Avoid_: 旋轉同步（暗示雙向）。
+
+**Viewport**:
+鏡像一個虛擬顯示時的幾何：它當前的邏輯尺寸與方向，投影到 view 的哪個矩形。同一個 instance 同時服務畫面呈現（內容矩形、反向旋轉角、未旋轉的佈局框）與觸控反向映射（view 座標 → 邏輯座標），因此兩側不可能算出不一致的幾何。純資料，不依賴 `android.graphics`，可在純 JVM 測試中窮舉「旋轉 × 長寬比 × letterbox」的組合。
+_Avoid_: 縮放矩陣、觸控映射（兩者都只講了它的一半）。
+
 **Script Engine**:
 The embedded Lua runtime that drives automation — it owns virtual displays, input, and vision matching from a user-authored script. See [ADR-0002](docs/adr/0002-lua-as-scripting-engine.md).
 _Avoid_: Automation engine, macro engine.
