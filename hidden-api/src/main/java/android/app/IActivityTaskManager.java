@@ -6,6 +6,7 @@ import android.os.Bundle;
 import android.os.IBinder;
 import android.os.IInterface;
 
+import androidx.annotation.DeprecatedSinceApi;
 import androidx.annotation.RequiresApi;
 
 /**
@@ -31,7 +32,11 @@ public interface IActivityTaskManager extends IInterface {
             Bundle options
     );
 
-    // Only work at API 29
+    // 10 parameters version only work at API 29
+    @RequiresApi(Build.VERSION_CODES.Q)
+    @DeprecatedSinceApi(
+            api = Build.VERSION_CODES.R,
+            message = "10 parameters version only work at API 29")
     int startActivity(
             IApplicationThread caller,
             String callingPackage,
