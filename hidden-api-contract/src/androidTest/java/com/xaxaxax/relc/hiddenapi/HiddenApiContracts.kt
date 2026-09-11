@@ -14,7 +14,7 @@ import android.os.Build
  * constants that javac inlines into callers, so verifying them needs the stub's baked-in value
  * rather than a reflective lookup. See [VirtualDisplayFlagContractTest].
  */
-public val HIDDEN_API_CONTRACTS: List<MemberContract> = listOf(
+internal val HIDDEN_API_CONTRACTS: List<MemberContract> = listOf(
 
     // ── ActivityManagerHidden ──────────────────────────────────────────────────────────────
     MemberContract(

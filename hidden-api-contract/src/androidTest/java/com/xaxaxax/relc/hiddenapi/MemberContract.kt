@@ -1,12 +1,13 @@
 package com.xaxaxax.relc.hiddenapi
 
+import android.os.Build
 import java.lang.reflect.Modifier
 
 /** Lowest API level this app supports; the default lower bound of every contract. */
-public const val MIN_SUPPORTED_API = 27
+internal val MIN_SUPPORTED_API = Build.VERSION_CODES.O_MR1
 
 /** The member a [MemberContract] is about. */
-public sealed interface Member {
+internal sealed interface Member {
     val name: String
 }
 
@@ -16,14 +17,14 @@ public sealed interface Member {
  * @param returns source-form return type, or null to leave the return type unchecked —
  *   use null where the framework's generic signature is not something we depend on.
  */
-public data class MethodMember(
+internal data class MethodMember(
     override val name: String,
     val parameters: List<String> = emptyList(),
     val returns: String? = null,
     val static: Boolean = false,
 ) : Member
 
-public data class FieldMember(
+internal data class FieldMember(
     override val name: String,
     val type: String,
     val static: Boolean = false,
@@ -41,7 +42,7 @@ public data class FieldMember(
  * Outside the range the contract makes no claim: the test still runs and still reports, as a
  * skip naming the range, so every member stays visible at every API level in the matrix.
  */
-public data class MemberContract(
+internal data class MemberContract(
     val owner: String,
     val member: Member,
     val sinceApi: Int = MIN_SUPPORTED_API,
@@ -64,13 +65,13 @@ internal fun String.simpleName(): String = substringAfterLast('.').substringAfte
  * What the platform actually has. [detail] is always populated so an assertion message can
  * explain itself without the reader re-running anything.
  */
-public data class Resolution(
+internal data class Resolution(
     val found: Boolean,
     val detail: String,
     val mismatches: List<String> = emptyList(),
 )
 
-public fun MemberContract.resolveAgainstPlatform(): Resolution {
+internal fun MemberContract.resolveAgainstPlatform(): Resolution {
     val ownerClass = PlatformReflection.classOrNull(owner)
         ?: return Resolution(found = false, detail = "class $owner is not present on this API level")
 

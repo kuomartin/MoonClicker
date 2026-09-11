@@ -26,7 +26,7 @@ dependencies {
     // No androidTest here on purpose. An instrumented test in this module would package the
     // `android.*` stubs into the test APK, where ART's bootclasspath still wins — the test would
     // load the platform class and quietly prove nothing. The contract tests that verify these
-    // stubs live in :engine's androidTest instead. See issue #18.
+    // stubs live in :hidden-api-contract instead. See issue #18 and ADR-0009.
     annotationProcessor(libs.rikka.refine.annotation.processor)
     compileOnly(libs.rikka.refine.annotation)
 }
