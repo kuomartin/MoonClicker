@@ -13,6 +13,15 @@ interface IRelcV2Service {
     boolean destroyVirtualDisplay(int displayId) = 104;
 
     int[] getVirtualDisplays() = 105;
+
+    /**
+     * Sets a virtual display's user rotation (Surface.ROTATION_*, 0..3).
+     *
+     * An app running on the display that declares its own orientation wins: WindowManager
+     * ignores this value for it, and that is expected rather than a failure. Returns false
+     * only when the call itself could not be made. See issue #16.
+     */
+    boolean setDisplayRotation(int displayId, int rotation) = 108;
     boolean launchInDisplay(String packageName, int displayId) = 106;
     List<String> getLauncherApps() = 107;
 

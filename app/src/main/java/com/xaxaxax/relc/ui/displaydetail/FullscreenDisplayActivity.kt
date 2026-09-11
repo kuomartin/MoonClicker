@@ -51,14 +51,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import com.xaxaxax.relc.core.DisplayConfig
 import com.xaxaxax.relc.ui.theme.ReLCTheme
 import dagger.hilt.android.AndroidEntryPoint
 import timber.log.Timber
@@ -109,25 +107,30 @@ fun FullscreenDisplayScreen(
     val uiState by viewModel.uiState.collectAsState()
     val inputController by viewModel.inputController.collectAsState()
     val capturedBitmap by viewModel.capturedBitmap.collectAsState()
-    val surfaceViewRef = remember { mutableStateOf<android.view.SurfaceView?>(null) }
+    val textureViewRef = remember { mutableStateOf<android.view.TextureView?>(null) }
+    // 單一來源：鏡像的 Viewport 與（#17 之後）X 的 requestedOrientation 都讀這一份。
+    val geometry = rememberDisplayGeometry(targetDisplayId)
+
+    // 方向鏈 Y → VD → X → MainDisplay（#17）。系統負責 WM 仲裁與 MainDisplay 跟隨 X，
+    // 這裡只接兩環：感測器推給虛擬顯示，以及虛擬顯示的 rotation 推給 X。
+    SensorRotationDriver(geometry.rotation) { rotation ->
+        viewModel.setDisplayRotation(targetDisplayId, rotation)
+    }
+    FollowDisplayRotation(activity, geometry.rotation)
 
     var showTemplateSelector by remember { mutableStateOf(false) }
     var availableTemplates by remember { mutableStateOf<List<String>>(emptyList()) }
 
     LaunchedEffect(uiState.executionState) {
         if (uiState.executionState == FullscreenDisplayViewModel.ExecutionState.CROPPING && capturedBitmap == null) {
-            val surfaceView = surfaceViewRef.value
-            if (surfaceView != null && surfaceView.width > 0 && surfaceView.height > 0) {
-                val bitmap = android.graphics.Bitmap.createBitmap(surfaceView.width, surfaceView.height, android.graphics.Bitmap.Config.ARGB_8888)
-                android.view.PixelCopy.request(surfaceView, bitmap, { result ->
-                    if (result == android.view.PixelCopy.SUCCESS) {
-                        viewModel.setCapturedBitmap(bitmap)
-                    } else {
-                        Timber.e("PixelCopy failed with result: $result")
-                        viewModel.cancelCropping()
-                    }
-                }, android.os.Handler(android.os.Looper.getMainLooper()))
+            // TextureView 取代 SurfaceView 之後，擷取畫面不需要 PixelCopy —— getBitmap()
+            // 直接同步回傳 texture 的內容。注意它回傳的是**未套用 view 旋轉**的影格，
+            // 亦即 surface 空間；虛擬顯示旋轉時模板的座標系該怎麼算，見地圖 #9 的迷霧。
+            val bitmap = textureViewRef.value?.bitmap
+            if (bitmap != null) {
+                viewModel.setCapturedBitmap(bitmap)
             } else {
+                Timber.e("TextureView.getBitmap() returned null")
                 viewModel.cancelCropping()
             }
         }
@@ -139,22 +142,15 @@ fun FullscreenDisplayScreen(
             .background(Color.Black)
     ) {
         if (inputController != null) {
-            val metrics = LocalResources.current.displayMetrics
-            val config = DisplayConfig(
-                name = "Attached",
-                width = metrics.widthPixels,
-                height = metrics.heightPixels,
-                densityDpi = metrics.densityDpi
-            )
-            VirtualDisplaySurfaceView(
+            VirtualDisplayMirror(
                 targetDisplayId = targetDisplayId,
+                geometry = geometry,
                 addSurface = { viewModel.addSurface(targetDisplayId, it) },
                 removeSurface = { viewModel.removeSurface(targetDisplayId, it) },
                 inputController = inputController!!,
-                config = config,
                 isReadOnly = uiState.isReadOnly,
                 modifier = Modifier.fillMaxSize(),
-                onSurfaceViewCreated = { surfaceViewRef.value = it }
+                onTextureViewCreated = { textureViewRef.value = it }
             )
         }
 
@@ -373,10 +369,13 @@ fun FullscreenDisplayScreen(
                             if (uiState.executionState == FullscreenDisplayViewModel.ExecutionState.RUNNING) {
                                 viewModel.stopExecution()
                             } else {
-                                val metrics = activity?.resources?.displayMetrics
-                                if (metrics != null) {
-                                    viewModel.startExecution(targetDisplayId, metrics.widthPixels, metrics.heightPixels, scriptDir)
-                                }
+                                // 影格尺寸必須是虛擬顯示的 surface 尺寸，不是手機的 metrics（#19）。
+                                viewModel.startExecution(
+                                    targetDisplayId,
+                                    geometry.surfaceWidth,
+                                    geometry.surfaceHeight,
+                                    scriptDir,
+                                )
                             }
                         }) {
                             Icon(
@@ -505,16 +504,13 @@ fun FullscreenDisplayScreen(
                             items(availableTemplates) { template ->
                                 TextButton(
                                     onClick = {
-                                        val metrics = activity?.resources?.displayMetrics
-                                        if (metrics != null) {
-                                            viewModel.startTemplateTest(
-                                                targetDisplayId,
-                                                metrics.widthPixels,
-                                                metrics.heightPixels,
-                                                scriptDir,
-                                                template
-                                            )
-                                        }
+                                        viewModel.startTemplateTest(
+                                            targetDisplayId,
+                                            geometry.surfaceWidth,
+                                            geometry.surfaceHeight,
+                                            scriptDir,
+                                            template
+                                        )
                                         showTemplateSelector = false
                                     },
                                     modifier = Modifier.fillMaxWidth()

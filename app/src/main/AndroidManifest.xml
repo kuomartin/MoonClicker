@@ -38,7 +38,6 @@
             android:exported="false"
             android:theme="@style/Theme.ReLC.Fullscreen"
             android:configChanges="orientation|screenSize|keyboardHidden"
-            android:screenOrientation="fullUser"
         />
         <activity
             android:name=".RelcActivity"

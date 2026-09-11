@@ -66,6 +66,12 @@ double getColorDiff(const cv::Mat &candidate, const cv::Mat &target) {
     return (diff * 100.0) / (255.0 * 3.0);
 }
 
+JNIEXPORT void JNICALL
+Java_com_xaxaxax_relc_lua_LuaNative_nativeSetDisplayRotation(JNIEnv *env, jobject thiz,
+                                                            jint rotation) {
+    if (gEngine) gEngine->onDisplayRotationChanged(rotation);
+}
+
 JNIEXPORT jobject JNICALL
 Java_com_xaxaxax_relc_lua_LuaNative_startEngine(
         JNIEnv *env,
