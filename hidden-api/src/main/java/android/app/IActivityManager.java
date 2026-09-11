@@ -17,6 +17,8 @@ import java.util.List;
  * real android.app.IActivityManager.
  */
 public interface IActivityManager {
+
+    @DeprecatedSinceApi(api = Build.VERSION_CODES.Q)
     int startActivity(
             IApplicationThread caller,
             String callingPackage,
@@ -29,9 +31,9 @@ public interface IActivityManager {
             ProfilerInfo profilerInfo,
             Bundle options
     );
-
+    @DeprecatedSinceApi(api = Build.VERSION_CODES.Q)
     int createStackOnDisplay(int displayId);
-
+    @DeprecatedSinceApi(api = Build.VERSION_CODES.Q)
     void moveTaskToStack(int taskId, int stackId, boolean toTop);
 
     @RequiresApi(Build.VERSION_CODES.P)

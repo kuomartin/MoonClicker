@@ -47,6 +47,9 @@ internal val HIDDEN_API_CONTRACTS: List<MemberContract> = listOf(
         ),
         sinceApi = Build.VERSION_CODES.Q,
     ),
+    // getInstance()/getTasks(int) are unused by production code today (RelcShizukuService and
+    // RelcV2Service only ever call getService()) but are verified against real devices anyway.
+    // API 29–30 devices resolve neither method; both are present and matching from API 31 (S).
     MemberContract(
         owner = "android.app.ActivityTaskManager",
         member = MethodMember(
@@ -54,7 +57,7 @@ internal val HIDDEN_API_CONTRACTS: List<MemberContract> = listOf(
             returns = "android.app.ActivityTaskManager",
             static = true,
         ),
-        sinceApi = Build.VERSION_CODES.Q,
+        sinceApi = Build.VERSION_CODES.S,
     ),
     MemberContract(
         owner = "android.app.ActivityTaskManager",
@@ -63,7 +66,7 @@ internal val HIDDEN_API_CONTRACTS: List<MemberContract> = listOf(
             parameters = listOf("int"),
             returns = "java.util.List",
         ),
-        sinceApi = Build.VERSION_CODES.Q,
+        sinceApi = Build.VERSION_CODES.S,
     ),
 
     // ── AppOpsManagerHidden ────────────────────────────────────────────────────────────────
@@ -232,9 +235,12 @@ internal val HIDDEN_API_CONTRACTS: List<MemberContract> = listOf(
     ),
 
     // ── MotionEventHidden ──────────────────────────────────────────────────────────────────
+    // Verified against real API 27–36 devices: absent on 27–28, present from 29 (Q) onward —
+    // matches the @RequiresApi(Q) already on the stub.
     MemberContract(
         owner = "android.view.MotionEvent",
         member = MethodMember(name = "setDisplayId", parameters = listOf("int"), returns = "void"),
+        sinceApi = Build.VERSION_CODES.Q,
     ),
 
     // ── IWindowManager ─────────────────────────────────────────────────────────────────────

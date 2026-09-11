@@ -191,7 +191,7 @@ class RelcShizukuService(private val context: Context) : IRelcShizukuService.Stu
         }
     }
 
-    @RequiresApi(Build.VERSION_CODES.R)
+    @RequiresApi(Build.VERSION_CODES.Q)
     private fun launchAppViaATM(packageName: String, displayId: Int) = runCatching {
         // Whether the application are running or not, ATM will handle everything.
 
@@ -205,19 +205,33 @@ class RelcShizukuService(private val context: Context) : IRelcShizukuService.Stu
         Refine.unsafeCast<ActivityOptionsHidden>(options).setLaunchDisplayId(displayId)
 
         val atm = ActivityTaskManager.getService()
-        val result = atm.startActivity(
-            null, // IApplicationThread
-            "com.android.shell",
-            null, // callingFeatureId
-            intent,
-            null, // resolvedType
-            null, // resultTo
-            null, // resultWho
-            0,    // requestCode
-            0,    // flags
-            null, // ProfilerInfo
-            options.toBundle()
-        )
+        val result = if (Build.VERSION.SDK_INT>Build.VERSION_CODES.Q)
+            atm.startActivity(
+                null, // IApplicationThread
+                "com.android.shell",
+                null, // callingFeatureId
+                intent,
+                null, // resolvedType
+                null, // resultTo
+                null, // resultWho
+                0,    // requestCode
+                0,    // flags
+                null, // ProfilerInfo
+                options.toBundle()
+            )
+        else
+            atm.startActivity(
+                null, // IApplicationThread
+                "com.android.shell",
+                intent,
+                null, // resolvedType
+                null, // resultTo
+                null, // resultWho
+                0,    // requestCode
+                0,    // flags
+                null, // ProfilerInfo
+                options.toBundle()
+            )
         Timber.d("IActivityTaskManager.startActivity result = $result")
         checkStartActivityResult(result, intent)
     }.isSuccess
