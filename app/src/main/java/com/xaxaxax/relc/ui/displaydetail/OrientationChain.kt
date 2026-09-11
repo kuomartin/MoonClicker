@@ -8,6 +8,8 @@ import android.view.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.platform.LocalContext
@@ -29,12 +31,21 @@ import kotlin.math.abs
  * 形成死結（見 #17 的「實作時必須避開的迴路」）。
  */
 @Composable
-fun SensorRotationDriver(onRotationChanged: (Int) -> Unit) {
+fun SensorRotationDriver(
+    displayRotation: Int,
+    onRotationChanged: (Int) -> Unit,
+) {
     val context = LocalContext.current
     val currentCallback by rememberUpdatedState(onRotationChanged)
+    // 進入時顯示的方向。只有當我們真的推送過方向時才需要還原——否則離開時的還原會把
+    // 原本未鎖定（free）的顯示鎖成 lock，那是另一種副作用外洩。
+    val entryRotation = remember { displayRotation }
+    val pushedRotation = remember { mutableStateOf(false) }
 
     DisposableEffect(context) {
-        var lastRotation = Surface.ROTATION_0
+        // 以顯示當前的方向為起點，而不是 ROTATION_0：進入一個已經橫向的顯示時，
+        // 第一筆相符的感測器取樣不該被當成「沒有變化」而吞掉。
+        var lastRotation = entryRotation
         val listener = object : OrientationEventListener(context) {
             override fun onOrientationChanged(orientation: Int) {
                 // 使用者關閉自動旋轉時整條鏈停擺——這讓兩個分支都等於「直接在手機上跑 Y」：
@@ -44,6 +55,7 @@ fun SensorRotationDriver(onRotationChanged: (Int) -> Unit) {
                 val next = quantizeOrientation(orientation, lastRotation)
                 if (next == lastRotation) return
                 lastRotation = next
+                pushedRotation.value = true
                 currentCallback(next)
             }
         }
@@ -52,7 +64,10 @@ fun SensorRotationDriver(onRotationChanged: (Int) -> Unit) {
         } else {
             Timber.w("Device cannot detect orientation; the rotation chain stays idle")
         }
-        onDispose { listener.disable() }
+        onDispose {
+            listener.disable()
+            if (pushedRotation.value) currentCallback(entryRotation)
+        }
     }
 }
 
@@ -67,23 +82,6 @@ fun FollowDisplayRotation(activity: Activity?, rotation: Int) {
     LaunchedEffect(activity, rotation) {
         activity ?: return@LaunchedEffect
         activity.requestedOrientation = requestedOrientationFor(rotation)
-    }
-}
-
-/**
- * 進入時記下虛擬顯示的 rotation，離開時明確設回去。
- *
- * 「解除鎖定」**不會**還原方向（真機實測），而虛擬顯示的方向在 App 進程結束後仍然存在，
- * 其他正在跑的腳本會看到它——留著就是副作用外洩。
- */
-@Composable
-fun RestoreDisplayRotationOnExit(
-    entryRotation: Int,
-    onRestore: (Int) -> Unit,
-) {
-    val currentRestore by rememberUpdatedState(onRestore)
-    DisposableEffect(Unit) {
-        onDispose { currentRestore(entryRotation) }
     }
 }
 
@@ -107,8 +105,8 @@ internal fun quantizeOrientation(degrees: Int, current: Int): Int {
     }
     if (candidate == current) return current
 
-    // 遲滯：落在新象限中心 ±30° 內才切換，避免邊界來回抖動——每次抖動都是一次跨進程
-    // AIDL 加一次 WindowManager 的顯示旋轉。
+    // 遲滯：必須越過象限邊界 BOUNDARY_MARGIN_DEGREES 度才切換，避免邊界來回抖動——
+    // 每次抖動都是一次跨進程 AIDL 加一次 WindowManager 的顯示旋轉。
     val center = when (candidate) {
         Surface.ROTATION_0 -> 0
         Surface.ROTATION_270 -> 90
@@ -116,8 +114,14 @@ internal fun quantizeOrientation(degrees: Int, current: Int): Int {
         else -> 270
     }
     val delta = abs(((degrees - center + 540) % 360) - 180)
-    return if (delta <= 30) candidate else current
+    return if (delta <= QUADRANT_HALF_WIDTH_DEGREES - BOUNDARY_MARGIN_DEGREES) candidate else current
 }
+
+/** 象限半寬：邊界距離象限中心 45 度。 */
+private const val QUADRANT_HALF_WIDTH_DEGREES = 45
+
+/** 必須越過象限邊界幾度才採用新方向（#17 Q1）。 */
+private const val BOUNDARY_MARGIN_DEGREES = 30
 
 internal fun requestedOrientationFor(rotation: Int): Int = when (rotation and 3) {
     Surface.ROTATION_90 -> ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE

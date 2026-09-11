@@ -26,11 +26,15 @@ class OrientationChainTest {
     }
 
     @Test
-    fun `angles near a boundary keep the current rotation`() {
-        // 50 度落在 ROTATION_270 的象限裡，但離其中心（90）有 40 度 —— 超出 30 度的遲滯帶，
-        // 因此不切換。這是防止邊界抖動的那道閘。
+    fun `a new quadrant is adopted only after clearing its boundary by the margin`() {
+        // 象限邊界在 45 度，必須再越過 30 度（亦即到達 75 度）才採用 ROTATION_270。
         assertEquals(Surface.ROTATION_0, quantizeOrientation(50, Surface.ROTATION_0))
+        assertEquals(Surface.ROTATION_0, quantizeOrientation(74, Surface.ROTATION_0))
+        assertEquals(Surface.ROTATION_270, quantizeOrientation(76, Surface.ROTATION_0))
+
+        // 另一側的邊界在 315 度，同樣要越過 30 度（到 285 度）。
         assertEquals(Surface.ROTATION_0, quantizeOrientation(310, Surface.ROTATION_0))
+        assertEquals(Surface.ROTATION_90, quantizeOrientation(284, Surface.ROTATION_0))
     }
 
     @Test
