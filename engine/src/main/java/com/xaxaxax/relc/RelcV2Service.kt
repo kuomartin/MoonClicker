@@ -8,6 +8,8 @@ import android.app.ActivityOptionsHidden
 import android.app.ActivityTaskManager
 import android.app.AppOpsManager
 import android.app.AppOpsManagerHidden
+import android.app.RunningTaskInfoHidden_API_27
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
@@ -57,6 +59,17 @@ class RelcV2Service(private val context: Context) : IRelcV2Service.Stub() {
                 // but standard loadLibrary is the first step.
                 Timber.e(ex)
             }
+        }
+
+        private fun MotionEvent.setDisplayId(displayId: Int): Boolean {
+                return if (Build.VERSION.SDK_INT>= Build.VERSION_CODES.Q) {
+                    Refine.unsafeCast<MotionEventHidden>(this).setDisplayId(displayId)
+                    true
+                }
+                else {
+                    Timber.d("Cannot associate a display id to the input event")
+                    false
+                }
         }
 
         const val DELAY_MS = 16 // 60fps
@@ -425,43 +438,106 @@ class RelcV2Service(private val context: Context) : IRelcV2Service.Stub() {
     private external fun nativeDestroyDistributor(ptr: Long)
 
     override fun launchInDisplay(packageName: String, displayId: Int): Boolean {
+        // IActivityManager's startActivity/createStackOnDisplay/moveTaskToStack only exist
+        // through API 28 (see hidden-api-contract's HIDDEN_API_CONTRACTS) — API 29 must go
+        // through ActivityTaskManager, which Workaround.startActivity already branches
+        // correctly for (10-param overload on Q, 11-param from R).
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            launchViaActivityTaskManager(packageName, displayId)
+        } else {
+            launchOrMoveViaActivityManager(packageName, displayId)
+        }
+    }
+
+    private fun launchViaActivityTaskManager(packageName: String, displayId: Int): Boolean {
         val intent = context.packageManager.getLaunchIntentForPackage(packageName) ?: return false
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         val options = ActivityOptions.makeBasic()
         Refine.unsafeCast<ActivityOptionsHidden>(options).setLaunchDisplayId(displayId)
         return try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                ActivityTaskManager.getService().startActivity(
-                    null,
-                    "com.android.shell",
-                    null,
-                    intent,
-                    null,
-                    null,
-                    null,
-                    0,
-                    0,
-                    null,
-                    options.toBundle()
-                )
-            } else {
-                ActivityManagerHidden.getService().startActivity(
-                    null,
-                    "com.android.shell",
-                    intent,
-                    null,
-                    null,
-                    null,
-                    0,
-                    0,
-                    null,
-                    options.toBundle()
-                )
-            }
+            //TODO parse the result
+            Workaround.startActivity(intent, options)
             true
         } catch (t: Throwable) {
             Timber.d(t, "Failed to launch $packageName in display#$displayId.")
             false
+        }
+    }
+
+    // ── Legacy (API 27–28) ──────────────────────────────────────────────────────────────
+    // Ported from RelcShizukuService, which this class replaces — that implementation was
+    // hard-won, so it's kept rather than redone. IActivityManager's startActivity/
+    // createStackOnDisplay/moveTaskToStack don't exist past API 28, so this path is only ever
+    // reached below Q; it also covers the "app is already running elsewhere" case that
+    // Workaround.startActivity's AM fallback does not (that fallback always relaunches fresh).
+
+    private fun launchOrMoveViaActivityManager(packageName: String, displayId: Int): Boolean = runCatching {
+        val iam = ActivityManagerHidden.getService()
+        val tasks = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) iam.getTasks(50) else iam.getTasks(50, 0)
+        val task = tasks.find { it.baseActivity?.packageName == packageName }
+        if (task != null) {
+            // App already running — move its task instead of relaunching.
+            val hiddenInfo = Refine.unsafeCast<RunningTaskInfoHidden_API_27>(task)
+            Timber.d("moveToDisplay (API <= 28): taskId=${hiddenInfo.id} pkg=$packageName to displayId=$displayId")
+            // To move only one task, we create a new stack on the target display and move the task to it.
+            val newStackId = iam.createStackOnDisplay(displayId)
+            Timber.d("Created stack $newStackId on display $displayId")
+            iam.moveTaskToStack(hiddenInfo.id, newStackId, true)
+        } else {
+            val intent = context.packageManager.getLaunchIntentForPackage(packageName)
+                ?: throw IllegalArgumentException("launchInDisplay: no launcher intent for $packageName")
+                    .also { Timber.w(it) }
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+            // setLaunchDisplayId is @hide — access via Refine + LSPass
+            val options = ActivityOptions.makeBasic()
+            Refine.unsafeCast<ActivityOptionsHidden>(options).setLaunchDisplayId(displayId)
+
+            val result = iam.startActivity(
+                null, // IApplicationThread
+                "com.android.shell",
+                intent,
+                null, // resolvedType
+                null, // resultTo
+                null, // resultWho
+                0,    // requestCode
+                0,    // flags
+                null, // ProfilerInfo
+                options.toBundle()
+            )
+            Timber.d("IActivityManager.startActivity result = $result")
+            checkStartActivityResult(result, intent)
+        }
+    }.onFailure {
+        Timber.e(it, "Failed to launch/move $packageName in display#$displayId.")
+    }.isSuccess
+
+    private fun checkStartActivityResult(result: Int, intent: Intent) {
+        if (result >= 1) return  // ActivityManager.START_SUCCESS and other non-error codes
+        when (result) {
+            -1, -2 -> throw ActivityNotFoundException(
+                "No Activity found to handle $intent"
+            )
+
+            -4 -> throw SecurityException(
+                "Not allowed to start activity $intent"
+            )
+
+            -5 -> throw IllegalArgumentException(
+                "PendingIntent is not an activity"
+            )
+
+            -6 -> throw RuntimeException(
+                "Activity could not be started for $intent"
+            )
+
+            -7 -> throw SecurityException(
+                "Starting under voice control not allowed for: $intent"
+            )
+
+            else -> if (result < 0) throw RuntimeException(
+                "Unknown error code $result when starting $intent"
+            )
         }
     }
 
@@ -474,7 +550,8 @@ class RelcV2Service(private val context: Context) : IRelcV2Service.Stub() {
 
     override fun injectMotionEvent(event: MotionEvent, displayId: Int): Boolean {
         return try {
-            Refine.unsafeCast<MotionEventHidden>(event).setDisplayId(displayId)
+            if (displayId!=0 && !event.setDisplayId(displayId))
+                return false
             inputManager.injectInputEvent(event, 0)
         } catch (t: Throwable) {
             Timber.d(t, "Failed to inject $event on display#$displayId.")
