@@ -505,15 +505,18 @@ class RelcV2Service(private val context: Context) : IRelcV2Service.Stub() {
                 }
                 return true
             } catch (t: Throwable) {
-                // 版本簽章不符、權限不足、displayId 不存在等——真正的失敗，值得回報。
+                // 版本簽章不符、權限不足、displayId 不存在等——真正的失敗。**不退回 shell**：
+                // 那會把可回報的錯誤變成靜默成功，摧毀 #16 Q3 兩級失敗處理的前提。
                 Timber.e(t, "freezeDisplayRotation(%d, %d) failed", displayId, quarterTurns)
+                return false
             }
         }
         return setDisplayRotationViaShell(displayId, quarterTurns)
     }
 
     /**
-     * API 27–28 的退路，以及 Java 路徑失敗時的最後手段。服務以 shell UID 執行，可直接呼叫 `cmd`。
+     * API 27–28 專用的退路——該版本區間沒有 `freezeDisplayRotation`。
+     * 服務以 shell UID 執行，可直接呼叫 `cmd`。
      */
     private fun setDisplayRotationViaShell(displayId: Int, quarterTurns: Int): Boolean = try {
         val process = ProcessBuilder(

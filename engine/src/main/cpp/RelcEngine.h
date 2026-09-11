@@ -56,12 +56,15 @@ public:
     void pushEngineEvent(int type, const std::string &payload);
 
     /**
-     * 虛擬顯示當前的 rotation（Surface.ROTATION_*，0..3），由 app 進程的 DisplayListener 推入。
+     * 記下虛擬顯示當前的 rotation（Surface.ROTATION_*，0..3），由 app 進程的 DisplayListener 推入。
+     *
+     * **這不會旋轉任何顯示**——與 IRelcV2Service.setDisplayRotation 名字相近但語意相反，
+     * 後者才是真的去旋轉。這裡只是記錄供座標轉換使用。
      *
      * 影格在 **surface 空間**（虛擬顯示建立時的尺寸，內容被旋轉「進」其中），而
      * injectMotionEvent 使用的是**邏輯空間**；兩者差這個旋轉。見 issue #19。
      */
-    void setDisplayRotation(int rotation);
+    void onDisplayRotationChanged(int rotation);
 
     // Helpers for Lua callbacks
     bool multiTouchSwipe(int pointerId, const std::vector<int> &points, long duration, bool keep);

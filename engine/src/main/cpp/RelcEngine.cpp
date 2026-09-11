@@ -456,7 +456,7 @@ bool RelcEngine::destroyVirtualDisplay() {
     return static_cast<bool>(ok);
 }
 
-void RelcEngine::setDisplayRotation(int rotation) {
+void RelcEngine::onDisplayRotationChanged(int rotation) {
     displayRotation.store(rotation & 3);
 }
 

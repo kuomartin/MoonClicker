@@ -75,7 +75,9 @@ class FullscreenDisplayViewModel @Inject constructor(
      * WindowManager 會忽略我們（見地圖前提 3a），因此不對使用者提示。
      */
     fun setDisplayRotation(displayId: Int, rotation: Int) {
-        viewModelScope.launch {
+        // 不能用 viewModelScope：離開全螢幕時的還原是在拆除期間發出的，而那時 scope 已被
+        // 取消，launch 根本不會執行 —— 還原就永遠送不出去，正是 #17 Q5 要防的那個外洩。
+        rotationScope.launch {
             serviceFlow.runWhenAlive { service ->
                 if (!service.setDisplayRotation(displayId, rotation)) {
                     Timber.w("setDisplayRotation($displayId, $rotation) reported failure")
@@ -283,3 +285,12 @@ class FullscreenDisplayViewModel @Inject constructor(
         _inputController.value = null
     }
 }
+
+/**
+ * 專供旋轉寫入使用的耐久 scope。這些是冪等的 fire-and-forget 呼叫，且其中一個必須
+ * 在 ViewModel 拆除之後仍然送得出去（見 [FullscreenDisplayViewModel.setDisplayRotation]）。
+ */
+private val rotationScope =
+    kotlinx.coroutines.CoroutineScope(
+        kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO
+    )
