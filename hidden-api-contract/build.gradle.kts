@@ -68,6 +68,8 @@ dependencies {
     // get) while keeping the stubs out of the APK, so the platform is the only thing loaded.
     androidTestCompileOnly(project(":hidden-api"))
     androidTestImplementation(libs.androidx.junit)
+    // Supplies AndroidJUnitRunner itself — androidx.test.ext:junit does not pull it in.
+    androidTestImplementation(libs.androidx.test.runner)
     // Non-SDK interface restrictions would otherwise hide the very members under test.
     androidTestImplementation(libs.hiddenapibypass)
 }

@@ -13,7 +13,7 @@ import java.lang.reflect.Method
  * `android.*` namespace and ART's bootclasspath wins over anything in the test APK, so a test
  * that referenced them would silently measure the platform against itself.
  */
-public object PlatformReflection {
+internal object PlatformReflection {
 
     private val loader: ClassLoader = PlatformReflection::class.java.classLoader!!
 

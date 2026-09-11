@@ -4,6 +4,7 @@ import android.os.Build
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Assume.assumeTrue
 import org.junit.BeforeClass
 import org.junit.Test
@@ -34,12 +35,22 @@ class VirtualDisplayFlagContractTest(private val flag: VirtualDisplayFlagTable.F
         val field = PlatformReflection.findField(owner!!, flag.name)
 
         if (field == null) {
-            // Below the level we claim it from, absence is expected: skip rather than fail, so
-            // the matrix's older devices stay useful for the flags they do have.
+            // At or above the level we claim the flag from, absence is a failure: the stub's
+            // belief about when it was introduced is wrong. This must assert, not assume —
+            // an assumption failure is reported as *skipped* and would leave the build green.
+            if (sdk >= flag.sinceApi) {
+                fail(
+                    "${flag.name} is missing on API $sdk but we claim it from API " +
+                        "${flag.sinceApi} — the stub's assumption about when it was introduced " +
+                        "is wrong.",
+                )
+            }
+            // Below that level, absence is expected: skip, so the matrix's older devices stay
+            // useful for the flags they do have.
             assumeTrue(
-                "${flag.name} is missing on API $sdk but we claim it from API ${flag.sinceApi} — " +
-                    "the stub's assumption about when it was introduced is wrong.",
-                sdk < flag.sinceApi,
+                "${flag.name} does not exist until API ${flag.sinceApi}, so API $sdk says " +
+                    "nothing about its value.",
+                false,
             )
             return
         }

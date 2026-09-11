@@ -26,7 +26,7 @@ import org.junit.runners.Parameterized
  * lookup, which answers "does the member exist" without needing the permission to call it.
  */
 @RunWith(Parameterized::class)
-class HiddenApiMemberContractTest(private val contract: MemberContract) {
+internal class HiddenApiMemberContractTest(private val contract: MemberContract) {
 
     @Test
     fun platformMatchesStub() {
