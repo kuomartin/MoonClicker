@@ -17,6 +17,12 @@ plugins {
  *
  * What *is* tested is the platform, against the assumptions `:hidden-api` encodes.
  */
+
+val sdkPath = file("${System.getProperty("user.home")}/Android/Sdk")
+if (sdkPath.exists()) {
+    // 設定給目前專案讀取
+    project.extra["android.sdk.path"] = sdkPath.absolutePath
+}
 android {
     namespace = "com.xaxaxax.relc.hiddenapi.contract"
     compileSdk {
@@ -45,18 +51,59 @@ android {
     testOptions {
         managedDevices {
             localDevices {
-                create("api27") { device = "Pixel 2"; sdkVersion = 27; systemImageSource = "aosp" }
-                create("api28") { device = "Pixel 2"; sdkVersion = 28; systemImageSource = "aosp" }
-                create("api29") { device = "Pixel 3"; sdkVersion = 29; systemImageSource = "aosp" }
-                create("api30") { device = "Pixel 3"; sdkVersion = 30; systemImageSource = "aosp-atd" }
-                create("api31") { device = "Pixel 6"; sdkVersion = 31; systemImageSource = "aosp-atd" }
-                create("api33") { device = "Pixel 6"; sdkVersion = 33; systemImageSource = "aosp-atd" }
-                create("api34") { device = "Pixel 6"; sdkVersion = 34; systemImageSource = "aosp-atd" }
-                create("api35") { device = "Pixel 6"; sdkVersion = 35; systemImageSource = "aosp-atd" }
-                create("api36") { device = "Pixel 6"; sdkVersion = 36; systemImageSource = "aosp-atd" }
+                create("api27") {
+                    device = "Pixel 2"
+                    apiLevel = 27
+                    systemImageSource = "aosp"
+                }
+                create("api28") {
+                    device = "Pixel 2"
+                    apiLevel = 28
+                    systemImageSource = "aosp"
+                }
+                create("api29") {
+                    device = "Pixel 3"
+                    apiLevel = 29
+                    systemImageSource = "aosp"
+                }
+                create("api30") {
+                    device = "Pixel 3"
+                    apiLevel = 30
+                    systemImageSource = "aosp-atd"
+                }
+                create("api31") {
+                    device = "Pixel 6"
+                    apiLevel = 31
+                    systemImageSource = "aosp-atd"
+                }
+                create("api33") {
+                    device = "Pixel 6"
+                    apiLevel = 33
+                    systemImageSource = "aosp-atd"
+                }
+                create("api34") {
+                    device = "Pixel 6"
+                    apiLevel = 34
+                    systemImageSource = "aosp-atd"
+                }
+                create("api35") {
+                    device = "Pixel 6"
+                    apiLevel = 35
+                    systemImageSource = "aosp-atd"
+                }
+                create("api36") {
+                    device = "Pixel 6"
+                    apiLevel = 36
+                    systemImageSource = "aosp-atd"
+                }
+                all {
+                    testedAbi = "x86_64"
+                }
             }
             groups {
-                create("apiMatrix") { targetDevices.addAll(localDevices) }
+                create("apiMatrix") {
+                    targetDevices.addAll(localDevices)
+                }
             }
         }
     }

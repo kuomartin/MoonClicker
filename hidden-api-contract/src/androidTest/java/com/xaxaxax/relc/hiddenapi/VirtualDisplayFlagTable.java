@@ -78,8 +78,12 @@ public final class VirtualDisplayFlagTable {
                 DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_TRUSTED, Build.VERSION_CODES.R));
         flags.add(new Flag("VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP",
                 DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP, Build.VERSION_CODES.S));
+        // Verified missing on a real API 31 (S) device. API 32 (S_V2) isn't in the device
+        // matrix, so whether it actually arrived at 32 or 33 is unconfirmed — Tiramisu is the
+        // earliest level we have a real, matching device run for.
         flags.add(new Flag("VIRTUAL_DISPLAY_FLAG_ALWAYS_UNLOCKED",
-                DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_ALWAYS_UNLOCKED, Build.VERSION_CODES.S));
+                DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_ALWAYS_UNLOCKED,
+                Build.VERSION_CODES.TIRAMISU));
         flags.add(new Flag("VIRTUAL_DISPLAY_FLAG_TOUCH_FEEDBACK_DISABLED",
                 DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_TOUCH_FEEDBACK_DISABLED,
                 Build.VERSION_CODES.TIRAMISU));

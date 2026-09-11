@@ -17,8 +17,8 @@ class RelcApplication : Application() {
     lateinit var scriptStatusNotifier: ScriptStatusNotifier
 
     override fun onCreate() {
-        super.onCreate()
         instance = this
+        super.onCreate()
         if (BuildConfig.DEBUG) Timber.plant(Timber.DebugTree())
         // Mirrors running scripts into the status notification for the whole process
         // lifetime — this is the only surface that shows a script is running while the
