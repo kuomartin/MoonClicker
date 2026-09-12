@@ -90,6 +90,22 @@ class ShizukuManager(private val context: Context) {
     val service: IRelcV2Service?
         get() = _serviceFlow.value
 
+    /** 給狀態列 UI 用的合併狀態，Displays/Scripts 兩個畫面共用同一份判斷邏輯。 */
+    val statusFlow: StateFlow<ShizukuStatusUiState> = combine(
+        isAvailableFlow, hasPermissionFlow, serviceFlow
+    ) { available, permission, service ->
+        ShizukuStatusUiState(available, permission, service != null)
+    }.stateIn(
+        scope = CoroutineScope(Dispatchers.Default + SupervisorJob()),
+        started = SharingStarted.Eagerly,
+        initialValue = ShizukuStatusUiState()
+    )
+
+    /** 狀態列按鈕的統一入口：未授權先要授權，已授權但沒連線就去連線。 */
+    fun requestPermissionOrConnect() {
+        if (!hasPermission) requestPermission() else bindUserService()
+    }
+
     // 單例 ServiceConnection
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName, binder: IBinder) {
@@ -177,4 +193,20 @@ class ShizukuManager(private val context: Context) {
                 )
         return intent.apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
     }
+}
+
+enum class ShizukuConnectionStatus { NOT_AVAILABLE, NEED_PERMISSION, DISCONNECTED, CONNECTED }
+
+data class ShizukuStatusUiState(
+    val isAvailable: Boolean = false,
+    val hasPermission: Boolean = false,
+    val isConnected: Boolean = false,
+) {
+    val status: ShizukuConnectionStatus
+        get() = when {
+            !isAvailable -> ShizukuConnectionStatus.NOT_AVAILABLE
+            !hasPermission -> ShizukuConnectionStatus.NEED_PERMISSION
+            !isConnected -> ShizukuConnectionStatus.DISCONNECTED
+            else -> ShizukuConnectionStatus.CONNECTED
+        }
 }
