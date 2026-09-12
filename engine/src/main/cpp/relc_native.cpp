@@ -63,8 +63,9 @@ Java_com_xaxaxax_relc_lua_LuaNative_nativeStart(
         jobject service,
         jint displayId,
         jboolean withVision,
-        jint displayWidth,
-        jint displayHeight,
+        jint surfaceWidth,
+        jint surfaceHeight,
+        jint initialRotation,
         jstring scriptDir) {
     std::lock_guard<std::mutex> lock(gRuntimeMutex);
     if (gRuntime != nullptr) {
@@ -78,7 +79,8 @@ Java_com_xaxaxax_relc_lua_LuaNative_nativeStart(
     if (dirCopy.empty() || dirCopy.back() != '/') dirCopy += '/';
 
     auto *runtime = new ScriptRuntime(env, host, service);
-    if (!runtime->start(displayId, withVision, displayWidth, displayHeight, dirCopy)) {
+    if (!runtime->start(displayId, withVision, surfaceWidth, surfaceHeight, initialRotation,
+                        dirCopy)) {
         delete runtime;
         return JNI_FALSE;
     }

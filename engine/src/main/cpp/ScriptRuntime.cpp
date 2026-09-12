@@ -53,8 +53,8 @@ ScriptRuntime::~ScriptRuntime() {
     if (attached) javaVM->DetachCurrentThread();
 }
 
-bool ScriptRuntime::start(int displayId, bool withVision, int displayWidth, int displayHeight,
-                          const std::string &scriptDir) {
+bool ScriptRuntime::start(int displayId, bool withVision, int surfaceWidth, int surfaceHeight,
+                          int initialRotation, const std::string &scriptDir) {
     if (running.load()) {
         LOGE("start() called while a script is already running");
         return false;
@@ -64,10 +64,12 @@ bool ScriptRuntime::start(int displayId, bool withVision, int displayWidth, int 
     this->scriptDir = scriptDir;
     this->visionEnabled = withVision;
 
-    visionMatcher = std::make_unique<VisionMatcher>(displayWidth, displayHeight, scriptDir);
+    visionMatcher = std::make_unique<VisionMatcher>(surfaceWidth, surfaceHeight, scriptDir);
+    // 一定要在腳本執行緒起跑前設好，否則第一行 screen.width 讀到的是未旋轉的值。
+    visionMatcher->setRotation(initialRotation);
 
     if (withVision) {
-        imageReader = std::make_unique<NativeImageReader>(displayWidth, displayHeight);
+        imageReader = std::make_unique<NativeImageReader>(surfaceWidth, surfaceHeight);
         if (!imageReader->init()) {
             LOGE("Failed to init NativeImageReader");
             imageReader.reset();

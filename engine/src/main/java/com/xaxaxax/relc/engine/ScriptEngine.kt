@@ -4,6 +4,7 @@ import android.content.Context
 import com.xaxaxax.relc.IRelcV2Service
 import com.xaxaxax.relc.engine.state.EngineStateRepository
 import com.xaxaxax.relc.lua.LuaNative
+import com.xaxaxax.relc.script.DisplayGeometry
 import com.xaxaxax.relc.script.DisplayRotationTracker
 import com.xaxaxax.relc.script.ScriptHost
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -78,6 +79,14 @@ object ScriptEngine {
             return false
         }
 
+        // getDisplaySize 回的是**邏輯**尺寸（Display.getRealSize，已套用旋轉），但 AImageReader
+        // 必須以虛擬顯示建立時的 surface 尺寸開。旋轉 90/270 時兩者長寬互換——用錯的話影格
+        // 會被擠進錯誤長寬比的緩衝區，比對與座標全歪。
+        val rotation = context.getSystemService(android.hardware.display.DisplayManager::class.java)
+            ?.getDisplay(run.displayId)?.rotation ?: 0
+        val (surfaceWidth, surfaceHeight) =
+            DisplayGeometry.surfaceSize(size[0], size[1], rotation)
+
         _sharedData.value = emptyMap()
         EngineStateRepository.reset(run.scriptId)
 
@@ -99,8 +108,11 @@ object ScriptEngine {
             service,
             run.displayId,
             run.hasVision,
-            size[0],
-            size[1],
+            surfaceWidth,
+            surfaceHeight,
+            // 初始 rotation 隨啟動一起傳進去。交給下面的 tracker 才推的話，腳本的第一行
+            // 有機會在 rotation 還沒設定時就讀到 screen.width。
+            rotation,
             run.scriptDir.absolutePath,
         )
         if (!started) {
