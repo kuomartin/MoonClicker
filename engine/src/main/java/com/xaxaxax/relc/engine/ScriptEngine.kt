@@ -4,7 +4,6 @@ import android.content.Context
 import com.xaxaxax.relc.IRelcV2Service
 import com.xaxaxax.relc.engine.state.EngineStateRepository
 import com.xaxaxax.relc.lua.LuaNative
-import com.xaxaxax.relc.script.DisplayGeometry
 import com.xaxaxax.relc.script.DisplayRotationTracker
 import com.xaxaxax.relc.script.ScriptHost
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -65,27 +64,28 @@ object ScriptEngine {
             return false
         }
 
-        val size = try {
-            service.getDisplaySize(run.displayId)
+        // AImageReader 必須以顯示器**建立時**的 surface 尺寸開，而那是服務才知道的常數——
+        // 這裡不從（邏輯尺寸, rotation）回推。回推要兩次獨立的讀取，中間畫面轉了就會算出
+        // 錯得很有自信的尺寸，而影格緩衝區一開就是整場執行，錯了不會自己好。
+        val surface = try {
+            service.getDisplaySurfaceSize(run.displayId)
         } catch (t: Throwable) {
-            Timber.e(t, "getDisplaySize(${run.displayId}) failed")
+            Timber.e(t, "getDisplaySurfaceSize(${run.displayId}) failed")
             null
         }
-        if (size == null || size.size < 2 || size[0] <= 0 || size[1] <= 0) {
+        if (surface == null || surface.size < 2 || surface[0] <= 0 || surface[1] <= 0) {
+            // [0, 0] 也包含「這個 id 不是服務建的顯示器」——例如服務重綁之後才拿出來用的
+            // 舊 id。與其用推出來的幾何硬跑，不如當場停下來講清楚。
             EngineStateRepository.onEvent(
                 com.xaxaxax.relc.engine.state.EngineEventType.ERROR,
-                "Could not read the size of display ${run.displayId}",
+                "Could not read the surface size of display ${run.displayId}",
             )
             return false
         }
+        val (surfaceWidth, surfaceHeight) = surface[0] to surface[1]
 
-        // getDisplaySize 回的是**邏輯**尺寸（Display.getRealSize，已套用旋轉），但 AImageReader
-        // 必須以虛擬顯示建立時的 surface 尺寸開。旋轉 90/270 時兩者長寬互換——用錯的話影格
-        // 會被擠進錯誤長寬比的緩衝區，比對與座標全歪。
         val rotation = context.getSystemService(android.hardware.display.DisplayManager::class.java)
             ?.getDisplay(run.displayId)?.rotation ?: 0
-        val (surfaceWidth, surfaceHeight) =
-            DisplayGeometry.surfaceSize(size[0], size[1], rotation)
 
         _sharedData.value = emptyMap()
         EngineStateRepository.reset(run.scriptId)
@@ -110,8 +110,9 @@ object ScriptEngine {
             run.hasVision,
             surfaceWidth,
             surfaceHeight,
-            // 初始 rotation 隨啟動一起傳進去。交給下面的 tracker 才推的話，腳本的第一行
-            // 有機會在 rotation 還沒設定時就讀到 screen.width。
+            // 初始 rotation 隨啟動一起傳進去，這是兩段交接的第一段（見 ADR-0012）。
+            // ScriptRuntime::start 的最後一件事就是起 Lua 執行緒，所以 nativeStart 一回來腳本
+            // 可能已經在跑了——這裡是腳本第一行讀 screen.width 之前的最後一個時機。
             rotation,
             run.scriptDir.absolutePath,
         )

@@ -24,6 +24,7 @@ import android.os.Build
 import android.os.Process
 import android.os.SystemClock
 import android.os.UserHandle
+import android.view.Display
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -31,6 +32,7 @@ import android.view.MotionEventHidden
 import android.view.Surface
 import androidx.annotation.Keep
 import androidx.core.content.getSystemService
+import com.xaxaxax.relc.script.DisplayGeometry
 import dev.rikka.tools.refine.Refine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -131,7 +133,23 @@ class RelcV2Service(private val context: Context) : IRelcV2Service.Stub() {
         Refine.unsafeCast(im)
     }
 
-    private val vdStore = mutableMapOf<Int, VirtualDisplay>()
+    /**
+     * 一個虛擬顯示，連同它**建立時**的尺寸。
+     *
+     * 尺寸留在這裡而不是事後回推：`Display.getRealSize` 回的是套用旋轉後的邏輯尺寸，
+     * 要換回 surface 尺寸就得再讀一次 rotation——兩次獨立的讀取之間畫面轉了，算出來的
+     * 答案會錯得很有自信（見 [getDisplaySurfaceSize]）。建立尺寸是常數，記下來就不必猜。
+     *
+     * 名字不放這裡：`Display.getName()` 原樣回傳建立時給的名字（實機驗證過，被加前綴的是
+     * `uniqueId` 不是 name），平台已經是它的擁有者了。
+     */
+    private class ManagedDisplay(
+        val display: VirtualDisplay,
+        val surfaceWidth: Int,
+        val surfaceHeight: Int,
+    )
+
+    private val vdStore = mutableMapOf<Int, ManagedDisplay>()
     private val distributorStore = mutableMapOf<Int, Long>() // displayId -> nativePtr
     private val fakeDisplayContext = object : ContextWrapper(context) {
         override fun getPackageName(): String = "com.android.shell"
@@ -412,7 +430,7 @@ class RelcV2Service(private val context: Context) : IRelcV2Service.Stub() {
             nativeDestroyDistributor(nativePtr)
             return -1
         }
-        vdStore[displayId] = vd
+        vdStore[displayId] = ManagedDisplay(vd, surfaceWidth = width, surfaceHeight = height)
         distributorStore[displayId] = nativePtr
         Timber.d("VirtualDisplay created: id=$displayId name=$name ${width}x${height}@$densityDpi (Distributor Active)")
         return displayId
@@ -435,7 +453,7 @@ class RelcV2Service(private val context: Context) : IRelcV2Service.Stub() {
     }
 
     override fun destroyVirtualDisplay(displayId: Int): Boolean {
-        vdStore.remove(displayId)?.release()
+        vdStore.remove(displayId)?.display?.release()
         distributorStore.remove(displayId)?.let { ptr ->
             nativeDestroyDistributor(ptr)
         }
@@ -629,10 +647,36 @@ class RelcV2Service(private val context: Context) : IRelcV2Service.Stub() {
         return intArrayOf(outSize.x, outSize.y)
     }
 
+    /**
+     * Surface 空間的尺寸（見 CONTEXT.md「Surface 空間 / 邏輯空間」）。
+     *
+     * 三條路，差別在我們對這個顯示器知道多少：
+     * - 自己建立的虛擬顯示：建立尺寸是常數，直接回存下來的那一份，完全不經過推導。
+     * - 實體螢幕：沒有「建立尺寸」可言，只能推。但邏輯尺寸與 rotation 都來自這個進程裡
+     *   的同一個 DisplayManager，沒有跨進程的時間差。
+     * - 其他 id：回 [0, 0]。不是我們建的顯示器，我們沒有立場猜它的幾何——讓呼叫端當場
+     *   失敗，比帶著可能錯的尺寸跑完整個腳本好。
+     */
+    override fun getDisplaySurfaceSize(displayId: Int): IntArray {
+        vdStore[displayId]?.let { return intArrayOf(it.surfaceWidth, it.surfaceHeight) }
+        if (displayId != Display.DEFAULT_DISPLAY) {
+            Timber.w("getDisplaySurfaceSize($displayId): not a display this service created")
+            return intArrayOf(0, 0)
+        }
+
+        val dm = context.getSystemService(DisplayManager::class.java)
+        val display = dm.getDisplay(displayId) ?: return intArrayOf(0, 0)
+        val outSize = android.graphics.Point()
+        @Suppress("DEPRECATION") // TODO: check if this method will still work in future Android versions.
+        display.getRealSize(outSize)
+        val (width, height) = DisplayGeometry.surfaceSize(outSize.x, outSize.y, display.rotation)
+        return intArrayOf(width, height)
+    }
+
     override fun debug(input: String?): String = "RelcV2Service Active"
 
     override fun destroy() {
-        vdStore.forEach { (_, display) -> display.release() }
+        vdStore.forEach { (_, managed) -> managed.display.release() }
         exitProcess(0)
     }
 

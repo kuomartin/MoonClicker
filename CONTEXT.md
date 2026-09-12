@@ -27,7 +27,7 @@ Injects touch/swipe/multi-touch events into a specific virtual display via `IRel
 _Avoid_: Touch injector, event sender.
 
 **Surface 空間 / 邏輯空間**:
-同一個虛擬顯示的兩個座標系。**Surface 空間**是它建立時的尺寸，影格與 `AImageReader` 都在這裡，旋轉時尺寸不變、內容被轉「進」其中。**邏輯空間**是 WindowManager 眼中的顯示，旋轉 90/270 時長寬互換，`injectMotionEvent` 與 `match.*` 的對外座標都以它為準。兩者在未旋轉時恆等，旋轉時差一個直角——混用即為錯位的來源。
+同一個虛擬顯示的兩個座標系。**Surface 空間**是它建立時的尺寸，影格與 `AImageReader` 都在這裡，旋轉時尺寸不變、內容被轉「進」其中。**邏輯空間**是 WindowManager 眼中的顯示，旋轉 90/270 時長寬互換，`injectMotionEvent` 與 `match.*` 的對外座標都以它為準。兩者在未旋轉時恆等，旋轉時差一個直角——混用即為錯位的來源。surface 尺寸的權威是 [[RelcV2Service]]：它在建立顯示器時就知道，並透過 `getDisplaySurfaceSize` 回答，呼叫端不從（邏輯尺寸, rotation）回推——回推需要兩次獨立的讀取，中間旋轉就會算出錯得很有自信的答案（[ADR-0012](docs/adr/0012-surface-size-is-owned-not-derived.md)）。
 _Avoid_: 影格座標／畫面座標（沒有指明是哪一個）。
 
 **方向鏈**:

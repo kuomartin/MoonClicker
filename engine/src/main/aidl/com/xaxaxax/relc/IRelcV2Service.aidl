@@ -38,7 +38,23 @@ interface IRelcV2Service {
     boolean injectMotionEvent(in MotionEvent event, int displayId) = 298;
     boolean injectKeyEvent(in KeyEvent event, int displayId) = 299;
 
+    /** Returns [width, height] in **logical** space — Display.getRealSize(), rotation applied. */
     int[] getDisplaySize(int displayId) = 301;
+
+    /**
+     * Returns [width, height] in **surface** space — the size the display's buffers are
+     * actually allocated at, which does NOT swap when the display rotates.
+     *
+     * For a virtual display this is the size it was created with, remembered here rather
+     * than reconstructed from (logical size, rotation): those are two separate reads and a
+     * rotation landing between them yields a confidently wrong answer. For display 0 there
+     * is no creation size, so the service derives it from its own DisplayManager — one
+     * process, no cross-process tear. Any other display id returns [0, 0]: we have no
+     * warrant to guess at geometry for a display we did not create.
+     *
+     * Callers wanting the rotated, on-screen size want getDisplaySize instead.
+     */
+    int[] getDisplaySurfaceSize(int displayId) = 302;
 
     String debug(String input) = 1001;
     void destroy() = 16777114;
