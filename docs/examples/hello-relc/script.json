@@ -1,0 +1,5 @@
+{
+  "name": "Hello ReLC",
+  "description": "端到端冒煙測試：螢幕資訊、vision 逾時、點擊與滑動、data.set",
+  "display": { "width": 1080, "height": 2400, "densityDpi": 440 }
+}
