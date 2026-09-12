@@ -3,14 +3,9 @@ package com.xaxaxax.relc.ui.displays
 import android.content.res.Resources
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.xaxaxax.relc.IRelcV2Service
-import com.xaxaxax.relc.RelcV2Service
 import com.xaxaxax.relc.core.DisplayConfig
-import com.xaxaxax.relc.shizuku.UserService
+import com.xaxaxax.relc.shizuku.ShizukuManager
 import com.xaxaxax.relc.shizuku.createVirtualDisplay
-import com.xaxaxax.relc.shizuku.ready
-import com.xaxaxax.relc.shizuku.refreshShizukuPermission
-import com.xaxaxax.relc.shizuku.runWhenAlive
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -36,17 +31,11 @@ private const val REFRESH_DELAY = 500
 @HiltViewModel
 class DisplaysViewModel @Inject constructor(
 //    @ApplicationContext private val context: Context
+    private val shizukuManager: ShizukuManager
 ) : ViewModel() {
     private val displayIds = MutableStateFlow<List<Int>>(emptyList())
     private val isLoading = MutableStateFlow(false)
     private val isRefreshing = MutableStateFlow(false)
-    private val serviceFlow by lazy {
-        UserService.create(
-            viewModelScope,
-            RelcV2Service::class,
-            IRelcV2Service.Stub::asInterface
-        )
-    }
 
     val defaultConfig by lazy {
         val width = Resources.getSystem().displayMetrics.widthPixels
@@ -62,7 +51,7 @@ class DisplaysViewModel @Inject constructor(
 
     val uiState: StateFlow<DisplaysUiState> = combine(
         displayIds,
-        ready,
+        shizukuManager.isReadyFlow,
         isLoading,
         isRefreshing
     ) { ids, ready, loading, refreshing ->
@@ -92,10 +81,10 @@ class DisplaysViewModel @Inject constructor(
                 if (fromPullToRefresh) {
                     isRefreshing.value = true
                     if (!uiState.value.isShizukuReady) {
-                        refreshShizukuPermission()
+                        shizukuManager.requestPermission()
                     }
                 }
-                serviceFlow.runWhenAlive { service ->
+                shizukuManager.withService { service ->
                     val ids = service.virtualDisplays.toList()
                     displayIds.value = ids
                 }
@@ -113,7 +102,7 @@ class DisplaysViewModel @Inject constructor(
 
     fun createDisplay(config: DisplayConfig = defaultConfig) {
         viewModelScope.launch {
-            serviceFlow.runWhenAlive { service ->
+            shizukuManager.withService { service ->
                 service.createVirtualDisplay(config)
             }
             refreshDisplays()

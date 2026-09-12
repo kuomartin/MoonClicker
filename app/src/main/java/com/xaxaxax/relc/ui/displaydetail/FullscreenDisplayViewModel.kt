@@ -5,11 +5,8 @@ import android.view.Surface
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.xaxaxax.relc.IRelcV2Service
-import com.xaxaxax.relc.RelcV2Service
 import com.xaxaxax.relc.input.InputController
-import com.xaxaxax.relc.shizuku.UserService
-import com.xaxaxax.relc.shizuku.runWhenAlive
+import com.xaxaxax.relc.shizuku.ShizukuManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,7 +19,8 @@ import javax.inject.Inject
 @HiltViewModel
 class FullscreenDisplayViewModel @Inject constructor(
     @ApplicationContext context: Context,
-    savedStateHandle: SavedStateHandle
+    savedStateHandle: SavedStateHandle,
+    private val shizukuManager: ShizukuManager
 ) : ViewModel() {
     enum class ExecutionState {
         IDLE, RUNNING, CROPPING
@@ -44,15 +42,13 @@ class FullscreenDisplayViewModel @Inject constructor(
     private val _capturedBitmap = MutableStateFlow<android.graphics.Bitmap?>(null)
     val capturedBitmap: StateFlow<android.graphics.Bitmap?> = _capturedBitmap.asStateFlow()
 
-    private val serviceFlow = UserService.create(
-        viewModelScope,
-        RelcV2Service::class,
-        IRelcV2Service.Stub::asInterface
-    )
+    private val service = shizukuManager.serviceFlow
+
 
     init {
         viewModelScope.launch {
-            serviceFlow.runWhenAlive { service ->
+            shizukuManager.bindUserService()
+            shizukuManager.withService { service ->
                 // 初始化 InputController，這會讓 UI 顯示 VirtualDisplaySurfaceView
                 _inputController.value = InputController(service)
             }.onFailure {
@@ -78,7 +74,7 @@ class FullscreenDisplayViewModel @Inject constructor(
         // 不能用 viewModelScope：離開全螢幕時的還原是在拆除期間發出的，而那時 scope 已被
         // 取消，launch 根本不會執行 —— 還原就永遠送不出去，正是 #17 Q5 要防的那個外洩。
         rotationScope.launch {
-            serviceFlow.runWhenAlive { service ->
+            shizukuManager.withService { service ->
                 if (!service.setDisplayRotation(displayId, rotation)) {
                     Timber.w("setDisplayRotation($displayId, $rotation) reported failure")
                 }
@@ -88,7 +84,7 @@ class FullscreenDisplayViewModel @Inject constructor(
 
     fun startExecution(displayId: Int, width: Int, height: Int, scriptDir: String) {
         viewModelScope.launch {
-            serviceFlow.runWhenAlive { service ->
+            shizukuManager.withService { service ->
                 com.xaxaxax.relc.engine.LuaEngineControl.stop()
                 val mainScript = java.io.File(scriptDir, "main.lua").absolutePath
                 val success = com.xaxaxax.relc.engine.LuaEngineControl.startEngineWithService(
@@ -115,7 +111,7 @@ class FullscreenDisplayViewModel @Inject constructor(
         templateName: String
     ) {
         viewModelScope.launch {
-            serviceFlow.runWhenAlive { service ->
+            shizukuManager.withService { service ->
                 com.xaxaxax.relc.engine.LuaEngineControl.stop()
                 val testScript = java.io.File(scriptDir, "_test.lua")
                 val templatePath =
@@ -217,7 +213,7 @@ class FullscreenDisplayViewModel @Inject constructor(
 
     fun openAppList() {
         viewModelScope.launch {
-            serviceFlow.runWhenAlive { service ->
+            shizukuManager.withService { service ->
                 val rawApps = service.launcherApps
                 val appEntries = rawApps.map {
                     val parts = it.split("|")
@@ -236,7 +232,7 @@ class FullscreenDisplayViewModel @Inject constructor(
 
     fun launchApp(packageName: String, displayId: Int) {
         viewModelScope.launch {
-            serviceFlow.runWhenAlive { service ->
+            shizukuManager.withService { service ->
                 service.launchInDisplay(packageName, displayId)
             }
             closeAppList()
@@ -245,7 +241,7 @@ class FullscreenDisplayViewModel @Inject constructor(
 
     fun destroyDisplay(displayId: Int) {
         viewModelScope.launch {
-            serviceFlow.runWhenAlive { service ->
+            shizukuManager.withService { service ->
                 service.destroyVirtualDisplay(displayId)
             }.onFailure {
                 Timber.e(it)
@@ -257,7 +253,7 @@ class FullscreenDisplayViewModel @Inject constructor(
 
     fun addSurface(displayId: Int, surface: Surface) {
         viewModelScope.launch {
-            serviceFlow.runWhenAlive { service ->
+            shizukuManager.withService{ service ->
                 val handle = service.addVirtualDisplaySurface(displayId, surface)
                 if (handle != -1) {
                     surfaceHandleMap[surface] = handle
@@ -270,7 +266,7 @@ class FullscreenDisplayViewModel @Inject constructor(
 
     fun removeSurface(displayId: Int, surface: Surface) {
         viewModelScope.launch {
-            serviceFlow.runWhenAlive { service ->
+            shizukuManager.withService { service ->
                 surfaceHandleMap.remove(surface)?.let { handle ->
                     service.removeVirtualDisplaySurface(displayId, handle)
                 }

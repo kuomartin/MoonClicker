@@ -1,5 +1,7 @@
 package com.xaxaxax.relc.ui.scripts
 
+import android.content.Context
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -30,20 +32,21 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.currentCompositionContext
+import androidx.compose.runtime.currentCompositionLocalContext
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.xaxaxax.relc.R
-import com.xaxaxax.relc.script.LoopMode
-import com.xaxaxax.relc.script.ScriptConfig
-import com.xaxaxax.relc.script.ScriptState
+import com.xaxaxax.relc.toastNotImplement
 import com.xaxaxax.relc.ui.theme.ReLCTheme
 
 @Composable
@@ -51,27 +54,14 @@ fun ScriptsScreen(
     onNavigateToDetail: (String) -> Unit,
     viewModel: ScriptsViewModel = hiltViewModel()
 ) {
-    val scripts by viewModel.scripts.collectAsState()
-    val scriptStates by viewModel.scriptStates.collectAsState()
 
-    ScriptsScreenContent(
-        scripts = scripts,
-        scriptStates = scriptStates,
-        onNavigateToDetail = onNavigateToDetail,
-        onPlay = { viewModel.startScript(it) },
-        onStop = { viewModel.stopScript(it.id) }
-    )
+    ScriptsScreenContent()
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ScriptsScreenContent(
-    scripts: List<ScriptConfig>,
-    scriptStates: Map<String, ScriptState>,
-    onNavigateToDetail: (String) -> Unit,
-    onPlay: (ScriptConfig) -> Unit,
-    onStop: (ScriptConfig) -> Unit
-) {
+fun ScriptsScreenContent() {
+    val context = LocalContext.current
     Scaffold(
         floatingActionButton = {
             var expanded by remember { mutableStateOf(false) }
@@ -87,14 +77,14 @@ fun ScriptsScreenContent(
                         text = { Text("新增 Lua 腳本") },
                         onClick = {
                             expanded = false
-                            onNavigateToDetail("new_lua")
+                            toastNotImplement(context)
                         }
                     )
                     DropdownMenuItem(
                         text = { Text("新增簡易腳本") },
                         onClick = {
                             expanded = false
-                            onNavigateToDetail("new_simple")
+                            toastNotImplement(context)
                         }
                     )
                 }
@@ -105,14 +95,12 @@ fun ScriptsScreenContent(
             contentPadding = padding,
             modifier = Modifier.fillMaxSize()
         ) {
-            items(scripts) { script ->
-                val state = scriptStates[script.id] ?: ScriptState.IDLE
+            item{
                 ScriptItem(
-                    script = script,
-                    onClick = { onNavigateToDetail(script.id) },
-                    onPlay = { onPlay(script) },
-                    onStop = { onStop(script) },
-                    isRunning = state == ScriptState.RUNNING
+                    onPlay = {},
+                    onStop = {},
+                    onClick = {},
+                    isRunning = false
                 )
             }
         }
@@ -121,12 +109,16 @@ fun ScriptsScreenContent(
 
 @Composable
 fun ScriptItem(
-    script: ScriptConfig,
     onClick: () -> Unit,
     onPlay: () -> Unit,
     onStop: () -> Unit,
     isRunning: Boolean
 ) {
+    // TODO
+    val name = "Placeholder"
+    val description = "description"
+    val typeName = "type"
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -138,18 +130,12 @@ fun ScriptItem(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(text = script.name, style = MaterialTheme.typography.titleMedium)
-                    if (isRunning) {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        RunningBadge()
-                    }
-                }
-                if (script.description.isNotEmpty()) {
-                    Text(text = script.description, style = MaterialTheme.typography.bodyMedium)
+                Text(text = name, style = MaterialTheme.typography.titleMedium)
+                if (description.isNotEmpty()) {
+                    Text(text = description, style = MaterialTheme.typography.bodyMedium)
                 }
                 Text(
-                    text = script.type.name,
+                    text = typeName,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -209,25 +195,6 @@ private fun RunningBadge() {
 fun ScriptsScreenPreview() {
     ReLCTheme {
         ScriptsScreenContent(
-            scripts = listOf(
-                ScriptConfig.Lua(
-                    id = "1",
-                    name = "Test Script 1",
-                    description = "This is a test script.",
-                    code = ""
-                ),
-                ScriptConfig.Simple(
-                    id = "2",
-                    name = "Test Script 2",
-                    description = "Another test script.",
-                    steps = listOf(),
-                    loopMode = LoopMode.None,
-                )
-            ),
-            scriptStates = mapOf("1" to ScriptState.RUNNING),
-            onNavigateToDetail = {},
-            onPlay = {},
-            onStop = {}
         )
     }
 }

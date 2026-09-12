@@ -6,4 +6,5 @@ data class DisplayConfig(
     val height: Int,
     val densityDpi: Int = 320,
     val flags: Int = 0,
+    val managed: Boolean = false
 )

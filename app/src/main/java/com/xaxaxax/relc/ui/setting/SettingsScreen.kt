@@ -63,7 +63,7 @@ fun SettingsScreen(
 
     SettingsScreenContent(
         uiState = uiState,
-        onOpenShizuku = { launcher.launch(viewModel.openShizukuIntent()) },
+        onOpenShizuku = { launcher.launch(viewModel.getOpenShizukuIntent()) },
         onRequestShizukuPermission = { viewModel.requestShizukuPermission() },
         onRefresh = { viewModel.refreshPermissions(true) },
     )
