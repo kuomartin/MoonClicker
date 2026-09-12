@@ -151,13 +151,13 @@ bool ScriptRuntime::interruptibleSleep(long ms) {
 }
 
 void ScriptRuntime::pushEvent(int type, const std::string &payload) {
-    JNIEnv *env = luaEnv;
+    // 刻意不用快取的 luaEnv：JNIEnv 是綁執行緒的，而 start() 失敗時的事件是從呼叫端
+    // 的執行緒推出去的。每次重新取得比較慢，但不會把別條執行緒的 env 拿來用。
+    JNIEnv *env = nullptr;
     bool attached = false;
-    if (env == nullptr) {
-        if (javaVM->GetEnv((void **) &env, JNI_VERSION_1_6) == JNI_EDETACHED) {
-            if (javaVM->AttachCurrentThread(&env, nullptr) != JNI_OK) return;
-            attached = true;
-        }
+    if (javaVM->GetEnv((void **) &env, JNI_VERSION_1_6) == JNI_EDETACHED) {
+        if (javaVM->AttachCurrentThread(&env, nullptr) != JNI_OK) return;
+        attached = true;
     }
 
     jstring jPayload = env->NewStringUTF(payload.c_str());

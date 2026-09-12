@@ -4,6 +4,8 @@
 #include <android/keycodes.h>
 
 #include <algorithm>
+#include <cstdlib>
+#include <cstring>
 #include <chrono>
 #include <sstream>
 #include <string>

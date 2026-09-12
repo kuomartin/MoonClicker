@@ -9,8 +9,47 @@
     <!-- Script status notification -->
     <string name="script_status_channel_label">腳本執行狀態</string>
     <string name="script_status_channel_description">顯示目前正在執行的腳本</string>
-    <string name="script_status_title">%1$d 個腳本執行中</string>
-    <string name="script_status_action_view">查看狀態</string>
-    <string name="script_status_action_stop_all">停止所有</string>
+    <string name="script_status_title">執行中：%1$s</string>
+    <string name="script_status_action_stop">停止</string>
+    <string name="script_target_physical">本機螢幕</string>
+    <string name="script_target_virtual">虛擬顯示 %1$d</string>
+    <string name="script_message_channel_label">腳本訊息</string>
+    <string name="script_message_channel_description">腳本透過 device.notify 發出的訊息</string>
     <string name="script_running_badge">執行中</string>
+
+    <!-- Scripts page -->
+    <string name="scripts_empty_title">還沒有任何腳本</string>
+    <string name="scripts_empty_body">一份腳本就是一個資料夾，裡面要有 main.lua。把資料夾放進下面這個路徑，或用右下角匯入 .zip：</string>
+    <string name="scripts_copy_path">複製路徑</string>
+    <string name="scripts_path_copied">已複製路徑</string>
+    <string name="scripts_import">匯入腳本 (.zip)</string>
+    <string name="scripts_refresh">重新掃描</string>
+    <string name="scripts_import_failed">匯入失敗：%1$s</string>
+    <string name="scripts_import_succeeded">已匯入 %1$s</string>
+
+    <!-- Script detail -->
+    <string name="script_detail_run">執行</string>
+    <string name="script_detail_run_on">在指定顯示器執行</string>
+    <string name="script_detail_stop">停止</string>
+    <string name="script_detail_export">匯出</string>
+    <string name="script_detail_delete">刪除</string>
+    <string name="script_detail_source">main.lua</string>
+    <string name="script_detail_templates">模板圖片</string>
+    <string name="script_detail_shared_data">腳本發佈的資料</string>
+    <string name="script_detail_no_templates">這份腳本沒有模板圖片</string>
+    <string name="script_detail_missing_source">讀不到 main.lua</string>
+    <string name="script_detail_no_editor">沒有內建編輯器：請從檔案管理員或電腦編輯這個資料夾。</string>
+
+    <!-- Target picker -->
+    <string name="target_picker_title">在哪裡執行？</string>
+    <string name="target_picker_new">＋ 建立新顯示器</string>
+    <string name="target_picker_physical">本機螢幕</string>
+    <string name="target_picker_physical_note">不支援畫面辨識（vision.*）</string>
+    <string name="target_picker_virtual">虛擬顯示 %1$d</string>
+    <string name="target_picker_virtual_note">%1$d × %2$d</string>
+
+    <!-- Settings -->
+    <string name="settings_general">一般</string>
+    <string name="settings_auto_fullscreen">在虛擬顯示執行時自動開啟全螢幕</string>
+    <string name="settings_auto_fullscreen_note">關閉時腳本仍在背景執行，只是不會跳出鏡像畫面。</string>
 </resources>

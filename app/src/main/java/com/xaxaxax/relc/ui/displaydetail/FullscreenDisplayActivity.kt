@@ -118,8 +118,6 @@ fun FullscreenDisplayScreen(
     }
     FollowDisplayRotation(activity, geometry.rotation)
 
-    var showTemplateSelector by remember { mutableStateOf(false) }
-    var availableTemplates by remember { mutableStateOf<List<String>>(emptyList()) }
 
     LaunchedEffect(uiState.executionState) {
         if (uiState.executionState == FullscreenDisplayViewModel.ExecutionState.CROPPING && capturedBitmap == null) {
@@ -364,29 +362,6 @@ fun FullscreenDisplayScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
                     ) {
-                        // Start/Stop
-                        IconButton(onClick = {
-                            if (uiState.executionState == FullscreenDisplayViewModel.ExecutionState.RUNNING) {
-                                viewModel.stopExecution()
-                            } else {
-                                // 影格尺寸必須是虛擬顯示的 surface 尺寸，不是手機的 metrics（#19）。
-                                viewModel.startExecution(
-                                    targetDisplayId,
-                                    geometry.surfaceWidth,
-                                    geometry.surfaceHeight,
-                                    scriptDir,
-                                )
-                            }
-                        }) {
-                            Icon(
-                                imageVector = if (uiState.executionState == FullscreenDisplayViewModel.ExecutionState.RUNNING)
-                                    Icons.Default.Stop else Icons.Default.PlayArrow,
-                                contentDescription = if (uiState.executionState == FullscreenDisplayViewModel.ExecutionState.RUNNING)
-                                    "Stop" else "Start",
-                                tint = Color.White
-                            )
-                        }
-
                         // Screenshot
                         IconButton(onClick = { viewModel.startCropping() }) {
                             Icon(
@@ -423,18 +398,6 @@ fun FullscreenDisplayScreen(
                                     onClick = {
                                         viewModel.setMenuExpanded(false)
                                         viewModel.openAppList()
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Test Template") },
-                                    onClick = {
-                                        viewModel.setMenuExpanded(false)
-                                        val dir = java.io.File(scriptDir)
-                                        if (dir.exists()) {
-                                            availableTemplates = dir.listFiles { _, name -> name.endsWith(".png") }
-                                                ?.map { it.name } ?: emptyList()
-                                            showTemplateSelector = true
-                                        }
                                     }
                                 )
                                 DropdownMenuItem(
@@ -492,41 +455,5 @@ fun FullscreenDisplayScreen(
             )
         }
 
-        if (showTemplateSelector) {
-            AlertDialog(
-                onDismissRequest = { showTemplateSelector = false },
-                title = { Text("Select Template to Test") },
-                text = {
-                    if (availableTemplates.isEmpty()) {
-                        Text("No templates found in script directory.")
-                    } else {
-                        LazyColumn(modifier = Modifier.heightIn(max = 400.dp)) {
-                            items(availableTemplates) { template ->
-                                TextButton(
-                                    onClick = {
-                                        viewModel.startTemplateTest(
-                                            targetDisplayId,
-                                            geometry.surfaceWidth,
-                                            geometry.surfaceHeight,
-                                            scriptDir,
-                                            template
-                                        )
-                                        showTemplateSelector = false
-                                    },
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Text(template, modifier = Modifier.fillMaxWidth())
-                                }
-                            }
-                        }
-                    }
-                },
-                confirmButton = {
-                    TextButton(onClick = { showTemplateSelector = false }) {
-                        Text("Cancel")
-                    }
-                }
-            )
-        }
     }
 }

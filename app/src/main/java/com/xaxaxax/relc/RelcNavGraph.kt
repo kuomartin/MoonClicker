@@ -21,6 +21,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import com.xaxaxax.relc.ui.displaydetail.FullscreenDisplayActivity
 import com.xaxaxax.relc.ui.displays.DisplaysScreen
+import com.xaxaxax.relc.ui.scriptdetail.ScriptDetailScreen
 import com.xaxaxax.relc.ui.scripts.ScriptsScreen
 import com.xaxaxax.relc.ui.setting.SettingsScreen
 
@@ -51,7 +52,7 @@ fun RelcNavGraph(
     }
 
     val isDetailScreen = currentDestination?.hierarchy?.any {
-        it.hasRoute(DisplayDetailRoute::class)
+        it.hasRoute(DisplayDetailRoute::class) || it.hasRoute(ScriptDetailRoute::class)
     } == true
 
     val layoutType = if (isDetailScreen) {
@@ -82,7 +83,7 @@ fun RelcNavGraph(
 
         NavHost(
             navController = navController,
-            startDestination = DisplaysRoute
+            startDestination = ScriptsRoute
         ) {
             // --- DISPLAYS 群組 ---
             composable<DisplaysRoute> {
@@ -110,9 +111,12 @@ fun RelcNavGraph(
             composable<ScriptsRoute> {
                 ScriptsScreen(
                     onNavigateToDetail = { id ->
-                        toastNotImplement(context)
+                        navController.navigate(ScriptDetailRoute(id))
                     }
                 )
+            }
+            composable<ScriptDetailRoute> {
+                ScriptDetailScreen(onNavigateBack = { navController.popBackStack() })
             }
 
             // --- SETTINGS 群組 ---
