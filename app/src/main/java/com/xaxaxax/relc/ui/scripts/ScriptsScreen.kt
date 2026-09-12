@@ -46,7 +46,9 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.xaxaxax.relc.R
+import com.xaxaxax.relc.shizuku.ShizukuStatusUiState
 import com.xaxaxax.relc.toastNotImplement
+import com.xaxaxax.relc.ui.component.ShizukuStatusBar
 import com.xaxaxax.relc.ui.theme.ReLCTheme
 
 @Composable
@@ -54,13 +56,20 @@ fun ScriptsScreen(
     onNavigateToDetail: (String) -> Unit,
     viewModel: ScriptsViewModel = hiltViewModel()
 ) {
+    val shizukuStatus by viewModel.shizukuStatus.collectAsState()
 
-    ScriptsScreenContent()
+    ScriptsScreenContent(
+        shizukuStatus = shizukuStatus,
+        onShizukuAction = { viewModel.onShizukuAction() },
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ScriptsScreenContent() {
+fun ScriptsScreenContent(
+    shizukuStatus: ShizukuStatusUiState = ShizukuStatusUiState(),
+    onShizukuAction: () -> Unit = {},
+) {
     val context = LocalContext.current
     Scaffold(
         floatingActionButton = {
@@ -91,17 +100,26 @@ fun ScriptsScreenContent() {
             }
         }
     ) { padding ->
-        LazyColumn(
-            contentPadding = padding,
-            modifier = Modifier.fillMaxSize()
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
         ) {
-            item{
-                ScriptItem(
-                    onPlay = {},
-                    onStop = {},
-                    onClick = {},
-                    isRunning = false
-                )
+            ShizukuStatusBar(
+                state = shizukuStatus,
+                onActionClick = onShizukuAction,
+            )
+            LazyColumn(
+                modifier = Modifier.fillMaxSize()
+            ) {
+                item{
+                    ScriptItem(
+                        onPlay = {},
+                        onStop = {},
+                        onClick = {},
+                        isRunning = false
+                    )
+                }
             }
         }
     }
