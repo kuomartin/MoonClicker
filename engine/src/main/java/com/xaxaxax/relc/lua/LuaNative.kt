@@ -22,7 +22,8 @@ internal object LuaNative {
 
     /**
      * @param withVision 是否掛 ImageReader 取影格。實體螢幕拿不到影格，必須傳 false。
-     * @param displayWidth 顯示器建立時的尺寸（surface 空間，不是邏輯空間）。
+     * @param surfaceWidth 顯示器**建立時**的尺寸（surface 空間，不是 getDisplaySize 回的邏輯尺寸）。
+     * @param initialRotation 啟動當下的 rotation，讓腳本第一行讀 screen.width 就是對的。
      * @param scriptDir 腳本資料夾，內含 main.lua。
      */
     external fun nativeStart(
@@ -30,8 +31,9 @@ internal object LuaNative {
         service: IRelcV2Service,
         displayId: Int,
         withVision: Boolean,
-        displayWidth: Int,
-        displayHeight: Int,
+        surfaceWidth: Int,
+        surfaceHeight: Int,
+        initialRotation: Int,
         scriptDir: String,
     ): Boolean
 

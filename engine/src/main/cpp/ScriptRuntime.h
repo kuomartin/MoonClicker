@@ -54,11 +54,12 @@ public:
     /**
      * @param displayId     目標顯示器。
      * @param withVision    是否掛 ImageReader 取影格。實體螢幕拿不到影格，必須傳 false。
-     * @param displayWidth  顯示器建立時的尺寸（surface 空間）。
+     * @param surfaceWidth  顯示器**建立時**的尺寸（surface 空間），不是旋轉後的邏輯尺寸。
+     * @param initialRotation 啟動當下的 rotation，在腳本執行緒起跑前就設好。
      * @param scriptDir     腳本資料夾，必須以 '/' 結尾，內含 main.lua。
      */
-    bool start(int displayId, bool withVision, int displayWidth, int displayHeight,
-               const std::string &scriptDir);
+    bool start(int displayId, bool withVision, int surfaceWidth, int surfaceHeight,
+               int initialRotation, const std::string &scriptDir);
 
     /** 要求停止並等執行緒結束。可重入。 */
     void stop();
