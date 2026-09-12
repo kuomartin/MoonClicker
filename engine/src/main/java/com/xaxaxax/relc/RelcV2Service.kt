@@ -378,6 +378,11 @@ class RelcV2Service(private val context: Context) : IRelcV2Service.Stub() {
         var flags = flags and SUPPORTED_FLAGS
         flags = flags or ADD_FLAGS
 
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            flags = flags or DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_TRUSTED or
+                    DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP
+        }
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             flags = flags or ADD_FLAGS_33
         }
@@ -388,7 +393,10 @@ class RelcV2Service(private val context: Context) : IRelcV2Service.Stub() {
         // 1. 建立 Native GLES 分發器並獲取 Source Surface
         val nativePtr = nativeCreateDistributor(width, height)
         if (nativePtr == 0L) return -1
-        val sourceSurface = nativeGetDistributorSurface(nativePtr) ?: return -1
+        val sourceSurface = nativeGetDistributorSurface(nativePtr) ?: run {
+            nativeDestroyDistributor(nativePtr)
+            return -1
+        }
 
         val dm = buildDisplayManagerForVirtualDisplay()
         val vd = run {
@@ -399,7 +407,11 @@ class RelcV2Service(private val context: Context) : IRelcV2Service.Stub() {
             dm.createVirtualDisplay(name, width, height, densityDpi, sourceSurface, flags)
         }
 
-        val displayId = vd.display?.displayId ?: return -1
+        val displayId = vd.display?.displayId ?: run {
+            vd.release()
+            nativeDestroyDistributor(nativePtr)
+            return -1
+        }
         vdStore[displayId] = vd
         distributorStore[displayId] = nativePtr
         Timber.d("VirtualDisplay created: id=$displayId name=$name ${width}x${height}@$densityDpi (Distributor Active)")
