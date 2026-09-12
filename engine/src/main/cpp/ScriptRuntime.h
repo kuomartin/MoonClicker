@@ -114,6 +114,14 @@ private:
 
     jmethodID addSurfaceMethodId = nullptr;     // IRelcV2Service.addVirtualDisplaySurface
     jmethodID removeSurfaceMethodId = nullptr;  // IRelcV2Service.removeVirtualDisplaySurface
+    jmethodID surfaceReleaseMethodId = nullptr; // android.view.Surface.release
+
+    /**
+     * ANativeWindow_toSurface 產生的 Java Surface。必須留著到收尾時明確 release()——
+     * 只 DeleteLocalRef 的話底層資源要等 finalizer 才回收，logcat 會出現
+     * 「A resource failed to call Surface.release.」，而且每跑一次漏一個。
+     */
+    jobject sinkSurface = nullptr;
 
     std::string scriptDir;
     int displayId = -1;
