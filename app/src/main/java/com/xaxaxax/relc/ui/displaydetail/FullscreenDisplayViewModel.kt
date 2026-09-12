@@ -22,8 +22,12 @@ class FullscreenDisplayViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val shizukuManager: ShizukuManager
 ) : ViewModel() {
+    /**
+     * 這個畫面只管顯示器本身與模板裁切。跑腳本是 ScriptSession 的事（issue #5），
+     * 所以這裡沒有 RUNNING。
+     */
     enum class ExecutionState {
-        IDLE, RUNNING, CROPPING
+        IDLE, CROPPING
     }
 
     data class UiState(
@@ -79,76 +83,6 @@ class FullscreenDisplayViewModel @Inject constructor(
                 }
             }
         }
-    }
-
-    fun startExecution(displayId: Int, width: Int, height: Int, scriptDir: String) {
-        viewModelScope.launch {
-            shizukuManager.withService { service ->
-                com.xaxaxax.relc.engine.LuaEngineControl.stop()
-                val mainScript = java.io.File(scriptDir, "main.lua").absolutePath
-                val success = com.xaxaxax.relc.engine.LuaEngineControl.startEngineWithService(
-                    service,
-                    displayId,
-                    width,
-                    height,
-                    mainScript
-                )
-                if (success != null) {
-                    _uiState.value = _uiState.value.copy(executionState = ExecutionState.RUNNING)
-                } else {
-                    Timber.e("Failed to start Lua engine")
-                }
-            }
-        }
-    }
-
-    fun startTemplateTest(
-        displayId: Int,
-        width: Int,
-        height: Int,
-        scriptDir: String,
-        templateName: String
-    ) {
-        viewModelScope.launch {
-            shizukuManager.withService { service ->
-                com.xaxaxax.relc.engine.LuaEngineControl.stop()
-                val testScript = java.io.File(scriptDir, "_test.lua")
-                val templatePath =
-                    if (templateName.endsWith(".png")) templateName else "$templateName.png"
-                val content = $$"""
-                            config = { fps=60, scale=0.5, templates = { { name = 'target', path = '$$templatePath', threshold = 0,grayscale = true} } }
-
-                            function on_tick(matches, tick)
-                                if tick % 60 == 0 then log("Lua Tick: " .. tick) end
-                                local m = matches.target
-                                if m and m.found then
-                                    log(string.format(
-                                        'match: x=%d y=%d w=%d h=%d confidence=%.2f',
-                                        m.x - m.width/2, m.y - m.height/2, m.width, m.height, m.confidence
-                                    ))
-                                end
-                            end
-                            """.trimIndent()
-                testScript.writeText(content)
-                val success = com.xaxaxax.relc.engine.LuaEngineControl.startEngineWithService(
-                    service,
-                    displayId,
-                    width,
-                    height,
-                    testScript.absolutePath
-                )
-                if (success != null) {
-                    _uiState.value = _uiState.value.copy(executionState = ExecutionState.RUNNING)
-                } else {
-                    Timber.e("Failed to start Lua engine for testing")
-                }
-            }
-        }
-    }
-
-    fun stopExecution() {
-        com.xaxaxax.relc.engine.LuaEngineControl.stop()
-        _uiState.value = _uiState.value.copy(executionState = ExecutionState.IDLE)
     }
 
     fun startCropping() {

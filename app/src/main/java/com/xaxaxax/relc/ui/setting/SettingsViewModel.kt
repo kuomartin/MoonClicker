@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.xaxaxax.relc.core.AppSettings
 import com.xaxaxax.relc.permission.PermissionManager
 import com.xaxaxax.relc.shizuku.ShizukuManager
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -25,7 +26,8 @@ data class SettingsUiState(
     val hasShizukuPermission: Boolean = false,
     val isShizukuAvailable: Boolean = false,
     val osAllowSecondaryDisplays: Boolean = false,
-    val isRefreshing: Boolean = false
+    val isRefreshing: Boolean = false,
+    val autoOpenFullscreen: Boolean = false,
 )
 
 private const val REFRESH_DELAY = 500
@@ -35,7 +37,8 @@ class SettingsViewModel @Inject constructor(
     @param:ApplicationContext
     private val context: Context,
     private val permissionManager: PermissionManager,
-    private val shizukuManager: ShizukuManager
+    private val shizukuManager: ShizukuManager,
+    private val appSettings: AppSettings,
 ) : ViewModel() {
     private val _osAllowSecondaryDisplays = MutableStateFlow(false)
     private val isRefreshing = MutableStateFlow(false)
@@ -44,14 +47,15 @@ class SettingsViewModel @Inject constructor(
         shizukuManager.hasPermissionFlow,
         shizukuManager.isAvailableFlow,
         permissionManager.osAllowSecondaryDisplaysFlow,
-        permissionManager.overlayPermissionFlow,
-        isRefreshing
-    ) { hasShizuku, isShizuku, allowSecondary,allowOverlay, isRefreshing ->
+        isRefreshing,
+        appSettings.autoOpenFullscreen,
+    ) { hasShizuku, isShizuku, allowSecondary, isRefreshing, autoOpenFullscreen ->
         SettingsUiState(
             hasShizukuPermission = hasShizuku,
             isShizukuAvailable = isShizuku,
             osAllowSecondaryDisplays = allowSecondary,
-            isRefreshing = isRefreshing
+            isRefreshing = isRefreshing,
+            autoOpenFullscreen = autoOpenFullscreen,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -85,6 +89,8 @@ class SettingsViewModel @Inject constructor(
             }
         }
     }
+
+    fun setAutoOpenFullscreen(enabled: Boolean) = appSettings.setAutoOpenFullscreen(enabled)
 
     fun getOpenShizukuIntent() = shizukuManager.getOpenShizukuIntent()
     fun requestShizukuPermission() = shizukuManager.requestPermission()
