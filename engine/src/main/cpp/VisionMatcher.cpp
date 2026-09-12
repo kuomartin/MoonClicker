@@ -34,6 +34,12 @@ void VisionMatcher::onFrame(const cv::Mat &frame) {
         if (stopped) return;
         frame.copyTo(latestFrame);
         frames++;
+        if (frames == 1) {
+            // 只印第一張。「vision 永遠比對不到」最常見的原因是影格根本沒進來，
+            // 而那和「進來了但比不中」在 log 上長得一模一樣——這行把兩者分開。
+            __android_log_print(ANDROID_LOG_DEBUG, VM_LOG_TAG,
+                                "First frame received: %dx%d", frame.cols, frame.rows);
+        }
     }
     frameCv.notify_all();
 }

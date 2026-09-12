@@ -25,6 +25,9 @@ ScriptRuntime::ScriptRuntime(JNIEnv *env, jobject host, jobject service) {
                                           "(ILandroid/view/Surface;)I");
     removeSurfaceMethodId = env->GetMethodID(serviceClass, "removeVirtualDisplaySurface", "(II)Z");
 
+    jclass surfaceClass = env->FindClass("android/view/Surface");
+    surfaceReleaseMethodId = env->GetMethodID(surfaceClass, "release", "()V");
+
     jclass localDouble = env->FindClass("java/lang/Double");
     doubleClass = (jclass) env->NewGlobalRef(localDouble);
     doubleConstructor = env->GetMethodID(doubleClass, "<init>", "(D)V");
@@ -82,6 +85,9 @@ bool ScriptRuntime::start(int displayId, bool withVision, int displayWidth, int 
         }
         jobject surface = ANativeWindow_toSurface(env, imageReader->getWindow());
         sinkHandle = env->CallIntMethod(serviceObj, addSurfaceMethodId, displayId, surface);
+        // 服務在另一個進程，拿到的是 parcel 過去的副本；但我們這一份要留到收尾才 release，
+        // 現在就放掉的話沒辦法保證自己這側的資源有被明確回收。
+        sinkSurface = env->NewGlobalRef(surface);
         env->DeleteLocalRef(surface);
         if (attached) javaVM->DetachCurrentThread();
 
@@ -117,20 +123,31 @@ void ScriptRuntime::stop() {
 }
 
 void ScriptRuntime::detachImageReader() {
-    if (sinkHandle >= 0) {
-        JNIEnv *env;
+    if (sinkHandle >= 0 || sinkSurface != nullptr) {
+        JNIEnv *env = nullptr;
         bool attached = false;
         if (javaVM->GetEnv((void **) &env, JNI_VERSION_1_6) == JNI_EDETACHED) {
             if (javaVM->AttachCurrentThread(&env, nullptr) == JNI_OK) attached = true;
         }
         if (env) {
-            env->CallBooleanMethod(serviceObj, removeSurfaceMethodId, displayId, sinkHandle);
+            if (sinkHandle >= 0) {
+                env->CallBooleanMethod(serviceObj, removeSurfaceMethodId, displayId, sinkHandle);
+            }
+            if (sinkSurface) {
+                // 先讓服務端不再送影格，再釋放自己這一份 Surface。
+                env->CallVoidMethod(sinkSurface, surfaceReleaseMethodId);
+                env->DeleteGlobalRef(sinkSurface);
+                sinkSurface = nullptr;
+            }
             if (attached) javaVM->DetachCurrentThread();
         }
         sinkHandle = -1;
     }
     // 顯示器本身刻意不銷毀——它的生命週期屬於 :app 的 Displays 頁。
     if (imageReader) {
+        // 先斷開回呼再刪 reader：不然刪除期間還可能有一張影格正在被處理，
+        // logcat 會噴 ConsumerBase is abandoned。
+        imageReader->setCallback(nullptr);
         imageReader->release();
         imageReader.reset();
     }
