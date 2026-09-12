@@ -1,12 +1,17 @@
 #include <jni.h>
 #include <android/native_window_jni.h>
-#include <android/bitmap.h>
-#include <opencv2/core.hpp>
-#include <opencv2/imgproc.hpp>
-#include "RelcEngine.h"
-#include "GlesDistributor.h"
+#include <mutex>
+#include <string>
 
-static RelcEngine *gEngine = nullptr;
+#include "GlesDistributor.h"
+#include "ScriptRuntime.h"
+
+/**
+ * 一次只跑一個腳本。這不是偷懶——UI 也是以「執行中的那一個」來表達的
+ * （見 :app 的 ScriptSession）。要並行就得連同 Kotlin 端的狀態模型一起改。
+ */
+static ScriptRuntime *gRuntime = nullptr;
+static std::mutex gRuntimeMutex;
 
 extern "C" {
 
@@ -30,17 +35,18 @@ Java_com_xaxaxax_relc_RelcV2Service_nativeGetDistributorSurface(JNIEnv *env, job
 }
 
 JNIEXPORT jint JNICALL
-Java_com_xaxaxax_relc_RelcV2Service_nativeAddSurface(JNIEnv *env, jobject thiz, jlong ptr, jobject surface) {
+Java_com_xaxaxax_relc_RelcV2Service_nativeAddSurface(JNIEnv *env, jobject thiz, jlong ptr,
+                                                     jobject surface) {
     auto *distributor = reinterpret_cast<GlesDistributor *>(ptr);
     return distributor->addSurface(env, surface);
 }
 
 JNIEXPORT void JNICALL
-Java_com_xaxaxax_relc_RelcV2Service_nativeRemoveSurface(JNIEnv *env, jobject thiz, jlong ptr, jint handle) {
+Java_com_xaxaxax_relc_RelcV2Service_nativeRemoveSurface(JNIEnv *env, jobject thiz, jlong ptr,
+                                                        jint handle) {
     auto *distributor = reinterpret_cast<GlesDistributor *>(ptr);
     distributor->removeSurface(handle);
 }
-
 
 JNIEXPORT void JNICALL
 Java_com_xaxaxax_relc_RelcV2Service_nativeDestroyDistributor(JNIEnv *env, jobject thiz, jlong ptr) {
@@ -49,79 +55,56 @@ Java_com_xaxaxax_relc_RelcV2Service_nativeDestroyDistributor(JNIEnv *env, jobjec
     delete distributor;
 }
 
-/**
- * 計算兩張圖的顏色差異 (平均值差異)
- * 返回 0-100，越小表示越接近
- */
-double getColorDiff(const cv::Mat &candidate, const cv::Mat &target) {
-    cv::Scalar meanCandidate = cv::mean(candidate);
-    cv::Scalar meanTarget = cv::mean(target);
-
-    double diff = 0;
-    // 比較 B, G, R 三個通道 (RGBA 的前三個)
-    for (int i = 0; i < 3; i++) {
-        diff += std::abs(meanCandidate.val[i] - meanTarget.val[i]);
+JNIEXPORT jboolean JNICALL
+Java_com_xaxaxax_relc_lua_LuaNative_nativeStart(
+        JNIEnv *env,
+        jobject thiz,
+        jobject host,
+        jobject service,
+        jint displayId,
+        jboolean withVision,
+        jint displayWidth,
+        jint displayHeight,
+        jstring scriptDir) {
+    std::lock_guard<std::mutex> lock(gRuntimeMutex);
+    if (gRuntime != nullptr) {
+        LOGE("nativeStart rejected: a script is already running");
+        return JNI_FALSE;
     }
-    // 標準化到 0-100
-    return (diff * 100.0) / (255.0 * 3.0);
+
+    const char *dir = env->GetStringUTFChars(scriptDir, nullptr);
+    std::string dirCopy(dir);
+    env->ReleaseStringUTFChars(scriptDir, dir);
+    if (dirCopy.empty() || dirCopy.back() != '/') dirCopy += '/';
+
+    auto *runtime = new ScriptRuntime(env, host, service);
+    if (!runtime->start(displayId, withVision, displayWidth, displayHeight, dirCopy)) {
+        delete runtime;
+        return JNI_FALSE;
+    }
+
+    gRuntime = runtime;
+    return JNI_TRUE;
+}
+
+JNIEXPORT void JNICALL
+Java_com_xaxaxax_relc_lua_LuaNative_nativeStop(JNIEnv *env, jobject thiz) {
+    std::lock_guard<std::mutex> lock(gRuntimeMutex);
+    delete gRuntime;  // 解構子會 stop() 並等執行緒結束
+    gRuntime = nullptr;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_xaxaxax_relc_lua_LuaNative_nativeIsRunning(JNIEnv *env, jobject thiz) {
+    std::lock_guard<std::mutex> lock(gRuntimeMutex);
+    return gRuntime && gRuntime->isRunning() ? JNI_TRUE : JNI_FALSE;
 }
 
 JNIEXPORT void JNICALL
 Java_com_xaxaxax_relc_lua_LuaNative_nativeSetDisplayRotation(JNIEnv *env, jobject thiz,
-                                                            jint rotation) {
-    if (gEngine) gEngine->onDisplayRotationChanged(rotation);
-}
-
-JNIEXPORT jobject JNICALL
-Java_com_xaxaxax_relc_lua_LuaNative_startEngine(
-        JNIEnv *env,
-        jobject thiz,
-        jobject service, // Now IRelcV2Service
-        jint displayId,
-        jint width,
-        jint height,
-        jstring scriptPath) {
-
-//    if (gEngine) {
-//        delete gEngine;
-//    }
-
-    gEngine = new RelcEngine(env, service, thiz);
-
-    const char *nativeScriptPath = env->GetStringUTFChars(scriptPath, nullptr);
-    bool success = gEngine->start(displayId, width, height, nativeScriptPath);
-    env->ReleaseStringUTFChars(scriptPath, nativeScriptPath);
-
-    if (!success) {
-        delete gEngine;
-        gEngine = nullptr;
-        return nullptr;
-    }
-
-    ANativeWindow *window = gEngine->getWindow();
-    if (!window) return nullptr;
-
-    return ANativeWindow_toSurface(env, window);
-}
-
-JNIEXPORT void JNICALL
-Java_com_xaxaxax_relc_lua_LuaNative_stopEngine(
-        JNIEnv *env,
-        jobject thiz) {
-    if (gEngine) {
-        delete gEngine;
-        gEngine = nullptr;
-    }
-}
-
-JNIEXPORT jboolean JNICALL
-Java_com_xaxaxax_relc_lua_LuaNative_isEngineRunning(
-        JNIEnv *env,
-        jobject thiz) {
-    if (gEngine) {
-        return (jboolean) gEngine->isEngineRunning();
-    }
-    return JNI_FALSE;
+                                                             jint rotation) {
+    std::lock_guard<std::mutex> lock(gRuntimeMutex);
+    if (gRuntime) gRuntime->setRotation(rotation);
 }
 
 }
