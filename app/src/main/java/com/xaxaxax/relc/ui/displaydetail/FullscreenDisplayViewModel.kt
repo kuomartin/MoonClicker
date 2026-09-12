@@ -44,6 +44,8 @@ class FullscreenDisplayViewModel @Inject constructor(
 
     private val service = shizukuManager.serviceFlow
 
+    private val _inputController = MutableStateFlow<InputController?>(null)
+    val inputController: StateFlow<InputController?> = _inputController.asStateFlow()
 
     init {
         viewModelScope.launch {
@@ -56,9 +58,6 @@ class FullscreenDisplayViewModel @Inject constructor(
             }
         }
     }
-
-    private val _inputController = MutableStateFlow<InputController?>(null)
-    val inputController: StateFlow<InputController?> = _inputController.asStateFlow()
 
     fun toggleReadOnly() {
         _uiState.value = _uiState.value.copy(isReadOnly = !_uiState.value.isReadOnly)
