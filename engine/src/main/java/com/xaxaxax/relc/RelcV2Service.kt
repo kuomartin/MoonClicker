@@ -61,8 +61,9 @@ class RelcV2Service @JvmOverloads constructor(
      * 真的擁有的**套件名，不是任意字串。它不是設定，是宿主進程的事實。
      *
      * 預設 `com.android.shell`，因為服務跑在 Shizuku 起的 shell 進程裡，那裡這是實話。
-     * 換一個宿主進程就得換這個值。`@JvmOverloads` 是為了讓 Shizuku 反射找得到原本的
-     * `(Context)` 建構子。
+     * 換一個宿主進程就得換這個值（`engine/src/androidTest` 的 Tier1Env 就是這樣把整個服務
+     * 搬進測試進程的）。`@JvmOverloads` 是為了讓 Shizuku 反射找得到原本的 `(Context)`
+     * 建構子。
      */
     private val callerPackage: String = "com.android.shell",
 ) : IRelcV2Service.Stub() {
@@ -407,20 +408,8 @@ class RelcV2Service @JvmOverloads constructor(
         densityDpi: Int,
         flags: Int,
     ): Int {
-        var flags = flags and SUPPORTED_FLAGS
-        flags = flags or ADD_FLAGS
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            flags = flags or DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_TRUSTED or
-                    DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP
-        }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            flags = flags or ADD_FLAGS_33
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            flags = flags or ADD_FLAGS_34
-        }
+        val baseFlags = (flags and SUPPORTED_FLAGS) or ADD_FLAGS
+        val trustedFlags = baseFlags or trustedOnlyFlags()
 
         // 1. 建立 Native GLES 分發器並獲取 Source Surface
         val nativePtr = nativeCreateDistributor(width, height)
@@ -431,13 +420,15 @@ class RelcV2Service @JvmOverloads constructor(
         }
 
         val dm = buildDisplayManagerForVirtualDisplay()
-        val vd = run {
-            Timber.d(
-                "createVD: callingUid=${getCallingUid()} serviceUid=${Process.myUid()} fakePkg=${fakeDisplayContext.packageName} surfaceValid=${sourceSurface.isValid}"
-            )
-            @SuppressLint("WrongConstant")
-            dm.createVirtualDisplay(name, width, height, densityDpi, sourceSurface, flags)
-        }
+        Timber.d(
+            "createVD: callingUid=${getCallingUid()} serviceUid=${Process.myUid()} fakePkg=${fakeDisplayContext.packageName} surfaceValid=${sourceSurface.isValid}"
+        )
+        val vd = createDisplay(dm, name, width, height, densityDpi, sourceSurface, trustedFlags)
+            ?: createDisplay(dm, name, width, height, densityDpi, sourceSurface, baseFlags)
+            ?: run {
+                nativeDestroyDistributor(nativePtr)
+                return -1
+            }
 
         val displayId = vd.display?.displayId ?: run {
             vd.release()
@@ -448,6 +439,49 @@ class RelcV2Service @JvmOverloads constructor(
         distributorStore[displayId] = nativePtr
         Timber.d("VirtualDisplay created: id=$displayId name=$name ${width}x${height}@$densityDpi (Distributor Active)")
         return displayId
+    }
+
+    /**
+     * 需要 `ADD_TRUSTED_DISPLAY` 的那一整組旗標。
+     *
+     * 整組一起處理是因為它們互相依賴：`OWN_DISPLAY_GROUP`、`ALWAYS_UNLOCKED`、`OWN_FOCUS`、
+     * `DEVICE_DISPLAY_GROUP` 在 `DisplayManagerService` 那邊全都以「顯示器是 trusted」為
+     * 前提，所以拿不到 TRUSTED 時它們也一個都不能留。
+     */
+    private fun trustedOnlyFlags(): Int {
+        var f = 0
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            f = f or DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_TRUSTED or
+                    DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) f = f or ADD_FLAGS_33
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) f = f or ADD_FLAGS_34
+        return f
+    }
+
+    /**
+     * 建一個虛擬顯示，失敗回 `null`。
+     *
+     * 呼叫端會用 [trustedOnlyFlags] 試一次、被擋下來再用基本旗標試一次：**不是每台裝置的
+     * shell 都有 `ADD_TRUSTED_DISPLAY`**（實測 Samsung SM-A217F / Android 12 就沒有，而
+     * Pixel / API 37 有），而 Shizuku 就是跑在 shell 身分上。少了 TRUSTED 顯示器仍然建得
+     * 起來、也仍然收得到影格，只是它不再是 trusted display——別家 app 能不能被啟動到上面、
+     * 觸控怎麼派送，都可能跟著降級。整台不能用比降級糟得多，所以退而求其次。
+     */
+    @SuppressLint("WrongConstant")
+    private fun createDisplay(
+        dm: DisplayManager,
+        name: String,
+        width: Int,
+        height: Int,
+        densityDpi: Int,
+        surface: Surface,
+        flags: Int,
+    ): VirtualDisplay? = try {
+        dm.createVirtualDisplay(name, width, height, densityDpi, surface, flags)
+    } catch (e: SecurityException) {
+        Timber.w(e, "createVirtualDisplay rejected with flags=0x${flags.toString(16)}")
+        null
     }
 
     override fun addVirtualDisplaySurface(displayId: Int, surface: Surface): Int {
