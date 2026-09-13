@@ -42,6 +42,32 @@ class PuppetActivity : Activity() {
             activity.runOnUiThread { activity.requestedOrientation = orientation }
         }
 
+        /** 立刻改變畫的東西。 */
+        fun setVisible(marker: Boolean, glyph: Boolean) {
+            PuppetControl.markerVisible = marker
+            PuppetControl.glyphVisible = glyph
+            val activity = instance ?: return
+            activity.runOnUiThread { activity.markerView.invalidate() }
+        }
+
+        /**
+         * [delayMs] 之後才把東西畫出來。
+         *
+         * `vision.wait` 的語意是「等到它出現」，而在一個靜態畫面上比對第一幀就會中——那樣
+         * 測到的是 `vision.find`，等待完全沒被驗到。要驗它，畫面必須在腳本已經在等的時候
+         * 才改變。
+         */
+        fun showAfter(delayMs: Long, marker: Boolean = true, glyph: Boolean = true) {
+            val activity = instance ?: return
+            activity.runOnUiThread {
+                activity.markerView.postDelayed({
+                    PuppetControl.markerVisible = marker
+                    PuppetControl.glyphVisible = glyph
+                    activity.markerView.invalidate()
+                }, delayMs)
+            }
+        }
+
         /**
          * 測試之間一定要呼叫。虛擬顯示被銷毀時上面的 activity 不會跟著消失，它會被搬回
          * 預設顯示器；下一個測試的 `app.launch` 就會把那個既有的 task 撈回前景，而不是在
@@ -56,6 +82,7 @@ class PuppetActivity : Activity() {
     }
 
     private lateinit var markerView: MarkerView
+        private set
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -130,9 +157,11 @@ class PuppetActivity : Activity() {
             // bitmap 帶的是預設顯示器的密度，canvas 的目標密度是虛擬顯示器的，兩者不同時
             // 這 160px 的標記會被畫成別的大小——而模板 PNG 還是 160px，
             // TM_CCOEFF_NORMED 不是尺度不變的，於是永遠比不中。
-            canvas.drawBitmap(marker, null, markerAt, null)
-            canvas.drawBitmap(glyph, null, glyphAt, null)
+            if (PuppetControl.markerVisible) canvas.drawBitmap(marker, null, markerAt, null)
+            if (PuppetControl.glyphVisible) canvas.drawBitmap(glyph, null, glyphAt, null)
 
+            // 矩形照樣發佈，即使這一輪沒畫——它描述的是「會被畫在哪」，而 awaitReady 要靠它
+            // 判斷版面完成了沒。可見與否是 PuppetControl 的事。
             PuppetRecorder.contentSize = width to height
             PuppetRecorder.markerRect = markerAt
             PuppetRecorder.glyphRect = glyphAt
