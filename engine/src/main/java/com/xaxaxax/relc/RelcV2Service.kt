@@ -584,14 +584,25 @@ class RelcV2Service @JvmOverloads constructor(
         }
     }
 
+    /**
+     * `startActivity` 的回傳值只抓得到**同步**的框架錯誤（找不到 activity、權限不足）。
+     *
+     * 它抓不到「activity 不支援次要顯示器，被系統悄悄轉去別的顯示器」這一類——AOSP 的
+     * `ActivityStarter.getExternalResult()` 會把內部的 `START_ABORTED` 換成
+     * `START_SUCCESS` 再回給呼叫端（"Aborted results are treated as successes
+     * externally"），而那個場景的通知管道是 `ITaskStackListener` 的非同步回呼
+     * （`notifyActivityLaunchOnSecondaryDisplayFailed`），完全不經過這個回傳值。
+     * 要抓那個，得在啟動後查 task 實際落在哪個顯示器——見 issue #25 的追蹤留言。
+     */
     private fun launchViaActivityTaskManager(packageName: String, displayId: Int): Boolean {
         val intent = context.packageManager.getLaunchIntentForPackage(packageName) ?: return false
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         val options = ActivityOptions.makeBasic()
         Refine.unsafeCast<ActivityOptionsHidden>(options).setLaunchDisplayId(displayId)
         return try {
-            //TODO parse the result
-            Workaround.startActivity(intent, options, callerPackage)
+            val result = Workaround.startActivity(intent, options, callerPackage)
+            Timber.d("ActivityTaskManager.startActivity result = $result")
+            checkStartActivityResult(result, intent)
             true
         } catch (t: Throwable) {
             Timber.d(t, "Failed to launch $packageName in display#$displayId.")
