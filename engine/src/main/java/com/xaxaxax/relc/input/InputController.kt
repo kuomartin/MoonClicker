@@ -159,7 +159,6 @@ class InputController(private val service: IRelcV2Service) {
 
         if (transform != null && !transform.isIdentity) {
             eventCopy.transform(transform)
-            Timber.d("Touch Transform: (${event.x}, ${event.y}) -> (${eventCopy.x}, ${eventCopy.y}) on Display $displayId")
         }
 
         try {
