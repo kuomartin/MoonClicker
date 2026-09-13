@@ -110,7 +110,7 @@ trusted 與非 trusted 兩條顯示器路徑各有一台涵蓋到。過程中量
 - **不是每台裝置的 shell 都有 `ADD_TRUSTED_DISPLAY`。** SM-A217F 沒有，Pixel 7a (API 37)
   有。production 原本從 API 31 起無條件加上 `VIRTUAL_DISPLAY_FLAG_TRUSTED`，在前者上會直接
   `SecurityException`——整台不能用。現在改成拿不到就退回非 trusted 重試
-  （`RelcV2Service.createDisplay`）。**退回之後注入觸控仍然works**，這台上實測過。
+  （`RelcV2Service.createDisplay`）。**退回之後注入觸控仍然到得了 app**，這台上實測過。
 - **Android 12 的 splash screen 會在 activity 都 resume、也畫完之後還壓著一陣子。**
   那段期間注入的觸控收不到，而且視窗幾何還在變——早期擠進來的那一下座標會對不上。
   所以 `tapUntilReceived` 每輪都先清掉記錄再注入，量的是穩定之後的狀態。
@@ -118,12 +118,6 @@ trusted 與非 trusted 兩條顯示器路徑各有一台涵蓋到。過程中量
   canvas 目標是虛擬顯示器的，兩者不同時標記就不是你以為的尺寸，而 `TM_CCOEFF_NORMED`
   不是尺度不變的。指定目的矩形強制 1:1。（這是 puppet 的 bug，不是產品的——但它是任何人
   寫這種測試都會踩到的那一個。）
-
-### 還沒做的
-
-- 只跑過 API 31 與 36。中間那幾級（尤其 27–29 沒有 TRUSTED 旗標可用）未知。
-- `vision.wait` 的「等到它出現」語意還沒真的被驗——puppet 的畫面是靜態的，比對第一幀就中。
-  要驗等待，puppet 需要能排程「N 毫秒後換一個圖樣」。
 
 ### 旋轉（step7/step8）
 
@@ -146,6 +140,12 @@ rotation，而 app 宣告的方向會贏過它——實測在 SM-A217F 上那樣
 這條把 ADR-0012 的兩段交接釘住（`nativeStart` 帶進去的初始 rotation ＋
 `DisplayRotationTracker` 後續推的更新），少了它，往返即使通過也只是「推論」native 知道
 自己轉了。
+
+### 還沒做的
+
+- 只跑過 API 31 與 36。中間那幾級（尤其 27–29 沒有 TRUSTED 旗標可用）未知。
+- `vision.wait` 的「等到它出現」語意還沒真的被驗——puppet 的畫面是靜態的，比對第一幀就中。
+  要驗等待，puppet 需要能排程「N 毫秒後換一個圖樣」。
 
 ## 不測什麼
 
