@@ -188,14 +188,10 @@ internal val HIDDEN_API_CONTRACTS: List<MemberContract> = listOf(
     ),
 
     // ── PackageManagerHidden ───────────────────────────────────────────────────────────────
-    // NOTE: the two listener methods are checked against the *platform's* nested type,
-    // android.content.pm.PackageManager$OnPermissionsChangedListener, not the stub's own
-    // PackageManagerHidden$OnPermissionsChangedListener. Refine's rewriter used to skip a
-    // @RefineAs class's own nested types (RikkaApps/HiddenApiRefinePlugin#5), but that was
-    // fixed in Refine 3.0.0 — this repo is on 4.4.0 (see gradle/libs.versions.toml), so the
-    // nested-type call site should resolve fine. Left unverified because nothing calls these
-    // methods today; if something ever does, write a real test against it before trusting
-    // this comment.
+    // android.content.pm.PackageManager$OnPermissionsChangedListener 沒有檢查
+    // 但是Refine應該會正確處理 nested class/interface
+    // Left unverified because nothing calls these methods today;
+    // if something ever does, write a real test against it before trusting this comment.
     MemberContract(
         owner = "android.content.pm.PackageManager",
         member = MethodMember(
