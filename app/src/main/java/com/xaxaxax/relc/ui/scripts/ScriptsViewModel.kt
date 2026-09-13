@@ -10,8 +10,8 @@ import com.xaxaxax.relc.script.ScriptSession
 import com.xaxaxax.relc.script.ScriptSessionState
 import com.xaxaxax.relc.script.ScriptStore
 import com.xaxaxax.relc.script.ScriptTarget
+import com.xaxaxax.relc.shizuku.ShizukuConnectionStatus
 import com.xaxaxax.relc.shizuku.ShizukuManager
-import com.xaxaxax.relc.shizuku.ShizukuStatusUiState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -29,7 +29,7 @@ import javax.inject.Inject
 data class ScriptsUiState(
     val scripts: List<Script> = emptyList(),
     val session: ScriptSessionState = ScriptSessionState(),
-    val shizukuStatus: ShizukuStatusUiState = ShizukuStatusUiState(),
+    val shizukuStatus: ShizukuConnectionStatus = ShizukuConnectionStatus.NOT_AVAILABLE,
     val scriptsPath: String = "",
 )
 

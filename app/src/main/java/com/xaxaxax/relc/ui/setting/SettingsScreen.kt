@@ -46,6 +46,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.xaxaxax.relc.R
+import com.xaxaxax.relc.shizuku.ShizukuConnectionStatus
 import com.xaxaxax.relc.ui.component.Section
 import com.xaxaxax.relc.ui.theme.ReLCTheme
 
@@ -115,8 +116,7 @@ private fun SettingsScreenContent(
             ) {
                 item {
                     Section("Health Check") {
-                        val hasAnyFailure = !uiState.isShizukuAvailable ||
-                                !uiState.hasShizukuPermission ||
+                        val hasAnyFailure = !uiState.shizukuStatus.isAuthorized ||
                                 !uiState.osAllowSecondaryDisplays
 
                         if (hasAnyFailure) {
@@ -128,7 +128,7 @@ private fun SettingsScreenContent(
                             ) {
                                 Column {
                                     var first = true
-                                    if (!uiState.isShizukuAvailable) {
+                                    if (uiState.shizukuStatus == ShizukuConnectionStatus.NOT_AVAILABLE) {
                                         HealthCheckFailedItem(
                                             painterResource(R.drawable.ic_shizuku_icon),
                                             "Shizuku Not Running",
@@ -136,7 +136,7 @@ private fun SettingsScreenContent(
                                             actions = listOf("Launch Shizuku" to onOpenShizuku)
                                         )
                                         first = false
-                                    } else if (!uiState.hasShizukuPermission) {
+                                    } else if (uiState.shizukuStatus == ShizukuConnectionStatus.NEED_PERMISSION) {
                                         HealthCheckFailedItem(
                                             painterResource(R.drawable.ic_shizuku_icon),
                                             "Shizuku Permission Required",
@@ -162,7 +162,7 @@ private fun SettingsScreenContent(
                                 }
                             }
                         }
-                        if (uiState.isShizukuAvailable and uiState.hasShizukuPermission) {
+                        if (uiState.shizukuStatus.isAuthorized) {
                             HealthCheckGood(
                                 painter = painterResource(R.drawable.ic_shizuku_icon),
                                 title = "Shizuku Running",
@@ -296,12 +296,12 @@ private fun SettingsScreenPreview() {
                 uiState = uiState,
                 onOpenShizuku = {
                     uiState = uiState.copy(
-                        isShizukuAvailable = true
+                        shizukuStatus = ShizukuConnectionStatus.NEED_PERMISSION
                     )
                 },
                 onRequestShizukuPermission = {
                     uiState = uiState.copy(
-                        hasShizukuPermission = true
+                        shizukuStatus = ShizukuConnectionStatus.CONNECTED
                     )
                 },
                 onRefresh = { uiState = SettingsUiState() },

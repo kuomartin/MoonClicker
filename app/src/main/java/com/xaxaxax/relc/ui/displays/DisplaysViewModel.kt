@@ -7,8 +7,8 @@ import android.util.DisplayMetrics
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.xaxaxax.relc.core.DisplayConfig
+import com.xaxaxax.relc.shizuku.ShizukuConnectionStatus
 import com.xaxaxax.relc.shizuku.ShizukuManager
-import com.xaxaxax.relc.shizuku.ShizukuStatusUiState
 import com.xaxaxax.relc.shizuku.createVirtualDisplay
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -18,6 +18,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -34,8 +36,7 @@ data class DisplayCardInfo(
 
 data class DisplaysUiState(
     val displays: List<DisplayCardInfo> = emptyList(),
-    val shizukuStatus: ShizukuStatusUiState = ShizukuStatusUiState(),
-    val isShizukuReady: Boolean = false,
+    val shizukuStatus: ShizukuConnectionStatus = ShizukuConnectionStatus.NOT_AVAILABLE,
     val isLoading: Boolean = false,
     val isRefreshing: Boolean = false
 )
@@ -73,7 +74,6 @@ class DisplaysViewModel @Inject constructor(
         DisplaysUiState(
             displays = displays,
             shizukuStatus = shizukuStatus,
-            isShizukuReady = shizukuStatus.isConnected,
             isLoading = loading,
             isRefreshing = refreshing
         )
@@ -84,13 +84,20 @@ class DisplaysViewModel @Inject constructor(
     )
 
     init {
-        refreshDisplays()
+        // 連上就自動載入一次。自動連線讓「進畫面時服務還沒接上」變成常態，
+        // 若只在 init 載入一次，使用者會看到一份永遠是空的清單。
+        viewModelScope.launch {
+            shizukuManager.statusFlow
+                .map { it.isConnected }
+                .distinctUntilChanged()
+                .collect { connected -> if (connected) refreshDisplays() }
+        }
     }
 
     fun onShizukuAction() = shizukuManager.requestPermissionOrConnect()
 
     fun refreshDisplays(fromPullToRefresh: Boolean = false) {
-        if (!uiState.value.isShizukuReady && !fromPullToRefresh) {
+        if (!shizukuManager.status.isConnected && !fromPullToRefresh) {
             return
         }
         isLoading.value = true
@@ -98,7 +105,7 @@ class DisplaysViewModel @Inject constructor(
             try {
                 if (fromPullToRefresh) {
                     isRefreshing.value = true
-                    if (!uiState.value.isShizukuReady) {
+                    if (!shizukuManager.status.isConnected) {
                         shizukuManager.requestPermissionOrConnect()
                     }
                 }
