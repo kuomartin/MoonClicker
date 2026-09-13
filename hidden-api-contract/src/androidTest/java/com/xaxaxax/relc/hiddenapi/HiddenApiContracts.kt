@@ -189,12 +189,13 @@ internal val HIDDEN_API_CONTRACTS: List<MemberContract> = listOf(
 
     // ── PackageManagerHidden ───────────────────────────────────────────────────────────────
     // NOTE: the two listener methods are checked against the *platform's* nested type,
-    // android.content.pm.PackageManager$OnPermissionsChangedListener. The stub declares its own
-    // PackageManagerHidden$OnPermissionsChangedListener instead, and Refine only remaps types
-    // carrying a $RefineMetadata marker — which a nested type of a @RefineAs class does not get.
-    // So a call through the stub would emit an unresolvable descriptor. Nothing calls these
-    // today; the entries below pin the platform side, and the stub needs fixing before anything
-    // does. See the issue #18 discussion.
+    // android.content.pm.PackageManager$OnPermissionsChangedListener, not the stub's own
+    // PackageManagerHidden$OnPermissionsChangedListener. Refine's rewriter used to skip a
+    // @RefineAs class's own nested types (RikkaApps/HiddenApiRefinePlugin#5), but that was
+    // fixed in Refine 3.0.0 — this repo is on 4.4.0 (see gradle/libs.versions.toml), so the
+    // nested-type call site should resolve fine. Left unverified because nothing calls these
+    // methods today; if something ever does, write a real test against it before trusting
+    // this comment.
     MemberContract(
         owner = "android.content.pm.PackageManager",
         member = MethodMember(
