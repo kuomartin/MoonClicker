@@ -7,12 +7,21 @@ import android.content.Intent
 import android.os.Build
 
 object Workaround {
-    fun startActivity(intent: Intent, options: ActivityOptions) = when(Build.VERSION.SDK_INT) {
+    /**
+     * @param callerPackage 向系統宣稱的呼叫者。ActivityTaskManager 會拿它跟 calling uid
+     *   對，所以它必須是**執行這段程式碼的 uid 真的擁有的**套件名——在 Shizuku 的 shell
+     *   進程裡是 `com.android.shell`，換個宿主進程就不是了。
+     */
+    fun startActivity(
+        intent: Intent,
+        options: ActivityOptions,
+        callerPackage: String,
+    ) = when(Build.VERSION.SDK_INT) {
         // use ATM with 11 params
         in Build.VERSION_CODES.R..Int.MAX_VALUE ->
         ActivityTaskManager.getService().startActivity(
             null,
-            "com.android.shell",
+            callerPackage,
             null,
             intent,
             null,
@@ -27,7 +36,7 @@ object Workaround {
         Build.VERSION_CODES.Q ->
             ActivityTaskManager.getService().startActivity(
                 null,
-                "com.android.shell",
+                callerPackage,
                 intent,
                 null,
                 null,
@@ -42,7 +51,7 @@ object Workaround {
         else ->
         ActivityManagerHidden.getService().startActivity(
             null,
-            "com.android.shell",
+            callerPackage,
             intent,
             null,
             null,
