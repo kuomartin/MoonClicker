@@ -51,7 +51,21 @@ import kotlin.system.exitProcess
 import kotlin.time.Duration.Companion.milliseconds
 
 @Keep
-class RelcV2Service(private val context: Context) : IRelcV2Service.Stub() {
+class RelcV2Service @JvmOverloads constructor(
+    private val context: Context,
+    /**
+     * 這個進程向系統宣稱自己是誰。
+     *
+     * 建立虛擬顯示與啟動 activity 都會把它送進 system_server，而那邊會拿它跟 calling uid
+     * 對（`packageName must match the calling uid`）——所以它必須是**執行這段程式碼的 uid
+     * 真的擁有的**套件名，不是任意字串。它不是設定，是宿主進程的事實。
+     *
+     * 預設 `com.android.shell`，因為服務跑在 Shizuku 起的 shell 進程裡，那裡這是實話。
+     * 換一個宿主進程就得換這個值。`@JvmOverloads` 是為了讓 Shizuku 反射找得到原本的
+     * `(Context)` 建構子。
+     */
+    private val callerPackage: String = "com.android.shell",
+) : IRelcV2Service.Stub() {
     companion object {
         init {
             try {
@@ -152,8 +166,8 @@ class RelcV2Service(private val context: Context) : IRelcV2Service.Stub() {
     private val vdStore = mutableMapOf<Int, ManagedDisplay>()
     private val distributorStore = mutableMapOf<Int, Long>() // displayId -> nativePtr
     private val fakeDisplayContext = object : ContextWrapper(context) {
-        override fun getPackageName(): String = "com.android.shell"
-        override fun getOpPackageName(): String = "com.android.shell"
+        override fun getPackageName(): String = callerPackage
+        override fun getOpPackageName(): String = callerPackage
         override fun getApplicationContext(): Context = this
     }
 
@@ -486,7 +500,7 @@ class RelcV2Service(private val context: Context) : IRelcV2Service.Stub() {
         Refine.unsafeCast<ActivityOptionsHidden>(options).setLaunchDisplayId(displayId)
         return try {
             //TODO parse the result
-            Workaround.startActivity(intent, options)
+            Workaround.startActivity(intent, options, callerPackage)
             true
         } catch (t: Throwable) {
             Timber.d(t, "Failed to launch $packageName in display#$displayId.")
@@ -525,7 +539,7 @@ class RelcV2Service(private val context: Context) : IRelcV2Service.Stub() {
 
             val result = iam.startActivity(
                 null, // IApplicationThread
-                "com.android.shell",
+                callerPackage,
                 intent,
                 null, // resolvedType
                 null, // resultTo
