@@ -184,6 +184,25 @@ class Tier1SpikeTest {
     fun step6_a_script_finds_the_marker_and_taps_it() {
         val displayId = requireDisplay()
 
+        // 先把 puppet 叫起來、並確認它**真的收得到觸控**，再讓腳本跑。
+        //
+        // 不這樣做的話這個測試是時序賭博：Android 12 的 splash screen 會在 activity 都
+        // resume、也畫完之後還壓在上面一陣子（step5 量到的），而腳本只點一次——比對命中得
+        // 夠快時那一下就落進 splash 還在的窗口，掉了。那時失敗訊息會說「點擊沒送達」，看起
+        // 來像座標換算錯了，其實測到的是啟動時序。
+        //
+        // 啟動時序本身已經有 step4/step5 在管。這裡要測的是座標換算，所以先把環境弄成
+        // 穩定的，再讓腳本做它那一次點擊。
+        env.service.launchInDisplay(env.puppetPackage, displayId)
+        assertTrue("the puppet never came up", PuppetRecorder.awaitReady(displayId))
+        val warmUpTarget = PuppetRecorder.markerRect!!
+        assertNotNull(
+            "the puppet never became touchable, so the script's single tap could never land",
+            tapUntilReceived(displayId, warmUpTarget.centerX(), warmUpTarget.centerY()),
+        )
+        // 暖身的那幾下不算數——後面斷言要看的是腳本自己點的那一下。
+        PuppetRecorder.touches.clear()
+
         val outcome = LuaScriptRunner(
             service = env.service,
             displayId = displayId,
