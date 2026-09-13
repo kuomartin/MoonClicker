@@ -1,13 +1,20 @@
 package com.xaxaxax.relc.ui.scripts
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -16,19 +23,21 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -36,97 +45,165 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.xaxaxax.relc.R
-import com.xaxaxax.relc.script.LoopMode
-import com.xaxaxax.relc.script.ScriptConfig
-import com.xaxaxax.relc.script.ScriptState
+import com.xaxaxax.relc.engine.state.EngineRunState
+import com.xaxaxax.relc.script.Script
+import com.xaxaxax.relc.script.ScriptSessionState
+import com.xaxaxax.relc.shizuku.ShizukuStatusUiState
+import com.xaxaxax.relc.ui.component.ShizukuStatusBar
 import com.xaxaxax.relc.ui.theme.ReLCTheme
+import java.io.File
 
 @Composable
 fun ScriptsScreen(
     onNavigateToDetail: (String) -> Unit,
-    viewModel: ScriptsViewModel = hiltViewModel()
+    viewModel: ScriptsViewModel = hiltViewModel(),
 ) {
-    val scripts by viewModel.scripts.collectAsState()
-    val scriptStates by viewModel.scriptStates.collectAsState()
+    val uiState by viewModel.uiState.collectAsState()
+    val message by viewModel.message.collectAsState()
+    val context = LocalContext.current
+
+    // 使用者可能剛從檔案管理員丟了資料夾進來，回到這頁時重掃一次才看得到。
+    LaunchedEffect(Unit) { viewModel.refresh() }
+
+    LaunchedEffect(message) {
+        val text = message ?: return@LaunchedEffect
+        Toast.makeText(context, text, Toast.LENGTH_LONG).show()
+        viewModel.consumeMessage()
+    }
+
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri -> uri?.let(viewModel::import) }
 
     ScriptsScreenContent(
-        scripts = scripts,
-        scriptStates = scriptStates,
-        onNavigateToDetail = onNavigateToDetail,
-        onPlay = { viewModel.startScript(it) },
-        onStop = { viewModel.stopScript(it.id) }
+        uiState = uiState,
+        onShizukuAction = viewModel::onShizukuAction,
+        onRefresh = viewModel::refresh,
+        onImport = { importLauncher.launch(arrayOf("application/zip", "application/octet-stream")) },
+        onPlay = { viewModel.run(it) },
+        onStop = viewModel::stop,
+        onOpen = { onNavigateToDetail(it.id) },
     )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScriptsScreenContent(
-    scripts: List<ScriptConfig>,
-    scriptStates: Map<String, ScriptState>,
-    onNavigateToDetail: (String) -> Unit,
-    onPlay: (ScriptConfig) -> Unit,
-    onStop: (ScriptConfig) -> Unit
+    uiState: ScriptsUiState = ScriptsUiState(),
+    onShizukuAction: () -> Unit = {},
+    onRefresh: () -> Unit = {},
+    onImport: () -> Unit = {},
+    onPlay: (Script) -> Unit = {},
+    onStop: () -> Unit = {},
+    onOpen: (Script) -> Unit = {},
 ) {
     Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(stringResource(R.string.scripts_title)) },
+                actions = {
+                    IconButton(onClick = onRefresh) {
+                        Icon(
+                            Icons.Default.Refresh,
+                            contentDescription = stringResource(R.string.scripts_refresh),
+                        )
+                    }
+                },
+            )
+        },
         floatingActionButton = {
-            var expanded by remember { mutableStateOf(false) }
-            Box {
-                FloatingActionButton(onClick = { expanded = true }) {
-                    Icon(Icons.Default.Add, contentDescription = "Add Script")
-                }
-                DropdownMenu(
-                    expanded = expanded,
-                    onDismissRequest = { expanded = false }
-                ) {
-                    DropdownMenuItem(
-                        text = { Text("新增 Lua 腳本") },
-                        onClick = {
-                            expanded = false
-                            onNavigateToDetail("new_lua")
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("新增簡易腳本") },
-                        onClick = {
-                            expanded = false
-                            onNavigateToDetail("new_simple")
-                        }
-                    )
-                }
+            FloatingActionButton(onClick = onImport) {
+                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.scripts_import))
             }
-        }
+        },
     ) { padding ->
-        LazyColumn(
-            contentPadding = padding,
-            modifier = Modifier.fillMaxSize()
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
         ) {
-            items(scripts) { script ->
-                val state = scriptStates[script.id] ?: ScriptState.IDLE
-                ScriptItem(
-                    script = script,
-                    onClick = { onNavigateToDetail(script.id) },
-                    onPlay = { onPlay(script) },
-                    onStop = { onStop(script) },
-                    isRunning = state == ScriptState.RUNNING
-                )
+            ShizukuStatusBar(state = uiState.shizukuStatus, onActionClick = onShizukuAction)
+
+            if (uiState.scripts.isEmpty()) {
+                EmptyState(uiState.scriptsPath)
+            } else {
+                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    items(uiState.scripts, key = { it.id }) { script ->
+                        ScriptItem(
+                            script = script,
+                            session = uiState.session,
+                            onClick = { onOpen(script) },
+                            onPlay = { onPlay(script) },
+                            onStop = onStop,
+                        )
+                    }
+                }
             }
         }
     }
 }
 
+/**
+ * 空狀態不是裝飾：沒有內建編輯器，所以「腳本要放哪裡」就是使用者第一個、也是唯一需要
+ * 知道的事，路徑必須直接寫在這裡而且可以複製。
+ */
+@Composable
+private fun EmptyState(scriptsPath: String) {
+    val context = LocalContext.current
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Spacer(modifier = Modifier.size(48.dp))
+        Text(
+            text = stringResource(R.string.scripts_empty_title),
+            style = MaterialTheme.typography.titleMedium,
+        )
+        Text(
+            text = stringResource(R.string.scripts_empty_body),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Text(
+                text = scriptsPath,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(12.dp),
+            )
+        }
+        OutlinedButton(onClick = { copyPath(context, scriptsPath) }) {
+            Text(stringResource(R.string.scripts_copy_path))
+        }
+    }
+}
+
+private fun copyPath(context: Context, path: String) {
+    val clipboard = context.getSystemService(ClipboardManager::class.java) ?: return
+    clipboard.setPrimaryClip(ClipData.newPlainText("scripts", path))
+    Toast.makeText(context, R.string.scripts_path_copied, Toast.LENGTH_SHORT).show()
+}
+
 @Composable
 fun ScriptItem(
-    script: ScriptConfig,
+    script: Script,
+    session: ScriptSessionState,
     onClick: () -> Unit,
     onPlay: () -> Unit,
     onStop: () -> Unit,
-    isRunning: Boolean
 ) {
+    val isThisRunning = session.isRunning && session.script?.id == script.id
+    val otherRunning = session.isRunning && !isThisRunning
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -140,21 +217,37 @@ fun ScriptItem(
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(text = script.name, style = MaterialTheme.typography.titleMedium)
-                    if (isRunning) {
+                    if (isThisRunning) {
                         Spacer(modifier = Modifier.width(8.dp))
                         RunningBadge()
                     }
                 }
                 if (script.description.isNotEmpty()) {
-                    Text(text = script.description, style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        text = script.description,
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
                 Text(
-                    text = script.type.name,
+                    text = targetSummary(script),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                if (!isThisRunning && session.script?.id == script.id) {
+                    session.runState.summary()?.let {
+                        Text(
+                            text = it,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
             }
-            if (isRunning) {
+            if (isThisRunning) {
                 IconButton(onClick = onStop) {
                     Icon(
                         Icons.Default.Stop,
@@ -163,7 +256,7 @@ fun ScriptItem(
                     )
                 }
             } else {
-                IconButton(onClick = onPlay) {
+                IconButton(onClick = onPlay, enabled = !otherRunning) {
                     Icon(
                         Icons.Default.PlayArrow,
                         contentDescription = "Play",
@@ -173,6 +266,18 @@ fun ScriptItem(
             }
         }
     }
+}
+
+@Composable
+private fun targetSummary(script: Script): String = script.display?.let {
+    "${it.width} × ${it.height} · 虛擬顯示"
+} ?: stringResource(R.string.script_target_physical)
+
+private fun EngineRunState.summary(): String? = when (this) {
+    is EngineRunState.Error -> message
+    is EngineRunState.Finished -> "已完成"
+    is EngineRunState.Stopped -> "已停止"
+    else -> null
 }
 
 /**
@@ -209,25 +314,12 @@ private fun RunningBadge() {
 fun ScriptsScreenPreview() {
     ReLCTheme {
         ScriptsScreenContent(
-            scripts = listOf(
-                ScriptConfig.Lua(
-                    id = "1",
-                    name = "Test Script 1",
-                    description = "This is a test script.",
-                    code = ""
+            uiState = ScriptsUiState(
+                scripts = listOf(
+                    Script("daily", File("/tmp/daily"), "自動簽到", "每天開 App 點簽到", null),
                 ),
-                ScriptConfig.Simple(
-                    id = "2",
-                    name = "Test Script 2",
-                    description = "Another test script.",
-                    steps = listOf(),
-                    loopMode = LoopMode.None,
-                )
-            ),
-            scriptStates = mapOf("1" to ScriptState.RUNNING),
-            onNavigateToDetail = {},
-            onPlay = {},
-            onStop = {}
+                scriptsPath = "/sdcard/Android/data/com.xaxaxax.relc/files/scripts",
+            )
         )
     }
 }

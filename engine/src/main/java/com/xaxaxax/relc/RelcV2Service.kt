@@ -13,6 +13,7 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.PackageManagerHidden
 import android.hardware.display.DisplayManager
 import android.hardware.display.DisplayManagerHidden
@@ -24,6 +25,7 @@ import android.os.Build
 import android.os.Process
 import android.os.SystemClock
 import android.os.UserHandle
+import android.view.Display
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -31,6 +33,7 @@ import android.view.MotionEventHidden
 import android.view.Surface
 import androidx.annotation.Keep
 import androidx.core.content.getSystemService
+import com.xaxaxax.relc.script.DisplayGeometry
 import dev.rikka.tools.refine.Refine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -49,7 +52,22 @@ import kotlin.system.exitProcess
 import kotlin.time.Duration.Companion.milliseconds
 
 @Keep
-class RelcV2Service(private val context: Context) : IRelcV2Service.Stub() {
+class RelcV2Service @JvmOverloads constructor(
+    private val context: Context,
+    /**
+     * 這個進程向系統宣稱自己是誰。
+     *
+     * 建立虛擬顯示與啟動 activity 都會把它送進 system_server，而那邊會拿它跟 calling uid
+     * 對（`packageName must match the calling uid`）——所以它必須是**執行這段程式碼的 uid
+     * 真的擁有的**套件名，不是任意字串。它不是設定，是宿主進程的事實。
+     *
+     * 預設 `com.android.shell`，因為服務跑在 Shizuku 起的 shell 進程裡，那裡這是實話。
+     * 換一個宿主進程就得換這個值（`engine/src/androidTest` 的 Tier1Env 就是這樣把整個服務
+     * 搬進測試進程的）。`@JvmOverloads` 是為了讓 Shizuku 反射找得到原本的 `(Context)`
+     * 建構子。
+     */
+    private val callerPackage: String = "com.android.shell",
+) : IRelcV2Service.Stub() {
     companion object {
         init {
             try {
@@ -74,19 +92,43 @@ class RelcV2Service(private val context: Context) : IRelcV2Service.Stub() {
 
         const val DELAY_MS = 16 // 60fps
 
+        /** 都不在 `Manifest.permission` 裡（signature|privileged，@hide）。 */
+        const val ADD_TRUSTED_DISPLAY = "android.permission.ADD_TRUSTED_DISPLAY"
+        const val ADD_ALWAYS_UNLOCKED_DISPLAY =
+            "android.permission.ADD_ALWAYS_UNLOCKED_DISPLAY"
+
+        /** 呼叫端可以要求的旗標，其餘一律由這裡決定。 */
         const val SUPPORTED_FLAGS =
             DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR or
                     DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_DESTROY_CONTENT_ON_REMOVAL or
                     DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_SHOULD_SHOW_SYSTEM_DECORATIONS
+
+        /** 每個 API level 都給的基本盤。 */
         const val ADD_FLAGS = DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_PUBLIC or
                 DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_PRESENTATION or
                 DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY or
                 DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_SUPPORTS_TOUCH or
                 DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_ROTATES_WITH_CONTENT
-        const val ADD_FLAGS_33 = DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_TRUSTED or
-                DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP or
-                DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_ALWAYS_UNLOCKED or
-                DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_TOUCH_FEEDBACK_DISABLED
+
+        /**
+         * API 33 起才存在的那一組。**它們不是一包**——`createVirtualDisplayInternal` 裡是三個
+         * 各自獨立的檢查，見 [privilegedFlags]：
+         *
+         *  - `TRUSTED`、`OWN_DISPLAY_GROUP`：各自要 `ADD_TRUSTED_DISPLAY`，不符拋
+         *    SecurityException。
+         *  - `ALWAYS_UNLOCKED`：要的是**另一個權限** `ADD_ALWAYS_UNLOCKED_DISPLAY`，而且
+         *    javadoc 說它「only valid for virtual displays that aren't in the default
+         *    display group」，所以也依賴 `OWN_DISPLAY_GROUP`。
+         *  - `TOUCH_FEEDBACK_DISABLED`：沒有任何權限檢查。
+         *
+         * API 33 這條界線是「shell 通常從 Android 13 起才拿得到那些權限」的經驗值，與
+         * scrcpy 的 `NewDisplayCapture` 一致。見 docs/virtual-display-pitfalls.md。
+         */
+        /**
+         * API 34 起。這兩個確實依賴顯示器是 trusted——`OWN_FOCUS` 的 javadoc 明講
+         * 「The display must be trusted in order to have its own focus」，
+         * `DEVICE_DISPLAY_GROUP` 也只在與 `TRUSTED` 並用時才生效。
+         */
         const val ADD_FLAGS_34 = DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_OWN_FOCUS or
                 DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_DEVICE_DISPLAY_GROUP
     }
@@ -131,11 +173,27 @@ class RelcV2Service(private val context: Context) : IRelcV2Service.Stub() {
         Refine.unsafeCast(im)
     }
 
-    private val vdStore = mutableMapOf<Int, VirtualDisplay>()
+    /**
+     * 一個虛擬顯示，連同它**建立時**的尺寸。
+     *
+     * 尺寸留在這裡而不是事後回推：`Display.getRealSize` 回的是套用旋轉後的邏輯尺寸，
+     * 要換回 surface 尺寸就得再讀一次 rotation——兩次獨立的讀取之間畫面轉了，算出來的
+     * 答案會錯得很有自信（見 [getDisplaySurfaceSize]）。建立尺寸是常數，記下來就不必猜。
+     *
+     * 名字不放這裡：`Display.getName()` 原樣回傳建立時給的名字（實機驗證過，被加前綴的是
+     * `uniqueId` 不是 name），平台已經是它的擁有者了。
+     */
+    private class ManagedDisplay(
+        val display: VirtualDisplay,
+        val surfaceWidth: Int,
+        val surfaceHeight: Int,
+    )
+
+    private val vdStore = mutableMapOf<Int, ManagedDisplay>()
     private val distributorStore = mutableMapOf<Int, Long>() // displayId -> nativePtr
     private val fakeDisplayContext = object : ContextWrapper(context) {
-        override fun getPackageName(): String = "com.android.shell"
-        override fun getOpPackageName(): String = "com.android.shell"
+        override fun getPackageName(): String = callerPackage
+        override fun getOpPackageName(): String = callerPackage
         override fun getApplicationContext(): Context = this
     }
 
@@ -375,20 +433,8 @@ class RelcV2Service(private val context: Context) : IRelcV2Service.Stub() {
         densityDpi: Int,
         flags: Int,
     ): Int {
-        var flags = flags and SUPPORTED_FLAGS
-        flags = flags or ADD_FLAGS
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            flags = flags or DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_TRUSTED or
-                    DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP
-        }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            flags = flags or ADD_FLAGS_33
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            flags = flags or ADD_FLAGS_34
-        }
+        val baseFlags = (flags and SUPPORTED_FLAGS) or ADD_FLAGS
+        val privilegedFlags = baseFlags or privilegedFlags()
 
         // 1. 建立 Native GLES 分發器並獲取 Source Surface
         val nativePtr = nativeCreateDistributor(width, height)
@@ -399,23 +445,100 @@ class RelcV2Service(private val context: Context) : IRelcV2Service.Stub() {
         }
 
         val dm = buildDisplayManagerForVirtualDisplay()
-        val vd = run {
-            Timber.d(
-                "createVD: callingUid=${getCallingUid()} serviceUid=${Process.myUid()} fakePkg=${fakeDisplayContext.packageName} surfaceValid=${sourceSurface.isValid}"
-            )
-            @SuppressLint("WrongConstant")
-            dm.createVirtualDisplay(name, width, height, densityDpi, sourceSurface, flags)
-        }
+        Timber.d(
+            "createVD: callingUid=${getCallingUid()} serviceUid=${Process.myUid()} fakePkg=${fakeDisplayContext.packageName} surfaceValid=${sourceSurface.isValid}"
+        )
+        val vd = createDisplay(dm, name, width, height, densityDpi, sourceSurface, privilegedFlags)
+            ?: createDisplay(dm, name, width, height, densityDpi, sourceSurface, baseFlags)
+            ?: run {
+                nativeDestroyDistributor(nativePtr)
+                return -1
+            }
 
         val displayId = vd.display?.displayId ?: run {
             vd.release()
             nativeDestroyDistributor(nativePtr)
             return -1
         }
-        vdStore[displayId] = vd
+        vdStore[displayId] = ManagedDisplay(vd, surfaceWidth = width, surfaceHeight = height)
         distributorStore[displayId] = nativePtr
         Timber.d("VirtualDisplay created: id=$displayId name=$name ${width}x${height}@$densityDpi (Distributor Active)")
         return displayId
+    }
+
+    /**
+     * API 33+ 才給的那些旗標，**逐項按它自己的前提決定**。
+     *
+     * **不要把它們綁成一包。** 三個旗標在 `DisplayManagerService` 裡是三條獨立的檢查
+     * （見 [ADD_FLAGS_33]），整組丟掉的代價是：有 `ADD_TRUSTED_DISPLAY` 卻沒有
+     * `ADD_ALWAYS_UNLOCKED_DISPLAY` 的機器，會為一個旗標讓整個顯示器退回非 trusted。
+     *
+     * `ALWAYS_UNLOCKED` 尤其不能順手丟掉：少了它，虛擬顯示在裝置鎖定或休眠時**收不到注入
+     * 的觸控**。
+     */
+    private fun privilegedFlags(): Int {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return 0
+
+        // 沒有權限檢查，一律給。
+        var f = DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_TOUCH_FEEDBACK_DISABLED
+
+        if (holds(ADD_TRUSTED_DISPLAY)) {
+            f = f or DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_TRUSTED or
+                    DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP
+
+            // 依賴 OWN_DISPLAY_GROUP（見 javadoc），所以巢狀在這裡，但要的是另一個權限。
+            if (holds(ADD_ALWAYS_UNLOCKED_DISPLAY)) {
+                f = f or DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_ALWAYS_UNLOCKED
+            }
+
+            // 依賴顯示器是 trusted。
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                f = f or ADD_FLAGS_34
+            }
+        }
+        return f
+    }
+
+    /**
+     * 這個進程有沒有某個權限——**直接問，不要用丟例外去試**。
+     *
+     * `checkSelfPermission` 查的是 `Process.myUid()`，在 Shizuku 起的進程裡就是 shell，
+     * 正是 `DisplayManagerService` 會拿去對的那個身分。
+     */
+    private fun holds(permission: String): Boolean =
+        grantedPermissions.getOrPut(permission) {
+            val granted = context.checkSelfPermission(permission) ==
+                    PackageManager.PERMISSION_GRANTED
+            Timber.d("$permission granted=$granted for uid=${Process.myUid()}")
+            granted
+        }
+
+    private val grantedPermissions = ConcurrentHashMap<String, Boolean>()
+
+    /**
+     * 建一個虛擬顯示，失敗回 `null`。
+     *
+     * 呼叫端會用 [privilegedFlags] 試一次、被擋下來再用基本旗標試一次。少了 TRUSTED 顯示器
+     * 仍然建得起來、也仍然收得到影格與觸控，只是不再是 trusted display，部分行為會降級——
+     * 但整台不能用比降級糟得多。
+     *
+     * [privilegedFlags] 已經先問過權限，這裡是問完仍被擋下來時的退路：那組旗標各自還有別的
+     * 前提，權限過了不代表整組必然被接受。
+     */
+//    @SuppressLint("WrongConstant")
+    private fun createDisplay(
+        dm: DisplayManager,
+        name: String,
+        width: Int,
+        height: Int,
+        densityDpi: Int,
+        surface: Surface,
+        flags: Int,
+    ): VirtualDisplay? = try {
+        dm.createVirtualDisplay(name, width, height, densityDpi, surface, flags)
+    } catch (e: SecurityException) {
+        Timber.w(e, "createVirtualDisplay rejected with flags=0x${flags.toString(16)}")
+        null
     }
 
     override fun addVirtualDisplaySurface(displayId: Int, surface: Surface): Int {
@@ -435,7 +558,7 @@ class RelcV2Service(private val context: Context) : IRelcV2Service.Stub() {
     }
 
     override fun destroyVirtualDisplay(displayId: Int): Boolean {
-        vdStore.remove(displayId)?.release()
+        vdStore.remove(displayId)?.display?.release()
         distributorStore.remove(displayId)?.let { ptr ->
             nativeDestroyDistributor(ptr)
         }
@@ -468,7 +591,7 @@ class RelcV2Service(private val context: Context) : IRelcV2Service.Stub() {
         Refine.unsafeCast<ActivityOptionsHidden>(options).setLaunchDisplayId(displayId)
         return try {
             //TODO parse the result
-            Workaround.startActivity(intent, options)
+            Workaround.startActivity(intent, options, callerPackage)
             true
         } catch (t: Throwable) {
             Timber.d(t, "Failed to launch $packageName in display#$displayId.")
@@ -507,7 +630,7 @@ class RelcV2Service(private val context: Context) : IRelcV2Service.Stub() {
 
             val result = iam.startActivity(
                 null, // IApplicationThread
-                "com.android.shell",
+                callerPackage,
                 intent,
                 null, // resolvedType
                 null, // resultTo
@@ -629,10 +752,36 @@ class RelcV2Service(private val context: Context) : IRelcV2Service.Stub() {
         return intArrayOf(outSize.x, outSize.y)
     }
 
+    /**
+     * Surface 空間的尺寸（見 CONTEXT.md「Surface 空間 / 邏輯空間」）。
+     *
+     * 三條路，差別在我們對這個顯示器知道多少：
+     * - 自己建立的虛擬顯示：建立尺寸是常數，直接回存下來的那一份，完全不經過推導。
+     * - 實體螢幕：沒有「建立尺寸」可言，只能推。但邏輯尺寸與 rotation 都來自這個進程裡
+     *   的同一個 DisplayManager，沒有跨進程的時間差。
+     * - 其他 id：回 [0, 0]。不是我們建的顯示器，我們沒有立場猜它的幾何——讓呼叫端當場
+     *   失敗，比帶著可能錯的尺寸跑完整個腳本好。
+     */
+    override fun getDisplaySurfaceSize(displayId: Int): IntArray {
+        vdStore[displayId]?.let { return intArrayOf(it.surfaceWidth, it.surfaceHeight) }
+        if (displayId != Display.DEFAULT_DISPLAY) {
+            Timber.w("getDisplaySurfaceSize($displayId): not a display this service created")
+            return intArrayOf(0, 0)
+        }
+
+        val dm = context.getSystemService(DisplayManager::class.java)
+        val display = dm.getDisplay(displayId) ?: return intArrayOf(0, 0)
+        val outSize = android.graphics.Point()
+        @Suppress("DEPRECATION") // TODO: check if this method will still work in future Android versions.
+        display.getRealSize(outSize)
+        val (width, height) = DisplayGeometry.surfaceSize(outSize.x, outSize.y, display.rotation)
+        return intArrayOf(width, height)
+    }
+
     override fun debug(input: String?): String = "RelcV2Service Active"
 
     override fun destroy() {
-        vdStore.forEach { (_, display) -> display.release() }
+        vdStore.forEach { (_, managed) -> managed.display.release() }
         exitProcess(0)
     }
 

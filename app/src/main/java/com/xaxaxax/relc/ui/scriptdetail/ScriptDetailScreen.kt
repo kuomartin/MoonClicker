@@ -1,24 +1,32 @@
 package com.xaxaxax.relc.ui.scriptdetail
 
-import androidx.activity.compose.BackHandler
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -26,298 +34,240 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import com.xaxaxax.relc.script.ScriptConfig
-import com.xaxaxax.relc.script.ScriptState
+import coil3.compose.AsyncImage
+import com.xaxaxax.relc.R
+import com.xaxaxax.relc.engine.state.EngineRunState
 import com.xaxaxax.relc.ui.component.Section
-import com.xaxaxax.relc.ui.theme.ReLCTheme
+import com.xaxaxax.relc.ui.scripts.TargetPicker
 
-@Composable
-fun ScriptDetailScreen(
-    id: String,
-    onNavigateBack: () -> Unit,
-    viewModel: ScriptDetailViewModel = hiltViewModel()
-) {
-    val config by viewModel.config.collectAsState()
-    val state by viewModel.scriptState.collectAsState()
-    val logs by viewModel.logs.collectAsState(initial = "")
-    val hasChanges by viewModel.hasChanges.collectAsState()
-    var showExitConfirmation by remember { mutableStateOf(false) }
-
-    fun tryNavigateBack() {
-        if (hasChanges) {
-            showExitConfirmation = true
-        } else {
-            onNavigateBack()
-        }
-    }
-
-    BackHandler {
-        tryNavigateBack()
-    }
-
-    if (showExitConfirmation) {
-        AlertDialog(
-            onDismissRequest = { showExitConfirmation = false },
-            title = { Text("捨棄變更？") },
-            text = { Text("您有尚未儲存的變更，確定要離開嗎？") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showExitConfirmation = false
-                        onNavigateBack()
-                    }
-                ) {
-                    Text("捨棄")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showExitConfirmation = false }) {
-                    Text("取消")
-                }
-            }
-        )
-    }
-
-    ScriptDetailScreenContent(
-        config = config,
-        state = state,
-        latestLog = logs,
-        onNavigateBack = { tryNavigateBack() },
-        onUpdateConfig = { newConfig -> viewModel.updateConfig { newConfig } },
-        onSave = { viewModel.saveScript() },
-        onPlay = { config?.let { viewModel.scriptManager.startScript(it) } },
-        onStop = { config?.let { viewModel.scriptManager.stopScript(it.id) } },
-    )
-}
-
+/**
+ * 唯讀的腳本檢視 + 執行入口。
+ *
+ * 刻意不提供編輯：腳本是外部私有目錄下的一個資料夾，用檔案管理員或電腦改。這一頁要回答的
+ * 是「它現在長怎樣、跑起來會發生什麼」，不是「怎麼改它」。
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ScriptDetailScreenContent(
-    config: ScriptConfig?,
-    state: ScriptState,
-    latestLog: String,
+fun ScriptDetailScreen(
     onNavigateBack: () -> Unit,
-    onUpdateConfig: (ScriptConfig) -> Unit,
-    onSave: () -> Unit,
-    onPlay: () -> Unit,
-    onStop: () -> Unit,
+    viewModel: ScriptDetailViewModel = hiltViewModel(),
 ) {
-    val logLines = remember { mutableStateListOf<String>() }
-    LaunchedEffect(latestLog) {
-        if (latestLog.isNotEmpty()) {
-            logLines.add(latestLog)
-            if (logLines.size > 50) logLines.removeAt(0)
-        }
+    val uiState by viewModel.uiState.collectAsState()
+    val message by viewModel.message.collectAsState()
+    val context = LocalContext.current
+    var showTargetPicker by remember { mutableStateOf(false) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+
+    LaunchedEffect(message) {
+        val text = message ?: return@LaunchedEffect
+        Toast.makeText(context, text, Toast.LENGTH_LONG).show()
+        viewModel.consumeMessage()
     }
+
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/zip")
+    ) { uri -> uri?.let(viewModel::export) }
+
+    val script = uiState.script
+    val isThisRunning = uiState.session.isRunning && uiState.session.script?.id == script?.id
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(config?.name ?: "Loading...") },
+                title = { Text(script?.name ?: "") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
-                    IconButton(onClick = {
-                        onSave()
-                    }) {
+                    IconButton(onClick = { script?.let { exportLauncher.launch("${it.id}.zip") } }) {
                         Icon(
-                            Icons.Default.Save,
-                            contentDescription = "Save",
-                            tint = MaterialTheme.colorScheme.primary
+                            Icons.Default.Share,
+                            contentDescription = stringResource(R.string.script_detail_export),
                         )
                     }
-                }
+                    IconButton(onClick = { showDeleteConfirm = true }) {
+                        Icon(
+                            Icons.Default.Delete,
+                            contentDescription = stringResource(R.string.script_detail_delete),
+                        )
+                    }
+                },
             )
         },
-        floatingActionButton = {
-            if (config != null) {
-                ExtendedFloatingActionButton(
-                    onClick = {
-                        if (state == ScriptState.RUNNING) {
-                            onStop()
-                        } else {
-                            onSave()
-                            onPlay()
-                        }
-                    },
-                    icon = {
-                        Icon(
-                            if (state == ScriptState.RUNNING) Icons.Default.Stop else Icons.Default.PlayArrow,
-                            contentDescription = null
-                        )
-                    },
-                    text = {
-                        Text(if (state == ScriptState.RUNNING) "停止" else "執行")
-                    },
-                    containerColor = if (state == ScriptState.RUNNING) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = if (state == ScriptState.RUNNING) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer
-                )
-            }
-        }
     ) { padding ->
-        config?.let { currentConfig ->
-            Column(
-                modifier = Modifier
-                    .padding(padding)
-                    .fillMaxSize()
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    when (currentConfig) {
-                        is ScriptConfig.Lua -> LuaScriptEditorLayout(currentConfig, onUpdateConfig)
-                        is ScriptConfig.Simple -> SimpleScriptEditorLayout(
-                            currentConfig,
-                            onUpdateConfig
-                        )
+        if (script == null) {
+            Text(
+                text = stringResource(R.string.script_detail_missing_source),
+                modifier = Modifier.padding(padding).padding(16.dp),
+            )
+            return@Scaffold
+        }
+
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+        ) {
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    if (isThisRunning) {
+                        OutlinedButton(onClick = viewModel::stop) {
+                            Icon(Icons.Default.Stop, contentDescription = null)
+                            Text(stringResource(R.string.script_detail_stop))
+                        }
+                    } else {
+                        OutlinedButton(onClick = { viewModel.run() }) {
+                            Icon(Icons.Default.PlayArrow, contentDescription = null)
+                            Text(stringResource(R.string.script_detail_run))
+                        }
+                        OutlinedButton(onClick = {
+                            viewModel.refreshDisplays()
+                            showTargetPicker = true
+                        }) {
+                            Text(stringResource(R.string.script_detail_run_on))
+                        }
                     }
                 }
-                ScriptConsole(logLines = logLines)
+            }
+
+            item {
+                Section("狀態") {
+                    Text(
+                        text = statusText(uiState),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            }
+
+            if (uiState.sharedData.isNotEmpty()) {
+                item {
+                    Section(stringResource(R.string.script_detail_shared_data)) {
+                        Column {
+                            uiState.sharedData.forEach { (key, value) ->
+                                Text(
+                                    text = "$key = $value",
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            item {
+                Section(stringResource(R.string.script_detail_templates)) {
+                    if (uiState.templates.isEmpty()) {
+                        Text(
+                            text = stringResource(R.string.script_detail_no_templates),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            uiState.templates.forEach { file ->
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    AsyncImage(
+                                        model = file,
+                                        contentDescription = file.name,
+                                        modifier = Modifier.size(48.dp),
+                                    )
+                                    Text(
+                                        text = file.toRelativeString(script.dir),
+                                        style = MaterialTheme.typography.bodySmall,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            item {
+                Section(stringResource(R.string.script_detail_source)) {
+                    Column {
+                        Text(
+                            text = stringResource(R.string.script_detail_no_editor),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Card(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                            Text(
+                                text = uiState.source
+                                    ?: stringResource(R.string.script_detail_missing_source),
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier
+                                    .horizontalScroll(rememberScrollState())
+                                    .padding(12.dp),
+                            )
+                        }
+                    }
+                }
             }
         }
     }
-}
 
-@Composable
-private fun LuaScriptEditorLayout(
-    currentConfig: ScriptConfig.Lua,
-    onUpdateConfig: (ScriptConfig) -> Unit,
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(bottom = 80.dp) // Space for FAB
-    ) {
-        Section(name = "基本資訊") {
-            FormOutlinedField(
-                value = currentConfig.name,
-                onValueChange = { name ->
-                    val newConfig = currentConfig.copy(name = name)
-                    onUpdateConfig(newConfig)
-                },
-                label = "名稱",
-            )
-            FormOutlinedField(
-                value = currentConfig.description,
-                onValueChange = { description ->
-                    val newConfig = currentConfig.copy(description = description)
-                    onUpdateConfig(newConfig)
-                },
-                label = "描述",
-            )
-        }
-        Section(name = "內容") {
-            FormOutlinedField(
-                value = currentConfig.code,
-                onValueChange = { code ->
-                    val newConfig = currentConfig.copy(code = code)
-                    onUpdateConfig(newConfig)
-                },
-                label = "Lua",
-                minLines = 12,
-                singleLine = false,
-            )
-        }
+    if (showTargetPicker) {
+        TargetPicker(
+            displays = uiState.virtualDisplays,
+            newDisplayConfig = viewModel.newDisplayConfig,
+            onPick = {
+                showTargetPicker = false
+                viewModel.run(it)
+            },
+            onDismiss = { showTargetPicker = false },
+        )
+    }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text(stringResource(R.string.script_detail_delete)) },
+            text = { Text("要刪除「${script?.name}」嗎？資料夾會一併刪除。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDeleteConfirm = false
+                    if (viewModel.delete()) onNavigateBack()
+                }) { Text(stringResource(R.string.script_detail_delete)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) { Text("取消") }
+            },
+        )
     }
 }
 
 @Composable
-private fun SimpleScriptEditorLayout(
-    currentConfig: ScriptConfig.Simple,
-    onUpdateConfig: (ScriptConfig.Simple) -> Unit,
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(bottom = 80.dp) // Space for FAB
-    ) {
-        Section(name = "基本資訊") {
-            FormOutlinedField(
-                value = currentConfig.name,
-                onValueChange = { name ->
-                    val newConfig = currentConfig.copy(name = name)
-                    onUpdateConfig(newConfig)
-                },
-                label = "名稱",
-            )
-            FormOutlinedField(
-                value = currentConfig.description,
-                onValueChange = { description ->
-                    val newConfig = currentConfig.copy(description = description)
-                    onUpdateConfig(newConfig)
-                },
-                label = "描述",
-            )
-        }
-        Section(name = "執行策略") {
-            MacroLoopEditor(
-                loopMode = currentConfig.loopMode,
-                onLoopModeChange = { mode ->
-                    val newConfig = currentConfig.copy(loopMode = mode)
-                    onUpdateConfig(newConfig)
-                },
-            )
-        }
-        Section(name = "內容", modifier = Modifier.weight(1f)) {
-            SimpleScriptEditor(
-                scriptId = currentConfig.id,
-                steps = currentConfig.steps,
-                onStepsChange = { steps ->
-                    val newConfig = currentConfig.copy(steps = steps)
-                    onUpdateConfig(newConfig)
-                },
-            )
-        }
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun ScriptDetailScreenPreview() {
-    ReLCTheme {
-        Surface {
-            ScriptDetailScreenContent(
-                config = ScriptConfig.Lua(
-                    id = "1",
-                    name = "My Awesome Script",
-                    description = "",
-                    code = "log('Running script...')\ndisplayId = 0\ninput.tap(50, 500, 500)\nsleep(1000)\nlog('Done!')",
-                ),
-                state = ScriptState.IDLE,
-                latestLog = "[Lua] Running script...",
-                onNavigateBack = {},
-                onUpdateConfig = {},
-                onSave = {},
-                onPlay = {},
-                onStop = {},
-            )
-        }
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun SimpleEditorPreview() {
-    ReLCTheme {
-        Surface {
-            SimpleScriptEditorLayout(
-                currentConfig = ScriptConfig.Simple(
-                    id = "1",
-                    name = "My Awesome Script",
-                    description = "",
-                    steps = emptyList()
-                ), {}
-            )
-        }
+private fun statusText(uiState: ScriptDetailUiState): String {
+    val isThisScript = uiState.session.script?.id == uiState.script?.id
+    if (!isThisScript) return "尚未執行"
+    val target = uiState.session.displayId?.let {
+        if (it == 0) stringResource(R.string.script_target_physical)
+        else stringResource(R.string.script_target_virtual, it)
+    }.orEmpty()
+    return when (val state = uiState.session.runState) {
+        is EngineRunState.Idle -> "尚未執行"
+        is EngineRunState.Starting -> "啟動中 · $target"
+        is EngineRunState.Running -> "執行中 · $target"
+        is EngineRunState.Finished -> "已完成 · $target"
+        is EngineRunState.Stopped -> "已停止 · $target"
+        is EngineRunState.Error -> "錯誤：${state.message}"
     }
 }

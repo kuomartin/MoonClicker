@@ -1,5 +1,8 @@
 package com.xaxaxax.relc
 
+import android.content.Context
+import android.widget.Toast
+
 /**
  * 更新清單中指定索引處的值
  */
@@ -13,4 +16,8 @@ fun <T> List<T>.update(index: Int, item: T): List<T> {
 fun <T> List<T>.update(index: Int, transform: (T) -> T): List<T> {
     val item = this.getOrNull(index) ?: return this.toList()
     return slice(0 until index) + transform(item) + slice(index + 1 until size)
+}
+
+fun toastNotImplement(context: Context){
+    Toast.makeText(context, "Not implement yet...", Toast.LENGTH_SHORT).show()
 }

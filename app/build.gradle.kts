@@ -1,3 +1,5 @@
+import com.android.build.api.variant.BuildConfigField
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -39,6 +41,20 @@ android {
         buildConfig = true
         compose = true
         aidl = true
+    }
+}
+
+androidComponents {
+    onVariants { variant ->
+        val currentTimestamp = System.currentTimeMillis().toString()
+        variant.buildConfigFields?.put(
+            "BUILD_TIME",
+            BuildConfigField(
+                "Long",
+                "${currentTimestamp}L",
+                "Timestamp of when the APK was built"
+            )
+        )
     }
 }
 

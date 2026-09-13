@@ -43,9 +43,16 @@ void NativeImageReader::setCallback(std::function<void(const cv::Mat&)> callback
 
 void NativeImageReader::onImageAvailable(void* context, AImageReader* reader) {
     auto* self = static_cast<NativeImageReader*>(context);
+
+    // 整段都在鎖裡，包含 AImage_delete。release() 靠這把鎖判斷「在途的回呼做完了」，
+    // 而 AImage_delete 正是會跟 AImageReader_delete 互鎖的那一步——把它留在鎖外面，
+    // 屏障就形同虛設。
+    std::lock_guard<std::mutex> lock(self->callbackMutex);
+    if (self->closing.load()) return;
+
     AImage* image = nullptr;
     media_status_t status = AImageReader_acquireLatestImage(reader, &image);
-    
+
     if (status != AMEDIA_OK || !image) return;
 
     int32_t imgWidth, imgHeight;
@@ -62,20 +69,35 @@ void NativeImageReader::onImageAvailable(void* context, AImageReader* reader) {
     // Map to cv::Mat (Zero-Copy)
     cv::Mat mat(imgHeight, imgWidth, CV_8UC4, data, rowStride);
 
-    {
-        std::lock_guard<std::mutex> lock(self->callbackMutex);
-        if (self->frameCallback) {
-            self->frameCallback(mat);
-        }
+    if (self->frameCallback) {
+        self->frameCallback(mat);
     }
 
     AImage_delete(image);
 }
 
+/**
+ * 拆掉 reader。**順序不能改，弄反會死鎖**：先拔 listener、再等在途回呼做完、最後才刪。
+ *
+ * `AImageReader_delete` 會先拿 reader 的內部鎖再等回呼執行緒退出，而執行中的回呼在
+ * `AImage_delete` 裡正需要那把鎖。只清掉 `frameCallback` 不夠——native listener 還註冊著。
+ *
+ * 見 docs/virtual-display-pitfalls.md。
+ */
 void NativeImageReader::release() {
-    if (reader) {
-        AImageReader_delete(reader);
-        reader = nullptr;
+    if (!reader) {
+        window = nullptr;
+        return;
     }
+
+    closing.store(true);
+    AImageReader_setImageListener(reader, nullptr);
+
+    // 屏障：拿到就代表沒有回呼還在跑。拿到後**立刻放掉**再刪——抓著它去刪的話，
+    // 被擋在鎖外面的那個回呼執行緒永遠退不出來，又是同一個互等。
+    { std::lock_guard<std::mutex> lock(callbackMutex); }
+
+    AImageReader_delete(reader);
+    reader = nullptr;
     window = nullptr;
 }

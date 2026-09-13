@@ -32,12 +32,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.viewinterop.AndroidView
-import com.xaxaxax.relc.input.InputController
+import com.xaxaxax.relc.IRelcV2Service
 import timber.log.Timber
 import kotlin.math.roundToInt
 
 /**
- * 把鏡像 view 的生命週期跟虛擬顯示串接起來，並攔截觸控事件轉發給 [InputController]。
+ * 把鏡像 view 的生命週期跟虛擬顯示串接起來，並攔截觸控事件轉發給虛擬顯示（[forwardMirrorTouch]）。
  *
  * 幾何全部來自單一的 [Viewport]（見地圖 #9 / #12）：呈現與觸控讀同一個 instance，
  * 且座標變換只有 [Viewport.displayPerViewPixel] 一個來源。`Viewport` 的輸入取自公開的
@@ -49,7 +49,7 @@ fun VirtualDisplayMirror(
     geometry: DisplayGeometry,
     addSurface: (Surface) -> Unit,
     removeSurface: (Surface) -> Unit,
-    inputController: InputController,
+    service: IRelcV2Service,
     isReadOnly: Boolean,
     modifier: Modifier = Modifier,
     onTextureViewCreated: (TextureView) -> Unit = {},
@@ -96,7 +96,7 @@ fun VirtualDisplayMirror(
             // 手勢捕獲保證）——#12 Q9 要的不對稱語意由結構取得，不需狀態記帳。
             TouchForwarder(
                 targetDisplayId = targetDisplayId,
-                inputController = inputController,
+                service = service,
                 viewport = viewport,
                 isReadOnly = isReadOnly,
                 modifier = Modifier.matchParentSize(),
@@ -178,7 +178,7 @@ private fun MirrorSurface(
 @Composable
 private fun TouchForwarder(
     targetDisplayId: Int,
-    inputController: InputController,
+    service: IRelcV2Service,
     viewport: Viewport,
     isReadOnly: Boolean,
     modifier: Modifier = Modifier,
@@ -196,7 +196,7 @@ private fun TouchForwarder(
             if (isReadOnly || targetDisplayId == -1) {
                 false
             } else {
-                inputController.injectMotionEvent(event, targetDisplayId, transform)
+                service.forwardMirrorTouch(event, targetDisplayId, transform)
                 true
             }
         }
