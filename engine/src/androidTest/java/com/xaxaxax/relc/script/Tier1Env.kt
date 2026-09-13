@@ -131,6 +131,86 @@ internal class Tier1Env(
     }
 
     /**
+     * 掛一個 ImageReader 到這個顯示器上取樣影格，直到 [done] 成立或逾時。
+     *
+     * 拆除順序是有講究的，而且我今天已經在 C++ 那邊踩過同一顆地雷
+     * （`NativeImageReader::release`）：`ImageReader.close()` 會讓已取得的 Image buffer
+     * 失效，回呼還在讀就是 `IllegalStateException: buffer is inaccessible`。
+     * 所以先拔 sink 讓新影格停下、再用鎖等在途的那一次做完、最後才 close。
+     *
+     * 只有這裡碰得到那個順序，取樣邏輯不必各自重寫一遍。
+     */
+    private fun sampleFrames(
+        displayId: Int,
+        timeoutMs: Long,
+        onFrame: (buffer: java.nio.ByteBuffer, rowStride: Int) -> Unit,
+        done: () -> Boolean,
+    ): Boolean {
+        val thread = HandlerThread("frame-sampler").apply { start() }
+        val reader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
+        val lock = Object()
+        var closing = false
+
+        reader.setOnImageAvailableListener({ r ->
+            synchronized(lock) {
+                if (closing) return@setOnImageAvailableListener
+                val image = r.acquireLatestImage() ?: return@setOnImageAvailableListener
+                image.use { onFrame(it.planes[0].buffer, it.planes[0].rowStride) }
+            }
+        }, Handler(thread.looper))
+
+        val handle = service.addVirtualDisplaySurface(displayId, reader.surface)
+        try {
+            val deadline = System.currentTimeMillis() + timeoutMs
+            while (System.currentTimeMillis() < deadline) {
+                if (done()) return true
+                Thread.sleep(50)
+            }
+            return done()
+        } finally {
+            if (handle >= 0) service.removeVirtualDisplaySurface(displayId, handle)
+            synchronized(lock) { closing = true }
+            reader.close()
+            thread.quitSafely()
+        }
+    }
+
+    /**
+     * 等到這個顯示器的畫面**不再變動**。
+     *
+     * 「等視窗/版面回報它好了」是代理訊號，而合成出來的影格會比它慢：旋轉動畫期間
+     * `contentSize` 已經是新方向，緩衝區裡卻還是舊內容轉到一半——`vision` 於是以
+     * confidence 1.0 命中一個過渡位置，看起來完全像座標換算錯了。實測 step8 就是這樣飄的。
+     *
+     * 所以直接量真正在意的那件事：連續 [stableFrames] 張影格的取樣完全相同就算穩定。
+     * 這對啟動動畫、旋轉動畫、splash 收起來都成立，不必為每一種各補一個條件。
+     */
+    fun awaitStableFrame(
+        displayId: Int,
+        stableFrames: Int = 8,
+        timeoutMs: Long = 8_000,
+    ): Boolean {
+        val runLength = java.util.concurrent.atomic.AtomicInteger(0)
+        val lastHash = java.util.concurrent.atomic.AtomicLong(Long.MIN_VALUE)
+        return sampleFrames(
+            displayId = displayId,
+            timeoutMs = timeoutMs,
+            onFrame = { buffer, rowStride ->
+                var hash = 1125899906842597L
+                var offset = 0
+                // 每隔幾列取一個 pixel 就夠分辨「畫面有沒有動」，不必掃完整張。
+                while (offset + 4 <= buffer.limit()) {
+                    hash = hash * 31 + buffer.getInt(offset)
+                    offset += rowStride * 4
+                }
+                if (hash == lastHash.get()) runLength.incrementAndGet()
+                else { lastHash.set(hash); runLength.set(0) }
+            },
+            done = { runLength.get() >= stableFrames },
+        )
+    }
+
+    /**
      * 這個顯示器抓下來的影格裡有幾種不同的顏色。
      *
      * 用來回答「畫面上到底有沒有東西」。ATD（automated test device）系統映像檔把圖形堆疊
@@ -141,31 +221,19 @@ internal class Tier1Env(
      * 而「影格是不是全同色」就是我們真正在意的那件事。
      */
     fun distinctColorsOnDisplay(displayId: Int, sampleMs: Long = 2_000): Int {
-        val thread = HandlerThread("frame-probe").apply { start() }
-        val reader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
         val seen = java.util.Collections.synchronizedSet(HashSet<Int>())
-        reader.setOnImageAvailableListener({ r ->
-            val image = r.acquireLatestImage() ?: return@setOnImageAvailableListener
-            image.use {
-                val plane = it.planes[0]
-                val buffer = plane.buffer
-                // 抽樣就夠了——這裡只想知道「有沒有變化」，不是要還原整張圖。
+        sampleFrames(
+            displayId = displayId,
+            timeoutMs = sampleMs,
+            onFrame = { buffer, rowStride ->
                 var offset = 0
                 while (offset + 4 <= buffer.limit() && seen.size < 8) {
                     seen += buffer.getInt(offset)
-                    offset += plane.rowStride * 8
+                    offset += rowStride * 8
                 }
-            }
-        }, Handler(thread.looper))
-
-        val handle = service.addVirtualDisplaySurface(displayId, reader.surface)
-        try {
-            Thread.sleep(sampleMs)
-        } finally {
-            if (handle >= 0) service.removeVirtualDisplaySurface(displayId, handle)
-            reader.close()
-            thread.quitSafely()
-        }
+            },
+            done = { false },  // 取滿時間，看總共見過幾種顏色
+        )
         return seen.size
     }
 

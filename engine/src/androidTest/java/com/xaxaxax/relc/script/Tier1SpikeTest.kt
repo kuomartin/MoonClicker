@@ -4,6 +4,7 @@ import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.hardware.display.DisplayManager
 import android.graphics.PixelFormat
+import android.graphics.Rect
 import android.media.ImageReader
 import android.os.Handler
 import android.os.HandlerThread
@@ -109,7 +110,7 @@ class Tier1SpikeTest {
      * 這樣同一條測試在兩種裝置上都有意義。
      */
     @Test
-    fun step2b_the_trusted_flag_follows_the_permission() {
+    fun step2b_each_privileged_flag_follows_its_own_permission() {
         val displayId = requireDisplay()
         val granted = env.context.checkSelfPermission(RelcV2Service.ADD_TRUSTED_DISPLAY) ==
                 PackageManager.PERMISSION_GRANTED
@@ -119,6 +120,18 @@ class Tier1SpikeTest {
             "ADD_TRUSTED_DISPLAY granted=$granted but the display's FLAG_TRUSTED disagrees.\n$dump",
             granted,
             "FLAG_TRUSTED" in dump,
+        )
+
+        // ALWAYS_UNLOCKED 走的是**另一個權限**，而且它決定虛擬顯示在裝置鎖定時還收不收得到
+        // 注入的觸控——把它跟 TRUSTED 綁成一包丟掉，代價就是那個。
+        val unlockedGranted = env.context.checkSelfPermission(
+            RelcV2Service.ADD_ALWAYS_UNLOCKED_DISPLAY
+        ) == PackageManager.PERMISSION_GRANTED
+        assertEquals(
+            "ADD_ALWAYS_UNLOCKED_DISPLAY granted=$unlockedGranted (ADD_TRUSTED_DISPLAY=$granted) " +
+                    "but FLAG_ALWAYS_UNLOCKED disagrees.\n$dump",
+            granted && unlockedGranted,
+            "FLAG_ALWAYS_UNLOCKED" in dump,
         )
     }
 
@@ -182,25 +195,21 @@ class Tier1SpikeTest {
         assertTrue("the puppet never came up", PuppetRecorder.awaitReady(displayId))
 
         val target = PuppetRecorder.markerRect!!
-
-        // 重試而不是點一次：要分辨「這台裝置根本不派送」與「只是還沒輪到 puppet 的視窗」
-        // （Android 12 的 splash screen 會在 activity 都 resume、畫完之後還壓在上面一陣子）。
-        // 撐過 10 秒還一次都沒到，才叫做不會到。
-        val down = tapUntilReceived(displayId, target.centerX(), target.centerY())
+        val probe = tapUntilInside(displayId, target)
 
         assertNotNull(
-            "no ACTION_DOWN reached the puppet on display $displayId after 10s of retries\n" +
-                    "all touches = ${PuppetRecorder.touches}\n" +
+            "no ACTION_DOWN reached the puppet on display $displayId at all\n" +
                     "--- windows on this display ---\n" + env.windowsOnDisplay(displayId) +
                     "\n--- logcat ---\n" +
                     env.logcat("RelcV2Service", "InputManager", "InputDispatcher", "InputReader"),
-            down,
+            probe.last,
         )
         assertTrue(
-            "tap landed at (${down!!.x}, ${down.y}) on display ${down.displayId}, " +
+            "taps reach the puppet but never inside the marker: last landed at " +
+                    "(${probe.last!!.x}, ${probe.last.y}) on display ${probe.last.displayId}, " +
                     "expected inside ${PuppetRecorder.markerRect} " +
                     "(content ${PuppetRecorder.contentSize})",
-            PuppetRecorder.markerRect!!.contains(down.x.toInt(), down.y.toInt()),
+            probe.inside,
         )
     }
 
@@ -267,10 +276,17 @@ class Tier1SpikeTest {
             )
         }
 
+        // 版面說它好了，影格未必——動畫還在跑的時候比對會命中一個過渡位置。
+        assertTrue(
+            "display $displayId never stopped changing; vision would match a mid-animation frame",
+            env.awaitStableFrame(displayId),
+        )
+
         val warmUpTarget = PuppetRecorder.markerRect!!
-        assertNotNull(
-            "the puppet never became touchable, so the script's single tap could never land",
-            tapUntilReceived(displayId, warmUpTarget.centerX(), warmUpTarget.centerY()),
+        assertTrue(
+            "the puppet never became touchable at a settled position, so the script's single " +
+                    "tap could never land",
+            tapUntilInside(displayId, warmUpTarget).inside,
         )
         // 暖身的那幾下不算數——後面斷言要看的是腳本自己點的那一下。
         PuppetRecorder.touches.clear()
@@ -281,8 +297,11 @@ class Tier1SpikeTest {
             hasVision = true,
         ).use { runner ->
             runner.run(
+                // 腳本不再自己 app.launch：puppet 已經由測試叫起來、也暖身確認過可觸控了，
+                // 再啟動一次會把同一個 task 重新帶到前景、觸發另一輪轉場動畫，於是腳本那唯一
+                // 的一下又落在動畫中途（step8 三次中飄一次就是這樣來的）。啟動本身有 step4
+                // 在管；這一條只測往返。
                 main = """
-                    app.launch("${env.puppetPackage}")
                     data.set("screen_w", screen.width)
                     data.set("screen_h", screen.height)
                     local hit = vision.wait("marker.png", 20000)
@@ -407,24 +426,43 @@ class Tier1SpikeTest {
         return condition()
     }
 
-    /** 反覆注入同一個 tap，直到 puppet 收到 ACTION_DOWN 或 [timeoutMs] 到期。 */
-    private fun tapUntilReceived(
+    /** [tapUntilInside] 的結果：有沒有收到、以及最後看到的那一下在哪。 */
+    private class TapProbe(val last: PuppetRecorder.Touch?, val inside: Boolean)
+
+    /**
+     * 反覆注入同一個 tap，直到 puppet 回報的落點**落在 [target] 裡**，或逾時。
+     *
+     * 為什麼條件是「落在裡面」而不是「收到就好」：視窗在啟動動畫期間就已經收得到觸控，但那
+     * 時它還帶著縮放，回報的座標是動畫中途的值。實測兩次都注入 y=506，收到 334.01 與
+     * 369.01——x 精確不變、y 各自差一個純縮放（1.515 與 1.371），正是垂直方向還在動的樣子。
+     *
+     * 每輪先清掉記錄，回傳的才是這一次注入的結果而不是更早的殘留。
+     *
+     * 這不是「重試到過為止」：座標若真的算錯，它永遠不會落進 [target]，逾時後由
+     * [TapProbe.last] 指出它一直落在哪裡。兩種失敗因此分得開——一次都沒收到是派送不通，
+     * 收到但始終在外面是座標錯。
+     */
+    private fun tapUntilInside(
         displayId: Int,
-        x: Int,
-        y: Int,
-        timeoutMs: Long = 10_000,
-    ): PuppetRecorder.Touch? {
+        target: Rect,
+        timeoutMs: Long = 15_000,
+    ): TapProbe {
         val deadline = System.currentTimeMillis() + timeoutMs
+        var last: PuppetRecorder.Touch? = null
         while (System.currentTimeMillis() < deadline) {
-            // 每一輪都先清掉：不清的話回傳的會是**最早**擠進來的那一下，而那一下很可能發生在
-            // 啟動動畫還沒結束、視窗幾何還在變的時候——座標於是對不上，看起來像座標換算錯了，
-            // 其實只是量到了一個過渡狀態。
             PuppetRecorder.touches.clear()
-            env.service.multiTouchSwipe(-1, displayId, intArrayOf(x, y, x, y), 50L, false)
-            PuppetRecorder.awaitTouch(700) { it.action == MotionEvent.ACTION_DOWN }
-                ?.let { return it }
+            env.service.multiTouchSwipe(
+                -1, displayId,
+                intArrayOf(target.centerX(), target.centerY(), target.centerX(), target.centerY()),
+                50L, false,
+            )
+            val down = PuppetRecorder.awaitTouch(700) { it.action == MotionEvent.ACTION_DOWN }
+            if (down != null) {
+                last = down
+                if (target.contains(down.x.toInt(), down.y.toInt())) return TapProbe(down, true)
+            }
         }
-        return null
+        return TapProbe(last, false)
     }
 
     private fun requireDisplay(): Int {
