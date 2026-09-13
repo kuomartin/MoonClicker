@@ -47,9 +47,7 @@ internal val HIDDEN_API_CONTRACTS: List<MemberContract> = listOf(
         ),
         sinceApi = Build.VERSION_CODES.Q,
     ),
-    // getInstance()/getTasks(int) are unused by production code today (RelcShizukuService and
-    // RelcV2Service only ever call getService()) but are verified against real devices anyway.
-    // API 29–30 devices resolve neither method; both are present and matching from API 31 (S).
+    // Unused by production today; present and matching only from API 31.
     MemberContract(
         owner = "android.app.ActivityTaskManager",
         member = MethodMember(
@@ -89,8 +87,8 @@ internal val HIDDEN_API_CONTRACTS: List<MemberContract> = listOf(
     ),
 
     // ── IActivityManager ───────────────────────────────────────────────────────────────────
-    // The V1 (RelcShizukuService) launch path. Activity/stack management moved to
-    // IActivityTaskManager in Android 10, so these are 27–28 only.
+    // Activity/stack management moved to IActivityTaskManager in Android 10, so these are
+    // 27–28 only.
     MemberContract(
         owner = "android.app.IActivityManager",
         member = MethodMember(
@@ -125,8 +123,8 @@ internal val HIDDEN_API_CONTRACTS: List<MemberContract> = listOf(
         ),
         untilApi = Build.VERSION_CODES.P,
     ),
-    // getTasks lost its `flags` parameter in API 28 — the stub carries both overloads and
-    // RelcShizukuService picks by SDK_INT, so each side of the split is claimed separately.
+    // getTasks lost its `flags` parameter in API 28; each side of the split is claimed
+    // separately because callers pick the overload by SDK_INT.
     MemberContract(
         owner = "android.app.IActivityManager",
         member = MethodMember(name = "getTasks", parameters = listOf("int"), returns = "java.util.List"),
@@ -188,10 +186,7 @@ internal val HIDDEN_API_CONTRACTS: List<MemberContract> = listOf(
     ),
 
     // ── PackageManagerHidden ───────────────────────────────────────────────────────────────
-    // android.content.pm.PackageManager$OnPermissionsChangedListener 沒有檢查
-    // 但是Refine應該會正確處理 nested class/interface
-    // Left unverified because nothing calls these methods today;
-    // if something ever does, write a real test against it before trusting this comment.
+    // Nothing calls these today; write a real test before relying on them.
     MemberContract(
         owner = "android.content.pm.PackageManager",
         member = MethodMember(
@@ -232,8 +227,6 @@ internal val HIDDEN_API_CONTRACTS: List<MemberContract> = listOf(
     ),
 
     // ── MotionEventHidden ──────────────────────────────────────────────────────────────────
-    // Verified against real API 27–36 devices: absent on 27–28, present from 29 (Q) onward —
-    // matches the @RequiresApi(Q) already on the stub.
     MemberContract(
         owner = "android.view.MotionEvent",
         member = MethodMember(name = "setDisplayId", parameters = listOf("int"), returns = "void"),
@@ -241,10 +234,9 @@ internal val HIDDEN_API_CONTRACTS: List<MemberContract> = listOf(
     ),
 
     // ── IWindowManager ─────────────────────────────────────────────────────────────────────
-    // The overload split RelcV2Service.setDisplayRotation branches on, and the reason issue #18
-    // was opened: picking the wrong overload throws NoSuchMethodError at runtime. Each side
-    // states the range it must exist on; API 27–28 fall outside both and take the shell-command
-    // fallback instead.
+    // The overload split RelcV2Service.setDisplayRotation branches on — picking the wrong one
+    // throws NoSuchMethodError at runtime. API 27–28 fall outside both and take the
+    // shell-command fallback instead.
     MemberContract(
         owner = "android.view.IWindowManager",
         member = MethodMember(

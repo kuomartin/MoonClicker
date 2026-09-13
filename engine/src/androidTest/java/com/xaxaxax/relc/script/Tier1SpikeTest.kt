@@ -35,11 +35,8 @@ import java.util.concurrent.TimeUnit
 /**
  * Tier 1 —— 見 `docs/lua-api-testing.md`。
  *
- * 每個 step 回答一個原本**不知道答案**的問題，而且刻意各自獨立、依名稱排序執行，所以一次
- * 跑完就知道是哪一環斷掉，而不是只知道「Tier 1 不行」。
- *
- * 只有一處用 `Assume`：畫面全黑的環境（ATD 系統映像檔沒有圖形堆疊）跳過比對那一段。
- * 其餘一律用斷言——這裡的目的是把不成立的假設吵出來，不是把它藏起來。
+ * 每個 step 各自獨立、依名稱排序執行，失敗時直接指出是哪一環斷掉。
+ * `Assume` 只用於環境不提供被測物的情況（如 ATD 映像檔無圖形堆疊）。
  */
 @RunWith(AndroidJUnit4::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
@@ -49,13 +46,8 @@ class Tier1SpikeTest {
 
     @Before
     fun setUp() {
-        // Tier 1 的下限是 API 29：它整個建立在 adoptShellPermissionIdentity 上，而那是
-        // API 29 才有的。這是**測試框架**的限制，不是產品的——production 跑在 Shizuku 真正的
-        // shell 進程裡，不需要 adopt 任何身分，minSdk 仍然是 27。
-        //
-        // `MotionEvent.setDisplayId` 同樣是 API 29，所以「27/28 注入不到虛擬顯示」這個產品
-        // 邊界 Tier 1 永遠觀察不到，不必為它加能力閘門。見
-        // docs/virtual-display-pitfalls.md。
+        // Tier 1 的下限是 API 29（adoptShellPermissionIdentity）；這是測試框架的限制，
+        // 不是產品的——production 跑在 Shizuku 的 shell 進程裡，minSdk 仍是 27。
         assumeTrue(
             "UiAutomation.adoptShellPermissionIdentity does not exist below API 29, so this " +
                     "harness cannot stand in for Shizuku here. Says nothing about whether ReLC " +
@@ -73,19 +65,15 @@ class Tier1SpikeTest {
 
     @After
     fun tearDown() {
-        // setUp 的 assumption 不成立時 env 根本沒建起來，而 @After 照樣會跑——不擋的話
-        // 「跳過」會變成 UninitializedPropertyAccessException，也就是一個假的失敗。
+        // setUp 的 assumption 不成立時 env 沒建起來，但 @After 照樣會跑。
         if (::env.isInitialized) env.close()
     }
 
     /**
-     * Q: instrumentation 進程 adopt 之後，真的拿得到 Shizuku 那些權限嗎？
+     * Tier 1 的前提：instrumentation 進程 adopt 之後拿得到 Shizuku 那些權限。
      *
-     * 這是整個 Tier 1 的前提。拿不到的話後面每一步都會以難解讀的方式失敗。
-     *
-     * `ADD_TRUSTED_DISPLAY` **不在必要清單裡**：不是每台裝置的 shell 都有它，所以它是要量、
-     * 不是要求的事實。production 被擋下來時會退回非 trusted 顯示器
-     * （`RelcV2Service.createDisplay`）。
+     * `ADD_TRUSTED_DISPLAY` 不在必要清單裡——不是每台裝置的 shell 都有，缺了就退回
+     * 非 trusted 顯示器（`RelcV2Service.createDisplay`）。
      */
     @Test
     fun step1_shell_permissions_are_adoptable() {
@@ -105,10 +93,7 @@ class Tier1SpikeTest {
         )
     }
 
-    /**
-     * Q: `RelcV2Service` 的 `DisplayManager` 是用一個自稱 `com.android.shell` 的 Context
-     * 反射出來的。在 Shizuku 進程裡那是實話，在測試進程裡不是——系統會不會擋？
-     */
+    /** `RelcV2Service` 用自稱 `com.android.shell` 的 Context 建顯示器，在測試進程裡也要成立。 */
     @Test
     fun step2_the_real_service_creates_a_virtual_display() {
         val displayId = env.createDisplay()
@@ -117,14 +102,10 @@ class Tier1SpikeTest {
     }
 
     /**
-     * Q: 那組需要 `ADD_TRUSTED_DISPLAY` 的旗標，有沒有依權限正確地給或不給？
+     * 每個特權旗標要跟它自己的權限一致：有權限就該帶上，沒有就不該帶。
      *
-     * 這條存在的原因是**其餘測試全綠也分辨不出這件事**：非 trusted 的顯示器一樣建得起來、
-     * 一樣收得到觸控，所以旗標決策錯了其他斷言照樣通過。而錯掉的代價是整台裝置建不出
-     * 顯示器（見 docs/virtual-display-pitfalls.md）。
-     *
-     * 斷言的是**兩者一致**，不是某個特定值：拿得到權限就該是 trusted，拿不到就不該是。
-     * 這樣同一條測試在兩種裝置上都有意義。
+     * 斷言一致而非特定值，所以兩種裝置上都有意義。旗標給錯的代價是整台裝置建不出顯示器
+     * （見 docs/virtual-display-pitfalls.md），而其餘測試全綠也分辨不出來。
      */
     @Test
     fun step2b_each_privileged_flag_follows_its_own_permission() {
@@ -139,8 +120,7 @@ class Tier1SpikeTest {
             "FLAG_TRUSTED" in dump,
         )
 
-        // ALWAYS_UNLOCKED 走的是**另一個權限**，而且它決定虛擬顯示在裝置鎖定時還收不收得到
-        // 注入的觸控——把它跟 TRUSTED 綁成一包丟掉，代價就是那個。
+        // ALWAYS_UNLOCKED 走另一個權限，決定裝置鎖定時虛擬顯示還收不收得到注入的觸控。
         val unlockedGranted = env.context.checkSelfPermission(
             RelcV2Service.ADD_ALWAYS_UNLOCKED_DISPLAY
         ) == PackageManager.PERMISSION_GRANTED
@@ -152,7 +132,7 @@ class Tier1SpikeTest {
         )
     }
 
-    /** Q: GLES 分發器在這個進程裡起得來嗎——`vision.*` 有沒有影格可看？ */
+    /** GLES 分發器要真的產出影格，`vision.*` 才有東西可看。 */
     @Test
     fun step3_the_display_produces_frames() {
         val displayId = requireDisplay()
@@ -178,10 +158,7 @@ class Tier1SpikeTest {
         }
     }
 
-    /**
-     * Q: 啟動一個 activity 到次要顯示器上——這一步在沒有 `INTERNAL_SYSTEM_WINDOW`
-     * 或顯示器擁有權時會被 `ActivityStarter` 擋掉。
-     */
+    /** 啟動 activity 到次要顯示器；缺 `INTERNAL_SYSTEM_WINDOW` 或顯示器擁有權會被擋掉。 */
     @Test
     fun step4_the_puppet_launches_onto_the_display() {
         val displayId = requireDisplay()
@@ -201,10 +178,7 @@ class Tier1SpikeTest {
         )
     }
 
-    /**
-     * Q: 注入的觸控會不會真的送到那個顯示器上的視窗？這是 Tier 1 最大的未知——
-     * 非 trusted 的虛擬顯示在不同 API level 上行為不一樣。
-     */
+    /** 注入的觸控要真的送到那個顯示器上的視窗——非 trusted 顯示器各 API level 行為不一。 */
     @Test
     fun step5_an_injected_tap_reaches_the_puppet() {
         val displayId = requireDisplay()
@@ -231,26 +205,18 @@ class Tier1SpikeTest {
     }
 
     /**
-     * 全部串起來：腳本啟動 puppet、用 `vision.wait` 找到畫在上面的標記、點它，
-     * 而 puppet 確認被點到的位置就在標記裡。
+     * 全程往返：vision 說標記在哪 → input 打去那裡 → puppet 回報打到標記裡。
      *
-     * 這個斷言是**自洽**的——vision 說它在哪，input 就打去哪，puppet 回報打到哪。中間任何
-     * 一段的座標換算錯了都會露出來，而且不依賴 letterbox、density、insets 的任何假設。
+     * 自洽的斷言，不依賴 letterbox、density、insets 的任何假設。
      */
     @Test
     fun step6_a_script_finds_the_marker_and_taps_it() = visionTapRoundTrip(orientation = null)
 
     /**
-     * Q: 顯示器轉了之後，`vision` 回的座標還是指得到那個標記嗎？
+     * 旋轉後座標換算仍要成立（ADR-0012 的 Surface 空間／邏輯空間）。
      *
-     * rotation 0 時 `VisionMatcher::frameToLogical` 是 identity——所以 step6 其實一段換算
-     * 都沒驗到。真正會動的是 case 1/2/3，也就是 ADR-0012 與 CONTEXT.md「Surface 空間 /
-     * 邏輯空間」在講的那件事。
-     *
-     * 特別要抓的是**方向寫反**：case 1 與 case 3 在維度上都自洽（rotation 1 時 lx 落在
-     * [0, frameHeight)、ly 落在 [0, frameWidth)，case 3 反過來也對），所以把兩者對調不會
-     * 讓任何維度檢查失敗，用看的也很難發現——只有真的點下去、由 puppet 回報打到哪，才分
-     * 得出來。
+     * rotation 0 時 `VisionMatcher::frameToLogical` 是 identity，所以只有轉過的顯示器才驗得到
+     * 換算。方向寫反在維度上依然自洽，只有實際點下去、由 puppet 回報落點才分得出來。
      */
     @Test
     fun step7_a_landscape_display_still_maps_vision_to_where_the_tap_lands() =
@@ -263,30 +229,22 @@ class Tier1SpikeTest {
     /**
      * step6/7/8 共用的那一圈：vision 說標記在哪 → 點那裡 → puppet 回報打到哪。
      *
-     * 斷言本身跟 rotation 無關，這正是重點——換算對的話，這一圈在任何角度下都成立。
+     * 斷言與 rotation 無關——換算對的話，這一圈在任何角度下都成立。
      */
     private fun visionTapRoundTrip(orientation: Int?) {
         val displayId = requireDisplay()
 
-        // 先把 puppet 叫起來、並確認它**真的收得到觸控**，再讓腳本跑。
-        //
-        // 不暖身的話這是時序賭博：Android 12 的 splash 會在 activity 都 resume、畫完之後還
-        // 壓著一陣子，那段期間注入的觸控會掉，而腳本只點一次。失敗訊息會說「點擊沒送達」，
-        // 讀起來像座標錯了。
-        //
-        // 啟動時序有 step4/step5 在管；這裡要測的是座標換算。
+        // 先暖身到 puppet 真的收得到觸控再讓腳本跑：splash 期間注入的觸控會掉，
+        // 而腳本只點一次。啟動時序由 step4/step5 負責，這裡測的是座標換算。
         env.service.launchInDisplay(env.puppetPackage, displayId)
         assertTrue("the puppet never came up", PuppetRecorder.awaitReady(displayId))
 
         if (orientation != null) {
             PuppetActivity.requestOrientation(orientation)
-            // 轉了才算數：生效的話 puppet 的 content 會長寬互換。先確認這件事，否則
-            // 「其實根本沒轉」會被誤讀成「換算錯了」——兩者要查的地方完全不同。
+            // 轉了才算數：生效的話 puppet 的 content 會長寬互換。
             val rotated = env.height to env.width
-            // **環境能力，不是斷言**：有些環境不讓 app 宣告的方向傳到虛擬顯示（原因未定，
-            // 見 docs/virtual-display-pitfalls.md）。轉不動時「座標換算對不對」無從量起，
-            // 所以 assume 掉——但這是逐次實測的條件、不是寫死的裝置清單，任何轉得動的環境
-            // 仍然照常斷言。訊息帶上 dumpsys 供接手的人查。
+            // 環境能力而非斷言：有些環境不讓 app 宣告的方向傳到虛擬顯示
+            // （見 docs/virtual-display-pitfalls.md），轉不動時座標換算無從量起。
             assumeTrue(
                 "the puppet asked for orientation $orientation but display $displayId never " +
                         "followed — content is still ${PuppetRecorder.contentSize}, expected " +
@@ -311,7 +269,7 @@ class Tier1SpikeTest {
                     "tap could never land",
             tapUntilInside(displayId, warmUpTarget).inside,
         )
-        // 暖身的那幾下不算數——後面斷言要看的是腳本自己點的那一下。
+        // 後面要看的是腳本自己點的那一下，暖身的不算。
         PuppetRecorder.touches.clear()
 
         val outcome = LuaScriptRunner(
@@ -320,8 +278,7 @@ class Tier1SpikeTest {
             hasVision = true,
         ).use { runner ->
             runner.run(
-                // 腳本不自己 app.launch：puppet 已經由測試叫起來並暖身過，再啟動一次會把同一
-                // 個 task 重新帶到前景、觸發另一輪轉場動畫。啟動有 step4 在管，這裡只測往返。
+                // 腳本不自己 app.launch：puppet 已由測試叫起來，再啟動一次會觸發另一輪轉場動畫。
                 main = """
                     data.set("screen_w", screen.width)
                     data.set("screen_h", screen.height)
@@ -332,8 +289,7 @@ class Tier1SpikeTest {
                     data.set("cy", hit.cy)
                     data.set("confidence", hit.confidence)
 
-                    -- 同一畫面上的不對稱圖樣。模板是直立時截的，所以只有在引擎把模板
-                    -- 轉到當前方向之後，旋轉下才會中。
+                    -- 不對稱圖樣：模板是直立時截的，旋轉下要引擎轉過模板才會中。
                     local glyph = vision.wait("glyph.png", 5000)
                     data.set("glyph_found", glyph ~= nil)
                     if glyph ~= nil then
@@ -354,10 +310,8 @@ class Tier1SpikeTest {
 
         assertEquals(EngineRunState.Finished, outcome.runState)
 
-        // 腳本看到的尺寸要跟 puppet 實際被排版的尺寸一致。這條把 ADR-0012 的交接釘住：
-        // 啟動時隨 nativeStart 傳進去的那個 rotation 快照，加上 DisplayRotationTracker
-        // 後續推進來的更新，兩段都得到位，native 端的 logicalSize 才會是對的。
-        // 少了這條，下面的往返即使通過也只是「推論」native 知道自己轉了。
+        // 腳本看到的尺寸要跟 puppet 實際被排版的尺寸一致：nativeStart 的 rotation 快照與
+        // DisplayRotationTracker 後續的更新兩段都到位，native 的 logicalSize 才會是對的。
         assertEquals(
             "the script and the puppet disagree about the display size",
             PuppetRecorder.contentSize,
@@ -366,9 +320,8 @@ class Tier1SpikeTest {
         )
 
         if (outcome.data["found"] != true) {
-            // 比不中之前，先問畫面上到底有沒有東西。ATD 系統映像檔沒有圖形堆疊，虛擬顯示
-            // 送出來的每一張影格都是全黑——那時比不中是環境不提供被測物，不是 bug。
-            // puppet 這時還在（tearDown 才收），所以量到的就是腳本剛才看到的那個畫面。
+            // 比不中之前先問畫面上有沒有東西：ATD 映像檔沒有圖形堆疊，影格全黑，
+            // 那時比不中是環境不提供被測物，不是 bug。
             val colors = env.distinctColorsOnDisplay(displayId)
             assumeTrue(
                 "display $displayId composites nothing — only $colors distinct colour(s) while " +
@@ -383,10 +336,8 @@ class Tier1SpikeTest {
                     "display rotation ${displayRotation(displayId)})\n" +
                     "puppet ready on ${PuppetRecorder.resumedOnDisplay}, " +
                     "marker at ${PuppetRecorder.markerRect}, content ${PuppetRecorder.contentSize}\n" +
-                    // 最後一次比對的結果。注意 miss 時 confidence 一律是 0——match() 在低於
-                    // 門檻時 continue，留下預設值——所以這裡讀得到的是「哪張圖、找到沒」，
-                    // 不是相關係數。要分辨「畫面全黑」與「有內容但比不中」，靠下面的
-                    // distinctColorsOnDisplay，不要靠分數。
+                    // miss 時 confidence 一律是 0（低於門檻就 continue），所以這裡讀得到的是
+                    // 「哪張圖、找到沒」，不是相關係數。
                     "last match = ${EngineStateRepository.state.value.lastVisionResult}\n" +
                     env.logcat("VisionMatcher", "NativeImageReader", "GlesDistributor", "LuaEngine"),
             true,
@@ -403,8 +354,7 @@ class Tier1SpikeTest {
             target.contains(cx, cy),
         )
 
-        // 對稱標記中了、不對稱的沒中 —— 那就不是環境問題也不是座標問題，是模板方向。
-        // 這兩條分開斷言就是為了讓失敗訊息自己講出是哪一類。
+        // 與對稱標記分開斷言：對稱的中了、不對稱的沒中，就是模板方向問題。
         assertEquals(
             "the rotation-symmetric marker matched but the asymmetric glyph did not, at display " +
                     "rotation ${displayRotation(displayId)}. The frame is surface space, so a " +
@@ -448,18 +398,11 @@ class Tier1SpikeTest {
     }
 
     /**
-     * Q: `vision.wait` 真的會**等**嗎？
+     * `vision.wait` 的等待語意：標記在腳本已經在等的時候才畫出來。
      *
-     * 這一組存在的理由是：其餘所有 vision 測試的畫面都是靜態的，比對第一幀就中——也就是說
-     * 它們驗的其實是 `vision.find`，而 `wait` 的等待語意從來沒被執行到。畫面必須在腳本
-     * 已經在等的時候才改變，這件事才問得出來。
-     *
-     * 真正的鑑別力來自 `found`：標記在延遲之前根本不在畫面上，所以「有比中」本身就蘊含
-     * 「有等到」。經過時間那條是額外的防線，擋的是「比中了畫面上別的東西」。
-     *
-     * [step10][step10_vision_wait_returns_nil_on_timeout_without_erroring] 是它的反向對照：
-     * 同樣藏起來、但永遠不顯示，斷言 `found == false`。兩支一起看才完整——只有前者的話，
-     * 一個永遠回傳 true 的實作也會過。
+     * 鑑別力來自 `found`——標記在延遲前不在畫面上，比中就蘊含有等到；經過時間那條擋的是
+     * 「比中了畫面上別的東西」。反向對照見
+     * [step10][step10_vision_wait_returns_nil_on_timeout_without_erroring]。
      */
     @Test
     fun step9_vision_wait_blocks_until_the_marker_appears() {
@@ -486,12 +429,7 @@ class Tier1SpikeTest {
         )
     }
 
-    /**
-     * Q: 逾時是回 `nil` 還是拋錯？
-     *
-     * `docs/lua-api.md` 承諾「逾時回傳 nil」，而那條路徑在此之前完全沒有測試守著——腳本
-     * 作者的錯誤處理全建立在它上面。
-     */
+    /** `docs/lua-api.md` 承諾逾時回傳 `nil` 而不是拋錯——腳本的錯誤處理建立在這上面。 */
     @Test
     fun step10_vision_wait_returns_nil_on_timeout_without_erroring() {
         val displayId = readyDisplayWithHiddenMarkers()   // 一直不顯示
@@ -521,10 +459,9 @@ class Tier1SpikeTest {
     }
 
     /**
-     * Q: `vision.wait_any` 回的 index 指的是**出現的那一個**嗎？
+     * `vision.wait_any` 的 index 要指向真的出現的那一個。
      *
-     * 兩個候選同時出現的話 index 只反映呼叫順序，什麼都沒驗到。所以只讓其中一個出現，
-     * 另一個永遠不畫。
+     * 只讓其中一個出現：兩個都出現的話 index 只反映呼叫順序，什麼都沒驗到。
      */
     @Test
     fun step11_vision_wait_any_reports_which_one_appeared() {
@@ -581,16 +518,11 @@ class Tier1SpikeTest {
     private class TapProbe(val last: PuppetRecorder.Touch?, val inside: Boolean)
 
     /**
-     * 反覆注入同一個 tap，直到 puppet 回報的落點**落在 [target] 裡**，或逾時。
+     * 反覆注入同一個 tap，直到 puppet 回報的落點落在 [target] 裡，或逾時。
      *
-     * 條件是「落在裡面」而不是「收到就好」：視窗在啟動動畫期間就收得到觸控，但那時帶著縮放，
-     * 回報的座標是動畫中途的值（見 docs/virtual-display-pitfalls.md）。
-     *
-     * 每輪先清掉記錄，回傳的才是這一次注入的結果而不是更早的殘留。
-     *
-     * 這不是「重試到過為止」：座標若真的算錯，它永遠不會落進 [target]，逾時後由
-     * [TapProbe.last] 指出它一直落在哪裡。兩種失敗因此分得開——一次都沒收到是派送不通，
-     * 收到但始終在外面是座標錯。
+     * 條件是「落在裡面」而非「收到就好」：啟動動畫期間視窗就收得到觸控，但座標帶著縮放
+     * （見 docs/virtual-display-pitfalls.md）。座標若真的算錯就永遠不會落進 [target]，
+     * 逾時後由 [TapProbe.last] 分辨「一次都沒收到」與「收到但始終在外面」。
      */
     private fun tapUntilInside(
         displayId: Int,
@@ -622,7 +554,7 @@ class Tier1SpikeTest {
     }
 
     private companion object {
-        /** 排程改變畫面的延遲。要明顯大於「第一幀就比中」的時間尺度才有鑑別力。 */
+        /** 排程改變畫面的延遲，要明顯大於「第一幀就比中」的時間尺度。 */
         const val APPEAR_DELAY_MS = 2_000L
         const val TIMEOUT_MS = 2_000L
     }

@@ -65,14 +65,14 @@ class FullscreenDisplayViewModel @Inject constructor(
     }
 
     /**
-     * 把感測器方向推給虛擬顯示（#17 環節一）。
+     * 把感測器方向推給虛擬顯示（方向鏈環節一）。
      *
-     * 「設了但方向沒變」是**設計預期**而非錯誤——虛擬顯示裡的 app 若宣告了方向，
-     * WindowManager 會忽略我們（見地圖前提 3a），因此不對使用者提示。
+     * 「設了但方向沒變」是設計預期而非錯誤——虛擬顯示裡的 app 若宣告了方向，
+     * WindowManager 會忽略我們，因此不對使用者提示。
      */
     fun setDisplayRotation(displayId: Int, rotation: Int) {
-        // 不能用 viewModelScope：離開全螢幕時的還原是在拆除期間發出的，而那時 scope 已被
-        // 取消，launch 根本不會執行 —— 還原就永遠送不出去，正是 #17 Q5 要防的那個外洩。
+        // 不能用 viewModelScope：離開全螢幕時的還原是在拆除期間發出的，那時 scope 已被取消，
+        // launch 不會執行，還原就永遠送不出去。
         rotationScope.launch {
             shizukuManager.withService { service ->
                 if (!service.setDisplayRotation(displayId, rotation)) {
@@ -84,7 +84,6 @@ class FullscreenDisplayViewModel @Inject constructor(
 
     fun startCropping() {
         _uiState.value = _uiState.value.copy(executionState = ExecutionState.CROPPING)
-        // trigger is handled by Activity passing Bitmap to setCapturedBitmap
     }
 
     fun setCapturedBitmap(bitmap: android.graphics.Bitmap) {
@@ -103,7 +102,6 @@ class FullscreenDisplayViewModel @Inject constructor(
     ): Boolean {
         val bitmap = _capturedBitmap.value ?: return false
         try {
-            // Ensure cropRect is within bounds
             val left = cropRect.left.coerceAtLeast(0)
             val top = cropRect.top.coerceAtLeast(0)
             val right = cropRect.right.coerceAtMost(bitmap.width)

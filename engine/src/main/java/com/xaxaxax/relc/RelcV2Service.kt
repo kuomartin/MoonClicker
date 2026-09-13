@@ -55,16 +55,9 @@ import kotlin.time.Duration.Companion.milliseconds
 class RelcV2Service @JvmOverloads constructor(
     private val context: Context,
     /**
-     * 這個進程向系統宣稱自己是誰。
-     *
-     * 建立虛擬顯示與啟動 activity 都會把它送進 system_server，而那邊會拿它跟 calling uid
-     * 對（`packageName must match the calling uid`）——所以它必須是**執行這段程式碼的 uid
-     * 真的擁有的**套件名，不是任意字串。它不是設定，是宿主進程的事實。
-     *
-     * 預設 `com.android.shell`，因為服務跑在 Shizuku 起的 shell 進程裡，那裡這是實話。
-     * 換一個宿主進程就得換這個值（`engine/src/androidTest` 的 Tier1Env 就是這樣把整個服務
-     * 搬進測試進程的）。`@JvmOverloads` 是為了讓 Shizuku 反射找得到原本的 `(Context)`
-     * 建構子。
+     * 這個進程向系統宣稱自己是誰。不是設定，是宿主進程的事實——system_server 會拿它跟
+     * calling uid 對（`packageName must match the calling uid`），所以必須是執行這段程式碼
+     * 的 uid 真的擁有的套件名。換宿主進程就得換這個值。
      */
     private val callerPackage: String = "com.android.shell",
 ) : IRelcV2Service.Stub() {
@@ -73,8 +66,6 @@ class RelcV2Service @JvmOverloads constructor(
             try {
                 System.loadLibrary("relc_native")
             } catch (ex: UnsatisfiedLinkError) {
-                // In Shizuku environment, sometimes we need to wait or handle library loading differently
-                // but standard loadLibrary is the first step.
                 Timber.e(ex)
             }
         }
@@ -110,25 +101,7 @@ class RelcV2Service @JvmOverloads constructor(
                 DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_SUPPORTS_TOUCH or
                 DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_ROTATES_WITH_CONTENT
 
-        /**
-         * API 33 起才存在的那一組。**它們不是一包**——`createVirtualDisplayInternal` 裡是三個
-         * 各自獨立的檢查，見 [privilegedFlags]：
-         *
-         *  - `TRUSTED`、`OWN_DISPLAY_GROUP`：各自要 `ADD_TRUSTED_DISPLAY`，不符拋
-         *    SecurityException。
-         *  - `ALWAYS_UNLOCKED`：要的是**另一個權限** `ADD_ALWAYS_UNLOCKED_DISPLAY`，而且
-         *    javadoc 說它「only valid for virtual displays that aren't in the default
-         *    display group」，所以也依賴 `OWN_DISPLAY_GROUP`。
-         *  - `TOUCH_FEEDBACK_DISABLED`：沒有任何權限檢查。
-         *
-         * API 33 這條界線是「shell 通常從 Android 13 起才拿得到那些權限」的經驗值，與
-         * scrcpy 的 `NewDisplayCapture` 一致。見 docs/virtual-display-pitfalls.md。
-         */
-        /**
-         * API 34 起。這兩個確實依賴顯示器是 trusted——`OWN_FOCUS` 的 javadoc 明講
-         * 「The display must be trusted in order to have its own focus」，
-         * `DEVICE_DISPLAY_GROUP` 也只在與 `TRUSTED` 並用時才生效。
-         */
+        /** API 34 起，兩者都依賴顯示器是 trusted。 */
         const val ADD_FLAGS_34 = DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_OWN_FOCUS or
                 DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_DEVICE_DISPLAY_GROUP
     }
@@ -174,14 +147,8 @@ class RelcV2Service @JvmOverloads constructor(
     }
 
     /**
-     * 一個虛擬顯示，連同它**建立時**的尺寸。
-     *
-     * 尺寸留在這裡而不是事後回推：`Display.getRealSize` 回的是套用旋轉後的邏輯尺寸，
-     * 要換回 surface 尺寸就得再讀一次 rotation——兩次獨立的讀取之間畫面轉了，算出來的
-     * 答案會錯得很有自信（見 [getDisplaySurfaceSize]）。建立尺寸是常數，記下來就不必猜。
-     *
-     * 名字不放這裡：`Display.getName()` 原樣回傳建立時給的名字（實機驗證過，被加前綴的是
-     * `uniqueId` 不是 name），平台已經是它的擁有者了。
+     * 一個虛擬顯示，連同它建立時的尺寸——那是常數，記下來就不必從邏輯尺寸加 rotation
+     * 回推（兩次獨立讀取之間畫面轉了，答案會錯得很有自信）。見 [getDisplaySurfaceSize]。
      */
     private class ManagedDisplay(
         val display: VirtualDisplay,
@@ -210,7 +177,6 @@ class RelcV2Service @JvmOverloads constructor(
 
         val logId = if (pointerId == -1) nextInternalPointerId.getAndDecrement() else pointerId
 
-        // Cancel previous interpolation job for this pointer if any
         swipeJobs[logId]?.cancel()
 
         val job = serviceScope.launch {
@@ -279,7 +245,6 @@ class RelcV2Service @JvmOverloads constructor(
                     }
                 }
             } finally {
-                // Only remove if it's still our job
                 swipeJobs.remove(logId, coroutineContext[kotlinx.coroutines.Job])
             }
         }
@@ -436,7 +401,6 @@ class RelcV2Service @JvmOverloads constructor(
         val baseFlags = (flags and SUPPORTED_FLAGS) or ADD_FLAGS
         val privilegedFlags = baseFlags or privilegedFlags()
 
-        // 1. 建立 Native GLES 分發器並獲取 Source Surface
         val nativePtr = nativeCreateDistributor(width, height)
         if (nativePtr == 0L) return -1
         val sourceSurface = nativeGetDistributorSurface(nativePtr) ?: run {
@@ -467,14 +431,13 @@ class RelcV2Service @JvmOverloads constructor(
     }
 
     /**
-     * API 33+ 才給的那些旗標，**逐項按它自己的前提決定**。
+     * API 33+ 的特權旗標，逐項按它自己的前提決定——`DisplayManagerService`
+     * 裡是三條獨立的檢查，不要綁成一包給或一包丟。
      *
-     * **不要把它們綁成一包。** 三個旗標在 `DisplayManagerService` 裡是三條獨立的檢查
-     * （見 [ADD_FLAGS_33]），整組丟掉的代價是：有 `ADD_TRUSTED_DISPLAY` 卻沒有
-     * `ADD_ALWAYS_UNLOCKED_DISPLAY` 的機器，會為一個旗標讓整個顯示器退回非 trusted。
-     *
-     * `ALWAYS_UNLOCKED` 尤其不能順手丟掉：少了它，虛擬顯示在裝置鎖定或休眠時**收不到注入
-     * 的觸控**。
+     * 綁成一包的代價：有 `ADD_TRUSTED_DISPLAY` 卻沒有 `ADD_ALWAYS_UNLOCKED_DISPLAY` 的機器
+     * 會為一個旗標讓整個顯示器退回非 trusted，而少了 `ALWAYS_UNLOCKED`，虛擬顯示在裝置
+     * 鎖定或休眠時收不到注入的觸控。API 33 這條界線與 scrcpy 的 `NewDisplayCapture` 一致；
+     * 見 docs/virtual-display-pitfalls.md。
      */
     private fun privilegedFlags(): Int {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return 0
@@ -500,10 +463,8 @@ class RelcV2Service @JvmOverloads constructor(
     }
 
     /**
-     * 這個進程有沒有某個權限——**直接問，不要用丟例外去試**。
-     *
-     * `checkSelfPermission` 查的是 `Process.myUid()`，在 Shizuku 起的進程裡就是 shell，
-     * 正是 `DisplayManagerService` 會拿去對的那個身分。
+     * 這個進程有沒有某個權限——直接問，不要用丟例外去試。`checkSelfPermission` 查的是
+     * `Process.myUid()`，正是 `DisplayManagerService` 會拿去對的那個身分。
      */
     private fun holds(permission: String): Boolean =
         grantedPermissions.getOrPut(permission) {
@@ -518,14 +479,9 @@ class RelcV2Service @JvmOverloads constructor(
     /**
      * 建一個虛擬顯示，失敗回 `null`。
      *
-     * 呼叫端會用 [privilegedFlags] 試一次、被擋下來再用基本旗標試一次。少了 TRUSTED 顯示器
-     * 仍然建得起來、也仍然收得到影格與觸控，只是不再是 trusted display，部分行為會降級——
-     * 但整台不能用比降級糟得多。
-     *
-     * [privilegedFlags] 已經先問過權限，這裡是問完仍被擋下來時的退路：那組旗標各自還有別的
-     * 前提，權限過了不代表整組必然被接受。
+     * 呼叫端用 [privilegedFlags] 試一次、被擋下來再用基本旗標試一次——那些旗標各自還有
+     * 權限以外的前提。非 trusted 的顯示器仍然建得起來、收得到影格與觸控，只是行為降級。
      */
-//    @SuppressLint("WrongConstant")
     private fun createDisplay(
         dm: DisplayManager,
         name: String,
@@ -573,10 +529,8 @@ class RelcV2Service @JvmOverloads constructor(
     private external fun nativeDestroyDistributor(ptr: Long)
 
     override fun launchInDisplay(packageName: String, displayId: Int): Boolean {
-        // IActivityManager's startActivity/createStackOnDisplay/moveTaskToStack only exist
-        // through API 28 (see hidden-api-contract's HIDDEN_API_CONTRACTS) — API 29 must go
-        // through ActivityTaskManager, which Workaround.startActivity already branches
-        // correctly for (10-param overload on Q, 11-param from R).
+        // IActivityManager 的 startActivity/createStackOnDisplay/moveTaskToStack 只到 API 28
+        // 為止（見 HIDDEN_API_CONTRACTS），API 29 起一律走 ActivityTaskManager。
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             launchViaActivityTaskManager(packageName, displayId)
         } else {
@@ -585,14 +539,11 @@ class RelcV2Service @JvmOverloads constructor(
     }
 
     /**
-     * `startActivity` 的回傳值只抓得到**同步**的框架錯誤（找不到 activity、權限不足）。
+     * `startActivity` 的回傳值只抓得到同步的框架錯誤（找不到 activity、權限不足）。
      *
-     * 它抓不到「activity 不支援次要顯示器，被系統悄悄轉去別的顯示器」這一類——AOSP 的
-     * `ActivityStarter.getExternalResult()` 會把內部的 `START_ABORTED` 換成
-     * `START_SUCCESS` 再回給呼叫端（"Aborted results are treated as successes
-     * externally"），而那個場景的通知管道是 `ITaskStackListener` 的非同步回呼
-     * （`notifyActivityLaunchOnSecondaryDisplayFailed`），完全不經過這個回傳值。
-     * 要抓那個，得在啟動後查 task 實際落在哪個顯示器——見 issue #25 的追蹤留言。
+     * 「activity 不支援次要顯示器、被悄悄轉去別台」不在其中：`ActivityStarter` 會把
+     * `START_ABORTED` 換成 `START_SUCCESS` 回給呼叫端，該場景只透過 `ITaskStackListener`
+     * 非同步通知。要抓它得在啟動後查 task 實際落在哪個顯示器——見 issue #25。
      */
     private fun launchViaActivityTaskManager(packageName: String, displayId: Int): Boolean {
         val intent = context.packageManager.getLaunchIntentForPackage(packageName) ?: return false
@@ -611,21 +562,17 @@ class RelcV2Service @JvmOverloads constructor(
     }
 
     // ── Legacy (API 27–28) ──────────────────────────────────────────────────────────────
-    // Ported from RelcShizukuService, which this class replaces — that implementation was
-    // hard-won, so it's kept rather than redone. IActivityManager's startActivity/
-    // createStackOnDisplay/moveTaskToStack don't exist past API 28, so this path is only ever
-    // reached below Q; it also covers the "app is already running elsewhere" case that
-    // Workaround.startActivity's AM fallback does not (that fallback always relaunches fresh).
+    // 只在 Q 以下走到。除了啟動，這條路也涵蓋「app 已經跑在別的顯示器上」——
+    // Workaround.startActivity 的 AM 退路不涵蓋，它一律重新啟動。
 
     private fun launchOrMoveViaActivityManager(packageName: String, displayId: Int): Boolean = runCatching {
         val iam = ActivityManagerHidden.getService()
         val tasks = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) iam.getTasks(50) else iam.getTasks(50, 0)
         val task = tasks.find { it.baseActivity?.packageName == packageName }
         if (task != null) {
-            // App already running — move its task instead of relaunching.
             val hiddenInfo = Refine.unsafeCast<RunningTaskInfoHidden_API_27>(task)
             Timber.d("moveToDisplay (API <= 28): taskId=${hiddenInfo.id} pkg=$packageName to displayId=$displayId")
-            // To move only one task, we create a new stack on the target display and move the task to it.
+            // 只搬這一個 task：在目標顯示器上開一個新 stack，再把 task 移過去。
             val newStackId = iam.createStackOnDisplay(displayId)
             Timber.d("Created stack $newStackId on display $displayId")
             iam.moveTaskToStack(hiddenInfo.id, newStackId, true)
@@ -728,8 +675,7 @@ class RelcV2Service @JvmOverloads constructor(
                 }
                 return true
             } catch (t: Throwable) {
-                // 版本簽章不符、權限不足、displayId 不存在等——真正的失敗。**不退回 shell**：
-                // 那會把可回報的錯誤變成靜默成功，摧毀 #16 Q3 兩級失敗處理的前提。
+                // 真正的失敗，不退回 shell——那會把可回報的錯誤變成靜默成功。
                 Timber.e(t, "freezeDisplayRotation(%d, %d) failed", displayId, quarterTurns)
                 return false
             }
@@ -766,12 +712,9 @@ class RelcV2Service @JvmOverloads constructor(
     /**
      * Surface 空間的尺寸（見 CONTEXT.md「Surface 空間 / 邏輯空間」）。
      *
-     * 三條路，差別在我們對這個顯示器知道多少：
-     * - 自己建立的虛擬顯示：建立尺寸是常數，直接回存下來的那一份，完全不經過推導。
-     * - 實體螢幕：沒有「建立尺寸」可言，只能推。但邏輯尺寸與 rotation 都來自這個進程裡
-     *   的同一個 DisplayManager，沒有跨進程的時間差。
-     * - 其他 id：回 [0, 0]。不是我們建的顯示器，我們沒有立場猜它的幾何——讓呼叫端當場
-     *   失敗，比帶著可能錯的尺寸跑完整個腳本好。
+     * - 自己建立的虛擬顯示：回存下來的建立尺寸，不經推導。
+     * - 實體螢幕：只能由邏輯尺寸與 rotation 推得，兩者同進程讀取，沒有時間差。
+     * - 其他 id：回 [0, 0]，讓呼叫端當場失敗，好過帶著可能錯的尺寸跑完整個腳本。
      */
     override fun getDisplaySurfaceSize(displayId: Int): IntArray {
         vdStore[displayId]?.let { return intArrayOf(it.surfaceWidth, it.surfaceHeight) }
