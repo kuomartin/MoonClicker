@@ -92,8 +92,10 @@ class RelcV2Service @JvmOverloads constructor(
 
         const val DELAY_MS = 16 // 60fps
 
-        /** 不在 `Manifest.permission` 裡（signature|privileged，@hide）。 */
+        /** 都不在 `Manifest.permission` 裡（signature|privileged，@hide）。 */
         const val ADD_TRUSTED_DISPLAY = "android.permission.ADD_TRUSTED_DISPLAY"
+        const val ADD_ALWAYS_UNLOCKED_DISPLAY =
+            "android.permission.ADD_ALWAYS_UNLOCKED_DISPLAY"
 
         /** 呼叫端可以要求的旗標，其餘一律由這裡決定。 */
         const val SUPPORTED_FLAGS =
@@ -109,21 +111,25 @@ class RelcV2Service @JvmOverloads constructor(
                 DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_ROTATES_WITH_CONTENT
 
         /**
-         * 需要 `ADD_TRUSTED_DISPLAY` 的那一組，**API 33 起才給**。
+         * API 33 起才存在的那一組。**它們不是一包**——`createVirtualDisplayInternal` 裡是三個
+         * 各自獨立的檢查，見 [privilegedFlags]：
          *
-         * 旗標本身 API 30 就存在，但 shell 是從 Android 13 才被授予那個權限——實測
-         * Samsung SM-A217F / Android 12 的 `com.android.shell` 沒有它，Pixel 7a / API 37
-         * 有。在 31/32 上要求它只會換來
-         * `SecurityException: Requires ADD_TRUSTED_DISPLAY permission`，整台建不出顯示器。
+         *  - `TRUSTED`、`OWN_DISPLAY_GROUP`：各自要 `ADD_TRUSTED_DISPLAY`，不符拋
+         *    SecurityException。
+         *  - `ALWAYS_UNLOCKED`：要的是**另一個權限** `ADD_ALWAYS_UNLOCKED_DISPLAY`，而且
+         *    javadoc 說它「only valid for virtual displays that aren't in the default
+         *    display group」，所以也依賴 `OWN_DISPLAY_GROUP`。
+         *  - `TOUCH_FEEDBACK_DISABLED`：沒有任何權限檢查。
          *
-         * 這個界線與 scrcpy 的 `NewDisplayCapture` 一致（它也卡 API_33_ANDROID_13）。
+         * API 33 這條界線是「shell 通常從 Android 13 起才拿得到那些權限」的經驗值，與
+         * scrcpy 的 `NewDisplayCapture` 一致。實測 Samsung SM-A217F / Android 12 的
+         * `com.android.shell` 沒有 `ADD_TRUSTED_DISPLAY`。
          */
-        const val ADD_FLAGS_33 = DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_TRUSTED or
-                DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP or
-                DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_ALWAYS_UNLOCKED or
-                DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_TOUCH_FEEDBACK_DISABLED
-
-        /** 依賴顯示器是 trusted，所以只在 [ADD_FLAGS_33] 也成立時才加。 */
+        /**
+         * API 34 起。這兩個確實依賴顯示器是 trusted——`OWN_FOCUS` 的 javadoc 明講
+         * 「The display must be trusted in order to have its own focus」，
+         * `DEVICE_DISPLAY_GROUP` 也只在與 `TRUSTED` 並用時才生效。
+         */
         const val ADD_FLAGS_34 = DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_OWN_FOCUS or
                 DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_DEVICE_DISPLAY_GROUP
     }
@@ -429,7 +435,7 @@ class RelcV2Service @JvmOverloads constructor(
         flags: Int,
     ): Int {
         val baseFlags = (flags and SUPPORTED_FLAGS) or ADD_FLAGS
-        val trustedFlags = baseFlags or trustedOnlyFlags()
+        val privilegedFlags = baseFlags or privilegedFlags()
 
         // 1. 建立 Native GLES 分發器並獲取 Source Surface
         val nativePtr = nativeCreateDistributor(width, height)
@@ -443,7 +449,7 @@ class RelcV2Service @JvmOverloads constructor(
         Timber.d(
             "createVD: callingUid=${getCallingUid()} serviceUid=${Process.myUid()} fakePkg=${fakeDisplayContext.packageName} surfaceValid=${sourceSurface.isValid}"
         )
-        val vd = createDisplay(dm, name, width, height, densityDpi, sourceSurface, trustedFlags)
+        val vd = createDisplay(dm, name, width, height, densityDpi, sourceSurface, privilegedFlags)
             ?: createDisplay(dm, name, width, height, densityDpi, sourceSurface, baseFlags)
             ?: run {
                 nativeDestroyDistributor(nativePtr)
@@ -462,52 +468,65 @@ class RelcV2Service @JvmOverloads constructor(
     }
 
     /**
-     * 需要 `ADD_TRUSTED_DISPLAY` 的那一整組旗標，拿不到就整組不要。
+     * API 33+ 才給的那些旗標，**逐項按它自己的前提決定**。
      *
-     * 整組一起處理是因為它們互相依賴：`OWN_DISPLAY_GROUP`、`ALWAYS_UNLOCKED`、`OWN_FOCUS`、
-     * `DEVICE_DISPLAY_GROUP` 在 `DisplayManagerService` 那邊全都以「顯示器是 trusted」為
-     * 前提，所以少了 TRUSTED 它們也一個都不能留。
+     * 之前這裡是「拿不到 `ADD_TRUSTED_DISPLAY` 就整組不要」，那個模型是錯的：三個旗標在
+     * `DisplayManagerService` 裡是三條獨立的檢查（見 [ADD_FLAGS_33]）。整組綁一起的代價很
+     * 具體——一台有 `ADD_TRUSTED_DISPLAY` 卻沒有 `ADD_ALWAYS_UNLOCKED_DISPLAY` 的機器，會
+     * 為了一個旗標讓整個顯示器退回非 trusted。
      *
-     * 界線在 API 33（見 [ADD_FLAGS_33]）。API 34 那一組再套一層，因為它本身也要 trusted。
+     * `ALWAYS_UNLOCKED` 尤其不能順手丟掉：少了它，虛擬顯示在裝置鎖定或休眠時**收不到注入
+     * 的觸控**。
      */
-    private fun trustedOnlyFlags(): Int {
+    private fun privilegedFlags(): Int {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return 0
-        if (!canCreateTrustedDisplay) return 0
-        var f = ADD_FLAGS_33
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) f = f or ADD_FLAGS_34
+
+        // 沒有權限檢查，一律給。
+        var f = DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_TOUCH_FEEDBACK_DISABLED
+
+        if (holds(ADD_TRUSTED_DISPLAY)) {
+            f = f or DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_TRUSTED or
+                    DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP
+
+            // 依賴 OWN_DISPLAY_GROUP（見 javadoc），所以巢狀在這裡，但要的是另一個權限。
+            if (holds(ADD_ALWAYS_UNLOCKED_DISPLAY)) {
+                f = f or DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_ALWAYS_UNLOCKED
+            }
+
+            // 依賴顯示器是 trusted。
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                f = f or ADD_FLAGS_34
+            }
+        }
         return f
     }
 
     /**
-     * 這個進程能不能建立 trusted 顯示器——**直接問，不要用丟例外去試**。
+     * 這個進程有沒有某個權限——**直接問，不要用丟例外去試**。
      *
      * `checkSelfPermission` 查的是 `Process.myUid()`，在 Shizuku 起的進程裡就是 shell，
      * 正是 `DisplayManagerService` 會拿去對的那個身分。
-     *
-     * 這條與 [ADD_FLAGS_33] 的 API 閘門是**兩個不同的問題**，都要成立：API level 決定旗標
-     * 在這個平台上存不存在，權限決定 shell 能不能要求它。API 33 那條界線是「shell 通常從
-     * Android 13 起才拿得到」的經驗值；被 OEM 拿掉權限的 33+ 機器只有這裡問得出來。
-     *
-     * 問過了還是保留 [createDisplay] 的退路：這組旗標裡的 `OWN_DISPLAY_GROUP`、
-     * `ALWAYS_UNLOCKED` 等各自還有別的前提，權限過了不代表整組一定被接受。
      */
-    private val canCreateTrustedDisplay: Boolean by lazy {
-        val granted = context.checkSelfPermission(ADD_TRUSTED_DISPLAY) ==
-                PackageManager.PERMISSION_GRANTED
-        Timber.d("ADD_TRUSTED_DISPLAY granted=$granted for uid=${Process.myUid()}")
-        granted
-    }
+    private fun holds(permission: String): Boolean =
+        grantedPermissions.getOrPut(permission) {
+            val granted = context.checkSelfPermission(permission) ==
+                    PackageManager.PERMISSION_GRANTED
+            Timber.d("$permission granted=$granted for uid=${Process.myUid()}")
+            granted
+        }
+
+    private val grantedPermissions = ConcurrentHashMap<String, Boolean>()
 
     /**
      * 建一個虛擬顯示，失敗回 `null`。
      *
-     * 呼叫端會用 [trustedOnlyFlags] 試一次、被擋下來再用基本旗標試一次：**不是每台裝置的
+     * 呼叫端會用 [privilegedFlags] 試一次、被擋下來再用基本旗標試一次：**不是每台裝置的
      * shell 都有 `ADD_TRUSTED_DISPLAY`**（實測 Samsung SM-A217F / Android 12 就沒有，而
      * Pixel / API 37 有），而 Shizuku 就是跑在 shell 身分上。少了 TRUSTED 顯示器仍然建得
      * 起來、也仍然收得到影格，只是它不再是 trusted display——別家 app 能不能被啟動到上面、
      * 觸控怎麼派送，都可能跟著降級。整台不能用比降級糟得多，所以退而求其次。
      */
-    @SuppressLint("WrongConstant")
+//    @SuppressLint("WrongConstant")
     private fun createDisplay(
         dm: DisplayManager,
         name: String,
