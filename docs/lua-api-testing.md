@@ -107,10 +107,12 @@ step6 在比不中的時候會先量一次「puppet 明明在畫面上，抓下�
 `api36aosp` 30/30（0 skipped）、SM-A217F / Android 12 30/30、`api36` 29 綠 + 比對跳過。
 trusted 與非 trusted 兩條顯示器路徑各有一台涵蓋到。過程中量到的：
 
-- **不是每台裝置的 shell 都有 `ADD_TRUSTED_DISPLAY`。** SM-A217F 沒有，Pixel 7a (API 37)
-  有。production 原本從 API 31 起無條件加上 `VIRTUAL_DISPLAY_FLAG_TRUSTED`，在前者上會直接
-  `SecurityException`——整台不能用。現在改成拿不到就退回非 trusted 重試
-  （`RelcV2Service.createDisplay`）。**退回之後注入觸控仍然到得了 app**，這台上實測過。
+- **不是每台裝置的 shell 都有 `ADD_TRUSTED_DISPLAY`。** SM-A217F（Android 12）沒有，
+  Pixel 7a (API 37) 有。production 原本從 API 31 起無條件加上
+  `VIRTUAL_DISPLAY_FLAG_TRUSTED`，在前者上會直接 `SecurityException`——整台建不出顯示器。
+  現在那一組旗標從 **API 33** 起才給（與 scrcpy 的 `NewDisplayCapture` 同一條界線：shell
+  是從 Android 13 才被授予那個權限），另外保留「被擋下來就退回非 trusted 重試」當保險。
+  **非 trusted 的顯示器上注入觸控仍然到得了 app**，這台上實測過。
 - **Android 12 的 splash screen 會在 activity 都 resume、也畫完之後還壓著一陣子。**
   那段期間注入的觸控收不到，而且視窗幾何還在變——早期擠進來的那一下座標會對不上。
   所以 `tapUntilReceived` 每輪都先清掉記錄再注入，量的是穩定之後的狀態。

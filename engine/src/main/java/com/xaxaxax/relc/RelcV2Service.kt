@@ -91,19 +91,35 @@ class RelcV2Service @JvmOverloads constructor(
 
         const val DELAY_MS = 16 // 60fps
 
+        /** 呼叫端可以要求的旗標，其餘一律由這裡決定。 */
         const val SUPPORTED_FLAGS =
             DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR or
                     DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_DESTROY_CONTENT_ON_REMOVAL or
                     DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_SHOULD_SHOW_SYSTEM_DECORATIONS
+
+        /** 每個 API level 都給的基本盤。 */
         const val ADD_FLAGS = DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_PUBLIC or
                 DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_PRESENTATION or
                 DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY or
                 DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_SUPPORTS_TOUCH or
                 DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_ROTATES_WITH_CONTENT
+
+        /**
+         * 需要 `ADD_TRUSTED_DISPLAY` 的那一組，**API 33 起才給**。
+         *
+         * 旗標本身 API 30 就存在，但 shell 是從 Android 13 才被授予那個權限——實測
+         * Samsung SM-A217F / Android 12 的 `com.android.shell` 沒有它，Pixel 7a / API 37
+         * 有。在 31/32 上要求它只會換來
+         * `SecurityException: Requires ADD_TRUSTED_DISPLAY permission`，整台建不出顯示器。
+         *
+         * 這個界線與 scrcpy 的 `NewDisplayCapture` 一致（它也卡 API_33_ANDROID_13）。
+         */
         const val ADD_FLAGS_33 = DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_TRUSTED or
                 DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP or
                 DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_ALWAYS_UNLOCKED or
                 DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_TOUCH_FEEDBACK_DISABLED
+
+        /** 依賴顯示器是 trusted，所以只在 [ADD_FLAGS_33] 也成立時才加。 */
         const val ADD_FLAGS_34 = DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_OWN_FOCUS or
                 DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_DEVICE_DISPLAY_GROUP
     }
@@ -442,19 +458,17 @@ class RelcV2Service @JvmOverloads constructor(
     }
 
     /**
-     * 需要 `ADD_TRUSTED_DISPLAY` 的那一整組旗標。
+     * 需要 `ADD_TRUSTED_DISPLAY` 的那一整組旗標，拿不到就整組不要。
      *
      * 整組一起處理是因為它們互相依賴：`OWN_DISPLAY_GROUP`、`ALWAYS_UNLOCKED`、`OWN_FOCUS`、
      * `DEVICE_DISPLAY_GROUP` 在 `DisplayManagerService` 那邊全都以「顯示器是 trusted」為
-     * 前提，所以拿不到 TRUSTED 時它們也一個都不能留。
+     * 前提，所以少了 TRUSTED 它們也一個都不能留。
+     *
+     * 界線在 API 33（見 [ADD_FLAGS_33]）。API 34 那一組再套一層，因為它本身也要 trusted。
      */
     private fun trustedOnlyFlags(): Int {
-        var f = 0
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            f = f or DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_TRUSTED or
-                    DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) f = f or ADD_FLAGS_33
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return 0
+        var f = ADD_FLAGS_33
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) f = f or ADD_FLAGS_34
         return f
     }
