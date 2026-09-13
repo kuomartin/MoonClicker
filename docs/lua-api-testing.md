@@ -94,32 +94,59 @@ ATD（automated test device）系統映像檔把圖形堆疊拿掉了。虛擬�
 
 | | 映像檔 | 涵蓋 | 何時用 |
 |---|---|---|---|
-| `api36` | `aosp-atd` | Tier 0 + Tier 1 step1–5 | 開機快，平常跑 |
+| `api36` | `aosp-atd` | Tier 0 + Tier 1 除了比對那幾步 | 開機快，平常跑 |
 | `api36aosp` | `aosp` | 全部，含 `vision.*` 比對 | 映像檔大、開機慢 |
 
-step6 在比不中的時候會先量一次「puppet 明明在畫面上，抓下來的影格有幾種顏色」，只有一種
-就 `Assume` 跳過。**量的是性質不是裝置名**：`Build.PRODUCT` 裡有沒有 "atd" 是 proxy，
+step6/7/8 共用的那一圈在比不中的時候會先量一次「puppet 明明在畫面上，抓下來的影格有幾種
+顏色」，只有一種就 `Assume` 跳過。**量的是性質不是裝置名**：`Build.PRODUCT` 裡有沒有 "atd" 是 proxy，
 會隨映像檔改名而腐爛，而「影格是不是全同色」就是我們真正在意的那件事。所以在 `api36` 上
 比對會被跳過，在 `api36aosp` 與實機上會真的跑。
 
 ### 量到的事實
 
-`api36aosp` 30/30（0 skipped）、SM-A217F / Android 12 30/30、`api36` 29 綠 + 比對跳過。
-trusted 與非 trusted 兩條顯示器路徑各有一台涵蓋到。過程中量到的：
+SM-A217F 31/31、`api36aosp` 31/31（0 skipped）。trusted 與非 trusted 兩條顯示器路徑各有一台
+涵蓋到。過程中量到的：
 
 - **不是每台裝置的 shell 都有 `ADD_TRUSTED_DISPLAY`。** SM-A217F（Android 12）沒有，
   Pixel 7a (API 37) 有。production 原本從 API 31 起無條件加上
   `VIRTUAL_DISPLAY_FLAG_TRUSTED`，在前者上會直接 `SecurityException`——整台建不出顯示器。
-  現在那一組旗標從 **API 33** 起才給（與 scrcpy 的 `NewDisplayCapture` 同一條界線：shell
-  是從 Android 13 才被授予那個權限），另外保留「被擋下來就退回非 trusted 重試」當保險。
+  現在那一組旗標從 **API 33** 起才給（與 scrcpy 的 `NewDisplayCapture` 同一條界線），
+  另外保留「被擋下來就退回非 trusted 重試」當保險。
   **非 trusted 的顯示器上注入觸控仍然到得了 app**，這台上實測過。
-- **Android 12 的 splash screen 會在 activity 都 resume、也畫完之後還壓著一陣子。**
-  那段期間注入的觸控收不到，而且視窗幾何還在變——早期擠進來的那一下座標會對不上。
-  所以 `tapUntilReceived` 每輪都先清掉記錄再注入，量的是穩定之後的狀態。
+- **那組旗標不是一包，是三條獨立檢查。** `TRUSTED` 與 `OWN_DISPLAY_GROUP` 各自要
+  `ADD_TRUSTED_DISPLAY`；`ALWAYS_UNLOCKED` 要的是**另一個權限**
+  `ADD_ALWAYS_UNLOCKED_DISPLAY`；`TOUCH_FEEDBACK_DISABLED` 沒有檢查。綁成一包丟掉的代價很
+  具體：有 A 沒 B 的機器會為一個旗標賠掉整個 trusted 顯示器。step2b 逐項對照旗標與權限，
+  因為**其餘測試全綠也分辨不出這件事**——非 trusted 顯示器一樣建得起來、一樣收得到觸控。
+- **權限用問的，不要用丟例外試。** `checkSelfPermission` 查的是 `Process.myUid()`，在
+  Shizuku 進程裡就是 shell，正是 system_server 會拿去對的身分。
 - **`Canvas.drawBitmap(bmp, x, y, paint)` 會做密度縮放。** bitmap 帶的是預設顯示器的密度，
   canvas 目標是虛擬顯示器的，兩者不同時標記就不是你以為的尺寸，而 `TM_CCOEFF_NORMED`
   不是尺度不變的。指定目的矩形強制 1:1。（這是 puppet 的 bug，不是產品的——但它是任何人
   寫這種測試都會踩到的那一個。）
+
+### 四次「環境前提偽裝成產品 bug」
+
+同一個模式反覆出現，值得單獨列出來——症狀都是某個斷言失敗，看起來像座標或權限錯了：
+
+| 真正的原因 | 偽裝成 | 怎麼處理 |
+|---|---|---|
+| ATD 映像檔沒有圖形堆疊，影格全黑 | 「比對不中」 | `distinctColorsOnDisplay`，只有一種顏色就跳過 |
+| Android 12 的 splash 還壓在已 resume 的視窗上 | 「觸控沒送達」 | `tapUntilInside` 重試 |
+| 裝置 Dozing／鎖屏，虛擬顯示不派送觸控 | 「觸控沒送達」 | `Tier1Env.wakeAndUnlock()` |
+| 啟動／旋轉動畫還沒結束 | 「座標算錯」 | `awaitStableFrame` |
+
+前三次我都是再補一個**代理條件**（等 resume、等 contentSize 換邊…）。第四次才改成量真正
+在意的事：**連續幾張影格取樣相同**。那一個條件同時涵蓋前面三種動畫，不必各補一條。
+
+`tapUntilInside` 的條件是「落點在目標裡」而不是「有收到」——視窗在動畫期間就收得到觸控，
+但那時帶著縮放，回報的座標是過渡值（實測注入 y=506 收到 334.01 與 369.01，x 精確不變、
+y 各差一個純縮放）。這不是「重試到過為止」：座標真的算錯就永遠不會落進目標，逾時後由
+探針指出它一直落在哪裡。
+
+寫這些取樣工具時我在 Kotlin 重寫了一次當天稍早才在 C++ 修掉的 bug——`ImageReader.close()`
+時回呼還在讀 buffer。拆除順序（拔 sink → 等在途回呼 → 才 close）現在關在單一
+`sampleFrames` 裡，兩個取樣函式共用。
 
 ### 旋轉（step7/step8）
 
@@ -128,7 +155,7 @@ rotation，而 app 宣告的方向會贏過它——實測在 SM-A217F 上那樣
 回 true 但顯示器仍是 720x1280。這正是 CONTEXT.md「方向鏈」`Y → VD → X → MainDisplay`
 的第一環：**顯示器裡的 app 決定顯示器的方向**。
 
-兩個踩過的坑：
+踩過的坑：
 
 - **兩個圖樣，各驗一件事。** puppet 同時畫一個**旋轉對稱**的同心方框與一個**不對稱**的
   Γ 字形，step6/7/8 兩個都比。
@@ -184,9 +211,13 @@ production 在舊版上跑在 Shizuku 真正的 shell 進程裡，本來就不�
 - `vision.wait` 的「等到它出現」語意還沒真的被驗——puppet 的畫面是靜態的，比對第一幀就中。
   要驗等待，puppet 需要能排程「N 毫秒後換一個圖樣」。
 
-## 不測什麼
+## 跟 `:hidden-api-contract` 的分工
 
-平台本身的假設不在這裡——那是 `:hidden-api-contract` 的 API 矩陣在做的事。這裡只有一個
-API level，因為驗的是 Lua 綁定，不是 Android。
+兩邊都有 API 矩陣，問的問題不同：
+
+- `:hidden-api-contract` 驗**平台**是否符合 `:hidden-api` 那些 stub 編碼的假設，測試 APK
+  裡刻意不放 stub，讓平台成為唯一被載入的東西。
+- 這裡驗 **ReLC 自己**在各版本上的行為：顯示器建不建得出來、旗標拿不拿得到、觸控派不派送、
+  比對準不準。跨版本會變的是這些，不是 Lua 綁定本身（那是 Tier 0，一個 API level 就夠）。
 
 [Script Folder]: ../CONTEXT.md
