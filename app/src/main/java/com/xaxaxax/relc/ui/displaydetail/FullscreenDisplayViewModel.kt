@@ -5,7 +5,7 @@ import android.view.Surface
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.xaxaxax.relc.input.InputController
+import com.xaxaxax.relc.IRelcV2Service
 import com.xaxaxax.relc.shizuku.ShizukuManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -46,20 +46,17 @@ class FullscreenDisplayViewModel @Inject constructor(
     private val _capturedBitmap = MutableStateFlow<android.graphics.Bitmap?>(null)
     val capturedBitmap: StateFlow<android.graphics.Bitmap?> = _capturedBitmap.asStateFlow()
 
-    private val service = shizukuManager.serviceFlow
-
-    private val _inputController = MutableStateFlow<InputController?>(null)
-    val inputController: StateFlow<InputController?> = _inputController.asStateFlow()
+    /**
+     * 綁好的服務，也是 UI 判斷「可以顯示鏡像了沒」的依據——服務在，鏡像才有東西可映。
+     *
+     * 直接轉發 [ShizukuManager] 的 flow，不另外存一份：多存一份就多一個會跟真實綁定狀態
+     * 走樣的地方，而它表達的是同一件事。
+     */
+    val service: StateFlow<IRelcV2Service?> = shizukuManager.serviceFlow
 
     init {
         viewModelScope.launch {
             shizukuManager.bindUserService()
-            shizukuManager.withService { service ->
-                // 初始化 InputController，這會讓 UI 顯示 VirtualDisplaySurfaceView
-                _inputController.value = InputController(service)
-            }.onFailure {
-                Timber.e(it, "Failed to initialize InputController")
-            }
         }
     }
 
@@ -209,10 +206,6 @@ class FullscreenDisplayViewModel @Inject constructor(
         }
     }
 
-    override fun onCleared() {
-        super.onCleared()
-        _inputController.value = null
-    }
 }
 
 /**
