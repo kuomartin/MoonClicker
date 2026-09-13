@@ -111,7 +111,7 @@ step6/7/8 共用的那一圈在比不中的時候會先量一次「puppet 明明
 
 轉顯示器要**讓 puppet 自己宣告方向**，不是從外面呼叫 `setDisplayRotation`——後者是設 user
 rotation，而 app 宣告的方向會贏過它。這正是 CONTEXT.md「方向鏈」
-`Y → VD → X → MainDisplay` 的第一環。
+`Y → VD → FullscreenDisplayActivity → MainDisplay` 的第一環。
 
 puppet 同時畫**旋轉對稱**的同心方框與**不對稱**的 Γ 字形，step6/7/8 兩個都比：
 

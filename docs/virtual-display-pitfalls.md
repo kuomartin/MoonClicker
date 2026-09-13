@@ -71,7 +71,7 @@ Tier 1 觀察不到它：`UiAutomation.adoptShellPermissionIdentity` 也是 API 
 
 從外面呼叫 `setDisplayRotation`（`freezeDisplayRotation`）是設 user rotation，而 app 宣告的
 方向會贏過它——SM-A217F 上回傳 true 但顯示器仍是 720×1280。這正是 CONTEXT.md「方向鏈」
-`Y → VD → X → MainDisplay` 的第一環。
+`Y → VD → FullscreenDisplayActivity → MainDisplay` 的第一環。
 
 → `PuppetActivity.requestOrientation()`
 

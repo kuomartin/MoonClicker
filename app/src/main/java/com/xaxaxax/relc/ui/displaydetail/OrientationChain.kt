@@ -17,17 +17,19 @@ import timber.log.Timber
 import kotlin.math.abs
 
 /**
- * 方向鏈 `Y → VD → X → MainDisplay` 中需要我們自己寫的兩環（見 issue #17）。
+ * 方向鏈 `Y → VD → FullscreenDisplayActivity → MainDisplay` 中需要我們自己寫的兩環
+ * （見 issue #17）。
  *
  * 其餘兩環由系統免費提供：WindowManager 仲裁 Y 宣告的方向是否壓過我們設定的 rotation，
- * 以及 MainDisplay 跟隨 X 的 requestedOrientation 旋轉。
+ * 以及 MainDisplay 跟隨 `FullscreenDisplayActivity` 的 requestedOrientation 旋轉。
  */
 
 /**
  * 環節一：感測器 → 虛擬顯示的 user rotation。
  *
- * 來源必須是原始感測器：X 一旦被 [Activity.setRequestedOrientation] 鎖住，display 0 就不再
- * 跟著感測器轉，靠 configuration 或 display 0 的 rotation 當來源會形成死結。
+ * 來源必須是原始感測器：`FullscreenDisplayActivity` 一旦被 [Activity.setRequestedOrientation]
+ * 鎖住，display 0 就不再跟著感測器轉，靠 configuration 或 display 0 的 rotation 當來源
+ * 會形成死結。
  */
 @Composable
 fun SensorRotationDriver(
@@ -71,10 +73,10 @@ fun SensorRotationDriver(
 }
 
 /**
- * 環節二：虛擬顯示的 rotation → X 的 requestedOrientation。
+ * 環節二：虛擬顯示的 rotation → `FullscreenDisplayActivity` 的 requestedOrientation。
  *
  * 對 targetSdk ≥ 36 的 app，系統在 sw ≥ 600dp 的裝置上會忽略這個呼叫，OEM 亦可停用。
- * 那時 X 不會轉，畫面退回幾何層——letterbox 正確，只是不填滿。
+ * 那時 activity 不會轉，畫面退回幾何層——letterbox 正確，只是不填滿。
  */
 @Composable
 fun FollowDisplayRotation(activity: Activity?, rotation: Int) {
