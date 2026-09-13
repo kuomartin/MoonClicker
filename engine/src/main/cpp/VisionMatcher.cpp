@@ -77,9 +77,10 @@ bool VisionMatcher::templateExists(const VisionRequest &request) {
 }
 
 cv::Mat VisionMatcher::templateFor(const VisionRequest &request) {
-    // 快取鍵要包含前處理參數——同一張圖用不同 gray/scale 是不同的模板。
+    // 快取鍵要包含前處理參數——同一張圖用不同 gray/scale/rotation 是不同的模板。
+    const int quarterTurns = rotation();
     std::string key = request.imagePath + "|" + (request.gray ? "g" : "c") + "|" +
-                      std::to_string(request.scale);
+                      std::to_string(request.scale) + "|r" + std::to_string(quarterTurns);
 
     std::lock_guard<std::mutex> lock(cacheMutex);
     auto cached = cache.find(key);
@@ -90,6 +91,27 @@ cv::Mat VisionMatcher::templateFor(const VisionRequest &request) {
         VMLOGE("Failed to load template image: %s", request.imagePath.c_str());
         cache[key] = cv::Mat();  // 記住失敗，不要每幀都重試讀檔
         return {};
+    }
+
+    // 模板是**邏輯空間**的產物——腳本作者截的是他在畫面上看到的樣子。影格卻在 surface
+    // 空間，顯示器轉 90/270 時內容是被轉「進」緩衝區的，而 matchTemplate 不是旋轉不變的。
+    // 所以比對前把模板轉到影格的方向。方向取自 frameToLogical 的逆：r=1 時它把影格右上角
+    // 映到邏輯左上角，也就是影格內容是邏輯內容順時針轉 90 度。
+    //
+    // 轉模板而不是轉影格：兩者數學上等價（命中位置一一對應），但模板小、而且這裡有跨呼叫
+    // 的快取，整場執行只轉一次；影格每次比對都是新的一張 3.5 MB，轉不了快取。見 ADR-0013。
+    switch (quarterTurns) {
+        case 1:
+            cv::rotate(image, image, cv::ROTATE_90_CLOCKWISE);
+            break;
+        case 2:
+            cv::rotate(image, image, cv::ROTATE_180);
+            break;
+        case 3:
+            cv::rotate(image, image, cv::ROTATE_90_COUNTERCLOCKWISE);
+            break;
+        default:
+            break;
     }
 
     if (image.channels() == 3) {

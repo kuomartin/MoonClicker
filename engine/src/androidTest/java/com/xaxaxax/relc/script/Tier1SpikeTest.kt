@@ -12,6 +12,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.xaxaxax.relc.engine.state.EngineRunState
 import com.xaxaxax.relc.engine.state.EngineStateRepository
 import com.xaxaxax.relc.script.puppet.PuppetActivity
+import com.xaxaxax.relc.script.puppet.PuppetGlyph
 import com.xaxaxax.relc.script.puppet.PuppetMarker
 import com.xaxaxax.relc.script.puppet.PuppetRecorder
 import org.junit.After
@@ -263,9 +264,23 @@ class Tier1SpikeTest {
                     data.set("cx", hit.cx)
                     data.set("cy", hit.cy)
                     data.set("confidence", hit.confidence)
+
+                    -- 同一畫面上的不對稱圖樣。模板是直立時截的，所以只有在引擎把模板
+                    -- 轉到當前方向之後，旋轉下才會中。
+                    local glyph = vision.wait("glyph.png", 5000)
+                    data.set("glyph_found", glyph ~= nil)
+                    if glyph ~= nil then
+                        data.set("glyph_cx", glyph.cx)
+                        data.set("glyph_cy", glyph.cy)
+                        data.set("glyph_confidence", glyph.confidence)
+                    end
+
                     input.tap(hit.cx, hit.cy)
                 """.trimIndent(),
-                assets = mapOf("marker.png" to PuppetMarker.png()),
+                assets = mapOf(
+                    "marker.png" to PuppetMarker.png(),
+                    "glyph.png" to PuppetGlyph.png(),
+                ),
                 timeoutMs = 40_000,
             )
         }
@@ -301,9 +316,10 @@ class Tier1SpikeTest {
                     "display rotation ${displayRotation(displayId)})\n" +
                     "puppet ready on ${PuppetRecorder.resumedOnDisplay}, " +
                     "marker at ${PuppetRecorder.markerRect}, content ${PuppetRecorder.contentSize}\n" +
-                    // 最後一次比對的實際分數。接近 0 表示影格跟模板毫無關係（多半是空白/黑畫面，
-                    // 也就是根本沒截到內容）；0.5~0.8 表示截到了但有縮放或色彩差異。這兩種原因
-                    // 要查的地方完全不同，光看「沒中」分不出來。
+                    // 最後一次比對的結果。注意 miss 時 confidence 一律是 0——match() 在低於
+                    // 門檻時 continue，留下預設值——所以這裡讀得到的是「哪張圖、找到沒」，
+                    // 不是相關係數。要分辨「畫面全黑」與「有內容但比不中」，靠下面的
+                    // distinctColorsOnDisplay，不要靠分數。
                     "last match = ${EngineStateRepository.state.value.lastVisionResult}\n" +
                     env.logcat("VisionMatcher", "NativeImageReader", "GlesDistributor", "LuaEngine"),
             true,
@@ -318,6 +334,27 @@ class Tier1SpikeTest {
                     "($cx, $cy) but it was drawn at $target " +
                     "(confidence ${outcome.data["confidence"]})",
             target.contains(cx, cy),
+        )
+
+        // 對稱標記中了、不對稱的沒中 —— 那就不是環境問題也不是座標問題，是模板方向。
+        // 這兩條分開斷言就是為了讓失敗訊息自己講出是哪一類。
+        assertEquals(
+            "the rotation-symmetric marker matched but the asymmetric glyph did not, at display " +
+                    "rotation ${displayRotation(displayId)}. The frame is surface space, so a " +
+                    "rotated display rotates the content inside the buffer; an upright template " +
+                    "only matches once the engine turns it to the current rotation.\n" +
+                    "last match = ${EngineStateRepository.state.value.lastVisionResult}",
+            true,
+            outcome.data["glyph_found"],
+        )
+        val glyphTarget = PuppetRecorder.glyphRect!!
+        val gx = (outcome.data["glyph_cx"] as Double).toInt()
+        val gy = (outcome.data["glyph_cy"] as Double).toInt()
+        assertTrue(
+            "at display rotation ${displayRotation(displayId)} vision put the glyph at ($gx, $gy) " +
+                    "but it was drawn at $glyphTarget " +
+                    "(confidence ${outcome.data["glyph_confidence"]})",
+            glyphTarget.contains(gx, gy),
         )
 
         val down = PuppetRecorder.awaitTouch { it.action == MotionEvent.ACTION_DOWN }

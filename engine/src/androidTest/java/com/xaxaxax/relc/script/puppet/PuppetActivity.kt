@@ -106,23 +106,36 @@ class PuppetActivity : Activity() {
      */
     private class MarkerView(context: Context) : View(context) {
         private val marker = PuppetMarker.bitmap()
+        private val glyph = PuppetGlyph.bitmap()
 
         override fun onDraw(canvas: Canvas) {
             canvas.drawColor(Color.DKGRAY)
-            val dest = Rect(
+
+            val markerAt = Rect(
                 width / 4,
                 height / 3,
                 width / 4 + PuppetMarker.SIZE,
                 height / 3 + PuppetMarker.SIZE,
             )
+            // 擺在另一個象限，離對稱標記遠一點：兩個都是黑白幾何圖樣，靠得太近時
+            // 「比中了但比到隔壁那個」會變成一種很難讀的失敗。
+            val glyphAt = Rect(
+                width / 2,
+                height * 2 / 3,
+                width / 2 + PuppetGlyph.SIZE,
+                height * 2 / 3 + PuppetGlyph.SIZE,
+            )
+
             // 指定目的矩形，而不是 drawBitmap(bmp, x, y, paint)。後者會做**密度縮放**：
             // bitmap 帶的是預設顯示器的密度，canvas 的目標密度是虛擬顯示器的，兩者不同時
             // 這 160px 的標記會被畫成別的大小——而模板 PNG 還是 160px，
             // TM_CCOEFF_NORMED 不是尺度不變的，於是永遠比不中。
-            canvas.drawBitmap(marker, null, dest, null)
+            canvas.drawBitmap(marker, null, markerAt, null)
+            canvas.drawBitmap(glyph, null, glyphAt, null)
 
             PuppetRecorder.contentSize = width to height
-            PuppetRecorder.markerRect = dest
+            PuppetRecorder.markerRect = markerAt
+            PuppetRecorder.glyphRect = glyphAt
         }
     }
 }

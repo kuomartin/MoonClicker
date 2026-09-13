@@ -23,9 +23,13 @@ internal object PuppetRecorder {
     @Volatile
     var resumedOnDisplay: Int = -1
 
-    /** [PuppetMarker] 實際被畫在 view 座標的哪裡。`vision.*` 回的座標應該落在這裡面。 */
+    /** [PuppetMarker]（旋轉對稱）實際被畫在 view 座標的哪裡。 */
     @Volatile
     var markerRect: Rect? = null
+
+    /** [PuppetGlyph]（不對稱）實際被畫在哪裡。旋轉時只有它問得出「模板方向對不對」。 */
+    @Volatile
+    var glyphRect: Rect? = null
 
     /** puppet 的 content view 實際多大——用來確認它真的鋪滿了那個顯示器。 */
     @Volatile
@@ -36,6 +40,7 @@ internal object PuppetRecorder {
         keys.clear()
         resumedOnDisplay = -1
         markerRect = null
+        glyphRect = null
         contentSize = null
     }
 

@@ -71,7 +71,7 @@ The Engine Module's single JNI upcall target: everything the Lua API does that i
 _Avoid_: JNI callbacks, the native bridge (that is `LuaNative`).
 
 **VisionMatcher**:
-The native OpenCV-backed component that holds the latest frame of a virtual display and matches templates against it **on demand** — only while a script is inside a `vision.find`/`vision.wait` call, never per-frame. It is also the single place [[Surface 空間 / 邏輯空間]] conversion happens: frames go in as surface space, every coordinate it returns is logical. Exposed to scripts as the `vision.*` API. See [ADR-0003](docs/adr/0003-opencv-for-vision-matching.md).
+The native OpenCV-backed component that holds the latest frame of a virtual display and matches templates against it **on demand** — only while a script is inside a `vision.find`/`vision.wait` call, never per-frame. It is also the single place [[Surface 空間 / 邏輯空間]] conversion happens: frames go in as surface space, every coordinate it returns is logical, and template images are logical too — it turns them to the frame's orientation before matching, so a script's template survives the display rotating ([ADR-0013](docs/adr/0013-templates-are-logical-space.md)). Exposed to scripts as the `vision.*` API. See [ADR-0003](docs/adr/0003-opencv-for-vision-matching.md).
 _Avoid_: VisionEngine (the removed per-frame predecessor), image recognizer, matcher.
 
 **RelcV2Service**:
