@@ -50,6 +50,33 @@ internal class Tier1Env(
     }
 
     /**
+     * 把裝置叫醒並解掉鎖定畫面。
+     *
+     * 沒有 `ALWAYS_UNLOCKED`（那在 API 33 那組旗標裡）的虛擬顯示，在裝置 Dozing 或停在
+     * keyguard 時**收不到注入的觸控**。症狀是「puppet 沒收到 ACTION_DOWN」，跟座標換算錯、
+     * 權限不足、顯示器沒建起來全都長一樣——實測在 SM-A217F 上因為手機自己睡著而浪費過一輪
+     * 排查。
+     *
+     * 與其把它寫進 README 要人記得，不如讓測試自己處理：這是可以被建立的前提，不是需要
+     * 使用者配合的環境。
+     */
+    fun wakeAndUnlock() {
+        shell("input keyevent KEYCODE_WAKEUP")
+        shell("wm dismiss-keyguard")
+        val awake = (1..20).any {
+            if (shell("dumpsys power").contains("mWakefulness=Awake")) true
+            else { Thread.sleep(100); false }
+        }
+        check(awake) { "could not wake the device; injected touches will not be dispatched" }
+    }
+
+    fun shell(command: String): String {
+        val fd = uiAutomation.executeShellCommand(command)
+        return android.os.ParcelFileDescriptor.AutoCloseInputStream(fd)
+            .bufferedReader().use { it.readText() }
+    }
+
+    /**
      * shell 身分給的是**權限**，不是隱藏 API 的豁免——那兩件事在平台上是分開的。
      *
      * Shizuku 進程不需要這一步，因為它跑在 shell uid 上，而 shell/system uid 整個免受
@@ -83,6 +110,7 @@ internal class Tier1Env(
     fun bootstrap(): Int {
         PuppetRecorder.reset()
         adoptShellIdentity()
+        wakeAndUnlock()
         exemptHiddenApis()
         startService()
         return createDisplay()
@@ -95,9 +123,7 @@ internal class Tier1Env(
      * 把它接進斷言訊息，一次執行就知道原因，不用再手動重跑一次去撈。
      */
     fun logcat(vararg tags: String, lines: Int = 600): String {
-        val fd = uiAutomation.executeShellCommand("logcat -d -t $lines")
-        val all = android.os.ParcelFileDescriptor.AutoCloseInputStream(fd)
-            .bufferedReader().use { it.readText() }
+        val all = shell("logcat -d -t $lines")
         return all.lineSequence()
             .filter { line -> tags.any { it in line } }
             .joinToString("\n")
@@ -143,6 +169,14 @@ internal class Tier1Env(
         return seen.size
     }
 
+    /** `dumpsys display` 裡描述 [displayId] 的那一段。 */
+    fun displayDump(displayId: Int): String {
+        val all = shell("dumpsys display")
+        val start = all.indexOf("mDisplayId=$displayId")
+        if (start < 0) return "(display $displayId not in `dumpsys display`)"
+        return all.substring(start, minOf(start + 1200, all.length))
+    }
+
     /**
      * `dumpsys window` 裡跟 [displayId] 有關的行。
      *
@@ -150,9 +184,7 @@ internal class Tier1Env(
      * 控的視窗，或者有但系統不肯派送給它。這份輸出把兩者分開。
      */
     fun windowsOnDisplay(displayId: Int): String {
-        val fd = uiAutomation.executeShellCommand("dumpsys window displays")
-        val all = android.os.ParcelFileDescriptor.AutoCloseInputStream(fd)
-            .bufferedReader().use { it.readText() }
+        val all = shell("dumpsys window displays")
         val start = all.indexOf("Display: mDisplayId=$displayId")
         if (start < 0) return "(display $displayId not in `dumpsys window displays`)"
         val next = all.indexOf("Display: mDisplayId=", start + 1)
