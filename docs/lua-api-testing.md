@@ -104,7 +104,7 @@ step6 在比不中的時候會先量一次「puppet 明明在畫面上，抓下�
 
 ### 量到的事實
 
-`api36aosp` 28/28（0 skipped）、SM-A217F / Android 12 28/28、`api36` 27 綠 + 比對跳過。
+`api36aosp` 30/30（0 skipped）、SM-A217F / Android 12 30/30、`api36` 29 綠 + 比對跳過。
 trusted 與非 trusted 兩條顯示器路徑各有一台涵蓋到。過程中量到的：
 
 - **不是每台裝置的 shell 都有 `ADD_TRUSTED_DISPLAY`。** SM-A217F 沒有，Pixel 7a (API 37)
@@ -122,10 +122,30 @@ trusted 與非 trusted 兩條顯示器路徑各有一台涵蓋到。過程中量
 ### 還沒做的
 
 - 只跑過 API 31 與 36。中間那幾級（尤其 27–29 沒有 TRUSTED 旗標可用）未知。
-- 旋轉還沒進 Tier 1：puppet 目前不會請求方向改變，所以 surface/邏輯換算只在 rotation 0
-  下被驗過（Tier 0 的 `LuaScreenApiTest` 有涵蓋非零 rotation，但那是純數字，沒有真影格）。
 - `vision.wait` 的「等到它出現」語意還沒真的被驗——puppet 的畫面是靜態的，比對第一幀就中。
   要驗等待，puppet 需要能排程「N 毫秒後換一個圖樣」。
+
+### 旋轉（step7/step8）
+
+轉顯示器要**讓 puppet 自己宣告方向**，不是從外面呼叫 `setDisplayRotation`。後者是設 user
+rotation，而 app 宣告的方向會贏過它——實測在 SM-A217F 上那樣轉不動，`freezeDisplayRotation`
+回 true 但顯示器仍是 720x1280。這正是 CONTEXT.md「方向鏈」`Y → VD → X → MainDisplay`
+的第一環：**顯示器裡的 app 決定顯示器的方向**。
+
+兩個踩過的坑：
+
+- **模板必須旋轉對稱。** 影格在 surface 空間，顯示器轉 90 度時內容是被轉「進」緩衝區的，
+  而 `TM_CCOEFF_NORMED` 不是旋轉不變的。原本的棋盤格轉 90 度會反相，於是比不中。改成同心
+  方框。另一條路是「測試自己把模板也轉 90 度」，但那會把 surface 空間的旋轉方向寫死進
+  測試——方向猜錯時人會傾向一直翻到綠為止，而那正是這個測試該抓的東西。用對稱圖樣就沒有
+  這個誘惑，**位置**成為唯一被斷言的東西，而位置是 puppet 獨立回報的。
+- **先確認「真的轉了」再談座標。** 旋轉沒生效與換算錯誤，症狀都是「點沒打中」，但要查的
+  地方完全不同。所以先等 puppet 的 content 長寬互換，再往下。
+
+另外 step6/7/8 都會斷言腳本看到的 `screen.width/height` 跟 puppet 實際被排版的尺寸一致。
+這條把 ADR-0012 的兩段交接釘住（`nativeStart` 帶進去的初始 rotation ＋
+`DisplayRotationTracker` 後續推的更新），少了它，往返即使通過也只是「推論」native 知道
+自己轉了。
 
 ## 不測什麼
 
