@@ -85,6 +85,32 @@ android {
                     systemImageSource = "aosp"
                     testedAbi = "x86_64"
                 }
+
+                // Tier 1 的 API 矩陣。全部用**有圖形堆疊**的映像檔，不然比對那一段會被跳過，
+                // 而跨版本要驗的正好包含它。27–29 只有 `default` 有；30 起用 `aosp`。
+                //
+                // 每一級都在問不同的問題：
+                //   27/28  沒有 MotionEvent.setDisplayId，注入不到虛擬顯示（產品的能力邊界），
+                //          而且走的是 launchOrMoveViaActivityManager 那條 legacy 啟動路徑。
+                //   29     setDisplayId 出現的第一級。
+                //   30/31  TRUSTED 旗標存在但 shell 通常還拿不到權限。
+                //   33     ADD_TRUSTED_DISPLAY 通常開始給的那一級。
+                //   34/35  OWN_FOCUS / DEVICE_DISPLAY_GROUP。
+                create("api27") { device = "Pixel 2"; apiLevel = 27; systemImageSource = "default"; testedAbi = "x86" }
+                create("api28") { device = "Pixel 2"; apiLevel = 28; systemImageSource = "default"; testedAbi = "x86" }
+                create("api29") { device = "Pixel 3"; apiLevel = 29; systemImageSource = "default"; testedAbi = "x86" }
+                create("api30") { device = "Pixel 3"; apiLevel = 30; systemImageSource = "aosp"; testedAbi = "x86" }
+                create("api31") { device = "Pixel 6"; apiLevel = 31; systemImageSource = "aosp"; testedAbi = "x86_64" }
+                create("api33") { device = "Pixel 6"; apiLevel = 33; systemImageSource = "aosp"; testedAbi = "x86_64" }
+                create("api34") { device = "Pixel 6"; apiLevel = 34; systemImageSource = "aosp"; testedAbi = "x86_64" }
+                create("api35") { device = "Pixel 6"; apiLevel = 35; systemImageSource = "aosp"; testedAbi = "x86_64" }
+            }
+            groups {
+                // ./gradlew :engine:tier1MatrixGroupDebugAndroidTest
+                // 慢、而且第一次跑要下載每一份系統映像檔。平常用 api36 或實機。
+                create("tier1Matrix") {
+                    targetDevices.addAll(localDevices)
+                }
             }
         }
     }

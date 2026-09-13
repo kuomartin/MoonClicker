@@ -47,6 +47,22 @@ class Tier1SpikeTest {
 
     @Before
     fun setUp() {
+        // Tier 1 的下限是 API 29，因為它整個建立在 adoptShellPermissionIdentity 上。
+        // 實測 27 與 28 的映像檔都沒有那個方法（NoSuchMethodError）。
+        //
+        // 這是**測試框架**的限制，不是產品的：production 在舊版上跑在 Shizuku 真正的 shell
+        // 進程裡，本來就不需要 adopt 任何身分。minSdk 仍然是 27，只是這一層沒辦法替 Shizuku
+        // 站在那裡，27/28 的行為得用別的方式確認。
+        //
+        // 順帶一個巧合值得記著：`MotionEvent.setDisplayId` 也是 API 29 才有的，所以「注入
+        // 不到虛擬顯示」這個產品在 27/28 上的能力邊界，**Tier 1 永遠觀察不到**——兩個下限
+        // 剛好重合。曾經為它加過一個能力閘門，在可達範圍內恆為真，已拆除。
+        assumeTrue(
+            "UiAutomation.adoptShellPermissionIdentity does not exist below API 29, so this " +
+                    "harness cannot stand in for Shizuku here. Says nothing about whether ReLC " +
+                    "works there — Tier 0 still covers the Lua layer.",
+            android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q,
+        )
         PuppetRecorder.reset()
         env = Tier1Env()
         env.adoptShellIdentity()
@@ -57,7 +73,9 @@ class Tier1SpikeTest {
 
     @After
     fun tearDown() {
-        env.close()
+        // setUp 的 assumption 不成立時 env 根本沒建起來，而 @After 照樣會跑——不擋的話
+        // 「跳過」會變成 UninitializedPropertyAccessException，也就是一個假的失敗。
+        if (::env.isInitialized) env.close()
     }
 
     /**
@@ -268,10 +286,25 @@ class Tier1SpikeTest {
             // 轉了才算數：生效的話 puppet 的 content 會長寬互換。先確認這件事，否則
             // 「其實根本沒轉」會被誤讀成「換算錯了」——兩者要查的地方完全不同。
             val rotated = env.height to env.width
-            assertTrue(
+            // 這是**環境能力**，不是斷言：有些環境不讓 app 宣告的方向傳到虛擬顯示。實測
+            // API 31 的 AOSP 模擬器映像檔不跟隨，但同樣是 API 31 的 SM-A217F 實機會跟隨，
+            // API 30/33/34/35 的模擬器也會——所以不是版本問題。
+            //
+            // **原因未定。** 最大嫌疑是 `ignoreOrientationRequest`（API 31 引進的 per-display
+            // 設定，開啟後 WindowManager 會無視 app 宣告的方向），所以訊息裡帶上
+            // `dumpsys window displays`，下一個看到的人不必從頭查。auto-rotate 已排除
+            // （accelerometer_rotation=1 時照樣不跟隨）。
+            //
+            // 用 assume 而不是硬性失敗，是因為轉不動時「座標換算對不對」根本無從量起。
+            // 但它是逐次實測的環境條件、不是寫死的裝置清單：任何轉得動的環境仍然照常斷言。
+            assumeTrue(
                 "the puppet asked for orientation $orientation but display $displayId never " +
                         "followed — content is still ${PuppetRecorder.contentSize}, expected " +
-                        "$rotated. The orientation chain (CONTEXT.md) did not reach the display.",
+                        "$rotated, so there is no rotated frame to check coordinates against.\n" +
+                        "accelerometer_rotation=${env.shell("settings get system accelerometer_rotation").trim()}\n" +
+                        "user_rotation=${env.shell("settings get system user_rotation").trim()}\n" +
+                        "--- dumpsys window (look for mIgnoreOrientationRequest) ---\n" +
+                        env.windowsOnDisplay(displayId),
                 waitFor { PuppetRecorder.contentSize == rotated },
             )
         }
