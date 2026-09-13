@@ -86,9 +86,26 @@ library 的 androidTest APK 是自我 instrument 的，所以 `PuppetActivity` �
 斷言是**自洽**的：vision 說標記在哪、input 就打去哪、puppet 回報打到哪。中間任何一段座標
 換算錯了都會露出來，而且不依賴 letterbox、density、insets 的任何假設。
 
+### 兩台模擬器，差別是圖形堆疊不是 API level
+
+ATD（automated test device）系統映像檔把圖形堆疊拿掉了。虛擬顯示照樣建得起來、
+`GlesDistributor` 照樣以 60fps 送影格——但每一張都是全黑（在 Android Studio 裡開那台
+模擬器看到的也是黑畫面）。所以受管理裝置有兩台，同一個 API level：
+
+| | 映像檔 | 涵蓋 | 何時用 |
+|---|---|---|---|
+| `api36` | `aosp-atd` | Tier 0 + Tier 1 step1–5 | 開機快，平常跑 |
+| `api36aosp` | `aosp` | 全部，含 `vision.*` 比對 | 映像檔大、開機慢 |
+
+step6 在比不中的時候會先量一次「puppet 明明在畫面上，抓下來的影格有幾種顏色」，只有一種
+就 `Assume` 跳過。**量的是性質不是裝置名**：`Build.PRODUCT` 裡有沒有 "atd" 是 proxy，
+會隨映像檔改名而腐爛，而「影格是不是全同色」就是我們真正在意的那件事。所以在 `api36` 上
+比對會被跳過，在 `api36aosp` 與實機上會真的跑。
+
 ### 量到的事實
 
-在 Pixel 6 / API 36 模擬器與 Samsung SM-A217F / Android 12 兩台上都全綠。過程中量到的：
+`api36aosp` 28/28（0 skipped）、SM-A217F / Android 12 28/28、`api36` 27 綠 + 比對跳過。
+trusted 與非 trusted 兩條顯示器路徑各有一台涵蓋到。過程中量到的：
 
 - **不是每台裝置的 shell 都有 `ADD_TRUSTED_DISPLAY`。** SM-A217F 沒有，Pixel 7a (API 37)
   有。production 原本從 API 31 起無條件加上 `VIRTUAL_DISPLAY_FLAG_TRUSTED`，在前者上會直接

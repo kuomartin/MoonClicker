@@ -58,18 +58,31 @@ android {
     // 也不需要虛擬顯示——`IRelcV2Service` 由 RecordingRelcService 頂替——所以一台乾淨的
     // 模擬器就夠了。
     //
-    //   ./gradlew :engine:api36DebugAndroidTest      # 用受管理的模擬器
+    //   ./gradlew :engine:api36DebugAndroidTest      # 快的那台，跳過比對
+    //   ./gradlew :engine:api36aospDebugAndroidTest  # 有圖形堆疊，全部都跑
     //   ./gradlew :engine:connectedDebugAndroidTest  # 用已連線的裝置
     //
     // 只留一個 API level：這裡驗的是 Lua 綁定，不是平台行為（那是 :hidden-api-contract
-    // 的矩陣在做的事）。
+    // 的矩陣在做的事）。兩台的差別不是 API level，是有沒有圖形堆疊。
     testOptions {
         managedDevices {
             localDevices {
+                // ATD（automated test device）映像檔把圖形堆疊拿掉了：虛擬顯示建得起來、
+                // 影格也照送，但每一張都是全黑。所以它跑得完 Tier 0 與 Tier 1 的
+                // step1–5，`vision.*` 的比對會被 Tier1SpikeTest 的 assumption 跳過。
+                // 開機快，適合平常跑。
                 create("api36") {
                     device = "Pixel 6"
                     apiLevel = 36
                     systemImageSource = "aosp-atd"
+                    testedAbi = "x86_64"
+                }
+                // 同一個 API level 的完整 AOSP 映像檔，唯一的差別是它真的會合成畫面——
+                // 所以比對那一段只有在這台（或實機）上才真的被執行到。映像檔更大、開機更慢。
+                create("api36aosp") {
+                    device = "Pixel 6"
+                    apiLevel = 36
+                    systemImageSource = "aosp"
                     testedAbi = "x86_64"
                 }
             }
