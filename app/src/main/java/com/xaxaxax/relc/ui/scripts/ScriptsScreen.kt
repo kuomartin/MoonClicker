@@ -55,7 +55,6 @@ import com.xaxaxax.relc.R
 import com.xaxaxax.relc.engine.state.EngineRunState
 import com.xaxaxax.relc.script.Script
 import com.xaxaxax.relc.script.ScriptSessionState
-import com.xaxaxax.relc.shizuku.ShizukuStatusUiState
 import com.xaxaxax.relc.ui.component.ShizukuStatusBar
 import com.xaxaxax.relc.ui.theme.ReLCTheme
 import java.io.File
@@ -129,7 +128,7 @@ fun ScriptsScreenContent(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            ShizukuStatusBar(state = uiState.shizukuStatus, onActionClick = onShizukuAction)
+            ShizukuStatusBar(status = uiState.shizukuStatus, onActionClick = onShizukuAction)
 
             if (uiState.scripts.isEmpty()) {
                 EmptyState(uiState.scriptsPath)

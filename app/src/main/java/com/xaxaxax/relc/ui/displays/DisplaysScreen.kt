@@ -43,7 +43,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import com.xaxaxax.relc.shizuku.ShizukuStatusUiState
+import com.xaxaxax.relc.shizuku.ShizukuConnectionStatus
 import com.xaxaxax.relc.ui.component.ShizukuStatusBar
 import com.xaxaxax.relc.ui.theme.ReLCTheme
 
@@ -67,7 +67,7 @@ fun DisplaysScreen(
         onShizukuAction = { viewModel.onShizukuAction() },
         onDestroyDisplay = { viewModel.destroyDisplay(it) },
         onFabClick = {
-            if (uiState.isShizukuReady)
+            if (uiState.shizukuStatus.isConnected)
                 viewModel.createDisplay()
             else {
                 Toast.makeText(
@@ -117,7 +117,7 @@ internal fun DisplaysScreenContent(
                 .padding(innerPadding)
         ) {
             ShizukuStatusBar(
-                state = uiState.shizukuStatus,
+                status = uiState.shizukuStatus,
                 onActionClick = onShizukuAction,
             )
             PullToRefreshBox(
@@ -131,7 +131,7 @@ internal fun DisplaysScreenContent(
                         modifier = Modifier.align(Alignment.TopCenter),
                     )
                 },
-                enabled = uiState.isShizukuReady,
+                enabled = uiState.shizukuStatus.isConnected,
                 modifier = Modifier.fillMaxSize(),
             ) {
                 LazyVerticalGrid(
@@ -184,12 +184,7 @@ private fun PreviewDisplaysScreen() {
                     DisplayCardInfo(displayId = 1, width = 1080, height = 1920, densityDpi = 320),
                     DisplayCardInfo(displayId = 42, width = 1280, height = 720, densityDpi = 240),
                 ),
-                shizukuStatus = ShizukuStatusUiState(
-                    isAvailable = true,
-                    hasPermission = true,
-                    isConnected = true,
-                ),
-                isShizukuReady = true,
+                shizukuStatus = ShizukuConnectionStatus.CONNECTED,
             ),
             onNavigateToDetail = {},
             onPullRefresh = {},
