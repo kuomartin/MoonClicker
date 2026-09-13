@@ -1,6 +1,8 @@
 package com.xaxaxax.relc.script
 
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
+import android.hardware.display.DisplayManager
 import android.graphics.PixelFormat
 import android.media.ImageReader
 import android.os.Handler
@@ -9,6 +11,7 @@ import android.view.MotionEvent
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.xaxaxax.relc.engine.state.EngineRunState
 import com.xaxaxax.relc.engine.state.EngineStateRepository
+import com.xaxaxax.relc.script.puppet.PuppetActivity
 import com.xaxaxax.relc.script.puppet.PuppetMarker
 import com.xaxaxax.relc.script.puppet.PuppetRecorder
 import org.junit.After
@@ -181,7 +184,34 @@ class Tier1SpikeTest {
      * 一段的座標換算錯了都會露出來，而且不依賴 letterbox、density、insets 的任何假設。
      */
     @Test
-    fun step6_a_script_finds_the_marker_and_taps_it() {
+    fun step6_a_script_finds_the_marker_and_taps_it() = visionTapRoundTrip(orientation = null)
+
+    /**
+     * Q: 顯示器轉了之後，`vision` 回的座標還是指得到那個標記嗎？
+     *
+     * rotation 0 時 `VisionMatcher::frameToLogical` 是 identity——所以 step6 其實一段換算
+     * 都沒驗到。真正會動的是 case 1/2/3，也就是 ADR-0012 與 CONTEXT.md「Surface 空間 /
+     * 邏輯空間」在講的那件事。
+     *
+     * 特別要抓的是**方向寫反**：case 1 與 case 3 在維度上都自洽（rotation 1 時 lx 落在
+     * [0, frameHeight)、ly 落在 [0, frameWidth)，case 3 反過來也對），所以把兩者對調不會
+     * 讓任何維度檢查失敗，用看的也很難發現——只有真的點下去、由 puppet 回報打到哪，才分
+     * 得出來。
+     */
+    @Test
+    fun step7_a_landscape_display_still_maps_vision_to_where_the_tap_lands() =
+        visionTapRoundTrip(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE)
+
+    @Test
+    fun step8_a_reverse_landscape_display_still_maps_vision_to_where_the_tap_lands() =
+        visionTapRoundTrip(ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE)
+
+    /**
+     * step6/7/8 共用的那一圈：vision 說標記在哪 → 點那裡 → puppet 回報打到哪。
+     *
+     * 斷言本身跟 rotation 無關，這正是重點——換算對的話，這一圈在任何角度下都成立。
+     */
+    private fun visionTapRoundTrip(orientation: Int?) {
         val displayId = requireDisplay()
 
         // 先把 puppet 叫起來、並確認它**真的收得到觸控**，再讓腳本跑。
@@ -195,6 +225,20 @@ class Tier1SpikeTest {
         // 穩定的，再讓腳本做它那一次點擊。
         env.service.launchInDisplay(env.puppetPackage, displayId)
         assertTrue("the puppet never came up", PuppetRecorder.awaitReady(displayId))
+
+        if (orientation != null) {
+            PuppetActivity.requestOrientation(orientation)
+            // 轉了才算數：生效的話 puppet 的 content 會長寬互換。先確認這件事，否則
+            // 「其實根本沒轉」會被誤讀成「換算錯了」——兩者要查的地方完全不同。
+            val rotated = env.height to env.width
+            assertTrue(
+                "the puppet asked for orientation $orientation but display $displayId never " +
+                        "followed — content is still ${PuppetRecorder.contentSize}, expected " +
+                        "$rotated. The orientation chain (CONTEXT.md) did not reach the display.",
+                waitFor { PuppetRecorder.contentSize == rotated },
+            )
+        }
+
         val warmUpTarget = PuppetRecorder.markerRect!!
         assertNotNull(
             "the puppet never became touchable, so the script's single tap could never land",
@@ -211,6 +255,8 @@ class Tier1SpikeTest {
             runner.run(
                 main = """
                     app.launch("${env.puppetPackage}")
+                    data.set("screen_w", screen.width)
+                    data.set("screen_h", screen.height)
                     local hit = vision.wait("marker.png", 20000)
                     data.set("found", hit ~= nil)
                     if hit == nil then return end
@@ -226,6 +272,17 @@ class Tier1SpikeTest {
 
         assertEquals(EngineRunState.Finished, outcome.runState)
 
+        // 腳本看到的尺寸要跟 puppet 實際被排版的尺寸一致。這條把 ADR-0012 的交接釘住：
+        // 啟動時隨 nativeStart 傳進去的那個 rotation 快照，加上 DisplayRotationTracker
+        // 後續推進來的更新，兩段都得到位，native 端的 logicalSize 才會是對的。
+        // 少了這條，下面的往返即使通過也只是「推論」native 知道自己轉了。
+        assertEquals(
+            "the script and the puppet disagree about the display size",
+            PuppetRecorder.contentSize,
+            (outcome.data["screen_w"] as Double).toInt() to
+                    (outcome.data["screen_h"] as Double).toInt(),
+        )
+
         if (outcome.data["found"] != true) {
             // 比不中之前，先問畫面上到底有沒有東西。ATD 系統映像檔沒有圖形堆疊，虛擬顯示
             // 送出來的每一張影格都是全黑——那時比不中是環境不提供被測物，不是 bug。
@@ -240,7 +297,8 @@ class Tier1SpikeTest {
         }
 
         assertEquals(
-            "vision.wait never matched the marker\n" +
+            "vision.wait never matched the marker (orientation $orientation, " +
+                    "display rotation ${displayRotation(displayId)})\n" +
                     "puppet ready on ${PuppetRecorder.resumedOnDisplay}, " +
                     "marker at ${PuppetRecorder.markerRect}, content ${PuppetRecorder.contentSize}\n" +
                     // 最後一次比對的實際分數。接近 0 表示影格跟模板毫無關係（多半是空白/黑畫面，
@@ -256,7 +314,8 @@ class Tier1SpikeTest {
         val cx = (outcome.data["cx"] as Double).toInt()
         val cy = (outcome.data["cy"] as Double).toInt()
         assertTrue(
-            "vision put the marker at ($cx, $cy) but it was drawn at $target " +
+            "at display rotation ${displayRotation(displayId)} vision put the marker at " +
+                    "($cx, $cy) but it was drawn at $target " +
                     "(confidence ${outcome.data["confidence"]})",
             target.contains(cx, cy),
         )
@@ -264,9 +323,24 @@ class Tier1SpikeTest {
         val down = PuppetRecorder.awaitTouch { it.action == MotionEvent.ACTION_DOWN }
         assertNotNull("the script's tap never reached the puppet", down)
         assertTrue(
-            "the script tapped (${down!!.x}, ${down.y}), outside the marker at $target",
+            "at display rotation ${displayRotation(displayId)} the script tapped " +
+                    "(${down!!.x}, ${down.y}), outside the marker at $target",
             target.contains(down.x.toInt(), down.y.toInt()),
         )
+    }
+
+    /** 顯示器當下實際的 rotation，只用在訊息裡——測試本身不該依賴它是哪個值。 */
+    private fun displayRotation(displayId: Int): Int =
+        env.context.getSystemService(DisplayManager::class.java)
+            ?.getDisplay(displayId)?.rotation ?: -1
+
+    private inline fun waitFor(timeoutMs: Long = 10_000, condition: () -> Boolean): Boolean {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            if (condition()) return true
+            Thread.sleep(100)
+        }
+        return condition()
     }
 
     /** 反覆注入同一個 tap，直到 puppet 收到 ACTION_DOWN 或 [timeoutMs] 到期。 */

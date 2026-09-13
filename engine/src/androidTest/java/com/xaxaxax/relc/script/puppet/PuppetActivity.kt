@@ -28,6 +28,21 @@ class PuppetActivity : Activity() {
         private var instance: PuppetActivity? = null
 
         /**
+         * 讓 puppet 宣告一個方向，藉此把它所在的虛擬顯示轉過去。
+         *
+         * 這是 CONTEXT.md「方向鏈」`Y → VD → X → MainDisplay` 的第一環：**顯示器裡的 app
+         * 決定顯示器的方向**。用 `RelcV2Service.setDisplayRotation` 從外面轉是設 user
+         * rotation，而 app 宣告的方向會贏過它（`IRelcV2Service.setDisplayRotation` 的註解
+         * 就是這麼寫的）——實測在 SM-A217F 上那樣轉不動，顯示器仍是 720x1280。
+         *
+         * @param orientation `ActivityInfo.SCREEN_ORIENTATION_*`
+         */
+        fun requestOrientation(orientation: Int) {
+            val activity = instance ?: return
+            activity.runOnUiThread { activity.requestedOrientation = orientation }
+        }
+
+        /**
          * 測試之間一定要呼叫。虛擬顯示被銷毀時上面的 activity 不會跟著消失，它會被搬回
          * 預設顯示器；下一個測試的 `app.launch` 就會把那個既有的 task 撈回前景，而不是在
          * 新的顯示器上重開一個——畫面上什麼都沒有，`vision.*` 於是永遠找不到東西。

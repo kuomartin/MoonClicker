@@ -20,30 +20,36 @@ internal object PuppetMarker {
     const val SIZE = 160
     private const val CELL = 20
 
+    /**
+     * 同心方框，所以它**轉 90 度還是自己**。
+     *
+     * 這件事是旋轉測試的前提。影格在 surface 空間，顯示器轉 90 度時內容是被轉「進」那個
+     * 緩衝區的，而 `TM_CCOEFF_NORMED` 不是旋轉不變的——用一個不對稱的圖樣（例如棋盤格，
+     * 它轉 90 度會反相）當模板，旋轉後根本比不中，測試就會為了錯的理由失敗。
+     *
+     * 另一條路是「測試自己把模板也轉 90 度」，但那等於把 surface 空間的旋轉方向寫死在測試
+     * 裡：方向猜錯時我會傾向一直翻到綠為止，而那正是這個測試該抓出來的東西。用旋轉對稱的
+     * 圖樣就沒有這個誘惑——**位置**成為唯一被斷言的東西，而位置是 puppet 獨立回報的。
+     */
     fun bitmap(): Bitmap {
         val bitmap = Bitmap.createBitmap(SIZE, SIZE, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         val paint = Paint()
 
-        canvas.drawColor(Color.WHITE)
-        paint.color = Color.BLACK
-        val cells = SIZE / CELL
-        for (row in 0 until cells) {
-            for (col in 0 until cells) {
-                if ((row + col) % 2 == 0) continue
-                canvas.drawRect(
-                    (col * CELL).toFloat(),
-                    (row * CELL).toFloat(),
-                    ((col + 1) * CELL).toFloat(),
-                    ((row + 1) * CELL).toFloat(),
-                    paint,
-                )
-            }
+        var inset = 0
+        var black = true
+        while (inset < SIZE / 2) {
+            paint.color = if (black) Color.BLACK else Color.WHITE
+            canvas.drawRect(
+                inset.toFloat(),
+                inset.toFloat(),
+                (SIZE - inset).toFloat(),
+                (SIZE - inset).toFloat(),
+                paint,
+            )
+            black = !black
+            inset += CELL
         }
-        // 中央一塊實心，讓「有沒有對準」在肉眼與在分數上都看得出來。
-        paint.color = Color.BLACK
-        val inset = (SIZE / 2 - CELL).toFloat()
-        canvas.drawRect(inset, inset, SIZE - inset, SIZE - inset, paint)
         return bitmap
     }
 
