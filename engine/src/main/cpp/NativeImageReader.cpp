@@ -77,16 +77,12 @@ void NativeImageReader::onImageAvailable(void* context, AImageReader* reader) {
 }
 
 /**
- * 拆掉 reader。順序是有講究的，弄反會死鎖。
+ * 拆掉 reader。**順序不能改，弄反會死鎖**：先拔 listener、再等在途回呼做完、最後才刪。
  *
- * `AImageReader_delete` 會先拿 reader 的內部鎖，再等回呼執行緒退出（`ALooper::stop()` →
- * `Thread::requestExitAndWait()`）。而執行中的回呼在 `AImage_delete` 裡正需要同一把內部
- * 鎖——刪除者等執行緒、執行緒等鎖，兩邊互等。60fps 之下「拆除當下剛好有一張影格在處理」
- * 是機率事件，所以它是間歇性的：在 SM-A217F 上大約每五、六次執行會中一次。
+ * `AImageReader_delete` 會先拿 reader 的內部鎖再等回呼執行緒退出，而執行中的回呼在
+ * `AImage_delete` 裡正需要那把鎖。只清掉 `frameCallback` 不夠——native listener 還註冊著。
  *
- * 所以：先拔 listener（不再有新的回呼），再等在途的那一次做完，最後才刪。
- * 只清掉 frameCallback 是不夠的——native listener 還註冊著，回呼照樣進來、照樣呼叫
- * `AImage_delete`。
+ * 見 docs/virtual-display-pitfalls.md。
  */
 void NativeImageReader::release() {
     if (!reader) {

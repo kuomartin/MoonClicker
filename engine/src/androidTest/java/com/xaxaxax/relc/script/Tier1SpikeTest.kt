@@ -49,16 +49,13 @@ class Tier1SpikeTest {
 
     @Before
     fun setUp() {
-        // Tier 1 的下限是 API 29，因為它整個建立在 adoptShellPermissionIdentity 上。
-        // 實測 27 與 28 的映像檔都沒有那個方法（NoSuchMethodError）。
+        // Tier 1 的下限是 API 29：它整個建立在 adoptShellPermissionIdentity 上，而那是
+        // API 29 才有的。這是**測試框架**的限制，不是產品的——production 跑在 Shizuku 真正的
+        // shell 進程裡，不需要 adopt 任何身分，minSdk 仍然是 27。
         //
-        // 這是**測試框架**的限制，不是產品的：production 在舊版上跑在 Shizuku 真正的 shell
-        // 進程裡，本來就不需要 adopt 任何身分。minSdk 仍然是 27，只是這一層沒辦法替 Shizuku
-        // 站在那裡，27/28 的行為得用別的方式確認。
-        //
-        // 順帶一個巧合值得記著：`MotionEvent.setDisplayId` 也是 API 29 才有的，所以「注入
-        // 不到虛擬顯示」這個產品在 27/28 上的能力邊界，**Tier 1 永遠觀察不到**——兩個下限
-        // 剛好重合。曾經為它加過一個能力閘門，在可達範圍內恆為真，已拆除。
+        // `MotionEvent.setDisplayId` 同樣是 API 29，所以「27/28 注入不到虛擬顯示」這個產品
+        // 邊界 Tier 1 永遠觀察不到，不必為它加能力閘門。見
+        // docs/virtual-display-pitfalls.md。
         assumeTrue(
             "UiAutomation.adoptShellPermissionIdentity does not exist below API 29, so this " +
                     "harness cannot stand in for Shizuku here. Says nothing about whether ReLC " +
@@ -86,9 +83,9 @@ class Tier1SpikeTest {
      *
      * 這是整個 Tier 1 的前提。拿不到的話後面每一步都會以難解讀的方式失敗。
      *
-     * `ADD_TRUSTED_DISPLAY` **不在必要清單裡**——實測 Samsung SM-A217F / Android 12 的
-     * shell 就沒有它，而 Pixel / API 37 有。所以它是一個要量、不是要求的事實：production
-     * 現在也會在被擋下來時退回非 trusted 顯示器（見 `RelcV2Service.createDisplay`）。
+     * `ADD_TRUSTED_DISPLAY` **不在必要清單裡**：不是每台裝置的 shell 都有它，所以它是要量、
+     * 不是要求的事實。production 被擋下來時會退回非 trusted 顯示器
+     * （`RelcV2Service.createDisplay`）。
      */
     @Test
     fun step1_shell_permissions_are_adoptable() {
@@ -122,10 +119,9 @@ class Tier1SpikeTest {
     /**
      * Q: 那組需要 `ADD_TRUSTED_DISPLAY` 的旗標，有沒有依權限正確地給或不給？
      *
-     * 這條存在的原因是 30/30 全綠**分辨不出**這件事：非 trusted 的顯示器一樣建得起來、
-     * 一樣收得到觸控（SM-A217F 上實測），所以旗標決策錯了其餘測試照樣通過。ReLC 曾經在
-     * API 31 無條件要求 TRUSTED，讓那台機器完全不能建顯示器——沒有這條斷言，同樣的錯誤
-     * 再犯一次也不會有人發現。
+     * 這條存在的原因是**其餘測試全綠也分辨不出這件事**：非 trusted 的顯示器一樣建得起來、
+     * 一樣收得到觸控，所以旗標決策錯了其他斷言照樣通過。而錯掉的代價是整台裝置建不出
+     * 顯示器（見 docs/virtual-display-pitfalls.md）。
      *
      * 斷言的是**兩者一致**，不是某個特定值：拿得到權限就該是 trusted，拿不到就不該是。
      * 這樣同一條測試在兩種裝置上都有意義。
@@ -274,13 +270,11 @@ class Tier1SpikeTest {
 
         // 先把 puppet 叫起來、並確認它**真的收得到觸控**，再讓腳本跑。
         //
-        // 不這樣做的話這個測試是時序賭博：Android 12 的 splash screen 會在 activity 都
-        // resume、也畫完之後還壓在上面一陣子（step5 量到的），而腳本只點一次——比對命中得
-        // 夠快時那一下就落進 splash 還在的窗口，掉了。那時失敗訊息會說「點擊沒送達」，看起
-        // 來像座標換算錯了，其實測到的是啟動時序。
+        // 不暖身的話這是時序賭博：Android 12 的 splash 會在 activity 都 resume、畫完之後還
+        // 壓著一陣子，那段期間注入的觸控會掉，而腳本只點一次。失敗訊息會說「點擊沒送達」，
+        // 讀起來像座標錯了。
         //
-        // 啟動時序本身已經有 step4/step5 在管。這裡要測的是座標換算，所以先把環境弄成
-        // 穩定的，再讓腳本做它那一次點擊。
+        // 啟動時序有 step4/step5 在管；這裡要測的是座標換算。
         env.service.launchInDisplay(env.puppetPackage, displayId)
         assertTrue("the puppet never came up", PuppetRecorder.awaitReady(displayId))
 
@@ -289,17 +283,10 @@ class Tier1SpikeTest {
             // 轉了才算數：生效的話 puppet 的 content 會長寬互換。先確認這件事，否則
             // 「其實根本沒轉」會被誤讀成「換算錯了」——兩者要查的地方完全不同。
             val rotated = env.height to env.width
-            // 這是**環境能力**，不是斷言：有些環境不讓 app 宣告的方向傳到虛擬顯示。實測
-            // API 31 的 AOSP 模擬器映像檔不跟隨，但同樣是 API 31 的 SM-A217F 實機會跟隨，
-            // API 30/33/34/35 的模擬器也會——所以不是版本問題。
-            //
-            // **原因未定。** 最大嫌疑是 `ignoreOrientationRequest`（API 31 引進的 per-display
-            // 設定，開啟後 WindowManager 會無視 app 宣告的方向），所以訊息裡帶上
-            // `dumpsys window displays`，下一個看到的人不必從頭查。auto-rotate 已排除
-            // （accelerometer_rotation=1 時照樣不跟隨）。
-            //
-            // 用 assume 而不是硬性失敗，是因為轉不動時「座標換算對不對」根本無從量起。
-            // 但它是逐次實測的環境條件、不是寫死的裝置清單：任何轉得動的環境仍然照常斷言。
+            // **環境能力，不是斷言**：有些環境不讓 app 宣告的方向傳到虛擬顯示（原因未定，
+            // 見 docs/virtual-display-pitfalls.md）。轉不動時「座標換算對不對」無從量起，
+            // 所以 assume 掉——但這是逐次實測的條件、不是寫死的裝置清單，任何轉得動的環境
+            // 仍然照常斷言。訊息帶上 dumpsys 供接手的人查。
             assumeTrue(
                 "the puppet asked for orientation $orientation but display $displayId never " +
                         "followed — content is still ${PuppetRecorder.contentSize}, expected " +
@@ -333,10 +320,8 @@ class Tier1SpikeTest {
             hasVision = true,
         ).use { runner ->
             runner.run(
-                // 腳本不再自己 app.launch：puppet 已經由測試叫起來、也暖身確認過可觸控了，
-                // 再啟動一次會把同一個 task 重新帶到前景、觸發另一輪轉場動畫，於是腳本那唯一
-                // 的一下又落在動畫中途（step8 三次中飄一次就是這樣來的）。啟動本身有 step4
-                // 在管；這一條只測往返。
+                // 腳本不自己 app.launch：puppet 已經由測試叫起來並暖身過，再啟動一次會把同一
+                // 個 task 重新帶到前景、觸發另一輪轉場動畫。啟動有 step4 在管，這裡只測往返。
                 main = """
                     data.set("screen_w", screen.width)
                     data.set("screen_h", screen.height)
@@ -598,9 +583,8 @@ class Tier1SpikeTest {
     /**
      * 反覆注入同一個 tap，直到 puppet 回報的落點**落在 [target] 裡**，或逾時。
      *
-     * 為什麼條件是「落在裡面」而不是「收到就好」：視窗在啟動動畫期間就已經收得到觸控，但那
-     * 時它還帶著縮放，回報的座標是動畫中途的值。實測兩次都注入 y=506，收到 334.01 與
-     * 369.01——x 精確不變、y 各自差一個純縮放（1.515 與 1.371），正是垂直方向還在動的樣子。
+     * 條件是「落在裡面」而不是「收到就好」：視窗在啟動動畫期間就收得到觸控，但那時帶著縮放，
+     * 回報的座標是動畫中途的值（見 docs/virtual-display-pitfalls.md）。
      *
      * 每輪先清掉記錄，回傳的才是這一次注入的結果而不是更早的殘留。
      *

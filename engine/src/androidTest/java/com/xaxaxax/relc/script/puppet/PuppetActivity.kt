@@ -31,9 +31,9 @@ class PuppetActivity : Activity() {
          * 讓 puppet 宣告一個方向，藉此把它所在的虛擬顯示轉過去。
          *
          * 這是 CONTEXT.md「方向鏈」`Y → VD → X → MainDisplay` 的第一環：**顯示器裡的 app
-         * 決定顯示器的方向**。用 `RelcV2Service.setDisplayRotation` 從外面轉是設 user
-         * rotation，而 app 宣告的方向會贏過它（`IRelcV2Service.setDisplayRotation` 的註解
-         * 就是這麼寫的）——實測在 SM-A217F 上那樣轉不動，顯示器仍是 720x1280。
+         * 決定顯示器的方向**。從外面呼叫 `RelcV2Service.setDisplayRotation` 是設 user
+         * rotation，而 app 宣告的方向會贏過它，所以那樣轉不動。
+         * 見 docs/virtual-display-pitfalls.md。
          *
          * @param orientation `ActivityInfo.SCREEN_ORIENTATION_*`
          */

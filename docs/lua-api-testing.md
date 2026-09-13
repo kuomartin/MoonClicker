@@ -40,9 +40,8 @@ main.lua → LuaBindings.cpp（參數解析、座標攤平）
 涵蓋範圍：`input.*` 全部、`app.launch`、`device.*`、`data.set` 的每種型別、`screen.*`
 （含旋轉時的長寬互換）、`require`、錯誤與 traceback、停止語意。
 
-第一次跑就抓到一個 bug：`data.set(key, table)` 會**整份腳本一起帶走**——`boxLuaValue`
-從 `_G.cjson` 取編碼器，但 cjson 是用 `luaL_requiref(..., glb = 0)` 載入的，而它自己註冊
-全域的那段又被 `ENABLE_CJSON_GLOBAL` 關掉了。已改成走 `package.loaded`。
+第一次跑就抓到一個 bug：`data.set(key, table)` 會整份腳本一起帶走
+（見 [pitfalls](virtual-display-pitfalls.md)）。
 
 ### 這一層驗不到的
 
@@ -102,72 +101,25 @@ step6/7/8 共用的那一圈在比不中的時候會先量一次「puppet 明明
 會隨映像檔改名而腐爛，而「影格是不是全同色」就是我們真正在意的那件事。所以在 `api36` 上
 比對會被跳過，在 `api36aosp` 與實機上會真的跑。
 
-### 量到的事實
+### 踩過的坑
 
-SM-A217F 31/31、`api36aosp` 31/31（0 skipped）。trusted 與非 trusted 兩條顯示器路徑各有一台
-涵蓋到。過程中量到的：
-
-- **不是每台裝置的 shell 都有 `ADD_TRUSTED_DISPLAY`。** SM-A217F（Android 12）沒有，
-  Pixel 7a (API 37) 有。production 原本從 API 31 起無條件加上
-  `VIRTUAL_DISPLAY_FLAG_TRUSTED`，在前者上會直接 `SecurityException`——整台建不出顯示器。
-  現在那一組旗標從 **API 33** 起才給（與 scrcpy 的 `NewDisplayCapture` 同一條界線），
-  另外保留「被擋下來就退回非 trusted 重試」當保險。
-  **非 trusted 的顯示器上注入觸控仍然到得了 app**，這台上實測過。
-- **那組旗標不是一包，是三條獨立檢查。** `TRUSTED` 與 `OWN_DISPLAY_GROUP` 各自要
-  `ADD_TRUSTED_DISPLAY`；`ALWAYS_UNLOCKED` 要的是**另一個權限**
-  `ADD_ALWAYS_UNLOCKED_DISPLAY`；`TOUCH_FEEDBACK_DISABLED` 沒有檢查。綁成一包丟掉的代價很
-  具體：有 A 沒 B 的機器會為一個旗標賠掉整個 trusted 顯示器。step2b 逐項對照旗標與權限，
-  因為**其餘測試全綠也分辨不出這件事**——非 trusted 顯示器一樣建得起來、一樣收得到觸控。
-- **權限用問的，不要用丟例外試。** `checkSelfPermission` 查的是 `Process.myUid()`，在
-  Shizuku 進程裡就是 shell，正是 system_server 會拿去對的身分。
-- **`Canvas.drawBitmap(bmp, x, y, paint)` 會做密度縮放。** bitmap 帶的是預設顯示器的密度，
-  canvas 目標是虛擬顯示器的，兩者不同時標記就不是你以為的尺寸，而 `TM_CCOEFF_NORMED`
-  不是尺度不變的。指定目的矩形強制 1:1。（這是 puppet 的 bug，不是產品的——但它是任何人
-  寫這種測試都會踩到的那一個。）
-
-### 四次「環境前提偽裝成產品 bug」
-
-同一個模式反覆出現，值得單獨列出來——症狀都是某個斷言失敗，看起來像座標或權限錯了：
-
-| 真正的原因 | 偽裝成 | 怎麼處理 |
-|---|---|---|
-| ATD 映像檔沒有圖形堆疊，影格全黑 | 「比對不中」 | `distinctColorsOnDisplay`，只有一種顏色就跳過 |
-| Android 12 的 splash 還壓在已 resume 的視窗上 | 「觸控沒送達」 | `tapUntilInside` 重試 |
-| 裝置 Dozing／鎖屏，虛擬顯示不派送觸控 | 「觸控沒送達」 | `Tier1Env.wakeAndUnlock()` |
-| 啟動／旋轉動畫還沒結束 | 「座標算錯」 | `awaitStableFrame` |
-
-前三次我都是再補一個**代理條件**（等 resume、等 contentSize 換邊…）。第四次才改成量真正
-在意的事：**連續幾張影格取樣相同**。那一個條件同時涵蓋前面三種動畫，不必各補一條。
-
-`tapUntilInside` 的條件是「落點在目標裡」而不是「有收到」——視窗在動畫期間就收得到觸控，
-但那時帶著縮放，回報的座標是過渡值（實測注入 y=506 收到 334.01 與 369.01，x 精確不變、
-y 各差一個純縮放）。這不是「重試到過為止」：座標真的算錯就永遠不會落進目標，逾時後由
-探針指出它一直落在哪裡。
-
-寫這些取樣工具時我在 Kotlin 重寫了一次當天稍早才在 C++ 修掉的 bug——`ImageReader.close()`
-時回呼還在讀 buffer。拆除順序（拔 sink → 等在途回呼 → 才 close）現在關在單一
-`sampleFrames` 裡，兩個取樣函式共用。
+平台行為與我們自己的 bug 都收在 **[docs/virtual-display-pitfalls.md](virtual-display-pitfalls.md)**
+——`ADD_TRUSTED_DISPLAY` 不是每台都有、旗標不是一包、`AImageReader` 的拆除順序、
+環境前提偽裝成產品 bug 的四個案例等等。這裡不重複，程式碼註解也只留約束、把出處指過去。
 
 ### 旋轉（step7/step8）
 
-轉顯示器要**讓 puppet 自己宣告方向**，不是從外面呼叫 `setDisplayRotation`。後者是設 user
-rotation，而 app 宣告的方向會贏過它——實測在 SM-A217F 上那樣轉不動，`freezeDisplayRotation`
-回 true 但顯示器仍是 720x1280。這正是 CONTEXT.md「方向鏈」`Y → VD → X → MainDisplay`
-的第一環：**顯示器裡的 app 決定顯示器的方向**。
+轉顯示器要**讓 puppet 自己宣告方向**，不是從外面呼叫 `setDisplayRotation`——後者是設 user
+rotation，而 app 宣告的方向會贏過它。這正是 CONTEXT.md「方向鏈」
+`Y → VD → X → MainDisplay` 的第一環。
 
-踩過的坑：
+puppet 同時畫**旋轉對稱**的同心方框與**不對稱**的 Γ 字形，step6/7/8 兩個都比：
 
-- **兩個圖樣，各驗一件事。** puppet 同時畫一個**旋轉對稱**的同心方框與一個**不對稱**的
-  Γ 字形，step6/7/8 兩個都比。
-  - 對稱的驗**座標**：它在任何角度都長一樣，所以比中與否只取決於 `frameToLogical` 對不對。
-  - 不對稱的驗**方向**：模板是直立時截的，只有在引擎把模板轉到當前方向之後才會中
-    （[ADR-0013](adr/0013-templates-are-logical-space.md)）。
-  - 兩個一起看，失敗才可讀：「兩個都沒中」＝ 環境或座標；「只有不對稱的沒中」＝ 方向。
-    這就是 ADR-0013 那個 bug 被抓出來的方式——只有對稱圖樣時 step7/8 全綠，方向錯了也看不見。
-- **先確認「真的轉了」再談座標。** 旋轉沒生效與換算錯誤，症狀都是「點沒打中」，但要查的
-  地方完全不同。所以先等 puppet 的 content 長寬互換，再往下。
-- **`confidence` 在 miss 時不可讀。** `match()` 低於門檻就 `continue`，留下預設的 0——
-  所以「看分數判斷是全黑還是縮放」行不通，要靠 `distinctColorsOnDisplay`。
+- 對稱的驗**座標**——它在任何角度都長一樣，比中與否只取決於 `frameToLogical`。
+- 不對稱的驗**方向**——模板是直立時截的，只有在引擎把模板轉到當前方向之後才會中
+  （[ADR-0013](adr/0013-templates-are-logical-space.md)）。
+- 兩個一起看，失敗才可讀：「兩個都沒中」＝ 環境或座標；「只有不對稱的沒中」＝ 方向。
+  只有對稱圖樣的話，方向寫反也會全綠。
 
 另外 step6/7/8 都會斷言腳本看到的 `screen.width/height` 跟 puppet 實際被排版的尺寸一致。
 這條把 ADR-0012 的兩段交接釘住（`nativeStart` 帶進去的初始 rotation ＋
@@ -189,10 +141,9 @@ rotation，而 app 宣告的方向會贏過它——實測在 SM-A217F 上那樣
 step10 補的是 `docs/lua-api.md` 明寫、卻一直沒人守著的承諾（逾時回 nil），腳本作者的錯誤
 處理全建立在它上面。step11 刻意只顯示一個——兩個同時出現的話 index 只反映呼叫順序。
 
-**鑑別力是驗過的，不是假設的。** 真正的鑑別來自 `found`（標記在延遲前不在畫面上，「有比中」
-就蘊含「有等到」），時間斷言擋的是「比中了畫面上別的東西」。把延遲從 2 秒拉到 6 秒重跑仍然
-通過，證明 elapsed 跟著延遲走、不是撞到「腳本啟動＋拆除本來就要 2 秒」的固定成本。而
-**step10 是 step9 的反向對照**：少了它，一個永遠回傳 true 的實作也會過。
+鑑別力來自 `found`：標記在延遲前不在畫面上，「有比中」就蘊含「有等到」；時間斷言擋的是
+「比中了畫面上別的東西」。**step10 是 step9 的反向對照**——少了它，一個永遠回傳 true 的
+實作也會過。驗證過程見 [pitfalls](virtual-display-pitfalls.md#綠燈不等於有鑑別力)。
 
 ### API 矩陣
 
@@ -222,12 +173,8 @@ production 在舊版上跑在 Shizuku 真正的 shell 進程裡，本來就不�
 
 ### 還沒做的
 
-- **API 31 的模擬器不讓 app 宣告的方向傳到虛擬顯示**，所以旋轉那兩步在那裡被跳過。原因未定：
-  auto-rotate 是開的（`accelerometer_rotation=1`），同樣 API 31 的實機會跟隨，30/33/34/35 也
-  會，所以不是版本問題。最大嫌疑是 `ignoreOrientationRequest`（API 31 引進的 per-display
-  設定），失敗訊息裡已經帶上 `dumpsys window displays` 供下一個人查。
-- **`multi_swipe_dispatches_every_pointer` 在 API 31 模擬器上被跳過**，而且是沒有訊息的裸
-  `<skipped/>`。它是 Tier 0、不依賴環境，其他五級都正常。沒有追出原因。
+兩項未解的觀察記在
+[virtual-display-pitfalls.md 的「未解」](virtual-display-pitfalls.md#未解)。
 
 ## 跟 `:hidden-api-contract` 的分工
 

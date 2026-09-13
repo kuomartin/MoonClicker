@@ -52,13 +52,11 @@ internal class Tier1Env(
     /**
      * 把裝置叫醒並解掉鎖定畫面。
      *
-     * 沒有 `ALWAYS_UNLOCKED`（那在 API 33 那組旗標裡）的虛擬顯示，在裝置 Dozing 或停在
-     * keyguard 時**收不到注入的觸控**。症狀是「puppet 沒收到 ACTION_DOWN」，跟座標換算錯、
-     * 權限不足、顯示器沒建起來全都長一樣——實測在 SM-A217F 上因為手機自己睡著而浪費過一輪
-     * 排查。
+     * 沒有 `ALWAYS_UNLOCKED`（在 API 33 那組旗標裡）的虛擬顯示，在裝置 Dozing 或停在
+     * keyguard 時**收不到注入的觸控**，而症狀跟座標換算錯、權限不足、顯示器沒建起來一樣。
      *
-     * 與其把它寫進 README 要人記得，不如讓測試自己處理：這是可以被建立的前提，不是需要
-     * 使用者配合的環境。
+     * 這是測試可以自己建立的前提，不該寫進 README 要人記得。
+     * 見 docs/virtual-display-pitfalls.md。
      */
     fun wakeAndUnlock() {
         shell("input keyevent KEYCODE_WAKEUP")
@@ -133,12 +131,11 @@ internal class Tier1Env(
     /**
      * 掛一個 ImageReader 到這個顯示器上取樣影格，直到 [done] 成立或逾時。
      *
-     * 拆除順序是有講究的，而且我今天已經在 C++ 那邊踩過同一顆地雷
-     * （`NativeImageReader::release`）：`ImageReader.close()` 會讓已取得的 Image buffer
-     * 失效，回呼還在讀就是 `IllegalStateException: buffer is inaccessible`。
-     * 所以先拔 sink 讓新影格停下、再用鎖等在途的那一次做完、最後才 close。
+     * **拆除順序不能改**：拔 sink → 用鎖等在途回呼做完 → 才 `close()`。`close()` 會讓已取得
+     * 的 Image buffer 失效，回呼還在讀就是 `IllegalStateException: buffer is inaccessible`。
+     * 與 `NativeImageReader::release` 同一個約束。
      *
-     * 只有這裡碰得到那個順序，取樣邏輯不必各自重寫一遍。
+     * 收在這裡，取樣邏輯就不必各自重寫一遍。
      */
     private fun sampleFrames(
         displayId: Int,
@@ -178,12 +175,11 @@ internal class Tier1Env(
     /**
      * 等到這個顯示器的畫面**不再變動**。
      *
-     * 「等視窗/版面回報它好了」是代理訊號，而合成出來的影格會比它慢：旋轉動畫期間
-     * `contentSize` 已經是新方向，緩衝區裡卻還是舊內容轉到一半——`vision` 於是以
-     * confidence 1.0 命中一個過渡位置，看起來完全像座標換算錯了。實測 step8 就是這樣飄的。
+     * 「版面回報它好了」是代理訊號，合成出來的影格比它慢：旋轉動畫期間 `contentSize` 已經
+     * 是新方向，緩衝區裡還是舊內容轉到一半，`vision` 會以 confidence 1.0 命中一個過渡位置。
      *
-     * 所以直接量真正在意的那件事：連續 [stableFrames] 張影格的取樣完全相同就算穩定。
-     * 這對啟動動畫、旋轉動畫、splash 收起來都成立，不必為每一種各補一個條件。
+     * 所以量真正在意的性質：連續 [stableFrames] 張影格取樣相同。這一個條件同時涵蓋啟動
+     * 動畫、旋轉動畫與 splash 收起來，不必各補一條。見 docs/virtual-display-pitfalls.md。
      */
     fun awaitStableFrame(
         displayId: Int,
