@@ -9,6 +9,7 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.view.MotionEvent
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.xaxaxax.relc.RelcV2Service
 import com.xaxaxax.relc.engine.state.EngineRunState
 import com.xaxaxax.relc.engine.state.EngineStateRepository
 import com.xaxaxax.relc.script.puppet.PuppetActivity
@@ -48,6 +49,7 @@ class Tier1SpikeTest {
         PuppetRecorder.reset()
         env = Tier1Env()
         env.adoptShellIdentity()
+        env.wakeAndUnlock()
         env.exemptHiddenApis()
         env.startService()
     }
@@ -93,6 +95,31 @@ class Tier1SpikeTest {
         val displayId = env.createDisplay()
 
         assertTrue("createVirtualDisplay returned $displayId", displayId > 0)
+    }
+
+    /**
+     * Q: 那組需要 `ADD_TRUSTED_DISPLAY` 的旗標，有沒有依權限正確地給或不給？
+     *
+     * 這條存在的原因是 30/30 全綠**分辨不出**這件事：非 trusted 的顯示器一樣建得起來、
+     * 一樣收得到觸控（SM-A217F 上實測），所以旗標決策錯了其餘測試照樣通過。ReLC 曾經在
+     * API 31 無條件要求 TRUSTED，讓那台機器完全不能建顯示器——沒有這條斷言，同樣的錯誤
+     * 再犯一次也不會有人發現。
+     *
+     * 斷言的是**兩者一致**，不是某個特定值：拿得到權限就該是 trusted，拿不到就不該是。
+     * 這樣同一條測試在兩種裝置上都有意義。
+     */
+    @Test
+    fun step2b_the_trusted_flag_follows_the_permission() {
+        val displayId = requireDisplay()
+        val granted = env.context.checkSelfPermission(RelcV2Service.ADD_TRUSTED_DISPLAY) ==
+                PackageManager.PERMISSION_GRANTED
+        val dump = env.displayDump(displayId)
+
+        assertEquals(
+            "ADD_TRUSTED_DISPLAY granted=$granted but the display's FLAG_TRUSTED disagrees.\n$dump",
+            granted,
+            "FLAG_TRUSTED" in dump,
+        )
     }
 
     /** Q: GLES 分發器在這個進程裡起得來嗎——`vision.*` 有沒有影格可看？ */
