@@ -54,12 +54,6 @@ class FullscreenDisplayViewModel @Inject constructor(
      */
     val service: StateFlow<IRelcV2Service?> = shizukuManager.serviceFlow
 
-    init {
-        viewModelScope.launch {
-            shizukuManager.bindUserService()
-        }
-    }
-
     fun toggleReadOnly() {
         _uiState.value = _uiState.value.copy(isReadOnly = !_uiState.value.isReadOnly)
     }

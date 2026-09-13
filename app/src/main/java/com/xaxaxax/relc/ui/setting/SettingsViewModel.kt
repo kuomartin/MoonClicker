@@ -8,6 +8,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.xaxaxax.relc.core.AppSettings
 import com.xaxaxax.relc.permission.PermissionManager
+import com.xaxaxax.relc.shizuku.ShizukuConnectionStatus
 import com.xaxaxax.relc.shizuku.ShizukuManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -23,8 +24,7 @@ import timber.log.Timber
 import kotlin.time.Duration.Companion.milliseconds
 
 data class SettingsUiState(
-    val hasShizukuPermission: Boolean = false,
-    val isShizukuAvailable: Boolean = false,
+    val shizukuStatus: ShizukuConnectionStatus = ShizukuConnectionStatus.NOT_AVAILABLE,
     val osAllowSecondaryDisplays: Boolean = false,
     val isRefreshing: Boolean = false,
     val autoOpenFullscreen: Boolean = false,
@@ -44,15 +44,13 @@ class SettingsViewModel @Inject constructor(
     private val isRefreshing = MutableStateFlow(false)
 
     val uiState: StateFlow<SettingsUiState> = combine(
-        shizukuManager.hasPermissionFlow,
-        shizukuManager.isAvailableFlow,
+        shizukuManager.statusFlow,
         permissionManager.osAllowSecondaryDisplaysFlow,
         isRefreshing,
         appSettings.autoOpenFullscreen,
-    ) { hasShizuku, isShizuku, allowSecondary, isRefreshing, autoOpenFullscreen ->
+    ) { shizukuStatus, allowSecondary, isRefreshing, autoOpenFullscreen ->
         SettingsUiState(
-            hasShizukuPermission = hasShizuku,
-            isShizukuAvailable = isShizuku,
+            shizukuStatus = shizukuStatus,
             osAllowSecondaryDisplays = allowSecondary,
             isRefreshing = isRefreshing,
             autoOpenFullscreen = autoOpenFullscreen,
@@ -73,7 +71,8 @@ class SettingsViewModel @Inject constructor(
                 if (fromPullToRefresh) {
                     Timber.d("fromPullToRefresh : $uiState")
                     isRefreshing.value = true
-                    shizukuManager.requestPermission()
+                    // 下拉重整只該重新檢查狀態，不該彈授權對話框；要授權請按健康檢查卡片上的按鈕。
+                    shizukuManager.refreshAccess()
                 }
                 _osAllowSecondaryDisplays.value = context.packageManager.hasSystemFeature(
                     PackageManager.FEATURE_ACTIVITIES_ON_SECONDARY_DISPLAYS

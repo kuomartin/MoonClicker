@@ -13,65 +13,72 @@ import com.xaxaxax.relc.IRelcV2Service
 import com.xaxaxax.relc.RelcV2Service
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import rikka.shizuku.Shizuku
 import timber.log.Timber
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
+/** 放棄等待 bind 的時限，逾時後狀態退回 [ShizukuConnectionStatus.DISCONNECTED] 讓使用者手動重試。 */
+private val BIND_TIMEOUT = 10.seconds
+
+/**
+ * Shizuku 的可用程度：一條階梯，後面的必然蘊含前面的。
+ *
+ * 合併 available 與 hasPermission 兩個布林，是因為它們從來就不獨立——binder 不在時不可能有授權。
+ * 拆成兩個布林，「binder 不在卻已授權」這種不存在的狀態就會變成型別允許的。
+ */
+private enum class ShizukuAccess { NOT_AVAILABLE, NEED_PERMISSION, GRANTED }
+
 class ShizukuManager(private val context: Context) {
     private val myUid: Int get() = Process.myUid()
 
-    /** 監聽 Shizuku Binder 連線狀態 */
-    val isAvailableFlow: StateFlow<Boolean> = callbackFlow {
-        val receivedListener = Shizuku.OnBinderReceivedListener { trySend(true) }
-        val deadListener = Shizuku.OnBinderDeadListener { trySend(false) }
+    /** 與 App 生命週期等長，不需要取消。 */
+    private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
-        Shizuku.addBinderReceivedListener(receivedListener)
-        Shizuku.addBinderDeadListener(deadListener)
+    private val _access = MutableStateFlow(ShizukuAccess.NOT_AVAILABLE)
 
-        awaitClose {
-            Shizuku.removeBinderReceivedListener(receivedListener)
-            Shizuku.removeBinderDeadListener(deadListener)
+    private val _serviceFlow = MutableStateFlow<IRelcV2Service?>(null)
+    val serviceFlow = _serviceFlow.asStateFlow()
+
+    val service: IRelcV2Service?
+        get() = _serviceFlow.value
+
+    /** bind 已送出但服務還沒接上，也就是 UI 的「連線中」。 */
+    private val _isBinding = MutableStateFlow(false)
+
+    /** 唯一對外的 Shizuku 狀態，Displays/Scripts/Settings 共用同一份判斷。 */
+    val statusFlow: StateFlow<ShizukuConnectionStatus> = combine(
+        _access, serviceFlow, _isBinding
+    ) { access, service, binding ->
+        when {
+            access == ShizukuAccess.NOT_AVAILABLE -> ShizukuConnectionStatus.NOT_AVAILABLE
+            access == ShizukuAccess.NEED_PERMISSION -> ShizukuConnectionStatus.NEED_PERMISSION
+            service != null -> ShizukuConnectionStatus.CONNECTED
+            binding -> ShizukuConnectionStatus.CONNECTING
+            else -> ShizukuConnectionStatus.DISCONNECTED
         }
     }.stateIn(
-        scope = CoroutineScope(Dispatchers.Default + SupervisorJob()),
+        scope = scope,
         started = SharingStarted.Eagerly, // App 啟動即監聽
-        initialValue = Shizuku.pingBinder()
+        initialValue = ShizukuConnectionStatus.NOT_AVAILABLE
     )
-    val isAvailable: Boolean
-        get() = isAvailableFlow.value
 
-    /** 監聽 Shizuku 授權狀態 */
-    val hasPermissionFlow: StateFlow<Boolean> = callbackFlow {
-        val listener = Shizuku.OnRequestPermissionResultListener { reqCode, grantResult ->
-            if (reqCode == myUid) {
-                trySend(grantResult == PackageManager.PERMISSION_GRANTED)
-            }
-        }
-        Shizuku.addRequestPermissionResultListener(listener)
-        awaitClose { Shizuku.removeRequestPermissionResultListener(listener) }
-    }.stateIn(
-        scope = CoroutineScope(Dispatchers.Default + SupervisorJob()),
-        started = SharingStarted.Eagerly, // App 啟動即監聽
-        initialValue = false
-    )
-    val hasPermission: Boolean
-        get() = hasPermissionFlow.value
-
-    val isReadyFlow = combine(isAvailableFlow,hasPermissionFlow){ a, p -> a && p }
-
+    val status: ShizukuConnectionStatus
+        get() = statusFlow.value
 
     // -------------------------------------------------------------
     // 單例 UserService: IRelcV2Service
@@ -83,34 +90,13 @@ class ShizukuManager(private val context: Context) {
         .debuggable(BuildConfig.DEBUG)
         .version(BuildConfig.VERSION_CODE)
 
-    // 內部使用 MutableStateFlow 保存實例，對外只暴露唯讀 StateFlow
-    private val _serviceFlow = MutableStateFlow<IRelcV2Service?>(null)
-    val serviceFlow = _serviceFlow.asStateFlow()
-
-    val service: IRelcV2Service?
-        get() = _serviceFlow.value
-
-    /** 給狀態列 UI 用的合併狀態，Displays/Scripts 兩個畫面共用同一份判斷邏輯。 */
-    val statusFlow: StateFlow<ShizukuStatusUiState> = combine(
-        isAvailableFlow, hasPermissionFlow, serviceFlow
-    ) { available, permission, service ->
-        ShizukuStatusUiState(available, permission, service != null)
-    }.stateIn(
-        scope = CoroutineScope(Dispatchers.Default + SupervisorJob()),
-        started = SharingStarted.Eagerly,
-        initialValue = ShizukuStatusUiState()
-    )
-
-    /** 狀態列按鈕的統一入口：未授權先要授權，已授權但沒連線就去連線。 */
-    fun requestPermissionOrConnect() {
-        if (!hasPermission) requestPermission() else bindUserService()
-    }
-
-    // 單例 ServiceConnection
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName, binder: IBinder) {
-            val svc = if (binder.isBinderAlive) IRelcV2Service.Stub.asInterface(binder) else null
-            _serviceFlow.value = svc
+            _serviceFlow.value = if (binder.isBinderAlive) {
+                IRelcV2Service.Stub.asInterface(binder)
+            } else {
+                null
+            }
         }
 
         override fun onServiceDisconnected(name: ComponentName) {
@@ -119,39 +105,90 @@ class ShizukuManager(private val context: Context) {
         }
     }
 
-    private var isBound = false
+    private var bindJob: Job? = null
 
-    // 手動呼叫連線
-    fun bindUserService() {
-        when {
-            isBound -> Unit
-            !isAvailable->
-                Timber.w("Shizuku binder not available, skip binding")
-            !hasPermission->
-                Timber.w("Shizuku permission not available, skip binding")
-            else->
-                try {
-                    Shizuku.bindUserService(serviceArgs, serviceConnection)
-                    isBound = true
-                } catch (e: Exception) {
-                    Timber.e(e, "Failed to bind UserService")
-                    _serviceFlow.value = null
+    init {
+        // Sticky：ShizukuProvider 在 Application attach 階段就送出 binder，很可能早於本物件被建立，
+        // 非 sticky 版不會補發。
+        Shizuku.addBinderReceivedListenerSticky { refreshAccess() }
+        Shizuku.addBinderDeadListener {
+            _access.value = ShizukuAccess.NOT_AVAILABLE
+            _serviceFlow.value = null
+        }
+        Shizuku.addRequestPermissionResultListener { requestCode, grantResult ->
+            if (requestCode == myUid) {
+                _access.value = if (grantResult == PackageManager.PERMISSION_GRANTED) {
+                    ShizukuAccess.GRANTED
+                } else {
+                    ShizukuAccess.NEED_PERMISSION
+                }
+            }
+        }
+
+        // 條件一齊就自己連上，使用者不必在每個畫面各按一次。
+        //
+        // 只在「授權或服務狀態真的變了」時試一次：bind 逾時不改變這兩者，所以連不上不會變成無止境的
+        // 背景重試——連不上通常是環境問題，交給狀態列的按鈕讓使用者決定何時重試。
+        scope.launch {
+            combine(_access, serviceFlow) { access, service -> access to service }
+                .distinctUntilChanged()
+                .collect { (access, service) ->
+                    if (access == ShizukuAccess.GRANTED && service == null) bindUserService()
                 }
         }
     }
 
-    // 手動中斷連線
-    fun unbindUserService() {
-        if (!isBound) return
-        try {
-            Shizuku.unbindUserService(serviceArgs, serviceConnection, true)
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to unbind UserService")
-        } finally {
-            isBound = false
-            _serviceFlow.value = null
+    /**
+     * 不彈窗地把 Shizuku 目前的可用程度同步進 [statusFlow]。
+     *
+     * [Shizuku.checkSelfPermission] 在 binder 未送達時會丟 IllegalStateException，所以先 ping 再問。
+     */
+    fun refreshAccess() {
+        _access.value = when {
+            !Shizuku.pingBinder() -> ShizukuAccess.NOT_AVAILABLE
+
+            runCatching { Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED }
+                .getOrDefault(false) -> ShizukuAccess.GRANTED
+
+            else -> ShizukuAccess.NEED_PERMISSION
         }
     }
+
+    /** 狀態列按鈕的統一入口：未授權先要授權，已授權就（重）連線。 */
+    fun requestPermissionOrConnect() {
+        when (_access.value) {
+            ShizukuAccess.NOT_AVAILABLE -> Timber.w("Shizuku binder is not available")
+            ShizukuAccess.NEED_PERMISSION -> requestPermission()
+            ShizukuAccess.GRANTED -> bindUserService()
+        }
+    }
+
+    /**
+     * 連上 UserService。等到服務真的接上才離開「連線中」，逾時就放棄，
+     * 讓狀態退回 DISCONNECTED 而不是永遠卡在 CONNECTING。
+     */
+    fun bindUserService() {
+        if (bindJob?.isActive == true || _serviceFlow.value != null) return
+        if (_access.value != ShizukuAccess.GRANTED) {
+            Timber.w("Shizuku permission not available, skip binding")
+            return
+        }
+
+        bindJob = scope.launch {
+            _isBinding.value = true
+            try {
+                Shizuku.bindUserService(serviceArgs, serviceConnection)
+                withTimeoutOrNull(BIND_TIMEOUT) { serviceFlow.filterNotNull().first() }
+                    ?: Timber.w("Timed out waiting for RelcV2Service to connect")
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to bind UserService")
+                _serviceFlow.value = null
+            } finally {
+                _isBinding.value = false
+            }
+        }
+    }
+
     /**
      * 確保等待到 Service 處於連線狀態後執行，若逾時則回傳 Failure
      */
@@ -171,13 +208,10 @@ class ShizukuManager(private val context: Context) {
     // Actions
     // -------------------------------------------------------------
 
-    fun checkPermission(): Boolean =
-        isAvailable && Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
-
-    fun requestPermission(): Unit = when {
-        !isAvailable -> Timber.w("Shizuku binder is not available")
-        !hasPermission -> Shizuku.requestPermission(myUid)
-        else -> Timber.d("Already has permission")
+    fun requestPermission(): Unit = when (_access.value) {
+        ShizukuAccess.NOT_AVAILABLE -> Timber.w("Shizuku binder is not available")
+        ShizukuAccess.NEED_PERMISSION -> Shizuku.requestPermission(myUid)
+        ShizukuAccess.GRANTED -> Timber.d("Already has permission")
     }
 
     fun getOpenShizukuIntent(): Intent {
@@ -195,18 +229,16 @@ class ShizukuManager(private val context: Context) {
     }
 }
 
-enum class ShizukuConnectionStatus { NOT_AVAILABLE, NEED_PERMISSION, DISCONNECTED, CONNECTED }
+/** 宣告順序即階梯順序，[isAuthorized] 靠它比較。 */
+enum class ShizukuConnectionStatus {
+    NOT_AVAILABLE,
+    NEED_PERMISSION,
+    DISCONNECTED,
+    CONNECTING,
+    CONNECTED;
 
-data class ShizukuStatusUiState(
-    val isAvailable: Boolean = false,
-    val hasPermission: Boolean = false,
-    val isConnected: Boolean = false,
-) {
-    val status: ShizukuConnectionStatus
-        get() = when {
-            !isAvailable -> ShizukuConnectionStatus.NOT_AVAILABLE
-            !hasPermission -> ShizukuConnectionStatus.NEED_PERMISSION
-            !isConnected -> ShizukuConnectionStatus.DISCONNECTED
-            else -> ShizukuConnectionStatus.CONNECTED
-        }
+    /** 已授權，不論 UserService 連上沒。 */
+    val isAuthorized: Boolean get() = this >= DISCONNECTED
+
+    val isConnected: Boolean get() = this == CONNECTED
 }
