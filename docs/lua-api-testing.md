@@ -147,9 +147,40 @@ rotation，而 app 宣告的方向會贏過它——實測在 SM-A217F 上那樣
 `DisplayRotationTracker` 後續推的更新），少了它，往返即使通過也只是「推論」native 知道
 自己轉了。
 
+### API 矩陣
+
+```bash
+./gradlew :engine:api29DebugAndroidTest              # 單一級
+./gradlew :engine:tier1MatrixGroupDebugAndroidTest   # 全部，慢，第一次要下載映像檔
+```
+
+全部用**有圖形堆疊**的映像檔（27–29 只有 `default` 有，30 起用 `aosp`），否則比對那一段會被
+跳過，而跨版本要驗的正好包含它。
+
+| API | 結果 |
+|---|---|
+| 27, 28 | Tier 0 全過；**Tier 1 跳過** |
+| 29 | 31/31 —— Tier 1 能觸及的最舊一級，含 vision 與注入 |
+| 30, 33, 34, 35, 36 | 31/31 |
+| 31（模擬器） | 旋轉那兩步跳過，其餘全過 |
+| 31（SM-A217F 實機） | 31/31 |
+
+**Tier 1 的下限是 API 29**，因為它整個建立在 `UiAutomation.adoptShellPermissionIdentity` 上，
+而那是 API 29 才有的（27/28 實測 `NoSuchMethodError`）。這是**測試框架**的限制，不是產品的：
+production 在舊版上跑在 Shizuku 真正的 shell 進程裡，本來就不需要 adopt 任何身分。minSdk
+仍然是 27，Tier 0 在那裡照常全過。
+
+順帶一個巧合：`MotionEvent.setDisplayId` 也是 API 29 才有的，所以「注入不到虛擬顯示」這個
+產品在 27/28 上的能力邊界，**Tier 1 永遠觀察不到**——兩個下限剛好重合。
+
 ### 還沒做的
 
-- 只跑過 API 31 與 36。中間那幾級（尤其 27–29 沒有 TRUSTED 旗標可用）未知。
+- **API 31 的模擬器不讓 app 宣告的方向傳到虛擬顯示**，所以旋轉那兩步在那裡被跳過。原因未定：
+  auto-rotate 是開的（`accelerometer_rotation=1`），同樣 API 31 的實機會跟隨，30/33/34/35 也
+  會，所以不是版本問題。最大嫌疑是 `ignoreOrientationRequest`（API 31 引進的 per-display
+  設定），失敗訊息裡已經帶上 `dumpsys window displays` 供下一個人查。
+- **`multi_swipe_dispatches_every_pointer` 在 API 31 模擬器上被跳過**，而且是沒有訊息的裸
+  `<skipped/>`。它是 Tier 0、不依賴環境，其他五級都正常。沒有追出原因。
 - `vision.wait` 的「等到它出現」語意還沒真的被驗——puppet 的畫面是靜態的，比對第一幀就中。
   要驗等待，puppet 需要能排程「N 毫秒後換一個圖樣」。
 
