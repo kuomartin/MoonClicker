@@ -165,6 +165,8 @@ int GlesDistributor::addSurface(JNIEnv *env, jobject surface) {
         int handle = nextHandle++;
         jobject globalSurface = env->NewGlobalRef(surface);
         sinks.push_back({handle, globalSurface, window, eglSurface});
+        // 從閒置節奏立刻切回來，不然新掛上的鏡像要等最多 250ms 才看到第一張。
+        frameCond.notify_all();
         LOGD("Successfully added sink handle %d, window %p. Total sinks: %zu", handle, window,
              sinks.size());
         return handle;
@@ -292,9 +294,22 @@ void GlesDistributor::renderLoop() {
     auto lastLogTime = std::chrono::steady_clock::now();
 
     while (isRunning) {
+        bool hasSinks;
         {
+            std::lock_guard<std::mutex> lock(sinksMutex);
+            hasSinks = !sinks.empty();
+        }
+
+        {
+            // 沒人在看就不必以 60fps 的節奏醒來。但也不能完全不醒：SurfaceTexture 的緩衝區
+            // 佇列滿了之後生產端（虛擬顯示）會被擋住，所以閒置時仍然定期 updateTexImage
+            // 把它排空，只是把節奏從 10ms 放寬到 250ms。
+            //
+            // 這裡沒有用條件式等待，因為 frameAvailable / onFrameAvailable 這組事件驅動的
+            // 骨架從來沒有接上——SurfaceTexture 的 listener 沒有註冊，frameCond 也沒有人
+            // notify。改成等條件會直接睡死。逾時輪詢是目前唯一的驅動力，只是不必那麼密。
             std::unique_lock<std::mutex> lock(frameMutex);
-            frameCond.wait_for(lock, std::chrono::milliseconds(10));
+            frameCond.wait_for(lock, std::chrono::milliseconds(hasSinks ? 10 : 250));
         }
 
         if (!isRunning) break;
@@ -303,6 +318,9 @@ void GlesDistributor::renderLoop() {
         env->CallVoidMethod(jSurfaceTexture, updateTexImage);
 
         drawFrame();
+
+        // 只在真的有分發出去時才計數，否則閒置的顯示器也會定期印心跳，蓋掉有意義的訊息。
+        if (!hasSinks) continue;
 
         frameCount++;
         if (frameCount >= 60) {
