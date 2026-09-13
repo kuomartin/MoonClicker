@@ -1,6 +1,10 @@
 package com.xaxaxax.relc.script
 
 import android.content.Context
+import android.graphics.PixelFormat
+import android.media.ImageReader
+import android.os.Handler
+import android.os.HandlerThread
 import androidx.test.platform.app.InstrumentationRegistry
 import com.xaxaxax.relc.RelcV2Service
 import com.xaxaxax.relc.script.puppet.PuppetActivity
@@ -98,6 +102,45 @@ internal class Tier1Env(
             .filter { line -> tags.any { it in line } }
             .joinToString("\n")
             .ifEmpty { "(nothing in logcat matched ${tags.toList()})" }
+    }
+
+    /**
+     * 這個顯示器抓下來的影格裡有幾種不同的顏色。
+     *
+     * 用來回答「畫面上到底有沒有東西」。ATD（automated test device）系統映像檔把圖形堆疊
+     * 拿掉了，虛擬顯示照樣建得起來、`GlesDistributor` 照樣以 60fps 送影格——但每一張都是
+     * 全黑。那時 `vision.*` 比不中不是 bug，是這個環境不提供被測的東西。
+     *
+     * 量性質而不是認裝置名：`Build.PRODUCT` 裡有沒有 "atd" 是 proxy，會隨映像檔改名而腐爛，
+     * 而「影格是不是全同色」就是我們真正在意的那件事。
+     */
+    fun distinctColorsOnDisplay(displayId: Int, sampleMs: Long = 2_000): Int {
+        val thread = HandlerThread("frame-probe").apply { start() }
+        val reader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
+        val seen = java.util.Collections.synchronizedSet(HashSet<Int>())
+        reader.setOnImageAvailableListener({ r ->
+            val image = r.acquireLatestImage() ?: return@setOnImageAvailableListener
+            image.use {
+                val plane = it.planes[0]
+                val buffer = plane.buffer
+                // 抽樣就夠了——這裡只想知道「有沒有變化」，不是要還原整張圖。
+                var offset = 0
+                while (offset + 4 <= buffer.limit() && seen.size < 8) {
+                    seen += buffer.getInt(offset)
+                    offset += plane.rowStride * 8
+                }
+            }
+        }, Handler(thread.looper))
+
+        val handle = service.addVirtualDisplaySurface(displayId, reader.surface)
+        try {
+            Thread.sleep(sampleMs)
+        } finally {
+            if (handle >= 0) service.removeVirtualDisplaySurface(displayId, handle)
+            reader.close()
+            thread.quitSafely()
+        }
+        return seen.size
     }
 
     /**

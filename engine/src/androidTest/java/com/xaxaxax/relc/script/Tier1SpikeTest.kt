@@ -15,6 +15,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.FixMethodOrder
 import org.junit.Test
@@ -24,13 +25,13 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 /**
- * Tier 1 spike —— 見 `docs/lua-api-testing.md`。
+ * Tier 1 —— 見 `docs/lua-api-testing.md`。
  *
- * 每個 step 回答一個我們目前**不知道答案**的問題，而且刻意各自獨立、依名稱排序執行，
- * 所以一次跑完就能知道是在哪一步斷掉的，而不是只知道「Tier 1 不行」。
+ * 每個 step 回答一個原本**不知道答案**的問題，而且刻意各自獨立、依名稱排序執行，所以一次
+ * 跑完就知道是哪一環斷掉，而不是只知道「Tier 1 不行」。
  *
- * 這裡不用 `Assume` 跳過：spike 的目的就是把不成立的假設吵出來。等知道哪些 API level
- * 撐得住之後，再把它換成 `@SdkSuppress` 或 assumption。
+ * 只有一處用 `Assume`：畫面全黑的環境（ATD 系統映像檔沒有圖形堆疊）跳過比對那一段。
+ * 其餘一律用斷言——這裡的目的是把不成立的假設吵出來，不是把它藏起來。
  */
 @RunWith(AndroidJUnit4::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
@@ -205,6 +206,20 @@ class Tier1SpikeTest {
         }
 
         assertEquals(EngineRunState.Finished, outcome.runState)
+
+        if (outcome.data["found"] != true) {
+            // 比不中之前，先問畫面上到底有沒有東西。ATD 系統映像檔沒有圖形堆疊，虛擬顯示
+            // 送出來的每一張影格都是全黑——那時比不中是環境不提供被測物，不是 bug。
+            // puppet 這時還在（tearDown 才收），所以量到的就是腳本剛才看到的那個畫面。
+            val colors = env.distinctColorsOnDisplay(displayId)
+            assumeTrue(
+                "display $displayId composites nothing — only $colors distinct colour(s) while " +
+                        "the puppet is showing. ATD system images have no graphics stack; run " +
+                        "the vision tests on hardware or a non-ATD image.",
+                colors > 1,
+            )
+        }
+
         assertEquals(
             "vision.wait never matched the marker\n" +
                     "puppet ready on ${PuppetRecorder.resumedOnDisplay}, " +
