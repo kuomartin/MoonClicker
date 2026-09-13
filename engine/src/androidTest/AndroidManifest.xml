@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+        <!--
+            被腳本操作的 app（見 docs/lua-api-testing.md 的 Tier 1）。
+
+            它住在測試 APK 裡，而不是自己一個 application module：library 的 androidTest
+            APK 是自我 instrument 的，所以這個 activity 與測試程式碼在同一個進程，測試可以
+            直接讀 PuppetRecorder，不需要 IPC 也不需要第二個 APK 的安裝流程。
+
+            LAUNCHER 是必要的——RelcV2Service.launchInDisplay 靠
+            getLaunchIntentForPackage 解析要啟動什麼。
+            resizeableActivity 也是——不可調整大小的 activity 在部分版本上不准落到次要顯示器。
+        -->
+        <activity
+            android:name="com.xaxaxax.relc.script.puppet.PuppetActivity"
+            android:exported="true"
+            android:label="ReLC Puppet"
+            android:resizeableActivity="true"
+            android:theme="@android:style/Theme.NoTitleBar.Fullscreen">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+
+</manifest>
