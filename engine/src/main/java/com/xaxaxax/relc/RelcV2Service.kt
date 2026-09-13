@@ -13,6 +13,7 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.PackageManagerHidden
 import android.hardware.display.DisplayManager
 import android.hardware.display.DisplayManagerHidden
@@ -90,6 +91,9 @@ class RelcV2Service @JvmOverloads constructor(
         }
 
         const val DELAY_MS = 16 // 60fps
+
+        /** 不在 `Manifest.permission` 裡（signature|privileged，@hide）。 */
+        const val ADD_TRUSTED_DISPLAY = "android.permission.ADD_TRUSTED_DISPLAY"
 
         /** 呼叫端可以要求的旗標，其餘一律由這裡決定。 */
         const val SUPPORTED_FLAGS =
@@ -468,9 +472,30 @@ class RelcV2Service @JvmOverloads constructor(
      */
     private fun trustedOnlyFlags(): Int {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return 0
+        if (!canCreateTrustedDisplay) return 0
         var f = ADD_FLAGS_33
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) f = f or ADD_FLAGS_34
         return f
+    }
+
+    /**
+     * 這個進程能不能建立 trusted 顯示器——**直接問，不要用丟例外去試**。
+     *
+     * `checkSelfPermission` 查的是 `Process.myUid()`，在 Shizuku 起的進程裡就是 shell，
+     * 正是 `DisplayManagerService` 會拿去對的那個身分。
+     *
+     * 這條與 [ADD_FLAGS_33] 的 API 閘門是**兩個不同的問題**，都要成立：API level 決定旗標
+     * 在這個平台上存不存在，權限決定 shell 能不能要求它。API 33 那條界線是「shell 通常從
+     * Android 13 起才拿得到」的經驗值；被 OEM 拿掉權限的 33+ 機器只有這裡問得出來。
+     *
+     * 問過了還是保留 [createDisplay] 的退路：這組旗標裡的 `OWN_DISPLAY_GROUP`、
+     * `ALWAYS_UNLOCKED` 等各自還有別的前提，權限過了不代表整組一定被接受。
+     */
+    private val canCreateTrustedDisplay: Boolean by lazy {
+        val granted = context.checkSelfPermission(ADD_TRUSTED_DISPLAY) ==
+                PackageManager.PERMISSION_GRANTED
+        Timber.d("ADD_TRUSTED_DISPLAY granted=$granted for uid=${Process.myUid()}")
+        granted
     }
 
     /**
