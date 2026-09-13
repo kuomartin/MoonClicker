@@ -105,7 +105,7 @@ fun FullscreenDisplayScreen(
 ) {
     val activity = LocalActivity.current
     val uiState by viewModel.uiState.collectAsState()
-    val inputController by viewModel.inputController.collectAsState()
+    val service by viewModel.service.collectAsState()
     val capturedBitmap by viewModel.capturedBitmap.collectAsState()
     val textureViewRef = remember { mutableStateOf<android.view.TextureView?>(null) }
     // 單一來源：鏡像的 Viewport 與（#17 之後）X 的 requestedOrientation 都讀這一份。
@@ -139,13 +139,13 @@ fun FullscreenDisplayScreen(
             .fillMaxSize()
             .background(Color.Black)
     ) {
-        if (inputController != null) {
+        if (service != null) {
             VirtualDisplayMirror(
                 targetDisplayId = targetDisplayId,
                 geometry = geometry,
                 addSurface = { viewModel.addSurface(targetDisplayId, it) },
                 removeSurface = { viewModel.removeSurface(targetDisplayId, it) },
-                inputController = inputController!!,
+                service = service!!,
                 isReadOnly = uiState.isReadOnly,
                 modifier = Modifier.fillMaxSize(),
                 onTextureViewCreated = { textureViewRef.value = it }
