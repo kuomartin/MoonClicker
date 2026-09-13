@@ -53,6 +53,28 @@ android {
     buildFeatures {
         aidl = true
     }
+
+    // Lua API 的測試受測的是 relc_native.so，所以必須真的跑在裝置上。它們不需要 Shizuku
+    // 也不需要虛擬顯示——`IRelcV2Service` 由 RecordingRelcService 頂替——所以一台乾淨的
+    // 模擬器就夠了。
+    //
+    //   ./gradlew :engine:api36DebugAndroidTest      # 用受管理的模擬器
+    //   ./gradlew :engine:connectedDebugAndroidTest  # 用已連線的裝置
+    //
+    // 只留一個 API level：這裡驗的是 Lua 綁定，不是平台行為（那是 :hidden-api-contract
+    // 的矩陣在做的事）。
+    testOptions {
+        managedDevices {
+            localDevices {
+                create("api36") {
+                    device = "Pixel 6"
+                    apiLevel = 36
+                    systemImageSource = "aosp-atd"
+                    testedAbi = "x86_64"
+                }
+            }
+        }
+    }
 }
 
 dependencies {
@@ -72,5 +94,11 @@ dependencies {
     implementation(libs.hiddenapibypass)
 
     testImplementation(libs.junit)
+
+    // Lua API 的 instrumentation 測試（engine/src/androidTest）。它們必須跑在裝置上——
+    // 受測的是 relc_native.so 裡的 C++ 綁定，不是 Kotlin。
     androidTestImplementation(libs.androidx.junit)
+    // AndroidJUnitRunner 本身；androidx.test.ext:junit 不會帶進來。
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.kotlinx.coroutines.android)
 }
