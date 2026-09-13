@@ -3,11 +3,11 @@ package com.xaxaxax.relc.ui.displaydetail
 /**
  * 虛擬顯示的哪一塊、以什麼方向，投影到 view 的哪個矩形。
  *
- * 呈現側與觸控側讀**同一個 instance**，且座標變換只有 [displayPerViewPixel] 一個來源，
+ * 呈現側與觸控側讀同一個 instance，且座標變換只有 [displayPerViewPixel] 一個來源，
  * 因此兩邊不可能不一致。
  *
- * 純資料，**不得依賴 `android.graphics`**：那會讓 `app/src/test` 的呼叫擲出
- * `Method ... not mocked`（專案未設 `unitTests.isReturnDefaultValues`、未引入 Robolectric）。
+ * 純資料，不得依賴 `android.graphics`——那會讓 `app/src/test` 的呼叫擲出
+ * `Method ... not mocked`。
  */
 data class Viewport(
     /** 內容矩形在 view 座標中的左上角。 */
@@ -47,9 +47,9 @@ data class Viewport(
     /**
      * view 座標 → 邏輯顯示座標。
      *
-     * **映射永不失敗** —— 仿射映射在內容矩形之外一樣有定義，超界會得到超出邏輯範圍
-     * （含負值）的座標。容納性是另一個問題，由 [isInside] 回答。這個不對稱是刻意的：
-     * 手勢一旦在內容區內開始，拖出邊界仍然有效。
+     * 映射永不失敗：仿射映射在內容矩形之外一樣有定義，超界會得到超出邏輯範圍（含負值）
+     * 的座標。容納性由 [isInside] 回答——這個不對稱是刻意的，手勢一旦在內容區內開始，
+     * 拖出邊界仍然有效。
      */
     fun toDisplay(viewX: Float, viewY: Float): DisplayPoint = DisplayPoint(
         x = (viewX - contentLeft) * displayPerViewPixel,
@@ -87,8 +87,8 @@ fun viewportOf(
     viewHeight: Int,
 ): Viewport {
     val quarterTurns = rotation and 3
-    // 旋轉 90/270 時邏輯顯示的長寬互換，但 surface 尺寸不變 —— 內容是被旋轉「進」那個
-    // 固定尺寸的 surface（真機實測，見地圖 #9 前提 8）。
+    // 旋轉 90/270 時邏輯顯示的長寬互換，但 surface 尺寸不變——內容是被旋轉「進」
+    // 那個固定尺寸的 surface。
     val turned = isQuarterTurn(quarterTurns)
     val logicalWidth = (if (turned) surfaceHeight else surfaceWidth).toFloat()
     val logicalHeight = (if (turned) surfaceWidth else surfaceHeight).toFloat()

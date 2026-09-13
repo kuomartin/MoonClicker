@@ -25,7 +25,7 @@ class ViewportTest {
 
     @Test
     fun `rotating the display swaps its logical dimensions and counter-rotates the view`() {
-        // VD 建立為 1080x2400，鎖到 ROTATION_90 後邏輯顯示是 2400x1080（真機實測，見地圖 #9 前提 8）。
+        // VD 建立為 1080x2400，鎖到 ROTATION_90 後邏輯顯示是 2400x1080。
         // 手機仍為直向，故橫向內容等比縮小後上下留黑邊。
         val viewport = viewportOf(
             surfaceWidth = 1080, surfaceHeight = 2400,

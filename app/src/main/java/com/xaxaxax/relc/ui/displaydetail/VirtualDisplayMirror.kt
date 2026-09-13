@@ -84,16 +84,15 @@ fun VirtualDisplayMirror(
                 modifier = Modifier
                     .align(Alignment.Center)
                     // requiredSize 而非 size：旋轉前的佈局框比父層還長，size() 會被父層
-                    // constraints 夾住（實測會被壓成正方形），requiredSize 才忽略父層。
+                    // constraints 夾住，requiredSize 才忽略父層。
                     .requiredSize(
                         with(density) { viewport.unrotatedWidth.toDp() },
                         with(density) { viewport.unrotatedHeight.toDp() },
                     ),
             )
 
-            // 觸控節點：未旋轉，且尺寸正好等於內容矩形（見 #15）。因此黑邊上的觸控
-            // 根本不會抵達；而手勢一旦在此開始，拖出邊界仍會繼續送達（view 系統的
-            // 手勢捕獲保證）——#12 Q9 要的不對稱語意由結構取得，不需狀態記帳。
+            // 觸控節點未旋轉，尺寸正好等於內容矩形：黑邊上的觸控因此不會抵達，而手勢
+            // 一旦在此開始、拖出邊界仍會送達（view 系統的手勢捕獲）。不對稱語意由結構取得。
             TouchForwarder(
                 targetDisplayId = targetDisplayId,
                 service = service,
@@ -114,17 +113,16 @@ private fun MirrorSurface(
     onTextureViewCreated: (TextureView) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // TextureView 而非 SurfaceView：SurfaceView 的 surface 是獨立硬體圖層，**不吃 view 的
-    // 旋轉變換**（真機實測：佈局框有換、畫面仍側躺）。TextureView 走一般 view 繪製路徑，
-    // graphicsLayer 的旋轉才會真的套用。見 #13 Q2 的備案。
+    // TextureView 而非 SurfaceView：SurfaceView 的 surface 是獨立硬體圖層，不吃 view 的
+    // 旋轉變換；TextureView 走一般繪製路徑，graphicsLayer 的旋轉才會真的套用。
     val currentGeometry by rememberUpdatedState(geometry)
     val listener = remember(addSurface, removeSurface) {
         object : TextureView.SurfaceTextureListener {
             private var surface: Surface? = null
 
             override fun onSurfaceTextureAvailable(texture: SurfaceTexture, width: Int, height: Int) {
-                // buffer 尺寸恆為虛擬顯示建立時的大小，不隨旋轉改變（#11 實測）。
-                // **必須在包成 Surface 之前設定**，否則 producer 拿到的是 view 尺寸的 buffer。
+                // buffer 尺寸恆為虛擬顯示建立時的大小，不隨旋轉改變；必須在包成 Surface
+                // 之前設定，否則 producer 拿到的是 view 尺寸的 buffer。
                 texture.setDefaultBufferSize(
                     currentGeometry.surfaceWidth,
                     currentGeometry.surfaceHeight,
@@ -156,7 +154,7 @@ private fun MirrorSurface(
     }
 
     AndroidView(
-        // 影格在 surface 空間、內容躺著（地圖 #9 前提 8），套上反向旋轉才會正立。
+        // 影格在 surface 空間、內容躺著，套上反向旋轉才會正立。
         modifier = modifier.graphicsLayer { rotationZ = viewport.viewRotationDegrees },
         factory = { context ->
             TextureView(context).apply {
@@ -183,9 +181,8 @@ private fun TouchForwarder(
     isReadOnly: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    // 節點座標已是內容矩形內的相對座標，故只需縮放即可得到邏輯座標——觸控路徑上
-    // 沒有旋轉（旋轉被畫面側的 graphicsLayer 吸收掉了）。縮放係數取自 Viewport 的
-    // displayPerViewPixel，與 Viewport.toDisplay 是同一個來源。
+    // 節點座標已是內容矩形內的相對座標，只需縮放——觸控路徑上沒有旋轉，那被畫面側的
+    // graphicsLayer 吸收掉了。係數取自 Viewport.displayPerViewPixel，與 toDisplay 同源。
     val transform = remember(viewport.displayPerViewPixel) {
         Matrix().apply {
             setScale(viewport.displayPerViewPixel, viewport.displayPerViewPixel)
@@ -203,7 +200,7 @@ private fun TouchForwarder(
     )
 }
 
-/** 虛擬顯示的 surface 尺寸與當前方向，全部取自公開的 `Display` API（見 #13）。 */
+/** 虛擬顯示的 surface 尺寸與當前方向，全部取自公開的 `Display` API。 */
 data class DisplayGeometry(
     val surfaceWidth: Int,
     val surfaceHeight: Int,
@@ -237,13 +234,13 @@ private fun DisplayManager.readGeometry(displayId: Int): DisplayGeometry {
     val display = getDisplay(displayId) ?: return DisplayGeometry(0, 0, 0)
     val rotation = display.rotation
 
-    // getRealSize() 回報的是**邏輯**尺寸，會隨旋轉交換長寬；由它反推 surface 尺寸。
+    // getRealSize() 回報的是邏輯尺寸，會隨旋轉交換長寬；由它反推 surface 尺寸。
     val logical = Point().also { @Suppress("DEPRECATION") display.getRealSize(it) }
     val derivedWidth = if (isQuarterTurn(rotation)) logical.y else logical.x
     val derivedHeight = if (isQuarterTurn(rotation)) logical.x else logical.y
 
-    // getMode() 回報建立時的 surface 尺寸，不隨旋轉改變。這是實測行為、非文件保證，
-    // 故以反推值為 fallback，並在兩者不一致時示警（#13 Q1）。
+    // getMode() 回報建立時的 surface 尺寸，不隨旋轉改變——非文件保證，
+    // 故以反推值為 fallback 並在不一致時示警。
     val mode = display.mode
     if (mode.physicalWidth <= 0 || mode.physicalHeight <= 0) {
         return DisplayGeometry(derivedWidth, derivedHeight, rotation)

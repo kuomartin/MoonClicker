@@ -185,17 +185,11 @@ private val EngineRunState.isTerminal: Boolean
             this is EngineRunState.Stopped
 
 /**
- * [ScriptSession.resolveDisplay] 沿用現有虛擬顯示時，判斷某個顯示器的**建立尺寸**
+ * [ScriptSession.resolveDisplay] 沿用現有虛擬顯示時，判斷某個顯示器的建立尺寸
  * （[IRelcV2Service.getDisplaySurfaceSize]，不隨旋轉改變）符不符合請求。
  *
- * **精確比對，不接受長寬互換。** 曾經比對的是邏輯尺寸、兩種擺法都算符合——那是在繞過
- * surface 空間／邏輯空間的長寬互換問題（見 CONTEXT.md 與 ADR-0012），代價是失真：一個以
- * 2400x1080 建立的顯示器，會被拿去滿足一個要求 1080x2400 的請求，腳本接著就跑在 surface
- * 幾何相反的顯示器上。`getDisplaySurfaceSize` 是 ADR-0012 之後服務記住的建立尺寸常數，
- * 所以這裡不必再猜擺法——精確比對就是對的比對。
- *
- * 抽成頂層純函式，是為了讓「不接受長寬互換」這個行為變更能在不 mock 整個 `IRelcV2Service`
- * 的情況下被測試釘住。
+ * 精確比對，不接受長寬互換：接受的話，一個以 2400x1080 建立的顯示器會被拿去滿足
+ * 1080x2400 的請求，腳本就跑在 surface 幾何相反的顯示器上（見 ADR-0012）。
  */
 internal fun matchesSize(size: IntArray?, width: Int, height: Int): Boolean =
     size != null && size.size >= 2 && size[0] == width && size[1] == height

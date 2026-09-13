@@ -64,9 +64,8 @@ object ScriptEngine {
             return false
         }
 
-        // AImageReader 必須以顯示器**建立時**的 surface 尺寸開，而那是服務才知道的常數——
-        // 這裡不從（邏輯尺寸, rotation）回推。回推要兩次獨立的讀取，中間畫面轉了就會算出
-        // 錯得很有自信的尺寸，而影格緩衝區一開就是整場執行，錯了不會自己好。
+        // AImageReader 必須以顯示器建立時的 surface 尺寸開，所以問服務要那個常數，不從
+        // （邏輯尺寸, rotation）回推——緩衝區一開就是整場執行，尺寸錯了不會自己好。
         val surface = try {
             service.getDisplaySurfaceSize(run.displayId)
         } catch (t: Throwable) {
@@ -74,8 +73,8 @@ object ScriptEngine {
             null
         }
         if (surface == null || surface.size < 2 || surface[0] <= 0 || surface[1] <= 0) {
-            // [0, 0] 也包含「這個 id 不是服務建的顯示器」——例如服務重綁之後才拿出來用的
-            // 舊 id。與其用推出來的幾何硬跑，不如當場停下來講清楚。
+            // [0, 0] 也代表「這個 id 不是服務建的顯示器」。與其用推出來的幾何硬跑，
+            // 不如當場停下來講清楚。
             EngineStateRepository.onEvent(
                 com.xaxaxax.relc.engine.state.EngineEventType.ERROR,
                 "Could not read the surface size of display ${run.displayId}",
@@ -110,9 +109,8 @@ object ScriptEngine {
             run.hasVision,
             surfaceWidth,
             surfaceHeight,
-            // 初始 rotation 隨啟動一起傳進去，這是兩段交接的第一段（見 ADR-0012）。
-            // ScriptRuntime::start 的最後一件事就是起 Lua 執行緒，所以 nativeStart 一回來腳本
-            // 可能已經在跑了——這裡是腳本第一行讀 screen.width 之前的最後一個時機。
+            // 初始 rotation 隨啟動一起傳進去（ADR-0012 兩段交接的第一段）：nativeStart 一
+            // 回來 Lua 執行緒可能已經在跑，這是腳本讀 screen.width 之前的最後一個時機。
             rotation,
             run.scriptDir.absolutePath,
         )

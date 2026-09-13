@@ -34,8 +34,8 @@ struct VisionHit {
 /**
  * 持有虛擬顯示最新的一張影格，並在被要求時對它跑 `cv::matchTemplate`。
  *
- * 與上一代的差別：比對**不再每幀無條件執行**。影格回呼只負責存下影格並喚醒等待者，
- * OpenCV 只在腳本真的呼叫 `vision.find` / `vision.wait` 時才跑。
+ * 比對不是每幀無條件執行：影格回呼只存下影格並喚醒等待者，OpenCV 只在腳本真的呼叫
+ * `vision.find` / `vision.wait` 時才跑。
  *
  * 這裡同時是 surface 空間 ↔ 邏輯空間轉換的唯一所在（見 CONTEXT.md「Surface 空間 / 邏輯空間」）。
  * 影格是 surface 空間，對外的一切都是邏輯空間。

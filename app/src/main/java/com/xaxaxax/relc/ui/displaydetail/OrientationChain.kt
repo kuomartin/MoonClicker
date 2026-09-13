@@ -26,9 +26,8 @@ import kotlin.math.abs
 /**
  * 環節一：感測器 → 虛擬顯示的 user rotation。
  *
- * 來源**必須是原始感測器**。X 一旦被 [Activity.setRequestedOrientation] 鎖住，
- * display 0 就不再跟著感測器轉，因此靠 configuration 或 display 0 的 rotation 當來源會
- * 形成死結（見 #17 的「實作時必須避開的迴路」）。
+ * 來源必須是原始感測器：X 一旦被 [Activity.setRequestedOrientation] 鎖住，display 0 就不再
+ * 跟著感測器轉，靠 configuration 或 display 0 的 rotation 當來源會形成死結。
  */
 @Composable
 fun SensorRotationDriver(
@@ -74,8 +73,8 @@ fun SensorRotationDriver(
 /**
  * 環節二：虛擬顯示的 rotation → X 的 requestedOrientation。
  *
- * 對 targetSdk ≥ 36 的 app，系統在 sw ≥ 600dp 的裝置上會**忽略**這個呼叫，OEM 亦可停用。
- * 那時 X 不會轉，畫面退回幾何層——letterbox 正確，只是不填滿（地圖前提 3b）。
+ * 對 targetSdk ≥ 36 的 app，系統在 sw ≥ 600dp 的裝置上會忽略這個呼叫，OEM 亦可停用。
+ * 那時 X 不會轉，畫面退回幾何層——letterbox 正確，只是不填滿。
  */
 @Composable
 fun FollowDisplayRotation(activity: Activity?, rotation: Int) {
@@ -120,7 +119,7 @@ internal fun quantizeOrientation(degrees: Int, current: Int): Int {
 /** 象限半寬：邊界距離象限中心 45 度。 */
 private const val QUADRANT_HALF_WIDTH_DEGREES = 45
 
-/** 必須越過象限邊界幾度才採用新方向（#17 Q1）。 */
+/** 必須越過象限邊界幾度才採用新方向。 */
 private const val BOUNDARY_MARGIN_DEGREES = 30
 
 internal fun requestedOrientationFor(rotation: Int): Int = when (rotation and 3) {

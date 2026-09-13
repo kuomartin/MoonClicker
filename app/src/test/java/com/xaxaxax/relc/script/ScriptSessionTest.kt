@@ -5,8 +5,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * `matchesSize` 決定沿用現有虛擬顯示的規則：跟建立尺寸精確比對，不接受長寬互換
- * （issue #22）。互換曾經被刻意接受，代價是腳本可能跑在 surface 幾何相反的顯示器上。
+ * `matchesSize` 決定沿用現有虛擬顯示的規則：跟建立尺寸精確比對，不接受長寬互換——
+ * 接受的話腳本可能跑在 surface 幾何相反的顯示器上。
  */
 class ScriptSessionTest {
 
@@ -17,7 +17,6 @@ class ScriptSessionTest {
 
     @Test
     fun `swapped width and height is rejected`() {
-        // 這是這次修正的核心行為變更：以前這個案例回 true。
         assertFalse(matchesSize(intArrayOf(2400, 1080), width = 1080, height = 2400))
     }
 
