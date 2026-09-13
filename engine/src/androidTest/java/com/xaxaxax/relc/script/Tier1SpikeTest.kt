@@ -8,12 +8,14 @@ import android.graphics.Rect
 import android.media.ImageReader
 import android.os.Handler
 import android.os.HandlerThread
+import android.os.SystemClock
 import android.view.MotionEvent
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.xaxaxax.relc.RelcV2Service
 import com.xaxaxax.relc.engine.state.EngineRunState
 import com.xaxaxax.relc.engine.state.EngineStateRepository
 import com.xaxaxax.relc.script.puppet.PuppetActivity
+import com.xaxaxax.relc.script.puppet.PuppetControl
 import com.xaxaxax.relc.script.puppet.PuppetGlyph
 import com.xaxaxax.relc.script.puppet.PuppetMarker
 import com.xaxaxax.relc.script.puppet.PuppetRecorder
@@ -64,6 +66,7 @@ class Tier1SpikeTest {
             android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q,
         )
         PuppetRecorder.reset()
+        PuppetControl.reset()
         env = Tier1Env()
         env.adoptShellIdentity()
         env.wakeAndUnlock()
@@ -459,6 +462,136 @@ class Tier1SpikeTest {
         return condition()
     }
 
+    /**
+     * Q: `vision.wait` 真的會**等**嗎？
+     *
+     * 這一組存在的理由是：其餘所有 vision 測試的畫面都是靜態的，比對第一幀就中——也就是說
+     * 它們驗的其實是 `vision.find`，而 `wait` 的等待語意從來沒被執行到。畫面必須在腳本
+     * 已經在等的時候才改變，這件事才問得出來。
+     *
+     * 真正的鑑別力來自 `found`：標記在延遲之前根本不在畫面上，所以「有比中」本身就蘊含
+     * 「有等到」。經過時間那條是額外的防線，擋的是「比中了畫面上別的東西」。
+     *
+     * [step10][step10_vision_wait_returns_nil_on_timeout_without_erroring] 是它的反向對照：
+     * 同樣藏起來、但永遠不顯示，斷言 `found == false`。兩支一起看才完整——只有前者的話，
+     * 一個永遠回傳 true 的實作也會過。
+     */
+    @Test
+    fun step9_vision_wait_blocks_until_the_marker_appears() {
+        val displayId = readyDisplayWithHiddenMarkers()
+        PuppetActivity.showAfter(APPEAR_DELAY_MS)
+
+        val started = SystemClock.uptimeMillis()
+        val outcome = runScript(
+            displayId,
+            """
+            local hit = vision.wait("marker.png", 15000)
+            data.set("found", hit ~= nil)
+            """.trimIndent(),
+        )
+        val elapsed = SystemClock.uptimeMillis() - started
+
+        assertEquals(EngineRunState.Finished, outcome.runState)
+        assertEquals("vision.wait never matched even after the marker appeared", true, outcome.data["found"])
+        assertTrue(
+            "vision.wait returned after ${elapsed}ms but the marker was not drawn until " +
+                    "+${APPEAR_DELAY_MS}ms — it matched something already on screen instead of " +
+                    "waiting for it to appear",
+            elapsed >= APPEAR_DELAY_MS,
+        )
+    }
+
+    /**
+     * Q: 逾時是回 `nil` 還是拋錯？
+     *
+     * `docs/lua-api.md` 承諾「逾時回傳 nil」，而那條路徑在此之前完全沒有測試守著——腳本
+     * 作者的錯誤處理全建立在它上面。
+     */
+    @Test
+    fun step10_vision_wait_returns_nil_on_timeout_without_erroring() {
+        val displayId = readyDisplayWithHiddenMarkers()   // 一直不顯示
+
+        val started = SystemClock.uptimeMillis()
+        val outcome = runScript(
+            displayId,
+            """
+            local hit = vision.wait("marker.png", $TIMEOUT_MS)
+            data.set("found", hit ~= nil)
+            data.set("reached_the_end", true)
+            """.trimIndent(),
+        )
+        val elapsed = SystemClock.uptimeMillis() - started
+
+        assertEquals(
+            "timing out must unwind as a normal return, not an error",
+            EngineRunState.Finished,
+            outcome.runState,
+        )
+        assertEquals(false, outcome.data["found"])
+        assertEquals(true, outcome.data["reached_the_end"])
+        assertTrue(
+            "returned after only ${elapsed}ms for a ${TIMEOUT_MS}ms timeout — it gave up early",
+            elapsed >= TIMEOUT_MS,
+        )
+    }
+
+    /**
+     * Q: `vision.wait_any` 回的 index 指的是**出現的那一個**嗎？
+     *
+     * 兩個候選同時出現的話 index 只反映呼叫順序，什麼都沒驗到。所以只讓其中一個出現，
+     * 另一個永遠不畫。
+     */
+    @Test
+    fun step11_vision_wait_any_reports_which_one_appeared() {
+        val displayId = readyDisplayWithHiddenMarkers()
+        PuppetActivity.showAfter(APPEAR_DELAY_MS, marker = false, glyph = true)
+
+        val outcome = runScript(
+            displayId,
+            """
+            local i, hit = vision.wait_any({
+                { image = "marker.png" },
+                { image = "glyph.png" },
+            }, 15000)
+            data.set("index", i)
+            data.set("found", hit ~= nil)
+            """.trimIndent(),
+        )
+
+        assertEquals(EngineRunState.Finished, outcome.runState)
+        assertEquals(true, outcome.data["found"])
+        assertEquals(
+            "only the glyph was ever drawn, so wait_any must report index 2 (1-based)",
+            2.0,
+            outcome.data["index"],
+        )
+    }
+
+    /** 顯示器 + puppet 就緒、標記全部藏起來、畫面已經穩定。 */
+    private fun readyDisplayWithHiddenMarkers(): Int {
+        val displayId = requireDisplay()
+        env.service.launchInDisplay(env.puppetPackage, displayId)
+        assertTrue("the puppet never came up", PuppetRecorder.awaitReady(displayId))
+        PuppetActivity.setVisible(marker = false, glyph = false)
+        assertTrue(
+            "display $displayId never settled with the markers hidden",
+            env.awaitStableFrame(displayId),
+        )
+        return displayId
+    }
+
+    private fun runScript(displayId: Int, main: String): ScriptOutcome =
+        LuaScriptRunner(service = env.service, displayId = displayId, hasVision = true).use {
+            it.run(
+                main = main,
+                assets = mapOf(
+                    "marker.png" to PuppetMarker.png(),
+                    "glyph.png" to PuppetGlyph.png(),
+                ),
+                timeoutMs = 40_000,
+            )
+        }
+
     /** [tapUntilInside] 的結果：有沒有收到、以及最後看到的那一下在哪。 */
     private class TapProbe(val last: PuppetRecorder.Touch?, val inside: Boolean)
 
@@ -502,5 +635,11 @@ class Tier1SpikeTest {
         val displayId = env.createDisplay()
         assertTrue("could not create a virtual display (got $displayId) — see step2", displayId > 0)
         return displayId
+    }
+
+    private companion object {
+        /** 排程改變畫面的延遲。要明顯大於「第一幀就比中」的時間尺度才有鑑別力。 */
+        const val APPEAR_DELAY_MS = 2_000L
+        const val TIMEOUT_MS = 2_000L
     }
 }

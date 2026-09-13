@@ -174,6 +174,26 @@ rotation，而 app 宣告的方向會贏過它——實測在 SM-A217F 上那樣
 `DisplayRotationTracker` 後續推的更新），少了它，往返即使通過也只是「推論」native 知道
 自己轉了。
 
+### `vision.wait` 的等待語意（step9–11）
+
+其餘所有 vision 測試的畫面都是靜態的，比對第一幀就中——所以它們驗的其實是 `vision.find`，
+`wait` 的等待從來沒被執行到。要問這件事，畫面必須在腳本**已經在等**的時候才改變，
+於是 puppet 多了排程改變畫面的能力（`PuppetControl` 管輸入，`PuppetRecorder` 繼續只管輸出）。
+
+| | 問的問題 | 怎麼安排 |
+|---|---|---|
+| step9 | `wait` 真的會等嗎 | 標記延後 2 秒才畫 |
+| step10 | 逾時回 `nil` 還是拋錯 | 標記永遠不畫 |
+| step11 | `wait_any` 的 index 指的是出現的那一個嗎 | 只顯示兩個候選中的一個 |
+
+step10 補的是 `docs/lua-api.md` 明寫、卻一直沒人守著的承諾（逾時回 nil），腳本作者的錯誤
+處理全建立在它上面。step11 刻意只顯示一個——兩個同時出現的話 index 只反映呼叫順序。
+
+**鑑別力是驗過的，不是假設的。** 真正的鑑別來自 `found`（標記在延遲前不在畫面上，「有比中」
+就蘊含「有等到」），時間斷言擋的是「比中了畫面上別的東西」。把延遲從 2 秒拉到 6 秒重跑仍然
+通過，證明 elapsed 跟著延遲走、不是撞到「腳本啟動＋拆除本來就要 2 秒」的固定成本。而
+**step10 是 step9 的反向對照**：少了它，一個永遠回傳 true 的實作也會過。
+
 ### API 矩陣
 
 ```bash
@@ -208,8 +228,6 @@ production 在舊版上跑在 Shizuku 真正的 shell 進程裡，本來就不�
   設定），失敗訊息裡已經帶上 `dumpsys window displays` 供下一個人查。
 - **`multi_swipe_dispatches_every_pointer` 在 API 31 模擬器上被跳過**，而且是沒有訊息的裸
   `<skipped/>`。它是 Tier 0、不依賴環境，其他五級都正常。沒有追出原因。
-- `vision.wait` 的「等到它出現」語意還沒真的被驗——puppet 的畫面是靜態的，比對第一幀就中。
-  要驗等待，puppet 需要能排程「N 毫秒後換一個圖樣」。
 
 ## 跟 `:hidden-api-contract` 的分工
 
