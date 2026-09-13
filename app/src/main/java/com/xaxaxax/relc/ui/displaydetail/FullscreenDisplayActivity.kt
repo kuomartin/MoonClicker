@@ -108,11 +108,12 @@ fun FullscreenDisplayScreen(
     val service by viewModel.service.collectAsState()
     val capturedBitmap by viewModel.capturedBitmap.collectAsState()
     val textureViewRef = remember { mutableStateOf<android.view.TextureView?>(null) }
-    // 單一來源：鏡像的 Viewport 與（#17 之後）X 的 requestedOrientation 都讀這一份。
+    // 單一來源：鏡像的 Viewport 與這個 activity 的 requestedOrientation 都讀這一份。
     val geometry = rememberDisplayGeometry(targetDisplayId)
 
-    // 方向鏈 Y → VD → X → MainDisplay（#17）。系統負責 WM 仲裁與 MainDisplay 跟隨 X，
-    // 這裡只接兩環：感測器推給虛擬顯示，以及虛擬顯示的 rotation 推給 X。
+    // 方向鏈 Y → VD → FullscreenDisplayActivity → MainDisplay（見 issue #17）。系統負責
+    // WM 仲裁與 MainDisplay 跟隨前景 activity，這裡只接兩環：感測器推給虛擬顯示，
+    // 以及虛擬顯示的 rotation 推給這個 activity。
     SensorRotationDriver(geometry.rotation) { rotation ->
         viewModel.setDisplayRotation(targetDisplayId, rotation)
     }

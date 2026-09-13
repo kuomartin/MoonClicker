@@ -31,7 +31,7 @@ _Avoid_: Touch injector, event sender.
 _Avoid_: 影格座標／畫面座標（沒有指明是哪一個）。
 
 **方向鏈**:
-`Y → VD → X → MainDisplay` 的單向傳遞：虛擬顯示裡的 app 或感測器決定虛擬顯示的方向，`FullscreenDisplayActivity` 跟隨虛擬顯示，實體螢幕再跟隨它。四環中兩環由系統提供（WindowManager 對 app 宣告方向的仲裁、實體螢幕跟隨前景 activity）。鏈失效時（API 27–28、sw ≥ 600dp、使用者關閉自動旋轉）畫面退回 [[Viewport]] 的幾何層，仍然正確、只是不填滿。
+`Y → VD → FullscreenDisplayActivity → MainDisplay` 的單向傳遞：虛擬顯示裡的 app（Y）或感測器決定虛擬顯示（VD）的方向，`FullscreenDisplayActivity` 跟隨虛擬顯示，實體螢幕再跟隨它。四環中兩環由系統提供（WindowManager 對 app 宣告方向的仲裁、實體螢幕跟隨前景 activity）。鏈失效時（API 27–28、sw ≥ 600dp、使用者關閉自動旋轉）畫面退回 [[Viewport]] 的幾何層，仍然正確、只是不填滿。
 _Avoid_: 旋轉同步（暗示雙向）。
 
 **Viewport**:
