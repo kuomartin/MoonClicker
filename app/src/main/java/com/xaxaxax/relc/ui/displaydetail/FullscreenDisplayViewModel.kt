@@ -6,10 +6,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.xaxaxax.relc.IRelcV2Service
-import com.xaxaxax.relc.RelcV2Service
-import com.xaxaxax.relc.input.InputController
-import com.xaxaxax.relc.shizuku.UserService
-import com.xaxaxax.relc.shizuku.runWhenAlive
+import com.xaxaxax.relc.shizuku.ShizukuManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,10 +19,15 @@ import javax.inject.Inject
 @HiltViewModel
 class FullscreenDisplayViewModel @Inject constructor(
     @ApplicationContext context: Context,
-    savedStateHandle: SavedStateHandle
+    savedStateHandle: SavedStateHandle,
+    private val shizukuManager: ShizukuManager
 ) : ViewModel() {
+    /**
+     * 這個畫面只管顯示器本身與模板裁切。跑腳本是 ScriptSession 的事（issue #5），
+     * 所以這裡沒有 RUNNING。
+     */
     enum class ExecutionState {
-        IDLE, RUNNING, CROPPING
+        IDLE, CROPPING
     }
 
     data class UiState(
@@ -44,25 +46,19 @@ class FullscreenDisplayViewModel @Inject constructor(
     private val _capturedBitmap = MutableStateFlow<android.graphics.Bitmap?>(null)
     val capturedBitmap: StateFlow<android.graphics.Bitmap?> = _capturedBitmap.asStateFlow()
 
-    private val serviceFlow = UserService.create(
-        viewModelScope,
-        RelcV2Service::class,
-        IRelcV2Service.Stub::asInterface
-    )
+    /**
+     * 綁好的服務，也是 UI 判斷「可以顯示鏡像了沒」的依據——服務在，鏡像才有東西可映。
+     *
+     * 直接轉發 [ShizukuManager] 的 flow，不另外存一份：多存一份就多一個會跟真實綁定狀態
+     * 走樣的地方，而它表達的是同一件事。
+     */
+    val service: StateFlow<IRelcV2Service?> = shizukuManager.serviceFlow
 
     init {
         viewModelScope.launch {
-            serviceFlow.runWhenAlive { service ->
-                // 初始化 InputController，這會讓 UI 顯示 VirtualDisplaySurfaceView
-                _inputController.value = InputController(service)
-            }.onFailure {
-                Timber.e(it, "Failed to initialize InputController")
-            }
+            shizukuManager.bindUserService()
         }
     }
-
-    private val _inputController = MutableStateFlow<InputController?>(null)
-    val inputController: StateFlow<InputController?> = _inputController.asStateFlow()
 
     fun toggleReadOnly() {
         _uiState.value = _uiState.value.copy(isReadOnly = !_uiState.value.isReadOnly)
@@ -78,82 +74,12 @@ class FullscreenDisplayViewModel @Inject constructor(
         // 不能用 viewModelScope：離開全螢幕時的還原是在拆除期間發出的，而那時 scope 已被
         // 取消，launch 根本不會執行 —— 還原就永遠送不出去，正是 #17 Q5 要防的那個外洩。
         rotationScope.launch {
-            serviceFlow.runWhenAlive { service ->
+            shizukuManager.withService { service ->
                 if (!service.setDisplayRotation(displayId, rotation)) {
                     Timber.w("setDisplayRotation($displayId, $rotation) reported failure")
                 }
             }
         }
-    }
-
-    fun startExecution(displayId: Int, width: Int, height: Int, scriptDir: String) {
-        viewModelScope.launch {
-            serviceFlow.runWhenAlive { service ->
-                com.xaxaxax.relc.engine.LuaEngineControl.stop()
-                val mainScript = java.io.File(scriptDir, "main.lua").absolutePath
-                val success = com.xaxaxax.relc.engine.LuaEngineControl.startEngineWithService(
-                    service,
-                    displayId,
-                    width,
-                    height,
-                    mainScript
-                )
-                if (success != null) {
-                    _uiState.value = _uiState.value.copy(executionState = ExecutionState.RUNNING)
-                } else {
-                    Timber.e("Failed to start Lua engine")
-                }
-            }
-        }
-    }
-
-    fun startTemplateTest(
-        displayId: Int,
-        width: Int,
-        height: Int,
-        scriptDir: String,
-        templateName: String
-    ) {
-        viewModelScope.launch {
-            serviceFlow.runWhenAlive { service ->
-                com.xaxaxax.relc.engine.LuaEngineControl.stop()
-                val testScript = java.io.File(scriptDir, "_test.lua")
-                val templatePath =
-                    if (templateName.endsWith(".png")) templateName else "$templateName.png"
-                val content = $$"""
-                            config = { fps=60, scale=0.5, templates = { { name = 'target', path = '$$templatePath', threshold = 0,grayscale = true} } }
-
-                            function on_tick(matches, tick)
-                                if tick % 60 == 0 then log("Lua Tick: " .. tick) end
-                                local m = matches.target
-                                if m and m.found then
-                                    log(string.format(
-                                        'match: x=%d y=%d w=%d h=%d confidence=%.2f',
-                                        m.x - m.width/2, m.y - m.height/2, m.width, m.height, m.confidence
-                                    ))
-                                end
-                            end
-                            """.trimIndent()
-                testScript.writeText(content)
-                val success = com.xaxaxax.relc.engine.LuaEngineControl.startEngineWithService(
-                    service,
-                    displayId,
-                    width,
-                    height,
-                    testScript.absolutePath
-                )
-                if (success != null) {
-                    _uiState.value = _uiState.value.copy(executionState = ExecutionState.RUNNING)
-                } else {
-                    Timber.e("Failed to start Lua engine for testing")
-                }
-            }
-        }
-    }
-
-    fun stopExecution() {
-        com.xaxaxax.relc.engine.LuaEngineControl.stop()
-        _uiState.value = _uiState.value.copy(executionState = ExecutionState.IDLE)
     }
 
     fun startCropping() {
@@ -217,7 +143,7 @@ class FullscreenDisplayViewModel @Inject constructor(
 
     fun openAppList() {
         viewModelScope.launch {
-            serviceFlow.runWhenAlive { service ->
+            shizukuManager.withService { service ->
                 val rawApps = service.launcherApps
                 val appEntries = rawApps.map {
                     val parts = it.split("|")
@@ -236,7 +162,7 @@ class FullscreenDisplayViewModel @Inject constructor(
 
     fun launchApp(packageName: String, displayId: Int) {
         viewModelScope.launch {
-            serviceFlow.runWhenAlive { service ->
+            shizukuManager.withService { service ->
                 service.launchInDisplay(packageName, displayId)
             }
             closeAppList()
@@ -245,7 +171,7 @@ class FullscreenDisplayViewModel @Inject constructor(
 
     fun destroyDisplay(displayId: Int) {
         viewModelScope.launch {
-            serviceFlow.runWhenAlive { service ->
+            shizukuManager.withService { service ->
                 service.destroyVirtualDisplay(displayId)
             }.onFailure {
                 Timber.e(it)
@@ -257,7 +183,7 @@ class FullscreenDisplayViewModel @Inject constructor(
 
     fun addSurface(displayId: Int, surface: Surface) {
         viewModelScope.launch {
-            serviceFlow.runWhenAlive { service ->
+            shizukuManager.withService{ service ->
                 val handle = service.addVirtualDisplaySurface(displayId, surface)
                 if (handle != -1) {
                     surfaceHandleMap[surface] = handle
@@ -270,7 +196,7 @@ class FullscreenDisplayViewModel @Inject constructor(
 
     fun removeSurface(displayId: Int, surface: Surface) {
         viewModelScope.launch {
-            serviceFlow.runWhenAlive { service ->
+            shizukuManager.withService { service ->
                 surfaceHandleMap.remove(surface)?.let { handle ->
                     service.removeVirtualDisplaySurface(displayId, handle)
                 }
@@ -280,10 +206,6 @@ class FullscreenDisplayViewModel @Inject constructor(
         }
     }
 
-    override fun onCleared() {
-        super.onCleared()
-        _inputController.value = null
-    }
 }
 
 /**

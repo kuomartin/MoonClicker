@@ -3,25 +3,23 @@ package com.xaxaxax.relc.notification
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import com.xaxaxax.relc.script.ScriptManager
+import com.xaxaxax.relc.script.ScriptSession
 import dagger.hilt.android.AndroidEntryPoint
-import timber.log.Timber
 import javax.inject.Inject
 
-/** Backs the "停止所有" action on the script status notification. */
+/** 常駐通知上的「停止」。 */
 @AndroidEntryPoint
 class ScriptNotificationReceiver : BroadcastReceiver() {
 
     @Inject
-    lateinit var scriptManager: ScriptManager
+    lateinit var session: ScriptSession
 
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action != ACTION_STOP_ALL) return
-        Timber.d("Stopping all running scripts from notification action")
-        scriptManager.stopAllScripts()
+        if (intent.action != ACTION_STOP) return
+        session.stop()
     }
 
     companion object {
-        const val ACTION_STOP_ALL = "com.xaxaxax.relc.action.STOP_ALL_SCRIPTS"
+        const val ACTION_STOP = "com.xaxaxax.relc.action.STOP_SCRIPT"
     }
 }

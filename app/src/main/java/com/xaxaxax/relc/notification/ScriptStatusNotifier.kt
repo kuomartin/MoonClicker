@@ -1,167 +1,137 @@
 package com.xaxaxax.relc.notification
 
-import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import androidx.core.content.ContextCompat
+import com.xaxaxax.relc.EXTRA_NAV_TARGET
+import com.xaxaxax.relc.NAV_TARGET_SCRIPTS
 import com.xaxaxax.relc.R
 import com.xaxaxax.relc.RelcActivity
-import com.xaxaxax.relc.script.ScriptManager
-import com.xaxaxax.relc.script.ScriptRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Channel and notification ids for the "scripts are running" status notification. */
-internal const val SCRIPT_STATUS_CHANNEL_ID = "script_status"
-internal const val SCRIPT_STATUS_NOTIFICATION_ID = 1001
-
-/** Set on the [RelcActivity] intent to ask the nav graph to open the Scripts page. */
-const val EXTRA_NAV_TARGET = "com.xaxaxax.relc.extra.NAV_TARGET"
-const val NAV_TARGET_SCRIPTS = "scripts"
-
 /**
- * Keeps a single persistent notification in sync with [ScriptManager.scriptStates]. It replaces
- * the removed Lua overlay window as the way a user sees that scripts are running, and needs no
- * overlay-window permission — just POST_NOTIFICATIONS.
+ * 執行中的腳本唯一的系統層可見處（Overlay UI 已移除，見 ADR-0007）。
  *
- * The notification is posted while at least one script is RUNNING and cancelled otherwise.
+ * 一次只跑一份腳本，所以這裡不需要上一代那個彙總多份腳本的 summary——常駐通知就是
+ * 那一份腳本本身，動作只有「停止」。
  */
 @Singleton
 class ScriptStatusNotifier @Inject constructor(
     @param:ApplicationContext private val context: Context,
-    private val scriptManager: ScriptManager,
-    private val repository: ScriptRepository,
 ) {
-    private val scope = CoroutineScope(Dispatchers.Main.immediate + SupervisorJob())
-    private val notificationManager = NotificationManagerCompat.from(context)
+    private val manager = NotificationManagerCompat.from(context)
+    private var messageId = MESSAGE_NOTIFICATION_ID_BASE
 
-    /**
-     * Bumped when the notification permission may have changed. Without it a grant that
-     * arrives after scripts are already running would not repost, because the summary
-     * itself has not changed.
-     */
-    private val permissionGeneration = MutableStateFlow(0)
+    init {
+        createChannels()
+    }
 
-    fun start() {
-        createChannel()
-        scope.launch {
-            val summaries = combine(repository.scripts, scriptManager.scriptStates) { scripts, states ->
-                summarizeRunningScripts(scripts, states)
-            }
-            combine(summaries, permissionGeneration) { summary, generation -> summary to generation }
-                .distinctUntilChanged()
-                .collect { (summary, _) ->
-                    if (summary == null) cancel() else post(summary)
-                }
+    fun showRunning(scriptName: String, displayId: Int?) {
+        val target = when (displayId) {
+            null -> ""
+            0 -> context.getString(R.string.script_target_physical)
+            else -> context.getString(R.string.script_target_virtual, displayId)
         }
-    }
 
-    /** Call after the user answers the POST_NOTIFICATIONS prompt, so a grant takes effect now. */
-    fun onNotificationPermissionChanged() {
-        permissionGeneration.update { it + 1 }
-    }
-
-    private fun createChannel() {
-        val channel = NotificationChannel(
-            SCRIPT_STATUS_CHANNEL_ID,
-            context.getString(R.string.script_status_channel_label),
-            NotificationManager.IMPORTANCE_LOW,
-        ).apply {
-            description = context.getString(R.string.script_status_channel_description)
-            setShowBadge(false)
-        }
-        notificationManager.createNotificationChannel(channel)
-    }
-
-    private fun post(summary: RunningScriptsSummary) {
-        if (!canPostNotifications()) {
-            Timber.d("POST_NOTIFICATIONS not granted; skipping script status notification")
-            return
-        }
-        notificationManager.notify(SCRIPT_STATUS_NOTIFICATION_ID, build(summary))
-    }
-
-    private fun cancel() = notificationManager.cancel(SCRIPT_STATUS_NOTIFICATION_ID)
-
-    private fun build(summary: RunningScriptsSummary): Notification {
-        val openScripts = openScriptsIntent()
-        return NotificationCompat.Builder(context, SCRIPT_STATUS_CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_script)
-            .setContentTitle(
-                context.getString(R.string.script_status_title, summary.runningCount)
-            )
-            .setContentText(summary.text)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(summary.text))
-            .setContentIntent(openScripts)
+        val notification = NotificationCompat.Builder(context, STATUS_CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_media_play)
+            .setContentTitle(context.getString(R.string.script_status_title, scriptName))
+            .setContentText(target)
             .setOngoing(true)
-            .setSilent(true)
+            .setOnlyAlertOnce(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setContentIntent(openScriptsIntent())
             .addAction(
-                R.drawable.ic_script,
-                context.getString(R.string.script_status_action_view),
-                openScripts,
-            )
-            .addAction(
-                R.drawable.ic_stop,
-                context.getString(R.string.script_status_action_stop_all),
-                stopAllIntent(),
+                android.R.drawable.ic_media_pause,
+                context.getString(R.string.script_status_action_stop),
+                stopIntent(),
             )
             .build()
+
+        notify(STATUS_NOTIFICATION_ID, notification)
+    }
+
+    fun cancelRunning() {
+        manager.cancel(STATUS_NOTIFICATION_ID)
+    }
+
+    /** 腳本透過 Lua 的 `device.notify` 發的訊息——與執行狀態分開，不會蓋掉常駐通知。 */
+    fun showScriptMessage(title: String, text: String) {
+        val notification = NotificationCompat.Builder(context, MESSAGE_CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setAutoCancel(true)
+            .setContentIntent(openScriptsIntent())
+            .build()
+
+        notify(messageId++, notification)
+    }
+
+    private fun notify(id: Int, notification: Notification) {
+        try {
+            manager.notify(id, notification)
+        } catch (e: SecurityException) {
+            // POST_NOTIFICATIONS 被拒時不該讓腳本崩掉——腳本本身還是跑得下去。
+            Timber.w(e, "Notification not posted; permission missing")
+        }
     }
 
     private fun openScriptsIntent(): PendingIntent {
-        val intent = Intent(context, RelcActivity::class.java).apply {
-            action = Intent.ACTION_MAIN
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-            putExtra(EXTRA_NAV_TARGET, NAV_TARGET_SCRIPTS)
-        }
+        val intent = Intent(context, RelcActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            .putExtra(EXTRA_NAV_TARGET, NAV_TARGET_SCRIPTS)
         return PendingIntent.getActivity(
-            context,
-            REQUEST_OPEN_SCRIPTS,
-            intent,
+            context, 0, intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
     }
 
-    private fun stopAllIntent(): PendingIntent {
-        val intent = Intent(context, ScriptNotificationReceiver::class.java).apply {
-            action = ScriptNotificationReceiver.ACTION_STOP_ALL
-        }
+    private fun stopIntent(): PendingIntent {
+        val intent = Intent(context, ScriptNotificationReceiver::class.java)
+            .setAction(ScriptNotificationReceiver.ACTION_STOP)
         return PendingIntent.getBroadcast(
-            context,
-            REQUEST_STOP_ALL,
-            intent,
+            context, 0, intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
     }
 
-    private fun canPostNotifications(): Boolean =
-        notificationManager.areNotificationsEnabled() &&
-                ContextCompat.checkSelfPermission(
-                    context,
-                    Manifest.permission.POST_NOTIFICATIONS,
-                ) == PackageManager.PERMISSION_GRANTED
+    private fun createChannels() {
+        val service = context.getSystemService(NotificationManager::class.java) ?: return
+        service.createNotificationChannel(
+            NotificationChannel(
+                STATUS_CHANNEL_ID,
+                context.getString(R.string.script_status_channel_label),
+                NotificationManager.IMPORTANCE_LOW,
+            ).apply {
+                description = context.getString(R.string.script_status_channel_description)
+                setShowBadge(false)
+            }
+        )
+        service.createNotificationChannel(
+            NotificationChannel(
+                MESSAGE_CHANNEL_ID,
+                context.getString(R.string.script_message_channel_label),
+                NotificationManager.IMPORTANCE_DEFAULT,
+            ).apply {
+                description = context.getString(R.string.script_message_channel_description)
+            }
+        )
+    }
 
     private companion object {
-        const val REQUEST_OPEN_SCRIPTS = 1
-        const val REQUEST_STOP_ALL = 2
+        const val STATUS_CHANNEL_ID = "script_status"
+        const val MESSAGE_CHANNEL_ID = "script_message"
+        const val STATUS_NOTIFICATION_ID = 1001
+        const val MESSAGE_NOTIFICATION_ID_BASE = 2000
     }
 }

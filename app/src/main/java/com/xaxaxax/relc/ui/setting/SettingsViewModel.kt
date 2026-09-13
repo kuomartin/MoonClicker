@@ -6,9 +6,9 @@ import android.content.pm.PackageManager
 import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.xaxaxax.relc.shizuku.hasShizukuPermission
-import com.xaxaxax.relc.shizuku.isShizukuAvailable
-import com.xaxaxax.relc.shizuku.refreshShizukuPermission
+import com.xaxaxax.relc.core.AppSettings
+import com.xaxaxax.relc.permission.PermissionManager
+import com.xaxaxax.relc.shizuku.ShizukuManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import jakarta.inject.Inject
@@ -26,7 +26,8 @@ data class SettingsUiState(
     val hasShizukuPermission: Boolean = false,
     val isShizukuAvailable: Boolean = false,
     val osAllowSecondaryDisplays: Boolean = false,
-    val isRefreshing: Boolean = false
+    val isRefreshing: Boolean = false,
+    val autoOpenFullscreen: Boolean = false,
 )
 
 private const val REFRESH_DELAY = 500
@@ -34,22 +35,27 @@ private const val REFRESH_DELAY = 500
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     @param:ApplicationContext
-    private val context: Context
+    private val context: Context,
+    private val permissionManager: PermissionManager,
+    private val shizukuManager: ShizukuManager,
+    private val appSettings: AppSettings,
 ) : ViewModel() {
     private val _osAllowSecondaryDisplays = MutableStateFlow(false)
     private val isRefreshing = MutableStateFlow(false)
 
     val uiState: StateFlow<SettingsUiState> = combine(
-        hasShizukuPermission,
-        isShizukuAvailable,
-        _osAllowSecondaryDisplays,
-        isRefreshing
-    ) { hasShizuku, isShizuku, allowSecondary, isRefreshing ->
+        shizukuManager.hasPermissionFlow,
+        shizukuManager.isAvailableFlow,
+        permissionManager.osAllowSecondaryDisplaysFlow,
+        isRefreshing,
+        appSettings.autoOpenFullscreen,
+    ) { hasShizuku, isShizuku, allowSecondary, isRefreshing, autoOpenFullscreen ->
         SettingsUiState(
             hasShizukuPermission = hasShizuku,
             isShizukuAvailable = isShizuku,
             osAllowSecondaryDisplays = allowSecondary,
-            isRefreshing = isRefreshing
+            isRefreshing = isRefreshing,
+            autoOpenFullscreen = autoOpenFullscreen,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -67,8 +73,7 @@ class SettingsViewModel @Inject constructor(
                 if (fromPullToRefresh) {
                     Timber.d("fromPullToRefresh : $uiState")
                     isRefreshing.value = true
-                    if (!uiState.value.hasShizukuPermission)
-                        refreshShizukuPermission()
+                    shizukuManager.requestPermission()
                 }
                 _osAllowSecondaryDisplays.value = context.packageManager.hasSystemFeature(
                     PackageManager.FEATURE_ACTIVITIES_ON_SECONDARY_DISPLAYS
@@ -85,21 +90,8 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun requestShizukuPermission() = com.xaxaxax.relc.shizuku.requestShizukuPermission()
+    fun setAutoOpenFullscreen(enabled: Boolean) = appSettings.setAutoOpenFullscreen(enabled)
 
-
-    fun openShizukuIntent(): Intent {
-        val intent =
-            context.packageManager.getLaunchIntentForPackage("moe.shizuku.privileged.api")
-                ?: Intent(
-                    Intent.ACTION_VIEW,
-                    "market://details?id=moe.shizuku.privileged.api".toUri()
-                ).takeIf { it.resolveActivity(context.packageManager) != null }
-                ?: Intent(
-                    Intent.ACTION_VIEW,
-                    "https://shizuku.rikka.app/download/".toUri()
-                )
-        return intent.apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
-    }
-
+    fun getOpenShizukuIntent() = shizukuManager.getOpenShizukuIntent()
+    fun requestShizukuPermission() = shizukuManager.requestPermission()
 }

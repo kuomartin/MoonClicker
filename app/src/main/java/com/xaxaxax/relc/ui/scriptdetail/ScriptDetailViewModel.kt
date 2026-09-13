@@ -1,99 +1,140 @@
 package com.xaxaxax.relc.ui.scriptdetail
 
+import android.content.Context
+import android.content.res.Resources
+import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.xaxaxax.relc.script.LoopMode
-import com.xaxaxax.relc.script.ScriptConfig.ScriptCodeType
-import com.xaxaxax.relc.script.ScriptConfig
-import com.xaxaxax.relc.script.ScriptManager
-import com.xaxaxax.relc.script.ScriptRepository
-import com.xaxaxax.relc.script.ScriptState
+import com.xaxaxax.relc.ScriptDetailRoute
+import com.xaxaxax.relc.core.DisplayConfig
+import com.xaxaxax.relc.core.DisplayInfo
+import com.xaxaxax.relc.core.readDisplayInfo
+import com.xaxaxax.relc.engine.ScriptEngine
+import com.xaxaxax.relc.script.Script
+import com.xaxaxax.relc.script.ScriptArchive
+import com.xaxaxax.relc.script.ScriptSession
+import com.xaxaxax.relc.script.ScriptSessionState
+import com.xaxaxax.relc.script.ScriptStore
+import com.xaxaxax.relc.script.ScriptTarget
+import com.xaxaxax.relc.shizuku.ShizukuManager
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.util.UUID
+import kotlinx.coroutines.withContext
+import timber.log.Timber
+import androidx.navigation.toRoute
+import java.io.File
 import javax.inject.Inject
+
+data class ScriptDetailUiState(
+    val script: Script? = null,
+    val source: String? = null,
+    val templates: List<File> = emptyList(),
+    val sharedData: Map<String, Any> = emptyMap(),
+    val session: ScriptSessionState = ScriptSessionState(),
+    val virtualDisplays: List<DisplayInfo> = emptyList(),
+)
 
 @HiltViewModel
 class ScriptDetailViewModel @Inject constructor(
-    private val repository: ScriptRepository,
-    val scriptManager: ScriptManager,
-    savedStateHandle: SavedStateHandle
+    @param:ApplicationContext private val context: Context,
+    savedStateHandle: SavedStateHandle,
+    private val store: ScriptStore,
+    private val session: ScriptSession,
+    private val shizukuManager: ShizukuManager,
 ) : ViewModel() {
 
-    private val scriptId: String = checkNotNull(savedStateHandle["id"])
+    private val scriptId: String = savedStateHandle.toRoute<ScriptDetailRoute>().id
 
-    private val _config = MutableStateFlow<ScriptConfig?>(null)
-    val config = _config.asStateFlow()
+    private val virtualDisplays = MutableStateFlow<List<DisplayInfo>>(emptyList())
+    private val _message = MutableStateFlow<String?>(null)
+    val message: StateFlow<String?> = _message.asStateFlow()
 
-    private val _initialConfig = MutableStateFlow<ScriptConfig?>(null)
-    val hasChanges = kotlinx.coroutines.flow.combine(_config, _initialConfig) { current, initial ->
-        if (current == null || initial == null) false
-        else current != initial
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
-
-    val scriptState = scriptManager.scriptStates.map { states ->
-        states[scriptId] ?: ScriptState.IDLE
+    val uiState: StateFlow<ScriptDetailUiState> = combine(
+        store.scripts,
+        session.state,
+        ScriptEngine.sharedData,
+        virtualDisplays,
+    ) { scripts, sessionState, sharedData, displays ->
+        val script = scripts.firstOrNull { it.id == scriptId }
+        ScriptDetailUiState(
+            script = script,
+            source = script?.let(store::readSource),
+            templates = script?.let(store::templates).orEmpty(),
+            sharedData = sharedData,
+            session = sessionState,
+            virtualDisplays = displays,
+        )
     }.stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5000),
-        ScriptState.IDLE
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = ScriptDetailUiState(),
     )
 
-    val logs = scriptManager.logs
-        .filter { it.scriptId == scriptId }
-        .map { it.message }
+    /** 建新顯示器時的預設尺寸：腳本自己說了就用它的，沒說就跟著本機螢幕。 */
+    val newDisplayConfig: DisplayConfig
+        get() = uiState.value.script?.display ?: DisplayConfig(
+            name = "ReLC",
+            width = Resources.getSystem().displayMetrics.widthPixels,
+            height = Resources.getSystem().displayMetrics.heightPixels,
+            densityDpi = Resources.getSystem().displayMetrics.densityDpi,
+        )
 
     init {
+        refreshDisplays()
+    }
+
+    fun refreshDisplays() {
         viewModelScope.launch {
-            if (scriptId == "new_lua") {
-                val newCfg = ScriptConfig.Lua(
-                    id = UUID.randomUUID().toString(),
-                    name = "New Lua Script",
-                    description = "",
-                    code = "log(\"Hello ReLC\")\n",
-                )
-                _config.value = newCfg
-                _initialConfig.value = newCfg
-            } else if (scriptId == "new_simple") {
-                val newCfg = ScriptConfig.Simple(
-                    id = UUID.randomUUID().toString(),
-                    name = "New Simple Script",
-                    description = "",
-                    steps = emptyList()
-                )
-                _config.value = newCfg
-                _initialConfig.value = newCfg
-            } else {
-                repository.scripts.collect { scripts ->
-                    val script = scripts.find { it.id == scriptId }
-                    if (_config.value == null && script != null) {
-                        _config.value = script
-                        _initialConfig.value = script
-                    }
+            shizukuManager.withService { service ->
+                val ids = service.virtualDisplays.toList()
+                virtualDisplays.value = withContext(Dispatchers.Default) {
+                    ids.mapNotNull { context.readDisplayInfo(it) }
+                }
+            }.onFailure { Timber.w(it, "Could not list virtual displays") }
+        }
+    }
+
+    fun run(target: ScriptTarget? = null) {
+        val script = uiState.value.script ?: return
+        session.start(script, target ?: session.defaultTargetFor(script))
+    }
+
+    fun stop() = session.stop()
+
+    fun export(uri: Uri) {
+        val script = uiState.value.script ?: return
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    context.contentResolver.openOutputStream(uri)?.use {
+                        ScriptArchive.export(script, it)
+                    } ?: error("無法寫入選取的位置")
                 }
             }
+            _message.value = result.fold({ "已匯出 ${script.name}" }, { "匯出失敗：${it.message}" })
         }
     }
 
-    fun updateConfig(update: (ScriptConfig) -> ScriptConfig) {
-        _config.update { current ->
-            current?.let { update(it) }
+    /** @return true 表示刪掉了，呼叫端該離開這一頁。 */
+    fun delete(): Boolean {
+        val script = uiState.value.script ?: return false
+        if (session.state.value.isRunning && session.state.value.script?.id == script.id) {
+            _message.value = "腳本執行中，請先停止"
+            return false
         }
+        return store.delete(script)
     }
 
-    fun saveScript() {
-        _config.value?.let {
-            repository.saveScript(it)
-            _initialConfig.value = it
-        }
+    fun consumeMessage() {
+        _message.value = null
     }
-
 }

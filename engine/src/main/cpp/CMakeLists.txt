@@ -59,7 +59,9 @@ add_library(relc_native SHARED
         relc_native.cpp
         LuaEngine.cpp
         NativeImageReader.cpp
-        RelcEngine.cpp
+        ScriptRuntime.cpp
+        VisionMatcher.cpp
+        LuaBindings.cpp
         GlesDistributor.cpp
         ${LUA_SRC}
         ${LUA_CJSON_SRC}

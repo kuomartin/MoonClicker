@@ -10,19 +10,16 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.mutableStateOf
 import androidx.core.content.ContextCompat
-import com.xaxaxax.relc.notification.EXTRA_NAV_TARGET
-import com.xaxaxax.relc.notification.NAV_TARGET_SCRIPTS
-import com.xaxaxax.relc.notification.ScriptStatusNotifier
 import com.xaxaxax.relc.ui.theme.ReLCTheme
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
+
+/** Set on the [RelcActivity] intent to ask the nav graph to open the Scripts page. */
+const val EXTRA_NAV_TARGET = "com.xaxaxax.relc.extra.NAV_TARGET"
+const val NAV_TARGET_SCRIPTS = "scripts"
 @AndroidEntryPoint
 class RelcActivity : ComponentActivity() {
-
-    @Inject
-    lateinit var scriptStatusNotifier: ScriptStatusNotifier
-
     /**
      * Set when the activity is opened from the script status notification, so the nav graph
      * jumps to the Scripts page once. Held as state so a notification tap while the activity
@@ -30,12 +27,6 @@ class RelcActivity : ComponentActivity() {
      */
     private val openScriptsPage = mutableStateOf(false)
 
-    private val notificationPermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) {
-            // A grant here must repost: the running scripts haven't changed, so the
-            // notifier's own summary flow would not emit again on its own.
-            scriptStatusNotifier.onNotificationPermissionChanged()
-        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -64,6 +55,9 @@ class RelcActivity : ComponentActivity() {
         }
         intent?.removeExtra(EXTRA_NAV_TARGET)
     }
+
+    private val notificationPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
 
     /**
      * The script status notification is the only place a run is visible while the user is in

@@ -1,17 +1,18 @@
 package com.xaxaxax.relc.ui.displays
 
+import android.content.Context
 import android.content.res.Resources
+import android.hardware.display.DisplayManager
+import android.util.DisplayMetrics
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.xaxaxax.relc.IRelcV2Service
-import com.xaxaxax.relc.RelcV2Service
 import com.xaxaxax.relc.core.DisplayConfig
-import com.xaxaxax.relc.shizuku.UserService
+import com.xaxaxax.relc.shizuku.ShizukuManager
+import com.xaxaxax.relc.shizuku.ShizukuStatusUiState
 import com.xaxaxax.relc.shizuku.createVirtualDisplay
-import com.xaxaxax.relc.shizuku.ready
-import com.xaxaxax.relc.shizuku.refreshShizukuPermission
-import com.xaxaxax.relc.shizuku.runWhenAlive
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -19,12 +20,21 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import javax.inject.Inject
 import kotlin.time.Duration.Companion.milliseconds
 
+data class DisplayCardInfo(
+    val displayId: Int,
+    val width: Int,
+    val height: Int,
+    val densityDpi: Int,
+)
+
 data class DisplaysUiState(
-    val displayIds: List<Int> = emptyList(),
+    val displays: List<DisplayCardInfo> = emptyList(),
+    val shizukuStatus: ShizukuStatusUiState = ShizukuStatusUiState(),
     val isShizukuReady: Boolean = false,
     val isLoading: Boolean = false,
     val isRefreshing: Boolean = false
@@ -35,18 +45,12 @@ private const val REFRESH_DELAY = 500
 
 @HiltViewModel
 class DisplaysViewModel @Inject constructor(
-//    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val shizukuManager: ShizukuManager
 ) : ViewModel() {
-    private val displayIds = MutableStateFlow<List<Int>>(emptyList())
+    private val displays = MutableStateFlow<List<DisplayCardInfo>>(emptyList())
     private val isLoading = MutableStateFlow(false)
     private val isRefreshing = MutableStateFlow(false)
-    private val serviceFlow by lazy {
-        UserService.create(
-            viewModelScope,
-            RelcV2Service::class,
-            IRelcV2Service.Stub::asInterface
-        )
-    }
 
     val defaultConfig by lazy {
         val width = Resources.getSystem().displayMetrics.widthPixels
@@ -61,14 +65,15 @@ class DisplaysViewModel @Inject constructor(
     }
 
     val uiState: StateFlow<DisplaysUiState> = combine(
-        displayIds,
-        ready,
+        displays,
+        shizukuManager.statusFlow,
         isLoading,
         isRefreshing
-    ) { ids, ready, loading, refreshing ->
+    ) { displays, shizukuStatus, loading, refreshing ->
         DisplaysUiState(
-            displayIds = ids,
-            isShizukuReady = ready,
+            displays = displays,
+            shizukuStatus = shizukuStatus,
+            isShizukuReady = shizukuStatus.isConnected,
             isLoading = loading,
             isRefreshing = refreshing
         )
@@ -82,6 +87,8 @@ class DisplaysViewModel @Inject constructor(
         refreshDisplays()
     }
 
+    fun onShizukuAction() = shizukuManager.requestPermissionOrConnect()
+
     fun refreshDisplays(fromPullToRefresh: Boolean = false) {
         if (!uiState.value.isShizukuReady && !fromPullToRefresh) {
             return
@@ -92,12 +99,14 @@ class DisplaysViewModel @Inject constructor(
                 if (fromPullToRefresh) {
                     isRefreshing.value = true
                     if (!uiState.value.isShizukuReady) {
-                        refreshShizukuPermission()
+                        shizukuManager.requestPermissionOrConnect()
                     }
                 }
-                serviceFlow.runWhenAlive { service ->
+                shizukuManager.withService { service ->
                     val ids = service.virtualDisplays.toList()
-                    displayIds.value = ids
+                    displays.value = withContext(Dispatchers.Default) {
+                        ids.mapNotNull { id -> readDisplayCardInfo(id) }
+                    }
                 }
             } catch (t: Throwable) {
                 Timber.e(t, "refreshDisplays failed")
@@ -111,11 +120,32 @@ class DisplaysViewModel @Inject constructor(
         }
     }
 
+    private fun readDisplayCardInfo(displayId: Int): DisplayCardInfo? {
+        val displayManager = context.getSystemService(DisplayManager::class.java) ?: return null
+        val display = displayManager.getDisplay(displayId) ?: return null
+        val metrics = DisplayMetrics()
+        @Suppress("DEPRECATION")
+        display.getRealMetrics(metrics)
+        return DisplayCardInfo(
+            displayId = displayId,
+            width = metrics.widthPixels,
+            height = metrics.heightPixels,
+            densityDpi = metrics.densityDpi,
+        )
+    }
+
     fun createDisplay(config: DisplayConfig = defaultConfig) {
         viewModelScope.launch {
-            serviceFlow.runWhenAlive { service ->
+            shizukuManager.withService { service ->
                 service.createVirtualDisplay(config)
             }
+            refreshDisplays()
+        }
+    }
+
+    fun destroyDisplay(displayId: Int) {
+        viewModelScope.launch {
+            shizukuManager.withService { service -> service.destroyVirtualDisplay(displayId) }
             refreshDisplays()
         }
     }

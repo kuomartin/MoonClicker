@@ -22,6 +22,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MediumTopAppBar
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -39,6 +40,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -63,9 +65,10 @@ fun SettingsScreen(
 
     SettingsScreenContent(
         uiState = uiState,
-        onOpenShizuku = { launcher.launch(viewModel.openShizukuIntent()) },
+        onOpenShizuku = { launcher.launch(viewModel.getOpenShizukuIntent()) },
         onRequestShizukuPermission = { viewModel.requestShizukuPermission() },
         onRefresh = { viewModel.refreshPermissions(true) },
+        onAutoOpenFullscreenChange = viewModel::setAutoOpenFullscreen,
     )
 }
 
@@ -76,6 +79,7 @@ private fun SettingsScreenContent(
     onOpenShizuku: () -> Unit,
     onRequestShizukuPermission: () -> Unit,
     onRefresh: () -> Unit,
+    onAutoOpenFullscreenChange: (Boolean) -> Unit,
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val pullRefreshState = rememberPullToRefreshState()
@@ -169,17 +173,42 @@ private fun SettingsScreenContent(
                 }
 
                 item {
-                    Section(name = "General") {
-//                    ToggleSettingItem(
-//                        name = "Dark Mode",
-//                        description = "Enable dark theme across the app",
-//                        checked = false,
-//                        onCheckedChange = {}
-//                    )
+                    Section(name = stringResource(R.string.settings_general)) {
+                        ToggleSettingItem(
+                            name = stringResource(R.string.settings_auto_fullscreen),
+                            description = stringResource(R.string.settings_auto_fullscreen_note),
+                            checked = uiState.autoOpenFullscreen,
+                            onCheckedChange = onAutoOpenFullscreenChange,
+                        )
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ToggleSettingItem(
+    name: String,
+    description: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = name, style = MaterialTheme.typography.bodyLarge)
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }
 
@@ -276,6 +305,9 @@ private fun SettingsScreenPreview() {
                     )
                 },
                 onRefresh = { uiState = SettingsUiState() },
+                onAutoOpenFullscreenChange = {
+                    uiState = uiState.copy(autoOpenFullscreen = it)
+                },
             )
         }
     }
