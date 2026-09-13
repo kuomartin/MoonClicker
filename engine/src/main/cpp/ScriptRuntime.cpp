@@ -200,7 +200,12 @@ jobject ScriptRuntime::boxLuaValue(lua_State *L, int index) {
                                 (jboolean) lua_toboolean(L, index));
         case LUA_TTABLE: {
             // table 以 JSON 字串過橋——Kotlin 端拿到的是字串，要用再自己解析。
-            lua_getglobal(L, "cjson");
+            //
+            // cjson 是 luaL_requiref(..., glb = 0) 載入的，而且原始碼裡註冊全域的那段被
+            // ENABLE_CJSON_GLOBAL 關掉了——所以 _G.cjson 是 nil，只有 package.loaded 有它。
+            // 從全域讀會在 lua_getfield 當場拋錯，把整份腳本一起帶走。
+            lua_getfield(L, LUA_REGISTRYINDEX, LUA_LOADED_TABLE);
+            lua_getfield(L, -1, "cjson");
             lua_getfield(L, -1, "encode");
             lua_pushvalue(L, index);
             jobject boxed = nullptr;
@@ -209,7 +214,7 @@ jobject ScriptRuntime::boxLuaValue(lua_State *L, int index) {
             } else {
                 LOGE("Failed to encode table for data.set: %s", lua_tostring(L, -1));
             }
-            lua_pop(L, 2);  // 結果（或錯誤）與 cjson 表
+            lua_pop(L, 3);  // 結果（或錯誤）、cjson 表、package.loaded
             return boxed;
         }
         default:
