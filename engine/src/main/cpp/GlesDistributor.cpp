@@ -305,9 +305,9 @@ void GlesDistributor::renderLoop() {
             // 佇列滿了之後生產端（虛擬顯示）會被擋住，所以閒置時仍然定期 updateTexImage
             // 把它排空，只是把節奏從 10ms 放寬到 250ms。
             //
-            // 這裡沒有用條件式等待，因為 frameAvailable / onFrameAvailable 這組事件驅動的
-            // 骨架從來沒有接上——SurfaceTexture 的 listener 沒有註冊，frameCond 也沒有人
-            // notify。改成等條件會直接睡死。逾時輪詢是目前唯一的驅動力，只是不必那麼密。
+            // **不要改成條件式等待**：frameAvailable / onFrameAvailable 這組事件驅動的骨架
+            // 從來沒有接上（listener 沒註冊、旗標沒人寫、frameCond 沒人 notify），等條件會
+            // 直接睡死。逾時輪詢目前是唯一的驅動力，只是不必那麼密。
             std::unique_lock<std::mutex> lock(frameMutex);
             frameCond.wait_for(lock, std::chrono::milliseconds(hasSinks ? 10 : 250));
         }

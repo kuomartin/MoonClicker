@@ -98,8 +98,8 @@ cv::Mat VisionMatcher::templateFor(const VisionRequest &request) {
     // 所以比對前把模板轉到影格的方向。方向取自 frameToLogical 的逆：r=1 時它把影格右上角
     // 映到邏輯左上角，也就是影格內容是邏輯內容順時針轉 90 度。
     //
-    // 轉模板而不是轉影格：兩者數學上等價（命中位置一一對應），但模板小、而且這裡有跨呼叫
-    // 的快取，整場執行只轉一次；影格每次比對都是新的一張 3.5 MB，轉不了快取。見 ADR-0013。
+    // 轉模板而不是轉影格：兩者數學上等價（命中位置一一對應），但模板小且這裡有跨呼叫的
+    // 快取，整場執行只轉一次；影格每次比對都是新的一張，快取不了。見 ADR-0013。
     switch (quarterTurns) {
         case 1:
             cv::rotate(image, image, cv::ROTATE_90_CLOCKWISE);

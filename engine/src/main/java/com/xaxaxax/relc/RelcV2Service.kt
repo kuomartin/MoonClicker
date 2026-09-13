@@ -122,8 +122,7 @@ class RelcV2Service @JvmOverloads constructor(
          *  - `TOUCH_FEEDBACK_DISABLED`：沒有任何權限檢查。
          *
          * API 33 這條界線是「shell 通常從 Android 13 起才拿得到那些權限」的經驗值，與
-         * scrcpy 的 `NewDisplayCapture` 一致。實測 Samsung SM-A217F / Android 12 的
-         * `com.android.shell` 沒有 `ADD_TRUSTED_DISPLAY`。
+         * scrcpy 的 `NewDisplayCapture` 一致。見 docs/virtual-display-pitfalls.md。
          */
         /**
          * API 34 起。這兩個確實依賴顯示器是 trusted——`OWN_FOCUS` 的 javadoc 明講
@@ -470,10 +469,9 @@ class RelcV2Service @JvmOverloads constructor(
     /**
      * API 33+ 才給的那些旗標，**逐項按它自己的前提決定**。
      *
-     * 之前這裡是「拿不到 `ADD_TRUSTED_DISPLAY` 就整組不要」，那個模型是錯的：三個旗標在
-     * `DisplayManagerService` 裡是三條獨立的檢查（見 [ADD_FLAGS_33]）。整組綁一起的代價很
-     * 具體——一台有 `ADD_TRUSTED_DISPLAY` 卻沒有 `ADD_ALWAYS_UNLOCKED_DISPLAY` 的機器，會
-     * 為了一個旗標讓整個顯示器退回非 trusted。
+     * **不要把它們綁成一包。** 三個旗標在 `DisplayManagerService` 裡是三條獨立的檢查
+     * （見 [ADD_FLAGS_33]），整組丟掉的代價是：有 `ADD_TRUSTED_DISPLAY` 卻沒有
+     * `ADD_ALWAYS_UNLOCKED_DISPLAY` 的機器，會為一個旗標讓整個顯示器退回非 trusted。
      *
      * `ALWAYS_UNLOCKED` 尤其不能順手丟掉：少了它，虛擬顯示在裝置鎖定或休眠時**收不到注入
      * 的觸控**。
@@ -520,11 +518,12 @@ class RelcV2Service @JvmOverloads constructor(
     /**
      * 建一個虛擬顯示，失敗回 `null`。
      *
-     * 呼叫端會用 [privilegedFlags] 試一次、被擋下來再用基本旗標試一次：**不是每台裝置的
-     * shell 都有 `ADD_TRUSTED_DISPLAY`**（實測 Samsung SM-A217F / Android 12 就沒有，而
-     * Pixel / API 37 有），而 Shizuku 就是跑在 shell 身分上。少了 TRUSTED 顯示器仍然建得
-     * 起來、也仍然收得到影格，只是它不再是 trusted display——別家 app 能不能被啟動到上面、
-     * 觸控怎麼派送，都可能跟著降級。整台不能用比降級糟得多，所以退而求其次。
+     * 呼叫端會用 [privilegedFlags] 試一次、被擋下來再用基本旗標試一次。少了 TRUSTED 顯示器
+     * 仍然建得起來、也仍然收得到影格與觸控，只是不再是 trusted display，部分行為會降級——
+     * 但整台不能用比降級糟得多。
+     *
+     * [privilegedFlags] 已經先問過權限，這裡是問完仍被擋下來時的退路：那組旗標各自還有別的
+     * 前提，權限過了不代表整組必然被接受。
      */
 //    @SuppressLint("WrongConstant")
     private fun createDisplay(

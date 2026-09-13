@@ -90,7 +90,7 @@ class LuaScriptLifecycleTest {
             """.trimIndent()
         )
 
-        // table 那一行曾經整份腳本一起帶走（cjson 不在 _G），所以終態也要一起釘住。
+        // table 那一行會把整份腳本帶走（cjson 不在 _G），所以終態也要一起釘住。
         assertEquals(EngineRunState.Finished, outcome.runState)
         assertEquals(1.5, outcome.data["n"])
         assertEquals("text", outcome.data["s"])
