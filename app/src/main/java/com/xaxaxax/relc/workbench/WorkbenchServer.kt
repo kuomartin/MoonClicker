@@ -2,12 +2,17 @@ package com.xaxaxax.relc.workbench
 
 import io.ktor.server.application.Application
 import io.ktor.server.application.call
+import io.ktor.server.application.install
 import io.ktor.server.cio.CIO
 import io.ktor.server.engine.EmbeddedServer
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
 import io.ktor.server.routing.routing
+import io.ktor.server.websocket.WebSockets
+import io.ktor.server.websocket.webSocket
+import io.ktor.websocket.Frame
+import io.ktor.websocket.readText
 import java.net.Inet4Address
 import java.net.NetworkInterface
 import javax.inject.Inject
@@ -91,9 +96,19 @@ class WorkbenchServer @Inject constructor() {
 }
 
 fun Application.workbenchModule() {
+    install(WebSockets)
     routing {
         get("/health") {
             call.respondText("OK")
+        }
+        // Milestone 1 只驗證「連線建立/斷開本身」（見 #57），業務路由（同步/執行/log 串流）
+        // 是後續票的範圍——先用 echo 讓 extension 端能驗證連線確實是雙向可用的 WebSocket。
+        webSocket("/") {
+            for (frame in incoming) {
+                if (frame is Frame.Text) {
+                    send(Frame.Text(frame.readText()))
+                }
+            }
         }
     }
 }
