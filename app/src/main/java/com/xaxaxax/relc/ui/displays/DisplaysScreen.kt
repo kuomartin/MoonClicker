@@ -1,13 +1,16 @@
 package com.xaxaxax.relc.ui.displays
 
 import android.widget.Toast
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
@@ -22,6 +25,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -40,6 +44,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -57,11 +62,25 @@ import com.xaxaxax.relc.ui.theme.ReLCTheme
 
 const val MIN_DISPLAY_DIMENSION_PX = 100
 const val MAX_DISPLAY_DIMENSION_PX = 7680
+const val MIN_DISPLAY_DPI = 120
+const val MAX_DISPLAY_DPI = 640
 
 fun isValidDisplayDimension(text: String): Boolean {
     val value = text.toIntOrNull() ?: return false
     return value in MIN_DISPLAY_DIMENSION_PX..MAX_DISPLAY_DIMENSION_PX
 }
+
+fun isValidDisplayDpi(text: String): Boolean {
+    val value = text.toIntOrNull() ?: return false
+    return value in MIN_DISPLAY_DPI..MAX_DISPLAY_DPI
+}
+
+data class DisplayPreset(
+    val label: String,
+    val width: Int,
+    val height: Int,
+    val densityDpi: Int,
+)
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -80,13 +99,14 @@ fun DisplaysScreen(
         uiState = uiState,
         defaultWidth = viewModel.defaultConfig.width,
         defaultHeight = viewModel.defaultConfig.height,
+        defaultDensityDpi = viewModel.defaultConfig.densityDpi,
         onNavigateToDetail = onNavigateToDetail,
         onPullRefresh = { viewModel.refreshDisplays(true) },
         onShizukuAction = { viewModel.onShizukuAction() },
         onDestroyDisplay = { viewModel.destroyDisplay(it) },
-        onCreateDisplay = { width, height ->
+        onCreateDisplay = { width, height, densityDpi ->
             viewModel.createDisplay(
-                viewModel.defaultConfig.copy(width = width, height = height)
+                viewModel.defaultConfig.copy(width = width, height = height, densityDpi = densityDpi)
             )
         },
         onFabClick = {
@@ -107,11 +127,12 @@ internal fun DisplaysScreenContent(
     uiState: DisplaysUiState,
     defaultWidth: Int,
     defaultHeight: Int,
+    defaultDensityDpi: Int,
     onNavigateToDetail: (String) -> Unit,
     onPullRefresh: () -> Unit,
     onShizukuAction: () -> Unit,
     onDestroyDisplay: (Int) -> Unit,
-    onCreateDisplay: (width: Int, height: Int) -> Unit,
+    onCreateDisplay: (width: Int, height: Int, densityDpi: Int) -> Unit,
     onFabClick: () -> Unit,
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
@@ -122,10 +143,11 @@ internal fun DisplaysScreenContent(
         CreateDisplayDialog(
             defaultWidth = defaultWidth,
             defaultHeight = defaultHeight,
+            defaultDensityDpi = defaultDensityDpi,
             onDismiss = { showCreateDialog = false },
-            onConfirm = { width, height ->
+            onConfirm = { width, height, densityDpi ->
                 showCreateDialog = false
-                onCreateDisplay(width, height)
+                onCreateDisplay(width, height, densityDpi)
             }
         )
     }
@@ -228,11 +250,12 @@ private fun PreviewDisplaysScreen() {
             ),
             defaultWidth = 1080,
             defaultHeight = 1920,
+            defaultDensityDpi = 320,
             onNavigateToDetail = {},
             onPullRefresh = {},
             onShizukuAction = {},
             onDestroyDisplay = {},
-            onCreateDisplay = { _, _ -> },
+            onCreateDisplay = { _, _, _ -> },
             onFabClick = {},
         )
     }
@@ -300,27 +323,59 @@ private fun DisplayCard(
 private fun CreateDisplayDialog(
     defaultWidth: Int,
     defaultHeight: Int,
+    defaultDensityDpi: Int,
     onDismiss: () -> Unit,
-    onConfirm: (width: Int, height: Int) -> Unit,
+    onConfirm: (width: Int, height: Int, densityDpi: Int) -> Unit,
 ) {
+    val presets = remember(defaultWidth, defaultHeight, defaultDensityDpi) {
+        listOf(
+            DisplayPreset("Local", defaultWidth, defaultHeight, defaultDensityDpi),
+            DisplayPreset("Small", 720, 1280, 320),
+            DisplayPreset("Medium", 1080, 2400, 420),
+            DisplayPreset("Tablet", 2560, 1600, 320),
+        )
+    }
     var widthText by rememberSaveable { mutableStateOf(defaultWidth.toString()) }
     var heightText by rememberSaveable { mutableStateOf(defaultHeight.toString()) }
+    var dpiText by rememberSaveable { mutableStateOf(defaultDensityDpi.toString()) }
 
     val widthValid = isValidDisplayDimension(widthText)
     val heightValid = isValidDisplayDimension(heightText)
+    val dpiValid = isValidDisplayDpi(dpiText)
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Create Display") },
         text = {
             Column {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                ) {
+                    presets.forEach { preset ->
+                        val selected = widthText == preset.width.toString() &&
+                            heightText == preset.height.toString() &&
+                            dpiText == preset.densityDpi.toString()
+                        FilterChip(
+                            selected = selected,
+                            onClick = {
+                                widthText = preset.width.toString()
+                                heightText = preset.height.toString()
+                                dpiText = preset.densityDpi.toString()
+                            },
+                            label = { Text(preset.label) }
+                        )
+                    }
+                }
                 OutlinedTextField(
                     value = widthText,
                     onValueChange = { widthText = it },
                     label = { Text("Width (px)") },
                     isError = !widthValid,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
                 )
                 OutlinedTextField(
                     value = heightText,
@@ -330,8 +385,17 @@ private fun CreateDisplayDialog(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
                 )
+                OutlinedTextField(
+                    value = dpiText,
+                    onValueChange = { dpiText = it },
+                    label = { Text("Density (dpi)") },
+                    isError = !dpiValid,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                )
                 Text(
-                    text = "$MIN_DISPLAY_DIMENSION_PX–$MAX_DISPLAY_DIMENSION_PX px",
+                    text = "$MIN_DISPLAY_DIMENSION_PX–$MAX_DISPLAY_DIMENSION_PX px, " +
+                        "$MIN_DISPLAY_DPI–$MAX_DISPLAY_DPI dpi",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 4.dp)
@@ -340,8 +404,8 @@ private fun CreateDisplayDialog(
         },
         confirmButton = {
             Button(
-                onClick = { onConfirm(widthText.toInt(), heightText.toInt()) },
-                enabled = widthValid && heightValid
+                onClick = { onConfirm(widthText.toInt(), heightText.toInt(), dpiText.toInt()) },
+                enabled = widthValid && heightValid && dpiValid
             ) {
                 Text("Create")
             }

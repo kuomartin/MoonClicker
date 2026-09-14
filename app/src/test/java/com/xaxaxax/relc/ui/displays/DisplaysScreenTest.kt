@@ -31,4 +31,19 @@ class DisplaysScreenTest {
         assertFalse(isValidDisplayDimension("abc"))
         assertFalse(isValidDisplayDimension("12.5"))
     }
+
+    @Test
+    fun `dpi within bounds is valid`() {
+        assertTrue(isValidDisplayDpi(MIN_DISPLAY_DPI.toString()))
+        assertTrue(isValidDisplayDpi(MAX_DISPLAY_DPI.toString()))
+        assertTrue(isValidDisplayDpi("320"))
+    }
+
+    @Test
+    fun `dpi outside bounds is invalid`() {
+        assertFalse(isValidDisplayDpi((MIN_DISPLAY_DPI - 1).toString()))
+        assertFalse(isValidDisplayDpi((MAX_DISPLAY_DPI + 1).toString()))
+        assertFalse(isValidDisplayDpi(""))
+        assertFalse(isValidDisplayDpi("abc"))
+    }
 }
