@@ -18,6 +18,8 @@ sealed interface ScriptTarget {
     /**
      * 開一個新的虛擬顯示（若已有同尺寸的就沿用）。
      * 腳本 `script.json` 裡的 `display` 就是解析成這個。
+     *
+     * 存的是尺寸而不是 displayId：id 每次重建都會變，存下來的必然過期。
      */
     data class NewVirtual(val config: DisplayConfig) : ScriptTarget
 

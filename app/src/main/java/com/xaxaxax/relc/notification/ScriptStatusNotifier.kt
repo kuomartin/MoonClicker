@@ -22,6 +22,10 @@ import javax.inject.Singleton
  *
  * 一次只跑一份腳本，所以這裡不需要上一代那個彙總多份腳本的 summary——常駐通知就是
  * 那一份腳本本身，動作只有「停止」。
+ *
+ * 通知**不會**讓行程活著。被移除的 AccessibilityService 原本順帶有這個效果，而
+ * `setOngoing(true)` 沒有，所以長時間執行的腳本可能在使用者切到別的 app 之後被系統殺掉。
+ * 要真正錨住執行，需要的是前景服務，那是另一個還沒做的決定。
  */
 @Singleton
 class ScriptStatusNotifier @Inject constructor(

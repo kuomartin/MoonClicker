@@ -6,4 +6,4 @@ The interpreter itself is a custom-embedded native Lua 5.5.0 (`app/src/main/cpp/
 
 ## Status
 
-Accepted. Corrected 2026-09-09 to reflect the actual native JNI implementation — see [ADR-0006](0006-module-split-and-engine-facade.md).
+Accepted. Corrected 2026-09-09 to reflect the actual native JNI implementation — see the Engine Module entry in `CONTEXT.md`.
