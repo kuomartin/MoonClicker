@@ -383,6 +383,136 @@ class Tier1SpikeTest {
         )
     }
 
+    /**
+     * `logicalToFrame` 唯一的呼叫路徑：roi 由腳本以邏輯座標給，VisionMatcher 內部把它換回
+     * 影格空間再比對（見 VisionMatcher.cpp:191-193）。step6/7/8 釘住 frameToLogical 的方向，
+     * 這裡釘 logicalToFrame 的方向——兩者互為反函數，其中一個寫錯不會讓另一個的測試失敗。
+     *
+     * miss 用 glyph 的位置：PuppetActivity 特意把它擺在離標記很遠的另一個象限（見
+     * MarkerView.onDraw 的註解），所以「roi 框住 glyph」保證排除掉 marker。只驗證命中的話，
+     * 一個完全忽略 roi 的實作也會通過。
+     */
+    @Test
+    fun step12_a_roi_framing_the_marker_matches_while_a_roi_framing_the_glyph_misses() =
+        visionRoiRoundTrip(orientation = null)
+
+    /** 同 step12，但顯示器轉過——roi 的方向換算不能只在 rotation 0 時對。 */
+    @Test
+    fun step13_a_landscape_display_still_confines_the_roi_correctly() =
+        visionRoiRoundTrip(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE)
+
+    @Test
+    fun step14_a_reverse_landscape_display_still_confines_the_roi_correctly() =
+        visionRoiRoundTrip(ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE)
+
+    private fun visionRoiRoundTrip(orientation: Int?) {
+        val displayId = requireDisplay()
+        env.service.launchInDisplay(env.puppetPackage, displayId)
+        assertTrue("the puppet never came up", PuppetRecorder.awaitReady(displayId))
+
+        if (orientation != null) {
+            PuppetActivity.requestOrientation(orientation)
+            val rotated = env.height to env.width
+            assumeTrue(
+                "the puppet asked for orientation $orientation but display $displayId never " +
+                        "followed — content is still ${PuppetRecorder.contentSize}, expected " +
+                        "$rotated, so there is no rotated frame to check the roi against.",
+                waitFor { PuppetRecorder.contentSize == rotated },
+            )
+        }
+
+        assertTrue(
+            "display $displayId never stopped changing; vision would match a mid-animation frame",
+            env.awaitStableFrame(displayId),
+        )
+
+        val marker = PuppetRecorder.markerRect!!
+        val glyph = PuppetRecorder.glyphRect!!
+        val content = PuppetRecorder.contentSize!!
+
+        val hitRoi = expandToRoi(marker, content)
+        val missRoi = expandToRoi(glyph, content)
+
+        val outcome = LuaScriptRunner(
+            service = env.service,
+            displayId = displayId,
+            hasVision = true,
+        ).use { runner ->
+            runner.run(
+                // vision.wait 而非 vision.find：腳本剛啟動時，(production) VisionMatcher 可能還沒
+                // 收到第一張影格，find 那時就返回未命中——跟 roi 邏輯本身無關。wait 會等到下一張
+                // 影格重試，miss 那句則要等滿逾時才能確認真的沒中，兩者都需要它。
+                main = """
+                    local hit = vision.wait({ image = "marker.png", roi = $hitRoi }, 10000)
+                    data.set("hit_found", hit ~= nil)
+                    if hit ~= nil then
+                        data.set("hit_cx", hit.cx)
+                        data.set("hit_cy", hit.cy)
+                    end
+
+                    local miss = vision.wait({ image = "marker.png", roi = $missRoi }, 3000)
+                    data.set("miss_found", miss ~= nil)
+                """.trimIndent(),
+                assets = mapOf("marker.png" to PuppetMarker.png()),
+                timeoutMs = 20_000,
+            )
+        }
+
+        assertEquals(EngineRunState.Finished, outcome.runState)
+
+        if (outcome.data["hit_found"] != true) {
+            // 比不中之前先問畫面上有沒有東西：ATD 映像檔沒有圖形堆疊，影格全黑，
+            // 那時比不中是環境不提供被測物，不是 bug。
+            val colors = env.distinctColorsOnDisplay(displayId)
+            assumeTrue(
+                "display $displayId composites nothing — only $colors distinct colour(s) while " +
+                        "the puppet is showing. ATD system images have no graphics stack; run " +
+                        "the vision tests on hardware or a non-ATD image.",
+                colors > 1,
+            )
+        }
+
+        assertEquals(
+            "roi $hitRoi frames the marker at $marker but vision.wait never matched it, at " +
+                    "display rotation ${displayRotation(displayId)}\n" +
+                    "last match = ${EngineStateRepository.state.value.lastVisionResult}\n" +
+                    env.logcat("VisionMatcher"),
+            true,
+            outcome.data["hit_found"],
+        )
+        val hx = (outcome.data["hit_cx"] as Double).toInt()
+        val hy = (outcome.data["hit_cy"] as Double).toInt()
+        assertTrue(
+            "roi $hitRoi matched at ($hx, $hy), outside the marker at $marker",
+            marker.contains(hx, hy),
+        )
+
+        assertEquals(
+            "roi $missRoi frames the glyph at $glyph, which excludes the marker at $marker, but " +
+                    "vision.wait matched anyway at display rotation ${displayRotation(displayId)} " +
+                    "— logicalToFrame is either ignoring the roi or converting it in the wrong " +
+                    "direction.\nlast match = ${EngineStateRepository.state.value.lastVisionResult}",
+            false,
+            outcome.data["miss_found"],
+        )
+    }
+
+    /**
+     * [rect] 加上邊界、裁進 [content]，再轉成一段 Lua 的 `roi` table literal。
+     *
+     * 邊界蓋住模板的整個尺寸（見 [ROI_MARGIN]）：roi 剛好貼著模板邊緣時，
+     * `logicalToFrame` 的浮點數截斷可能把換算後的寬高削到比模板還小一像素，
+     * 讓比對失敗於截斷而不是於 roi 邏輯本身。
+     */
+    private fun expandToRoi(rect: Rect, content: Pair<Int, Int>): String {
+        val (contentWidth, contentHeight) = content
+        val left = (rect.left - ROI_MARGIN).coerceAtLeast(0)
+        val top = (rect.top - ROI_MARGIN).coerceAtLeast(0)
+        val right = (rect.right + ROI_MARGIN).coerceAtMost(contentWidth)
+        val bottom = (rect.bottom + ROI_MARGIN).coerceAtMost(contentHeight)
+        return "{ x = $left, y = $top, w = ${right - left}, h = ${bottom - top} }"
+    }
+
     /** 顯示器當下實際的 rotation，只用在訊息裡——測試本身不該依賴它是哪個值。 */
     private fun displayRotation(displayId: Int): Int =
         env.context.getSystemService(DisplayManager::class.java)
@@ -557,5 +687,8 @@ class Tier1SpikeTest {
         /** 排程改變畫面的延遲，要明顯大於「第一幀就比中」的時間尺度。 */
         const val APPEAR_DELAY_MS = 2_000L
         const val TIMEOUT_MS = 2_000L
+
+        /** roi 的邊界，蓋過模板本身的尺寸（[PuppetMarker.SIZE] / [PuppetGlyph.SIZE] 都是 160）。 */
+        const val ROI_MARGIN = 20
     }
 }
