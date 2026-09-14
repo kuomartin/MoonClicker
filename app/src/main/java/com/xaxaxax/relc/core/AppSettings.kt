@@ -47,8 +47,20 @@ class AppSettings @Inject constructor(
         _autoStartUserService.value = enabled
     }
 
+    private val _workbenchEnabled =
+        MutableStateFlow(prefs.getBoolean(KEY_WORKBENCH_ENABLED, false))
+
+    /** Script Workbench 內嵌 server 的開關，與腳本執行狀態、畫面前後景無關。 */
+    val workbenchEnabled: StateFlow<Boolean> = _workbenchEnabled.asStateFlow()
+
+    fun setWorkbenchEnabled(enabled: Boolean) {
+        prefs.edit { putBoolean(KEY_WORKBENCH_ENABLED, enabled) }
+        _workbenchEnabled.value = enabled
+    }
+
     private companion object {
         const val KEY_AUTO_FULLSCREEN = "auto_open_fullscreen"
         const val KEY_AUTO_START_USER_SERVICE = "auto_start_user_service"
+        const val KEY_WORKBENCH_ENABLED = "workbench_enabled"
     }
 }

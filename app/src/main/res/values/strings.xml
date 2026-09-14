@@ -73,4 +73,10 @@
     <string name="settings_user_service_restart_message">服務會先結束再啟動，過程中所有虛擬顯示都會被釋放。</string>
     <string name="settings_user_service_confirm">確定</string>
     <string name="settings_user_service_cancel">取消</string>
+
+    <string name="settings_workbench">Script Workbench</string>
+    <string name="settings_workbench_note">開啟裝置端的內嵌 server，供電腦端的 Script Workbench 連線。</string>
+    <string name="workbench_notification_channel_label">Script Workbench</string>
+    <string name="workbench_notification_channel_description">Script Workbench server 開啟時的常駐通知。</string>
+    <string name="workbench_notification_title">Script Workbench 正在監聽</string>
 </resources>

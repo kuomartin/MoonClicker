@@ -3,6 +3,7 @@ package com.xaxaxax.relc.ui.setting
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -11,6 +12,7 @@ import com.xaxaxax.relc.permission.PermissionManager
 import com.xaxaxax.relc.script.ScriptSession
 import com.xaxaxax.relc.shizuku.ShizukuConnectionStatus
 import com.xaxaxax.relc.shizuku.ShizukuManager
+import com.xaxaxax.relc.workbench.WorkbenchService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import jakarta.inject.Inject
@@ -30,6 +32,7 @@ data class SettingsUiState(
     val isRefreshing: Boolean = false,
     val autoOpenFullscreen: Boolean = false,
     val autoStartUserService: Boolean = true,
+    val workbenchEnabled: Boolean = false,
     /** 腳本跑在 UserService 上，停掉服務會把它一起帶走。 */
     val isScriptRunning: Boolean = false,
 ) {
@@ -67,7 +70,8 @@ class SettingsViewModel @Inject constructor(
         permissionManager.osAllowSecondaryDisplaysFlow,
         isRefreshing,
         appSettings.autoOpenFullscreen,
-    ) { (status, autoStart, scriptRunning), allowSecondary, refreshing, autoOpenFullscreen ->
+        appSettings.workbenchEnabled,
+    ) { (status, autoStart, scriptRunning), allowSecondary, refreshing, autoOpenFullscreen, workbenchEnabled ->
         SettingsUiState(
             shizukuStatus = status,
             osAllowSecondaryDisplays = allowSecondary,
@@ -75,6 +79,7 @@ class SettingsViewModel @Inject constructor(
             autoOpenFullscreen = autoOpenFullscreen,
             autoStartUserService = autoStart,
             isScriptRunning = scriptRunning,
+            workbenchEnabled = workbenchEnabled,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -113,6 +118,16 @@ class SettingsViewModel @Inject constructor(
     fun setAutoOpenFullscreen(enabled: Boolean) = appSettings.setAutoOpenFullscreen(enabled)
 
     fun setAutoStartUserService(enabled: Boolean) = appSettings.setAutoStartUserService(enabled)
+
+    fun setWorkbenchEnabled(enabled: Boolean) {
+        val intent = Intent(context, WorkbenchService::class.java)
+        if (enabled) {
+            ContextCompat.startForegroundService(context, intent)
+        } else {
+            context.stopService(intent)
+        }
+        appSettings.setWorkbenchEnabled(enabled)
+    }
 
     fun startUserService() = shizukuManager.startUserService()
 

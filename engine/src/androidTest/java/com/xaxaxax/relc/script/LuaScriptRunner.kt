@@ -6,7 +6,13 @@ import com.xaxaxax.relc.engine.ScriptEngine
 import com.xaxaxax.relc.engine.ScriptRun
 import com.xaxaxax.relc.engine.state.EngineRunState
 import com.xaxaxax.relc.engine.state.EngineStateRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import java.io.File
@@ -20,6 +26,7 @@ internal data class ScriptOutcome(
     val calls: List<RecordingRelcService.Call>,
     val notifications: List<Pair<String, String>>,
     val openedUris: List<String>,
+    val logLines: List<String>,
 ) {
     val error: String? get() = (runState as? EngineRunState.Error)?.message
 }
@@ -54,6 +61,8 @@ internal class LuaScriptRunner(
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
     private val notifications = CopyOnWriteArrayList<Pair<String, String>>()
     private val openedUris = CopyOnWriteArrayList<String>()
+    private val logLines = CopyOnWriteArrayList<String>()
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var dir: File? = null
 
     /** 寫出腳本、啟動、等到終態。 */
@@ -86,6 +95,12 @@ internal class LuaScriptRunner(
             File(folder, name).apply { parentFile?.mkdirs() }.writeBytes(bytes)
         }
 
+        // UNDISPATCHED：保證 collect 真的掛上 SharedFlow 才讓這行 launch 返回，避免腳本執行緒
+        // 在訂閱建立前就把最早幾行 log 發出去（SharedFlow 沒有 replay，emit 時没人訂閱就遺失）。
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            ScriptEngine.logLines.collect { logLines += it }
+        }
+
         val started = ScriptEngine.start(
             context = context,
             service = service,
@@ -112,6 +127,7 @@ internal class LuaScriptRunner(
             calls = (service as? RecordingRelcService)?.calls?.toList() ?: emptyList(),
             notifications = notifications.toList(),
             openedUris = openedUris.toList(),
+            logLines = logLines.toList(),
         )
     }
 
@@ -120,6 +136,7 @@ internal class LuaScriptRunner(
 
     override fun close() {
         ScriptEngine.stop()
+        scope.cancel()
         dir?.deleteRecursively()
         dir = null
     }

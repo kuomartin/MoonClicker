@@ -21,6 +21,7 @@ internal class ScriptHost(
     private val onNotify: (title: String, text: String) -> Unit,
     private val onOpenUri: (uri: String) -> Unit,
     private val onData: (key: String, value: Any?) -> Unit,
+    private val onLog: (line: String) -> Unit,
 ) {
     /** 記住每個 pointer 最後的位置，這樣 [pointerUp] 才知道要在哪裡放開。 */
     private val lastPoint = HashMap<Int, Pair<Int, Int>>()
@@ -94,6 +95,9 @@ internal class ScriptHost(
 
     @Keep
     fun setData(key: String, value: Any?) = onData(key, value)
+
+    @Keep
+    fun log(line: String) = onLog(line)
 
     /** 由 C++ 的 pushEvent 呼叫，型別對應 [com.xaxaxax.relc.engine.state.EngineEventType]。 */
     @Keep

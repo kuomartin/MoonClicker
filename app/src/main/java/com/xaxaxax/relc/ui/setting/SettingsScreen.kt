@@ -73,6 +73,12 @@ fun SettingsScreen(
     ) {
         viewModel.refreshPermissions()
     }
+    // targetSdk 37（Android 17）起，接受區網的 inbound TCP 連線需要這個 runtime permission，
+    // 不然 VS Code 端連得上 TCP 卻永遠讀不到回應。拒絕也讓開關照常打開——本機診斷用途
+    // 還是能動，只是外部連不進來，不因為這個權限擋住整個功能。
+    val localNetworkPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) {}
 
     SettingsScreenContent(
         uiState = uiState,
@@ -81,6 +87,12 @@ fun SettingsScreen(
         onRefresh = { viewModel.refreshPermissions(true) },
         onAutoOpenFullscreenChange = viewModel::setAutoOpenFullscreen,
         onAutoStartUserServiceChange = viewModel::setAutoStartUserService,
+        onWorkbenchEnabledChange = { enabled ->
+            if (enabled) {
+                localNetworkPermissionLauncher.launch("android.permission.ACCESS_LOCAL_NETWORK")
+            }
+            viewModel.setWorkbenchEnabled(enabled)
+        },
         onStartUserService = viewModel::startUserService,
         onStopUserService = viewModel::stopUserService,
         onRestartUserService = viewModel::restartUserService,
@@ -96,6 +108,7 @@ private fun SettingsScreenContent(
     onRefresh: () -> Unit,
     onAutoOpenFullscreenChange: (Boolean) -> Unit,
     onAutoStartUserServiceChange: (Boolean) -> Unit = {},
+    onWorkbenchEnabledChange: (Boolean) -> Unit = {},
     onStartUserService: () -> Unit = {},
     onStopUserService: () -> Unit = {},
     onRestartUserService: () -> Unit = {},
@@ -199,6 +212,12 @@ private fun SettingsScreenContent(
                             description = stringResource(R.string.settings_auto_fullscreen_note),
                             checked = uiState.autoOpenFullscreen,
                             onCheckedChange = onAutoOpenFullscreenChange,
+                        )
+                        ToggleSettingItem(
+                            name = stringResource(R.string.settings_workbench),
+                            description = stringResource(R.string.settings_workbench_note),
+                            checked = uiState.workbenchEnabled,
+                            onCheckedChange = onWorkbenchEnabledChange,
                         )
                     }
                 }

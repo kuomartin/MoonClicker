@@ -11,8 +11,11 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.mutableStateOf
 import androidx.core.content.ContextCompat
+import com.xaxaxax.relc.core.AppSettings
 import com.xaxaxax.relc.ui.theme.ReLCTheme
+import com.xaxaxax.relc.workbench.WorkbenchService
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
 
 /** Set on the [RelcActivity] intent to ask the nav graph to open the Scripts page. */
@@ -30,10 +33,13 @@ class RelcActivity : ComponentActivity() {
     /** 決定這次打開 App 要不要把 UserService 啟動起來。 */
     private val autoStarter: UserServiceAutoStarter by viewModels()
 
+    @Inject
+    lateinit var appSettings: AppSettings
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         autoStarter.onAppOpened()
+        reconcileWorkbenchState()
         consumeNavTarget(intent)
         requestNotificationPermissionIfNeeded()
         enableEdgeToEdge()
@@ -51,6 +57,16 @@ class RelcActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         consumeNavTarget(intent)
+    }
+
+    /**
+     * `workbenchEnabled` 只是持久化偏好，實際的前景服務可能被系統在背景殺掉而不會自動重啟
+     * （`START_STICKY` 不保證），所以每次打開 App 都依偏好值重新對帳一次——比照
+     * [UserServiceAutoStarter.onAppOpened] 對 Shizuku user service 的作法。
+     */
+    private fun reconcileWorkbenchState() {
+        if (!appSettings.workbenchEnabled.value) return
+        ContextCompat.startForegroundService(this, Intent(this, WorkbenchService::class.java))
     }
 
     private fun consumeNavTarget(intent: Intent?) {
