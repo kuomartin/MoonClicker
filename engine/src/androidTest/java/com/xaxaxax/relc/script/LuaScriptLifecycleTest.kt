@@ -47,7 +47,7 @@ class LuaScriptLifecycleTest {
 
     /**
      * 使用者按停止 → `Stopped`，**不是** `Error`。腳本被展開的方式是從阻塞呼叫裡拋
-     * Lua 錯誤，所以這兩者在引擎內部長得一模一樣；分辨它們是 ADR-0010 的承諾。
+     * Lua 錯誤，所以這兩者在引擎內部長得一模一樣；分辨它們是引擎的對外承諾。
      */
     @Test
     fun stopping_a_sleeping_script_reports_Stopped_not_Error() = withRunner { runner ->

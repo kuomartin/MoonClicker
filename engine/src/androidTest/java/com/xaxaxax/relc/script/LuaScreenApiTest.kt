@@ -12,8 +12,8 @@ import org.junit.runner.RunWith
 /**
  * `screen.*` 與「這個目標有沒有影格」的分界。
  *
- * 旋轉那一段是這個 repo 反覆出錯的地方（見 CONTEXT.md 的「Surface 空間 / 邏輯空間」與
- * ADR-0012）：影格是 surface 空間、對外座標是邏輯空間，兩者差一個直角。這裡不需要真的
+ * 旋轉那一段是這個 repo 反覆出錯的地方（見 CONTEXT.md 的「Surface 空間 / 邏輯空間」）：
+ * 影格是 surface 空間、對外座標是邏輯空間，兩者差一個直角。這裡不需要真的
  * 顯示器就能驗——native 端的換算只吃「建立時的 surface 尺寸」與「當前 rotation」兩個數字。
  */
 @RunWith(AndroidJUnit4::class)

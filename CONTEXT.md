@@ -55,15 +55,15 @@ Where a script will run: the physical screen (input only), an existing virtual d
 _Avoid_: Display id (a target is resolved *into* one, and ids do not survive a rebuild).
 
 **Engine Module**:
-The `:engine` Gradle module — the sole boundary allowed to touch native internals (the Script Engine, VisionEngine, RelcV2Service). Other modules observe it only through `EngineStateRepository`; they never reach into its internals directly. See [ADR-0006](docs/adr/0006-module-split-and-engine-facade.md).
+The `:engine` Gradle module — the sole boundary allowed to touch native internals (the Script Engine, VisionEngine, RelcV2Service). Other modules observe it only through `EngineStateRepository`; they never reach into its internals directly.
 _Avoid_: Native layer, backend module.
 
 **EngineStateRepository**:
-The Engine Module's single observable source of truth — a `StateFlow<EngineState>` aggregating run state (idle/starting/running/finished/error/stopped, with error detail), which script the state belongs to, and the latest vision result. Fed by native events rather than polled. Does not yet cover per-virtual-display state — see [ADR-0006](docs/adr/0006-module-split-and-engine-facade.md)'s scope note.
+The Engine Module's single observable source of truth — a `StateFlow<EngineState>` aggregating run state (idle/starting/running/finished/error/stopped, with error detail), which script the state belongs to, and the latest vision result. Fed by native events rather than polled. Does not yet cover per-virtual-display state: that would mean wiring `RelcV2Service`'s display bookkeeping — a separate source of truth — into the same repository, deliberately left unstarted rather than half-built.
 _Avoid_: Engine status, native state holder.
 
 **ScriptEngine**:
-The public facade over `LuaNative` (the Engine Module's JNI bridge, `internal` to `:engine`). Other modules start/stop a [[Script Folder]] and read `sharedData` (what a script publishes via the Lua `data.set` API) through this — never through `LuaNative` directly. See [ADR-0006](docs/adr/0006-module-split-and-engine-facade.md).
+The public facade over `LuaNative` (the Engine Module's JNI bridge, `internal` to `:engine`). Other modules start/stop a [[Script Folder]] and read `sharedData` (what a script publishes via the Lua `data.set` API) through this — never through `LuaNative` directly.
 _Avoid_: LuaEngineControl (its former name), the JNI bridge, LuaNative (when describing what other modules call).
 
 **ScriptHost**:

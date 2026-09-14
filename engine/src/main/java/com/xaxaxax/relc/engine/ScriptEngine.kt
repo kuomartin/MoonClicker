@@ -109,7 +109,8 @@ object ScriptEngine {
             run.hasVision,
             surfaceWidth,
             surfaceHeight,
-            // 初始 rotation 隨啟動一起傳進去（ADR-0012 兩段交接的第一段）：nativeStart 一
+            // 初始 rotation 隨啟動一起傳進去（兩段交接的第一段，第二段在
+            // DisplayRotationTracker.start）：nativeStart 一
             // 回來 Lua 執行緒可能已經在跑，這是腳本讀 screen.width 之前的最後一個時機。
             rotation,
             run.scriptDir.absolutePath,
