@@ -46,12 +46,14 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -65,10 +67,13 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.xaxaxax.relc.ui.theme.ReLCTheme
 import dagger.hilt.android.AndroidEntryPoint
 import timber.log.Timber
@@ -123,6 +128,22 @@ fun FullscreenDisplayScreen(
     val textureViewRef = remember { mutableStateOf<android.view.TextureView?>(null) }
     // 單一來源：鏡像的 Viewport 讀這一份，決定 letterbox 與內容尺寸。
     val geometry = rememberDisplayGeometry(targetDisplayId)
+
+    // issue #41：退出畫面（返回鍵、Home、或畫面上的 Exit 按鈕，onPause 一律涵蓋）時留一張
+    // 縮圖給 Displays 列表用；只在真的有鏡像畫面時才有東西可擷取。
+    val currentGeometry by rememberUpdatedState(geometry)
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, targetDisplayId) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_PAUSE) {
+                textureViewRef.value?.bitmap?.let { bitmap ->
+                    viewModel.captureThumbnail(targetDisplayId, bitmap, currentGeometry.rotation)
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     // ADR-0014：鏡像釘在 MainDisplay 的面板座標，不再跟 VD 的方向互相牽制——VD 怎麼轉
     // 是它自己的事，這個 activity 也不再把 VD 的方向鎖進 requestedOrientation。

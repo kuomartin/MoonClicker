@@ -4,12 +4,14 @@ import android.content.Context
 import android.content.res.Resources
 import android.hardware.display.DisplayManager
 import android.util.DisplayMetrics
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.xaxaxax.relc.core.DisplayConfig
 import com.xaxaxax.relc.shizuku.ShizukuConnectionStatus
 import com.xaxaxax.relc.shizuku.ShizukuManager
 import com.xaxaxax.relc.shizuku.createVirtualDisplay
+import com.xaxaxax.relc.ui.displaydetail.DisplayThumbnailCache
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -32,6 +34,7 @@ data class DisplayCardInfo(
     val width: Int,
     val height: Int,
     val densityDpi: Int,
+    val thumbnail: ImageBitmap? = null,
 )
 
 data class DisplaysUiState(
@@ -47,7 +50,8 @@ private const val REFRESH_DELAY = 500
 @HiltViewModel
 class DisplaysViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val shizukuManager: ShizukuManager
+    private val shizukuManager: ShizukuManager,
+    private val thumbnailCache: DisplayThumbnailCache,
 ) : ViewModel() {
     private val displays = MutableStateFlow<List<DisplayCardInfo>>(emptyList())
     private val isLoading = MutableStateFlow(false)
@@ -111,6 +115,8 @@ class DisplaysViewModel @Inject constructor(
                 }
                 shizukuManager.withService { service ->
                     val ids = service.virtualDisplays.toList()
+                    computeRemovedDisplayIds(displays.value.map { it.displayId }, ids)
+                        .forEach { thumbnailCache.remove(it) }
                     displays.value = withContext(Dispatchers.Default) {
                         ids.mapNotNull { id -> readDisplayCardInfo(id) }
                     }
@@ -138,6 +144,7 @@ class DisplaysViewModel @Inject constructor(
             width = metrics.widthPixels,
             height = metrics.heightPixels,
             densityDpi = metrics.densityDpi,
+            thumbnail = thumbnailCache.get(displayId),
         )
     }
 
@@ -153,7 +160,12 @@ class DisplaysViewModel @Inject constructor(
     fun destroyDisplay(displayId: Int) {
         viewModelScope.launch {
             shizukuManager.withService { service -> service.destroyVirtualDisplay(displayId) }
+            thumbnailCache.remove(displayId)
             refreshDisplays()
         }
     }
 }
+
+/** 上一輪清單裡有、這一輪沒了的 displayId——縮圖快取該一併清掉的對象。 */
+internal fun computeRemovedDisplayIds(previousIds: List<Int>, currentIds: List<Int>): Set<Int> =
+    previousIds.toSet() - currentIds.toSet()
