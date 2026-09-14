@@ -27,6 +27,10 @@
       {
         "command": "relc.push",
         "title": "ReLC: Push Script Folder to Device"
+      },
+      {
+        "command": "relc.run",
+        "title": "ReLC: Run Current Script on Device"
       }
     ]
   },

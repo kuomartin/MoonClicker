@@ -27,6 +27,20 @@ export async function pullScript(address: string, id: string, destDir: string): 
   new AdmZip(buffer).extractAllTo(destDir, true);
 }
 
+/**
+ * 觸發裝置上已同步的腳本執行（見 #61）——裝置端統一經過既有 ScriptSession，這裡只是
+ * 多一個外部呼叫入口，不建立第二條執行路徑。
+ */
+export async function runScript(address: string, id: string): Promise<void> {
+  const response = await fetch(`http://${address}/scripts/${encodeURIComponent(id)}/run`, {
+    method: "POST",
+  });
+  if (!response.ok) {
+    const reason = await response.text();
+    throw new Error(`執行失敗（HTTP ${response.status}）：${reason}`);
+  }
+}
+
 /** Push：把本機 [sourceDir] 的內容整份推回裝置上 id 對應的 Script Folder，整份覆蓋掉。 */
 export async function pushScript(address: string, id: string, sourceDir: string): Promise<void> {
   const zip = new AdmZip();
