@@ -19,6 +19,7 @@ ScriptRuntime::ScriptRuntime(JNIEnv *env, jobject host, jobject service) {
     hostMethods.setData = env->GetMethodID(hostClass, "setData",
                                            "(Ljava/lang/String;Ljava/lang/Object;)V");
     hostMethods.onEvent = env->GetMethodID(hostClass, "onEngineEvent", "(ILjava/lang/String;)V");
+    hostMethods.log = env->GetMethodID(hostClass, "log", "(Ljava/lang/String;)V");
 
     jclass serviceClass = env->GetObjectClass(serviceObj);
     addSurfaceMethodId = env->GetMethodID(serviceClass, "addVirtualDisplaySurface",

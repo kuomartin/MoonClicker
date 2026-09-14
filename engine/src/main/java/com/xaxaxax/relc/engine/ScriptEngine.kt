@@ -6,8 +6,11 @@ import com.xaxaxax.relc.engine.state.EngineStateRepository
 import com.xaxaxax.relc.lua.LuaNative
 import com.xaxaxax.relc.script.DisplayRotationTracker
 import com.xaxaxax.relc.script.ScriptHost
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import timber.log.Timber
@@ -40,6 +43,11 @@ object ScriptEngine {
 
     /** 腳本透過 Lua 的 `data.set` 發佈的鍵值。 */
     val sharedData: StateFlow<Map<String, Any>> = _sharedData.asStateFlow()
+
+    private val _logLines = MutableSharedFlow<String>(extraBufferCapacity = 64)
+
+    /** 腳本透過 Lua 的 `log(...)` 送出的每一行。 */
+    val logLines: SharedFlow<String> = _logLines.asSharedFlow()
 
     private var host: ScriptHost? = null
     private var rotationTracker: DisplayRotationTracker? = null
@@ -99,6 +107,8 @@ object ScriptEngine {
                     if (value == null) current - key else current + (key to value)
                 }
             },
+            // native 執行緒同步呼叫進來，不是 suspend context，emit 會掛住呼叫端。
+            onLog = { line -> _logLines.tryEmit(line) },
         )
         host = scriptHost
 

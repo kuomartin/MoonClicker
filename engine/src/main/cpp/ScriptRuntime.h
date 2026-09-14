@@ -34,6 +34,7 @@ struct HostMethods {
     jmethodID openUri = nullptr;    // (Ljava/lang/String;)V
     jmethodID setData = nullptr;    // (Ljava/lang/String;Ljava/lang/Object;)V
     jmethodID onEvent = nullptr;    // (ILjava/lang/String;)V
+    jmethodID log = nullptr;        // (Ljava/lang/String;)V
 };
 
 /**
