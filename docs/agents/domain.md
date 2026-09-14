@@ -29,6 +29,14 @@ When your output names a domain concept (in an issue title, a refactor proposal,
 
 If the concept you need isn't in the glossary yet, that's a signal — either you're inventing language the project doesn't use (reconsider) or there's a real gap (note it for `/domain-modeling`).
 
+## Cite ADRs by number and decision
+
+When code, a comment, or a doc points at an ADR, name the ADR and its decision — `見 ADR-0012` — and write the reasoning itself at the call site. A citation that names a passage *inside* an ADR couples the code to that ADR's shape: the ADR can no longer be tightened without breaking the citation, so the reference holds the decision record hostage. Needing to write "ADR-0012 的兩段交接那一節" is the signal that the reason belongs in the comment you are writing.
+
+When what you want is a **term** rather than a decision, cite `CONTEXT.md`. The glossary owns the vocabulary; an ADR only happens to use it.
+
+ADR numbers are an append-only ledger. A removed ADR leaves its number empty — gaps are correct, and renumbering would break the commit messages that cite them.
+
 ## Flag ADR conflicts
 
 If your output contradicts an existing ADR, surface it explicitly rather than silently overriding:
