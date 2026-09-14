@@ -8,12 +8,14 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -25,8 +27,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MediumTopAppBar
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
@@ -35,17 +39,29 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.xaxaxax.relc.shizuku.ShizukuConnectionStatus
 import com.xaxaxax.relc.ui.component.ShizukuStatusBar
 import com.xaxaxax.relc.ui.theme.ReLCTheme
+
+const val MIN_DISPLAY_DIMENSION_PX = 100
+const val MAX_DISPLAY_DIMENSION_PX = 7680
+
+fun isValidDisplayDimension(text: String): Boolean {
+    val value = text.toIntOrNull() ?: return false
+    return value in MIN_DISPLAY_DIMENSION_PX..MAX_DISPLAY_DIMENSION_PX
+}
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -62,14 +78,19 @@ fun DisplaysScreen(
 
     DisplaysScreenContent(
         uiState = uiState,
+        defaultWidth = viewModel.defaultConfig.width,
+        defaultHeight = viewModel.defaultConfig.height,
         onNavigateToDetail = onNavigateToDetail,
         onPullRefresh = { viewModel.refreshDisplays(true) },
         onShizukuAction = { viewModel.onShizukuAction() },
         onDestroyDisplay = { viewModel.destroyDisplay(it) },
+        onCreateDisplay = { width, height ->
+            viewModel.createDisplay(
+                viewModel.defaultConfig.copy(width = width, height = height)
+            )
+        },
         onFabClick = {
-            if (uiState.shizukuStatus.isConnected)
-                viewModel.createDisplay()
-            else {
+            if (!uiState.shizukuStatus.isConnected) {
                 Toast.makeText(
                     context,
                     "Shizuku permission required for create display",
@@ -84,14 +105,30 @@ fun DisplaysScreen(
 @Composable
 internal fun DisplaysScreenContent(
     uiState: DisplaysUiState,
+    defaultWidth: Int,
+    defaultHeight: Int,
     onNavigateToDetail: (String) -> Unit,
     onPullRefresh: () -> Unit,
     onShizukuAction: () -> Unit,
     onDestroyDisplay: (Int) -> Unit,
+    onCreateDisplay: (width: Int, height: Int) -> Unit,
     onFabClick: () -> Unit,
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val pullRefreshState = rememberPullToRefreshState()
+    var showCreateDialog by rememberSaveable { mutableStateOf(false) }
+
+    if (showCreateDialog) {
+        CreateDisplayDialog(
+            defaultWidth = defaultWidth,
+            defaultHeight = defaultHeight,
+            onDismiss = { showCreateDialog = false },
+            onConfirm = { width, height ->
+                showCreateDialog = false
+                onCreateDisplay(width, height)
+            }
+        )
+    }
 
     Scaffold(
         modifier = Modifier,
@@ -103,7 +140,10 @@ internal fun DisplaysScreenContent(
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = onFabClick,
+                onClick = {
+                    if (uiState.shizukuStatus.isConnected) showCreateDialog = true
+                    else onFabClick()
+                },
                 containerColor = MaterialTheme.colorScheme.primaryContainer,
                 contentColor = MaterialTheme.colorScheme.onPrimaryContainer
             ) {
@@ -186,10 +226,13 @@ private fun PreviewDisplaysScreen() {
                 ),
                 shizukuStatus = ShizukuConnectionStatus.CONNECTED,
             ),
+            defaultWidth = 1080,
+            defaultHeight = 1920,
             onNavigateToDetail = {},
             onPullRefresh = {},
             onShizukuAction = {},
             onDestroyDisplay = {},
+            onCreateDisplay = { _, _ -> },
             onFabClick = {},
         )
     }
@@ -251,4 +294,62 @@ private fun DisplayCard(
             }
         }
     }
+}
+
+@Composable
+private fun CreateDisplayDialog(
+    defaultWidth: Int,
+    defaultHeight: Int,
+    onDismiss: () -> Unit,
+    onConfirm: (width: Int, height: Int) -> Unit,
+) {
+    var widthText by rememberSaveable { mutableStateOf(defaultWidth.toString()) }
+    var heightText by rememberSaveable { mutableStateOf(defaultHeight.toString()) }
+
+    val widthValid = isValidDisplayDimension(widthText)
+    val heightValid = isValidDisplayDimension(heightText)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Create Display") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = widthText,
+                    onValueChange = { widthText = it },
+                    label = { Text("Width (px)") },
+                    isError = !widthValid,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = heightText,
+                    onValueChange = { heightText = it },
+                    label = { Text("Height (px)") },
+                    isError = !heightValid,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                )
+                Text(
+                    text = "$MIN_DISPLAY_DIMENSION_PX–$MAX_DISPLAY_DIMENSION_PX px",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(widthText.toInt(), heightText.toInt()) },
+                enabled = widthValid && heightValid
+            ) {
+                Text("Create")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }
