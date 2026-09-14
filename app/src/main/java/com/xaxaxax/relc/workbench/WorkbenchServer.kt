@@ -1,5 +1,6 @@
 package com.xaxaxax.relc.workbench
 
+import com.xaxaxax.relc.engine.ScriptEngine
 import com.xaxaxax.relc.script.Script
 import com.xaxaxax.relc.script.ScriptArchive
 import com.xaxaxax.relc.script.ScriptSession
@@ -29,11 +30,15 @@ import java.net.Inet4Address
 import java.net.NetworkInterface
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import timber.log.Timber
 
 /**
@@ -53,6 +58,16 @@ interface ScriptRunner {
     fun start(script: Script)
 }
 
+/**
+ * log/data 即時串流需要的最小介面（見 #62）。真正實作直接轉呼叫全域單例
+ * [ScriptEngine]；存在這一層是為了讓 `workbenchModule` 的 JVM 測試餵假的
+ * flow，不用真的跑一次原生引擎才能發出 log/data 事件。
+ */
+interface ScriptStream {
+    val logLines: Flow<String>
+    val sharedData: StateFlow<Map<String, Any>>
+}
+
 @Singleton
 class WorkbenchServer @Inject constructor(
     private val scriptStore: ScriptStore,
@@ -61,6 +76,11 @@ class WorkbenchServer @Inject constructor(
     private val scriptRunner = object : ScriptRunner {
         override fun isRunning() = scriptSession.state.value.isRunning
         override fun start(script: Script) = scriptSession.start(script)
+    }
+
+    private val scriptStream = object : ScriptStream {
+        override val logLines: Flow<String> get() = ScriptEngine.logLines
+        override val sharedData: StateFlow<Map<String, Any>> get() = ScriptEngine.sharedData
     }
 
     private var server: EmbeddedServer<*, *>? = null
@@ -85,7 +105,7 @@ class WorkbenchServer @Inject constructor(
                 CIO,
                 port = PORT,
                 host = host,
-                module = { workbenchModule(scriptsRoot, scriptRunner) },
+                module = { workbenchModule(scriptsRoot, scriptRunner, scriptStream) },
             ).start(wait = false)
             _address.value = "$host:$PORT"
             true
@@ -135,19 +155,37 @@ data class WorkbenchScriptSummary(val id: String, val name: String)
  * [scriptsRoot] 拆成參數而不是內部自己算，是為了比照 [ScriptStore.scan] 的作法，讓
  * `WorkbenchServerTest` 能直接餵一個暫存目錄進來，不需要 Hilt 或真的 Android Context。
  */
-fun Application.workbenchModule(scriptsRoot: File, scriptRunner: ScriptRunner) {
+fun Application.workbenchModule(
+    scriptsRoot: File,
+    scriptRunner: ScriptRunner,
+    scriptStream: ScriptStream,
+) {
     install(WebSockets)
     routing {
         get("/health") {
             call.respondText("OK")
         }
-        // Milestone 1 只驗證「連線建立/斷開本身」（見 #57），業務路由（執行/log 串流）
-        // 是後續票的範圍——先用 echo 讓 extension 端能驗證連線確實是雙向可用的 WebSocket。
+        // log + data.set 即時串流（見 #62），外加保留 #57 用來驗證連線本身的 echo。
+        //
+        // data 用 sharedData 這個 StateFlow 的訂閱語意天生就有「重連重送目前快照」的效果——
+        // 新的 collector 一訂閱就會先拿到目前值，不需要另外記錄「上次送過什麼」。
+        // log 是 logLines 這個 SharedFlow，live-only，斷線期間錯過的行不補、不維護歷史 buffer。
         webSocket("/") {
-            for (frame in incoming) {
-                if (frame is Frame.Text) {
-                    send(Frame.Text(frame.readText()))
+            val dataJob = launch {
+                scriptStream.sharedData.collect { send(Frame.Text(dataEnvelope(it))) }
+            }
+            val logJob = launch {
+                scriptStream.logLines.collect { send(Frame.Text(logEnvelope(it))) }
+            }
+            try {
+                for (frame in incoming) {
+                    if (frame is Frame.Text) {
+                        send(Frame.Text(frame.readText()))
+                    }
                 }
+            } finally {
+                dataJob.cancel()
+                logJob.cancel()
             }
         }
 
@@ -200,4 +238,25 @@ fun Application.workbenchModule(scriptsRoot: File, scriptRunner: ScriptRunner) {
             call.respondText("Started", status = HttpStatusCode.Accepted)
         }
     }
+}
+
+/** `{"type":"log","line":"..."}`——extension 端不用猜形狀就能用 `type` 正確路由。 */
+private fun logEnvelope(line: String): String =
+    JsonObject(mapOf("type" to JsonPrimitive("log"), "line" to JsonPrimitive(line))).toString()
+
+/** `{"type":"data","data":{...}}`，每次變動送整個 map，不算 diff。 */
+private fun dataEnvelope(data: Map<String, Any>): String =
+    JsonObject(
+        mapOf(
+            "type" to JsonPrimitive("data"),
+            "data" to JsonObject(data.mapValues { (_, value) -> value.toJsonPrimitive() }),
+        )
+    ).toString()
+
+/** `ScriptEngine.sharedData` 的值只會是 Double/String/Boolean（table 在引擎端已經 JSON 字串化）。 */
+private fun Any.toJsonPrimitive(): JsonPrimitive = when (this) {
+    is Double -> JsonPrimitive(this)
+    is Boolean -> JsonPrimitive(this)
+    is String -> JsonPrimitive(this)
+    else -> JsonPrimitive(toString())
 }

@@ -16,6 +16,11 @@ export function activate(context: vscode.ExtensionContext): void {
   statusBarItem.show();
   renderStatusBar({ status: "disconnected" });
 
+  // log 面板持續累加；data 面板每次都整份重畫成目前快照，不是逐筆 append——
+  // 裝置端每次變動送的就是整個 map，不是 diff（見 #62）。
+  const logChannel = vscode.window.createOutputChannel("ReLC Script Log");
+  const dataChannel = vscode.window.createOutputChannel("ReLC Script Data");
+
   connection.onDidChangeState((state) => {
     renderStatusBar(state);
     if (state.status === "error") {
@@ -23,8 +28,19 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   });
 
+  connection.onDidReceiveStreamEvent((event) => {
+    if (event.type === "log") {
+      logChannel.appendLine(event.line);
+    } else {
+      dataChannel.clear();
+      dataChannel.appendLine(JSON.stringify(event.data, null, 2));
+    }
+  });
+
   context.subscriptions.push(
     statusBarItem,
+    logChannel,
+    dataChannel,
     vscode.commands.registerCommand("relc.connect", connectCommand),
     vscode.commands.registerCommand("relc.disconnect", () => connection?.disconnect()),
     vscode.commands.registerCommand("relc.pull", pullCommand),
