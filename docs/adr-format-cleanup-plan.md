@@ -13,7 +13,8 @@ step (2)。
 1. **0006 直接移除**（不改標題、不改檔名）
 2. **0009 改標題**：拿掉 `ADR-0009:` 前綴，與其餘篇章一致
 3. **0007 的「Simple Script 錄製/編輯無替代方案」直接刪除**，不開 issue
-4. **0012 的改動排在 step (2) 之後**
+4. ~~0012 的改動排在 step (2) 之後~~ — **前置條件已解除**：那段護欄已經在程式碼裡，
+   八篇可以一起做。見 [step (2)](adr-format-cleanup-step2.md)
 5. **0007 只保留結論**
 6. **0009 移除 `Considered Options`**
 7. **0013 只保留結論**：描述該怎麼做，不敘述舊版本的狀況
@@ -31,12 +32,12 @@ step (2)。
 |---|---|---|---|
 | 0006 | 15 | **移除** | 活內容已在 `CONTEXT.md:58/:62/:66` |
 | 0007 | 21 | ~9 | 只留結論；行程存活陷阱移進程式碼 |
-| 0008 | 11 | ~9 | **建議保留**（見下） |
-| 0009 | 33 | ~9 | 改標題；兩個否決理由移進 build 腳本註解 |
-| 0010 | 34 | ~11 | 只留結論；Stopped/Error 承諾移進測試 |
+| 0008 | 11 | ~9 | 保留（見下）；¶3 已過期 |
+| 0009 | 33 | ~9 | 改標題；否決理由與後果**已在** build 腳本與測試檔 |
+| 0010 | 34 | ~11 | 只留結論；Stopped/Error 承諾**已在**測試 |
 | 0011 | 32 | ~9 | 只留結論；兩節已在 `lua-api.md` |
-| 0012 | 78 | ~9 | 護欄移進程式碼；一節已過期 |
-| 0013 | 72 | ~9 | 只留結論；兩個替代方案移進程式碼 |
+| 0012 | 78 | ~9 | 護欄**已在**程式碼；一節已過期 |
+| 0013 | 72 | ~9 | 只留結論；實作與成本論證**已在** `VisionMatcher.cpp` |
 
 296 → ~65 行。
 
@@ -125,7 +126,7 @@ Accepted.
 | ¶1 刪除範圍 | 留下，壓縮 |
 | ¶2 「deliberately blunt call」 | 併進決定句 |
 | ¶2 尾「選擇/執行腳本沒有替代 UI」 | **刪除** — issue #5 已追蹤 |
-| ¶3 `app/.../script/simple/*` 同名但無共用程式碼 | **移進程式碼註解** → step (2) |
+| ¶3 `app/.../script/simple/*` 同名但無共用程式碼 | **刪除 — 已過期**。`script/simple/*` 已於 `9dc6e82`（2026-09-12）刪除，比本 ADR 晚兩天，護欄保護的程式碼已不存在 |
 
 **為什麼建議留**，對照 `ADR-FORMAT.md` 的三個條件：
 
@@ -156,17 +157,17 @@ Accepted，2026-09-11。相關：[issue #18](https://github.com/kuomartin/ReLC/i
 | 狀態/日期/相關 三行 header | **併入 `## Status`**；`ADR-0006` 連結隨 0006 移除 |
 | `## 背景`（#16 誤判的往事） | **刪除** — 舊版本狀況，裁示 7 |
 | `## 決策` | 留下 |
-| 為什麼不放 `:hidden-api`（bootclasspath 會綠燈） | **移進 `hidden-api-contract/build.gradle.kts` 註解** → step (2) |
-| 為什麼不放 `:engine`（78.8 MB → 1.7 MB） | **同上** |
-| 後果 · `androidTestCompileOnly` 機制 | **同上** |
-| 後果 · JLS 13.1 常數 inline、故表用 Java 寫 | **移進 `VirtualDisplayFlagTable.java` 註解** → step (2) |
-| 後果 · 以 app UID 執行，只驗存在不驗可呼叫 | **移進 `HiddenApiContracts.kt` 註解** → step (2) |
-| 後果 · 新增 stub 要同步加一筆 | **同上** |
+| 為什麼不放 `:hidden-api`（bootclasspath 會綠燈） | **刪除 — 已在** `hidden-api-contract/build.gradle.kts:10-12` |
+| 為什麼不放 `:engine`（78.8 MB → 1.7 MB） | **刪除 — 已在**同檔 `:13-15` |
+| 後果 · `androidTestCompileOnly` 機制 | **刪除 — 已在**同檔 `:110-113` |
+| 後果 · JLS 13.1 常數 inline、故表用 Java 寫 | **刪除 — 已在** `VirtualDisplayFlagTable.java:13-22`，寫得比 ADR 完整 |
+| 後果 · 以 app UID 執行，只驗存在不驗可呼叫 | **刪除** — build 設定與測試本身可見 |
+| 後果 · 新增 stub 要同步加一筆 | **刪除 — 已在** `HiddenApiContracts.kt:11` |
 | 後果 · 這批慢，分開跑 | **刪除** — build 設定可見 |
 
-> 裁示 6 拿掉 `Considered Options`，但「放進 `:hidden-api` 會拿平台驗平台而且**綠燈**」是整批
-> ADR 裡最強的一條反直覺護欄——一定會有人想把測試搬回去。它的去處是
-> `hidden-api-contract/build.gradle.kts`：想搬的人就是會看那個檔案。
+> 裁示 6 拿掉 `Considered Options` 是安全的：「放進 `:hidden-api` 會拿平台驗平台而且**綠燈**」
+> 這條反直覺護欄**已經寫在 `hidden-api-contract/build.gradle.kts` 的檔頭**，而想把測試搬回去
+> 的人就是會打開那個檔案。ADR 這邊是複製品，不是唯一所在。
 
 ## 0010（34 → ~11）
 
@@ -193,7 +194,7 @@ Accepted.
 | ¶1 v2 的兩套模型 | **刪除** — 舊版本狀況，裁示 7（理由壓成決定句的尾巴） |
 | ¶2 v3 只留線性模型 | 留下，改為現在式 |
 | `## 實作上的簡化` · coroutine 拿掉、condition variable | **刪除** — 實作細節 |
-| `## 實作上的簡化` · 主動停止回報 `Stopped` 而非 `Error` | **移進測試註解**（`LuaScriptLifecycleTest.kt`）→ step (2)。行為契約，該測試正在驗它 |
+| `## 實作上的簡化` · 主動停止回報 `Stopped` 而非 `Error` | **刪除 — 已在** `LuaScriptLifecycleTest.kt:47-50`，該測試正在驗它 |
 | ¶ 比對改成隨需執行 | **刪除** — 已由 ADR-0013 與 `CONTEXT.md` 承載 |
 | `## 代價` | **升為 `Consequences`** — 是現在式後果，不是舊版敘事 |
 
@@ -219,7 +220,7 @@ Accepted。取代 [ADR-0002](0002-lua-as-scripting-engine.md) 所描述 API 面�
 | `## 隨之而來的約束：實體螢幕沒有畫面辨識` | **刪除** — `docs/lua-api.md:48/:70/:188` 已完整記載（已驗證） |
 | `## script.json 存的是尺寸，不是 displayId` | **待確認** — `lua-api.md` 是否已載明 `script.json` 的 `display` 欄位語意？未載明則移進該文件 → step (2) |
 
-## 0012（78 → ~9）— 排在 step (2) 之後
+## 0012（78 → ~9）
 
 ````md
 # Surface 尺寸由服務擁有，不由呼叫端回推
@@ -245,11 +246,12 @@ Accepted。與 [ADR-0011](0011-scripts-do-not-own-displays.md) 一致——腳�
 | `## 沒有新測試，這是刻意的` | **刪除** — 關於「這次變更」的後設評論 |
 | `## 名字與旋轉不記在這裡` · 名字 | **刪除** |
 | `## 名字與旋轉不記在這裡` · 旋轉是活狀態 | **併入 CONTEXT.md** → step (2) |
-| `## rotation 讀兩次是對的，不要合併` | **移進程式碼註解**（`ScriptEngine.kt:112`、`DisplayRotationTracker.kt:31`）→ step (2) |
+| `## rotation 讀兩次是對的，不要合併` | **刪除 — 已在程式碼**（`ScriptEngine.kt:112-113`、`DisplayRotationTracker.kt:31-36`，含「順序不能對調」）。只有「曾被重複發現一次」那句是 ADR 獨有，屬開發過程敘事 |
 | `## 已知的同類問題（另案處理）` | **刪除 — 已過期**。commit `4f93246` 已修，`matchesSize` 現在直接比對 `getDisplaySurfaceSize`（已驗證 `ScriptSession.kt:158-161`） |
 
-> ⚠️ **本檔最高風險項**。`## rotation 讀兩次是對的，不要合併` 自己記載著這份知識**已經遺失
-> 過一次**。它必須先落地到那兩個程式碼註解，**才能**從 ADR 刪除。
+> 我先前把 `## rotation 讀兩次是對的，不要合併` 標為「最高風險項、必須先落地才能刪」。
+> 查證後那是錯的：完整推理（含「順序不能對調——`nativeSetDisplayRotation` 在 `nativeStart`
+> 之前是空操作」）早已在那兩個檔案裡，寫得比 ADR 完整。0012 沒有前置條件。
 
 ## 0013（72 → ~9）
 
@@ -270,9 +272,9 @@ Accepted。
 |---|---|
 | `## 脈絡`（承諾有個洞、沒測試覆蓋才沒發現） | **刪除** — 舊版本狀況，裁示 7；理由壓成決定句的破折號子句 |
 | `## 決定` | 留下 |
-| `## 目前的實作機制（不凍結）` · `templateFor`、快取鍵、方向推導 | **移進程式碼註解**（`VisionMatcher.cpp`，該處已有半段）→ step (2) |
-| `## 目前的實作機制` · 轉模板 vs 轉影格成本表 | **同上** — 連同「成本反轉時換過去不違反本 ADR」那句 |
-| `## 不在 GlesDistributor 轉` 三個理由 | **同上** |
+| `## 目前的實作機制（不凍結）` · `templateFor`、快取鍵、方向推導 | **刪除 — 已在** `VisionMatcher.cpp:96-102` |
+| `## 目前的實作機制` · 轉模板 vs 轉影格成本表 | **刪除 — 已在**同處（`:101-102`） |
+| `## 不在 GlesDistributor 轉` 三個理由 | **刪除** — 其中「鏡像已自己反旋轉」即將被 ADR-0014 改寫依據，且該否決從未有人重提 |
 | `## 後果` · 一張模板服務所有方向 | **刪除** — 決定本身的重述 |
 | `## 後果` · scale 不是尺度不變 | **刪除** — `docs/lua-api.md:38` 已載明（已驗證） |
 | `## 後果` · 快取條目數 ×4 | **刪除** — 作者自評「可忽略」 |
@@ -280,18 +282,15 @@ Accepted。
 
 ---
 
-## 仍待確認
+## 已全部確認
 
-1. **0008 保留還是移除？** 我建議保留（理由見該節）。
-2. **0007 的行程存活陷阱**：移進 `ScriptStatusNotifier.kt` 註解，還是連同一起刪？
-   我建議前者——那是現在出貨的行為。
-3. **裁示 7 是否套用到 0010、0011？** 本提案已套用。
-4. **0011 的 `script.json` 存尺寸**：確認 `lua-api.md` 是否已載明。
+1. **0008 保留**
+2. **0007 的行程存活陷阱移進 `ScriptStatusNotifier.kt` 註解**（step (2) A2）
+3. **裁示 7 套用到 0010、0011**
+4. **`script.json`**：`docs/lua-api.md:222-232` 已載明 `display` 綱要（width/height/densityDpi），
+   但沒有「為何存尺寸不存 id」。該句移進 `ScriptTarget.kt`（step (2) A1）
 
 ## 不在本文件範圍
 
-- commit message：**永不修改**（已推送、全部以編號引用）
-- 修復指向 ADR 內部或指向被刪 ADR 的引用
-- 上表所有標記「→ step (2)」的新註解與文件
-
-以上全部是 step (2)。
+commit message **永不修改**（已推送、全部以編號引用）。引用修復與兩處新增註解見
+[step (2)](adr-format-cleanup-step2.md)。
