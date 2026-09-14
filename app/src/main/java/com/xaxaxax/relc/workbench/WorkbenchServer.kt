@@ -1,18 +1,27 @@
 package com.xaxaxax.relc.workbench
 
+import com.xaxaxax.relc.script.ScriptArchive
+import com.xaxaxax.relc.script.ScriptStore
+import io.ktor.http.ContentType
+import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
 import io.ktor.server.application.call
 import io.ktor.server.application.install
 import io.ktor.server.cio.CIO
 import io.ktor.server.engine.EmbeddedServer
 import io.ktor.server.engine.embeddedServer
+import io.ktor.server.request.receiveStream
+import io.ktor.server.response.respondBytes
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
+import io.ktor.server.routing.put
 import io.ktor.server.routing.routing
 import io.ktor.server.websocket.WebSockets
 import io.ktor.server.websocket.webSocket
 import io.ktor.websocket.Frame
 import io.ktor.websocket.readText
+import java.io.ByteArrayOutputStream
+import java.io.File
 import java.net.Inet4Address
 import java.net.NetworkInterface
 import javax.inject.Inject
@@ -20,6 +29,8 @@ import javax.inject.Singleton
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 import timber.log.Timber
 
 /**
@@ -30,7 +41,9 @@ import timber.log.Timber
  * milestone 1 沒有配對驗證（見 #53 Out of Scope），這是已知、記錄在案的風險，不是這裡能修的漏洞。
  */
 @Singleton
-class WorkbenchServer @Inject constructor() {
+class WorkbenchServer @Inject constructor(
+    private val scriptStore: ScriptStore,
+) {
     private var server: EmbeddedServer<*, *>? = null
 
     private val _address = MutableStateFlow<String?>(null)
@@ -48,11 +61,12 @@ class WorkbenchServer @Inject constructor() {
             // 連線停在 ESTABLISHED 卻永遠讀不到資料——loopback 走純 IPv4 不會踩到，跨裝置走
             // WiFi 才會。直接 bind 裝置在區網上的實際 IPv4 位址，繞開 wildcard 的雙棧歧義。
             val host = localIpv4Address()
+            val scriptsRoot = scriptStore.root
             server = embeddedServer(
                 CIO,
                 port = PORT,
                 host = host,
-                module = Application::workbenchModule,
+                module = { workbenchModule(scriptsRoot) },
             ).start(wait = false)
             _address.value = "$host:$PORT"
             true
@@ -95,19 +109,59 @@ class WorkbenchServer @Inject constructor() {
     }
 }
 
-fun Application.workbenchModule() {
+@Serializable
+data class WorkbenchScriptSummary(val id: String, val name: String)
+
+/**
+ * [scriptsRoot] 拆成參數而不是內部自己算，是為了比照 [ScriptStore.scan] 的作法，讓
+ * `WorkbenchServerTest` 能直接餵一個暫存目錄進來，不需要 Hilt 或真的 Android Context。
+ */
+fun Application.workbenchModule(scriptsRoot: File) {
     install(WebSockets)
     routing {
         get("/health") {
             call.respondText("OK")
         }
-        // Milestone 1 只驗證「連線建立/斷開本身」（見 #57），業務路由（同步/執行/log 串流）
+        // Milestone 1 只驗證「連線建立/斷開本身」（見 #57），業務路由（執行/log 串流）
         // 是後續票的範圍——先用 echo 讓 extension 端能驗證連線確實是雙向可用的 WebSocket。
         webSocket("/") {
             for (frame in incoming) {
                 if (frame is Frame.Text) {
                     send(Frame.Text(frame.readText()))
                 }
+            }
+        }
+
+        // Script Folder 雙向同步（見 #58）。三個路由都直接吃/還純 zip bytes，不用
+        // multipart——一次同步就是一份完整的資料夾內容，沒有欄位要拆。
+        get("/scripts") {
+            val scripts = ScriptStore.scan(scriptsRoot).map { WorkbenchScriptSummary(it.id, it.name) }
+            call.respondText(Json.encodeToString(scripts), ContentType.Application.Json)
+        }
+
+        // Pull：把裝置上的 Script Folder 打包成 zip 讓 extension 端下載展開到本機專案。
+        get("/scripts/{id}/export") {
+            val script = call.parameters["id"]?.let { id -> ScriptStore.scan(scriptsRoot).find { it.id == id } }
+            if (script == null) {
+                call.respondText("Script not found", status = HttpStatusCode.NotFound)
+                return@get
+            }
+            val bytes = ByteArrayOutputStream().also { ScriptArchive.export(script, it) }.toByteArray()
+            call.respondBytes(bytes, ContentType.Application.Zip)
+        }
+
+        // Push：extension 端把本機編輯完的 zip 推回來，整份覆蓋掉裝置上同 id 的資料夾——
+        // milestone 1 是單向覆蓋語意，不做多人衝突解決（見 #53 Out of Scope）。
+        put("/scripts/{id}/import") {
+            val id = call.parameters["id"]
+            if (id.isNullOrBlank()) {
+                call.respondText("Missing script id", status = HttpStatusCode.BadRequest)
+                return@put
+            }
+            when (val result = ScriptArchive.replace(call.receiveStream(), scriptsRoot, id)) {
+                is ScriptArchive.ImportResult.Imported -> call.respondText("OK")
+                is ScriptArchive.ImportResult.Failed ->
+                    call.respondText(result.reason, status = HttpStatusCode.BadRequest)
             }
         }
     }
