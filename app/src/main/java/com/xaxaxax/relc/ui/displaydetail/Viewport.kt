@@ -18,24 +18,30 @@ data class Viewport(
     val contentHeight: Float,
     /** 邏輯座標 → view 座標的縮放比。 */
     val scale: Float,
-    /** 邏輯顯示相對於自然方向轉了幾個直角（`Surface.ROTATION_*`，0..3）。 */
-    val quarterTurns: Int,
+    /**
+     * MainDisplay（display 0）相對自然方向轉了幾個直角（`Surface.ROTATION_*`，0..3）。
+     *
+     * ADR-0014：VD 自己的 rotation 不影響它的 buffer 尺寸（`DisplayGeometry.surfaceWidth`
+     * 建立後不隨旋轉改變），只影響畫進那個固定畫布裡的內容朝向；決定內容矩形的 letterbox
+     * 尺寸、以及套在鏡像 view 上的反向旋轉的，只有 d。
+     */
+    val d: Int,
 ) {
     /** 沒有可畫的內容 —— 虛擬顯示尺寸未知，或 view 尚未 measure。 */
     val isEmpty: Boolean get() = contentWidth <= 0f || contentHeight <= 0f
 
-    /** 邏輯顯示相對於自然方向是否轉了直角（長寬因此互換）。 */
-    val isQuarterTurned: Boolean get() = isQuarterTurn(quarterTurns)
+    /** d 是否轉了直角（長寬因此互換）。 */
+    val isDQuarterTurned: Boolean get() = isQuarterTurn(d)
 
-    /** 要套用到鏡像 view 的旋轉角度，用於把 surface 空間裡躺著的內容扶正。 */
-    val viewRotationDegrees: Float get() = -(quarterTurns * 90f)
+    /** 要套用到鏡像 view 的旋轉角度，用於抵銷系統對整個 view 空間套的 d 旋轉，把鏡像釘在面板座標。 */
+    val viewRotationDegrees: Float get() = -(d * 90f)
 
     /**
      * 鏡像 view **未旋轉時**的佈局尺寸。旋轉 90/270 後外接矩形長寬互換，
      * 因此這裡要先互換，套上 [viewRotationDegrees] 之後才剛好蓋住內容矩形。
      */
-    val unrotatedWidth: Float get() = if (isQuarterTurned) contentHeight else contentWidth
-    val unrotatedHeight: Float get() = if (isQuarterTurned) contentWidth else contentHeight
+    val unrotatedWidth: Float get() = if (isDQuarterTurned) contentHeight else contentWidth
+    val unrotatedHeight: Float get() = if (isDQuarterTurned) contentWidth else contentHeight
 
     /**
      * 一個 view 像素對應多少邏輯像素 —— 座標變換的**唯一**來源。
@@ -69,7 +75,11 @@ data class Viewport(
             viewY >= contentTop && viewY <= contentTop + contentHeight
 }
 
-/** 虛擬顯示**邏輯空間**中的一點，即 `injectMotionEvent` 使用的座標系。 */
+/**
+ * VD **buffer 空間**中的一點——[Viewport] 不知道 v（VD 自己的 rotation），只知道 d，所以這裡
+ * 停在 buffer 的原始座標系。`injectMotionEvent` 要的是 VD 目前的**邏輯空間**（隨 v 互換長寬），
+ * 那一層 v 旋轉不在 [Viewport] 裡，由 `VirtualDisplayMirror.kt` 的 `touchTransform` 疊加。
+ */
 data class DisplayPoint(val x: Float, val y: Float)
 
 /** 鏡像容器 view 座標空間中的一點。 */
@@ -77,19 +87,20 @@ data class ViewPoint(val x: Float, val y: Float)
 
 /**
  * @param surfaceWidth 虛擬顯示**建立時**的尺寸，不隨旋轉改變（`Display.getMode()`）。
- * @param rotation `Surface.ROTATION_*` 語意：邏輯顯示相對於自然方向的旋轉。
+ * @param d MainDisplay（display 0）的 `Surface.ROTATION_*`；決定鏡像在面板座標中的 letterbox
+ *   尺寸與反向旋轉，跟 VD 自己的 rotation 無關（見 [Viewport.d]）。
  */
 fun viewportOf(
     surfaceWidth: Int,
     surfaceHeight: Int,
-    rotation: Int,
+    d: Int,
     viewWidth: Int,
     viewHeight: Int,
 ): Viewport {
-    val quarterTurns = rotation and 3
-    // 旋轉 90/270 時邏輯顯示的長寬互換，但 surface 尺寸不變——內容是被旋轉「進」
-    // 那個固定尺寸的 surface。
-    val turned = isQuarterTurn(quarterTurns)
+    val dTurns = d and 3
+    // 旋轉 90/270 時鏡像在面板上的外接矩形長寬互換，但 VD 的 buffer 尺寸不變——
+    // 互換的是我們套的 -d·90 之後的落地形狀，不是 surface 本身。
+    val turned = isQuarterTurn(dTurns)
     val logicalWidth = (if (turned) surfaceHeight else surfaceWidth).toFloat()
     val logicalHeight = (if (turned) surfaceWidth else surfaceHeight).toFloat()
 
@@ -107,12 +118,28 @@ fun viewportOf(
         contentWidth = width,
         contentHeight = height,
         scale = scale,
-        quarterTurns = quarterTurns,
+        d = dTurns,
     )
 }
 
 internal fun isQuarterTurn(quarterTurns: Int): Boolean =
     quarterTurns == 1 || quarterTurns == 3
+
+/**
+ * buffer 空間中的一點旋轉 [quarterTurns] 個直角（`Surface.ROTATION_*`，VD 自己的 rotation）
+ * 到 VD 目前的邏輯空間，即 `injectMotionEvent` 要的座標系。
+ *
+ * 跟 `VirtualDisplayMirror.kt` 的 `quarterTurnMatrix` 是同一個仿射變換寫成兩份——那邊要用
+ * `android.graphics.Matrix` 才能餵給 `MotionEvent.transform()`，這裡是它的純 Kotlin 版本，
+ * 供測試把四個方向的公式釘住（`Matrix` 在 `app/src/test` 會丟 `not mocked`）。
+ */
+internal fun rotateToLogical(px: Float, py: Float, width: Float, height: Float, quarterTurns: Int): DisplayPoint =
+    when (quarterTurns and 3) {
+        1 -> DisplayPoint(py, width - px)
+        2 -> DisplayPoint(width - px, height - py)
+        3 -> DisplayPoint(height - py, px)
+        else -> DisplayPoint(px, py)
+    }
 
 private val EMPTY_VIEWPORT = Viewport(
     contentLeft = 0f,
@@ -120,5 +147,5 @@ private val EMPTY_VIEWPORT = Viewport(
     contentWidth = 0f,
     contentHeight = 0f,
     scale = 0f,
-    quarterTurns = 0,
+    d = 0,
 )

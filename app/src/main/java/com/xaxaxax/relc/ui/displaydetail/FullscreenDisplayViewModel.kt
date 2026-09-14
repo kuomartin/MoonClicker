@@ -58,24 +58,6 @@ class FullscreenDisplayViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(isReadOnly = !_uiState.value.isReadOnly)
     }
 
-    /**
-     * 把感測器方向推給虛擬顯示（方向鏈環節一）。
-     *
-     * 「設了但方向沒變」是設計預期而非錯誤——虛擬顯示裡的 app 若宣告了方向，
-     * WindowManager 會忽略我們，因此不對使用者提示。
-     */
-    fun setDisplayRotation(displayId: Int, rotation: Int) {
-        // 不能用 viewModelScope：離開全螢幕時的還原是在拆除期間發出的，那時 scope 已被取消，
-        // launch 不會執行，還原就永遠送不出去。
-        rotationScope.launch {
-            shizukuManager.withService { service ->
-                if (!service.setDisplayRotation(displayId, rotation)) {
-                    Timber.w("setDisplayRotation($displayId, $rotation) reported failure")
-                }
-            }
-        }
-    }
-
     fun startCropping() {
         _uiState.value = _uiState.value.copy(executionState = ExecutionState.CROPPING)
     }
@@ -199,12 +181,3 @@ class FullscreenDisplayViewModel @Inject constructor(
     }
 
 }
-
-/**
- * 專供旋轉寫入使用的耐久 scope。這些是冪等的 fire-and-forget 呼叫，且其中一個必須
- * 在 ViewModel 拆除之後仍然送得出去（見 [FullscreenDisplayViewModel.setDisplayRotation]）。
- */
-private val rotationScope =
-    kotlinx.coroutines.CoroutineScope(
-        kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO
-    )
