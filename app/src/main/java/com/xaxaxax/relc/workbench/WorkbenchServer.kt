@@ -12,6 +12,9 @@ import java.net.Inet4Address
 import java.net.NetworkInterface
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import timber.log.Timber
 
 /**
@@ -25,6 +28,11 @@ import timber.log.Timber
 class WorkbenchServer @Inject constructor() {
     private var server: EmbeddedServer<*, *>? = null
 
+    private val _address = MutableStateFlow<String?>(null)
+
+    /** 目前監聽的 "ip:port"，供 QR code 配對顯示；server 未啟動時是 null。 */
+    val address: StateFlow<String?> = _address.asStateFlow()
+
     /** @return 是否成功啟動——bind 失敗（例如 port 被佔用）時回傳 false，不讓例外往外拋。 */
     fun start(): Boolean {
         if (server != null) return true
@@ -34,17 +42,28 @@ class WorkbenchServer @Inject constructor() {
             // 來源是 IPv4-mapped-IPv6 位址」的 channel 會漏掉第一次 OP_READ 就緒事件，導致
             // 連線停在 ESTABLISHED 卻永遠讀不到資料——loopback 走純 IPv4 不會踩到，跨裝置走
             // WiFi 才會。直接 bind 裝置在區網上的實際 IPv4 位址，繞開 wildcard 的雙棧歧義。
+            val host = localIpv4Address()
             server = embeddedServer(
                 CIO,
                 port = PORT,
-                host = localIpv4Address(),
+                host = host,
                 module = Application::workbenchModule,
             ).start(wait = false)
+            _address.value = "$host:$PORT"
             true
         } catch (t: Throwable) {
             Timber.e(t, "WorkbenchServer failed to bind port $PORT")
             false
         }
+    }
+
+    /**
+     * 重新計算目前的區網 IPv4 位址（例如切換 WiFi 網路後）並更新 [address]；server 沒在跑
+     * 就不做事——避免在還沒 start() 之前把 address 誤設成一個其實沒人在監聽的位址。
+     */
+    fun refreshAddress() {
+        if (server == null) return
+        _address.value = "${localIpv4Address()}:$PORT"
     }
 
     /**
@@ -63,6 +82,7 @@ class WorkbenchServer @Inject constructor() {
     fun stop() {
         server?.stop()
         server = null
+        _address.value = null
     }
 
     companion object {

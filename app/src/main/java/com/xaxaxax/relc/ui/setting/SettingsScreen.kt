@@ -2,6 +2,7 @@ package com.xaxaxax.relc.ui.setting
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -46,6 +47,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.painterResource
@@ -59,6 +61,7 @@ import com.xaxaxax.relc.shizuku.ShizukuConnectionStatus
 import com.xaxaxax.relc.ui.component.Section
 import com.xaxaxax.relc.ui.component.shizukuStatusAppearance
 import com.xaxaxax.relc.ui.theme.ReLCTheme
+import com.xaxaxax.relc.workbench.QrCodeGenerator
 
 typealias HealthCheckActions = List<Pair<String, () -> Unit>>
 
@@ -219,6 +222,9 @@ private fun SettingsScreenContent(
                             checked = uiState.workbenchEnabled,
                             onCheckedChange = onWorkbenchEnabledChange,
                         )
+                        if (uiState.workbenchEnabled) {
+                            WorkbenchQrCode(address = uiState.workbenchAddress)
+                        }
                     }
                 }
 
@@ -390,6 +396,46 @@ private fun ToggleSettingItem(
             )
         }
         Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+/**
+ * Server 開啟後才顯示（見呼叫端），[address] 是 server 目前 bind 到的位址；bind 還在進行中
+ * （或者剛好卡在失敗邊緣）會是 null，此時顯示文字提示而不是空白或過期的 QR code。
+ */
+@Composable
+private fun WorkbenchQrCode(address: String?) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 12.dp),
+    ) {
+        if (address != null) {
+            val qrBitmap = remember(address) {
+                QrCodeGenerator.toBitmap(QrCodeGenerator.encode(address)).asImageBitmap()
+            }
+            Image(
+                bitmap = qrBitmap,
+                contentDescription = stringResource(R.string.settings_workbench_qr_description),
+                modifier = Modifier
+                    .size(200.dp)
+                    .align(Alignment.CenterHorizontally),
+            )
+            Text(
+                text = address,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .align(Alignment.CenterHorizontally)
+                    .padding(top = 8.dp),
+            )
+        } else {
+            Text(
+                text = stringResource(R.string.settings_workbench_qr_pending),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 

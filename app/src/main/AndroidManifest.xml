@@ -12,6 +12,10 @@
          否則連線會卡在 ESTABLISHED 永遠讀不到資料。見 WorkbenchServer 的 workbench module。 -->
     <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
 
+    <!-- QR code（#56）在切換 WiFi 網路時要跟著更新位址，靠 ConnectivityManager 的網路變動
+         callback（一般權限，不需要使用者授權）。 -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
     <!-- Package visibility queries for Android 11+ -->
     <queries>
         <!-- Query for Shizuku app -->
