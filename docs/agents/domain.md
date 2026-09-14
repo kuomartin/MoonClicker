@@ -29,6 +29,14 @@ When your output names a domain concept (in an issue title, a refactor proposal,
 
 If the concept you need isn't in the glossary yet, that's a signal — either you're inventing language the project doesn't use (reconsider) or there's a real gap (note it for `/domain-modeling`).
 
+## Cite ADRs by number and decision
+
+Cite an ADR by its number and its decision, and write the reasoning itself at the call site. Citing a passage *inside* an ADR couples the caller to that ADR's shape, so the ADR can no longer be tightened. Needing to name a section is the signal that the reason belongs in the comment you are writing.
+
+When you want a **term** rather than a decision, cite `CONTEXT.md` — the glossary owns the vocabulary.
+
+ADR numbers are append-only. A removed ADR leaves its number empty; gaps are correct, and renumbering breaks the commit messages that cite them.
+
 ## Flag ADR conflicts
 
 If your output contradicts an existing ADR, surface it explicitly rather than silently overriding:
