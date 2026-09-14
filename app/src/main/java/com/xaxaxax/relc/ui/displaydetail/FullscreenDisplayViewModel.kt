@@ -18,7 +18,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class FullscreenDisplayViewModel @Inject constructor(
-    @ApplicationContext context: Context,
+    @ApplicationContext private val context: Context,
     savedStateHandle: SavedStateHandle,
     private val shizukuManager: ShizukuManager
 ) : ViewModel() {
@@ -89,7 +89,11 @@ class FullscreenDisplayViewModel @Inject constructor(
 
             val croppedBitmap =
                 android.graphics.Bitmap.createBitmap(bitmap, left, top, width, height)
-            val templateDir = java.io.File(scriptDir)
+            val templateDir = if (scriptDir.isBlank()) {
+                java.io.File(context.getExternalFilesDir(null), "images")
+            } else {
+                java.io.File(scriptDir)
+            }
             if (!templateDir.exists()) templateDir.mkdirs()
 
             val file = java.io.File(templateDir, "$name.png")
