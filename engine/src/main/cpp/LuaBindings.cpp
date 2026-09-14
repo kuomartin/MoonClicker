@@ -199,6 +199,14 @@ int lua_log(lua_State *L) {
         }
     }
     __android_log_print(ANDROID_LOG_DEBUG, "LuaScript", "%s", message.c_str());
+
+    ScriptRuntime *runtime = self(L);
+    JNIEnv *env = runtime->env();
+    if (env != nullptr) {
+        jstring jMessage = env->NewStringUTF(message.c_str());
+        env->CallVoidMethod(runtime->hostObject(), runtime->host().log, jMessage);
+        env->DeleteLocalRef(jMessage);
+    }
     return 0;
 }
 

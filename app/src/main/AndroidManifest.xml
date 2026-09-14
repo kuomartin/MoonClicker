@@ -5,6 +5,13 @@
 
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+
+    <!-- targetSdk 37（Android 17）起，接受區網的 inbound TCP 連線需要這個 runtime permission，
+         否則連線會卡在 ESTABLISHED 永遠讀不到資料。見 WorkbenchServer 的 workbench module。 -->
+    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
+
     <!-- Package visibility queries for Android 11+ -->
     <queries>
         <!-- Query for Shizuku app -->
@@ -66,6 +73,16 @@
             android:name=".notification.ScriptNotificationReceiver"
             android:exported="false"
         />
+        <service
+            android:name=".workbench.WorkbenchService"
+            android:foregroundServiceType="specialUse"
+            android:exported="false"
+        >
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="script-workbench-wifi-server"
+            />
+        </service>
         <!-- android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" is to protect this provider from accessing by normal apps -->
     </application>
 

@@ -124,4 +124,10 @@ dependencies {
     // coil
     implementation(libs.coil.compose) // 請根據當前最新版本調整
     implementation(libs.coil.svg)
+
+    // Ktor (Script Workbench embedded server)
+    implementation(libs.ktor.server.core)
+    implementation(libs.ktor.server.cio)
+    implementation(libs.ktor.server.websockets)
+    testImplementation(libs.ktor.server.test.host)
 }
