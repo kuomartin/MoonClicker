@@ -28,7 +28,7 @@ internal class DisplayRotationTracker(context: Context) {
             return
         }
 
-        // 這次先行讀取不是多餘的，它是兩段交接的第二段（見 ADR-0012）。ScriptEngine.start
+        // 這次先行讀取不是多餘的，它是兩段交接的第二段。ScriptEngine.start
         // 已經把一個 rotation 快照隨 nativeStart 傳進去了，但那個快照到這裡註冊 listener
         // 之間還有一段空窗；期間發生的旋轉不會有任何 onDisplayChanged 補上，只能靠這裡再讀
         // 一次收掉。順序也不能對調——nativeSetDisplayRotation 在 nativeStart 之前是空操作，

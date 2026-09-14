@@ -213,7 +213,7 @@ class Tier1SpikeTest {
     fun step6_a_script_finds_the_marker_and_taps_it() = visionTapRoundTrip(orientation = null)
 
     /**
-     * 旋轉後座標換算仍要成立（ADR-0012 的 Surface 空間／邏輯空間）。
+     * 旋轉後座標換算仍要成立（見 CONTEXT.md 的「Surface 空間 / 邏輯空間」）。
      *
      * rotation 0 時 `VisionMatcher::frameToLogical` 是 identity，所以只有轉過的顯示器才驗得到
      * 換算。方向寫反在維度上依然自洽，只有實際點下去、由 puppet 回報落點才分得出來。
