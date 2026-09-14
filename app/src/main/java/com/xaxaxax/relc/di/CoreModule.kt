@@ -1,7 +1,6 @@
 package com.xaxaxax.relc.di
 
 import android.content.Context
-import com.xaxaxax.relc.core.AppSettings
 import com.xaxaxax.relc.permission.PermissionManager
 import com.xaxaxax.relc.shizuku.ShizukuManager
 import dagger.Module
@@ -17,10 +16,7 @@ import javax.inject.Singleton
 object CoreModule {
     @Provides
     @Singleton
-    fun provideShizukuManager(
-        @ApplicationContext context: Context,
-        appSettings: AppSettings,
-    ) = ShizukuManager(context, appSettings)
+    fun provideShizukuManager(@ApplicationContext context: Context) = ShizukuManager(context)
 
 
     @Provides
