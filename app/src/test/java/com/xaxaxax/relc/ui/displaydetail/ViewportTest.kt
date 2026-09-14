@@ -249,6 +249,28 @@ class ViewportTest {
         assertEquals(DisplayPoint(height, width), rotateToLogical(width, 0f, width, height, quarterTurns = 3))
     }
 
+    @Test
+    fun `rotateToLogical inverts cleanly at every quarter turn`() {
+        // touchTransform 用「(4-d) mod 4、長寬互換規則跟著反過來」反轉 d 那一段旋轉。
+        // 這裡不跑 Matrix（app 的 stub 會丟 not mocked），直接釘住這個反函式規則本身。
+        val width = 1080f
+        val height = 2400f
+        val points = listOf(0f to 0f, width to 0f, 0f to height, width to height, 300f to 777f)
+
+        for (quarterTurns in 0..3) {
+            val inverseTurns = (4 - quarterTurns) % 4
+            val (inverseWidth, inverseHeight) =
+                if (isQuarterTurn(quarterTurns)) height to width else width to height
+
+            for ((px, py) in points) {
+                val logical = rotateToLogical(px, py, width, height, quarterTurns)
+                val back = rotateToLogical(logical.x, logical.y, inverseWidth, inverseHeight, inverseTurns)
+                assertEquals("quarterTurns=$quarterTurns", px, back.x, TOLERANCE)
+                assertEquals("quarterTurns=$quarterTurns", py, back.y, TOLERANCE)
+            }
+        }
+    }
+
     private data class Rotation(val degrees: Float, val contentW: Float, val contentH: Float)
 
     private companion object {

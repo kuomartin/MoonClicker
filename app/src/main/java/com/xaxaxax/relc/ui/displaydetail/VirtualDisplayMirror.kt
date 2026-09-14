@@ -80,10 +80,11 @@ fun VirtualDisplayMirror(
                     with(density) { viewport.contentWidth.toDp() },
                     with(density) { viewport.contentHeight.toDp() },
                 )
-                // 釘住面板的容器：TextureView 與 TouchForwarder 是這裡唯一的兩個子節點，
-                // 共用同一個反向旋轉，兩者物理上永遠疊在一起，觸控才能維持縮放-only 的映射。
-                .graphicsLayer { rotationZ = viewport.viewRotationDegrees }
         ) {
+            // 反向旋轉只套在 MirrorSurface 自己身上（視覺）。TouchForwarder 刻意**不**放進
+            // 這個 graphicsLayer 底下：pointerInteropFilter 是給經典 View 用的 interop 橋，
+            // 疊在旋轉過的祖先節點下命中測試會整個收不到事件（真機驗證過，橫向沒反應）。
+            // TouchForwarder 改在 touchTransform 裡用純數學把同一個旋轉明算出來。
             MirrorSurface(
                 geometry = geometry,
                 addSurface = addSurface,
@@ -96,23 +97,19 @@ fun VirtualDisplayMirror(
                     .requiredSize(
                         with(density) { viewport.unrotatedWidth.toDp() },
                         with(density) { viewport.unrotatedHeight.toDp() },
-                    ),
+                    )
+                    .graphicsLayer { rotationZ = viewport.viewRotationDegrees },
             )
 
-            // 跟 MirrorSurface 同尺寸、同一個旋轉容器：黑邊上的觸控因此不會抵達，而手勢
-            // 一旦在此開始、拖出邊界仍會送達（view 系統的手勢捕獲）。不對稱語意由結構取得。
+            // 未旋轉、尺寸正好等於內容矩形：黑邊上的觸控因此不會抵達，而手勢一旦在此開始、
+            // 拖出邊界仍會送達（view 系統的手勢捕獲）。不對稱語意由結構取得。
             TouchForwarder(
                 targetDisplayId = targetDisplayId,
                 service = service,
                 viewport = viewport,
                 geometry = geometry,
                 isReadOnly = isReadOnly,
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .requiredSize(
-                        with(density) { viewport.unrotatedWidth.toDp() },
-                        with(density) { viewport.unrotatedHeight.toDp() },
-                    ),
+                modifier = Modifier.matchParentSize(),
             )
         }
     }
@@ -199,19 +196,20 @@ private fun TouchForwarder(
     // 像素；buffer 像素 → VD 目前的邏輯空間還差一個 v 旋轉，見 touchTransform。
     val currentGeometry by rememberUpdatedState(geometry)
 
-    // 一個手勢（DOWN..UP/CANCEL）中途 v 變了，代表手勢開始時算好的座標系已經不是現在這個。
-    // 這裡不試著「跳到新座標系」——那會讓使用者的手指瞬間對到另一個位置——直接丟棄手勢剩餘
-    // 的事件，讓使用者放開重按。
-    var gestureRotation by remember { mutableStateOf<Int?>(null) }
+    // 一個手勢（DOWN..UP/CANCEL）中途 v 或 d 變了，代表手勢開始時算好的座標系已經不是
+    // 現在這個。這裡不試著「跳到新座標系」——那會讓使用者的手指瞬間對到另一個位置——
+    // 直接丟棄手勢剩餘的事件，讓使用者放開重按。
+    var gestureRotation by remember { mutableStateOf<Pair<Int, Int>?>(null) }
 
     Box(
         modifier.pointerInteropFilter { event ->
             if (isReadOnly || targetDisplayId == -1) return@pointerInteropFilter false
 
             val geom = currentGeometry
+            val rotation = geom.rotation to viewport.d
             val isGestureStart = event.actionMasked == MotionEvent.ACTION_DOWN
-            if (isGestureStart) gestureRotation = geom.rotation
-            val staleGesture = gestureRotation != null && gestureRotation != geom.rotation
+            if (isGestureStart) gestureRotation = rotation
+            val staleGesture = gestureRotation != null && gestureRotation != rotation
 
             if (!staleGesture) {
                 service.forwardMirrorTouch(event, targetDisplayId, touchTransform(viewport, geom))
@@ -227,18 +225,37 @@ private fun TouchForwarder(
 }
 
 /**
- * view 像素 → VD 目前的邏輯空間：[Viewport.displayPerViewPixel] 縮放到 buffer 像素，
- * 再疊上跟 VD 自己的 rotation（`geometry.rotation`）對應的旋轉——跟舊版
- * `MirrorSurface` 曾經套用過的 `-v·90` 是同一個角度，只是現在用來變換座標而不是視覺。
+ * view 像素（內容矩形內的相對座標，未套用 [Viewport.viewRotationDegrees]）→ VD 目前的
+ * 邏輯空間，即 `injectMotionEvent` 要的座標系。三段：
+ *
+ * 1. [Viewport.displayPerViewPixel] 縮放到「d-space」像素（letterbox 用的那個、隨 d 互換
+ *    長寬的邏輯尺寸）。
+ * 2. 反轉 d 對應的旋轉，回到 buffer 的原始（不隨旋轉改變）像素——這步跟 [MirrorSurface] 套
+ *    的 `viewRotationDegrees` 抵銷的是同一個旋轉，方向相反。
+ * 3. 疊上 v（VD 自己的 rotation）對應的旋轉，跟舊版 `MirrorSurface` 曾經套用過的 `-v·90`
+ *    是同一個角度，只是現在用來變換座標而不是視覺。
  */
 private fun touchTransform(viewport: Viewport, geometry: DisplayGeometry): Matrix {
     val matrix = Matrix().apply {
         setScale(viewport.displayPerViewPixel, viewport.displayPerViewPixel)
     }
-    val quarterTurns = geometry.rotation and 3
-    if (quarterTurns != 0) {
+
+    val dTurns = viewport.d and 3
+    if (dTurns != 0) {
+        // rotateToLogical(dTurns) 的反函式：轉回 (4 - dTurns) % 4，長寬互換的規則跟著反過來。
+        val inverseTurns = (4 - dTurns) % 4
+        val (inverseWidth, inverseHeight) = if (isQuarterTurn(dTurns)) {
+            geometry.surfaceHeight.toFloat() to geometry.surfaceWidth.toFloat()
+        } else {
+            geometry.surfaceWidth.toFloat() to geometry.surfaceHeight.toFloat()
+        }
+        matrix.postConcat(quarterTurnMatrix(inverseTurns, inverseWidth, inverseHeight))
+    }
+
+    val vTurns = geometry.rotation and 3
+    if (vTurns != 0) {
         matrix.postConcat(
-            quarterTurnMatrix(quarterTurns, geometry.surfaceWidth.toFloat(), geometry.surfaceHeight.toFloat())
+            quarterTurnMatrix(vTurns, geometry.surfaceWidth.toFloat(), geometry.surfaceHeight.toFloat())
         )
     }
     return matrix
