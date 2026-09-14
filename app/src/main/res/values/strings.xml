@@ -53,6 +53,13 @@
     <string name="settings_auto_fullscreen">在虛擬顯示執行時自動開啟全螢幕</string>
     <string name="settings_auto_fullscreen_note">關閉時腳本仍在背景執行，只是不會跳出鏡像畫面。</string>
 
+    <!-- Shizuku 連線狀態。狀態列與設定頁共用同一套詞彙，見 ShizukuStatusAppearance。 -->
+    <string name="shizuku_status_not_available">Shizuku 未啟動</string>
+    <string name="shizuku_status_need_permission">需要授權</string>
+    <string name="shizuku_status_disconnected">服務未連線</string>
+    <string name="shizuku_status_connecting">連線中…</string>
+    <string name="shizuku_status_connected">服務已連線</string>
+
     <string name="settings_user_service">UserService</string>
     <string name="settings_auto_start_user_service">自動啟動 UserService</string>
     <string name="settings_auto_start_user_service_note">關閉時仍會自動接上已在執行的服務，只是不會主動把它啟動起來。</string>

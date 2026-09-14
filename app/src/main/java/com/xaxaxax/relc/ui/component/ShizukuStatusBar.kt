@@ -33,18 +33,7 @@ fun ShizukuStatusBar(
     onActionClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val (label, tint) = when (status) {
-        ShizukuConnectionStatus.NOT_AVAILABLE ->
-            "Shizuku 未啟動" to MaterialTheme.colorScheme.error
-        ShizukuConnectionStatus.NEED_PERMISSION ->
-            "需要授權" to MaterialTheme.colorScheme.error
-        ShizukuConnectionStatus.DISCONNECTED ->
-            "服務未連線" to MaterialTheme.colorScheme.onSurfaceVariant
-        ShizukuConnectionStatus.CONNECTING ->
-            "連線中…" to MaterialTheme.colorScheme.onSurfaceVariant
-        ShizukuConnectionStatus.CONNECTED ->
-            "服務已連線" to MaterialTheme.colorScheme.primary
-    }
+    val (label, tint) = shizukuStatusAppearance(status)
     val actionLabel = when (status) {
         ShizukuConnectionStatus.NEED_PERMISSION -> "授權"
         ShizukuConnectionStatus.NOT_AVAILABLE, ShizukuConnectionStatus.DISCONNECTED -> "連線"

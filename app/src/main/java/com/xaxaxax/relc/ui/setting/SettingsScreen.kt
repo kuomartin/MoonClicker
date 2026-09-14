@@ -2,18 +2,24 @@ package com.xaxaxax.relc.ui.setting
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -51,6 +57,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.xaxaxax.relc.R
 import com.xaxaxax.relc.shizuku.ShizukuConnectionStatus
 import com.xaxaxax.relc.ui.component.Section
+import com.xaxaxax.relc.ui.component.shizukuStatusAppearance
 import com.xaxaxax.relc.ui.theme.ReLCTheme
 
 typealias HealthCheckActions = List<Pair<String, () -> Unit>>
@@ -178,8 +185,8 @@ private fun SettingsScreenContent(
                         if (uiState.shizukuStatus.isAuthorized) {
                             HealthCheckGood(
                                 painter = painterResource(R.drawable.ic_shizuku_icon),
-                                title = "Shizuku Running",
-                                description = "Service is active and authorized."
+                                title = "Shizuku Authorized",
+                                description = "Permission granted."
                             )
                         }
                     }
@@ -198,6 +205,7 @@ private fun SettingsScreenContent(
 
                 item {
                     Section(name = stringResource(R.string.settings_user_service)) {
+                        UserServiceStatusRow(uiState.shizukuStatus)
                         ToggleSettingItem(
                             name = stringResource(R.string.settings_auto_start_user_service),
                             description = stringResource(R.string.settings_auto_start_user_service_note),
@@ -263,6 +271,40 @@ private fun UserServiceConfirmDialog(
             }
         },
     )
+}
+
+/** 這個區塊在講的那個服務現在是什麼狀態。詞彙與狀態列共用，兩邊不會各說各話。 */
+@Composable
+private fun UserServiceStatusRow(status: ShizukuConnectionStatus) {
+    val (label, tint) = shizukuStatusAppearance(status)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // 固定寬度的槽位，圓點與轉圈換手時文字才不會跟著左右跳。
+        Box(
+            modifier = Modifier.size(12.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (status == ShizukuConnectionStatus.CONNECTING) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(12.dp),
+                    strokeWidth = 1.5.dp,
+                    color = tint,
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(10.dp)
+                        .background(tint, CircleShape)
+                )
+            }
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        Text(text = label, style = MaterialTheme.typography.bodyLarge, color = tint)
+    }
 }
 
 @Composable
