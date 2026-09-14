@@ -1,11 +1,16 @@
+import * as fs from "node:fs";
+import * as path from "node:path";
 import * as vscode from "vscode";
 import { ConnectionState, WorkbenchConnection } from "./workbenchConnection";
+import { mergeLuarc } from "./luarc";
 import { listScripts, pullScript, pushScript, runScript } from "./scriptSync";
 
 let connection: WorkbenchConnection | undefined;
 let statusBarItem: vscode.StatusBarItem | undefined;
+let extensionContext: vscode.ExtensionContext | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
+  extensionContext = context;
   connection = new WorkbenchConnection();
   statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
   statusBarItem.show();
@@ -79,6 +84,7 @@ async function pullCommand(): Promise<void> {
     const destDir = folders?.[0]?.fsPath;
     if (!destDir) return;
     await pullScript(address, id, destDir);
+    ensureLuarcConfigured(destDir);
     vscode.window.showInformationMessage(`ReLC: 已把「${id}」同步到 ${destDir}`);
   } catch (err) {
     vscode.window.showErrorMessage(`ReLC: ${(err as Error).message}`);
@@ -99,6 +105,28 @@ async function runCommand(): Promise<void> {
   } catch (err) {
     vscode.window.showErrorMessage(`ReLC: ${(err as Error).message}`);
   }
+}
+
+/**
+ * 在同步下來的專案裡補上 LuaLS 的 `.luarc.json`（見 #59）。壞掉的既有檔案不阻擋同步——
+ * 保留原檔，不嘗試修它，讓使用者自己處理那個既有問題。
+ */
+function ensureLuarcConfigured(projectDir: string): void {
+  if (!extensionContext) return;
+  const stubPath = path.join(extensionContext.extensionPath, "lua-meta");
+  const luarcPath = path.join(projectDir, ".luarc.json");
+
+  let existing: Record<string, unknown> = {};
+  if (fs.existsSync(luarcPath)) {
+    try {
+      existing = JSON.parse(fs.readFileSync(luarcPath, "utf8"));
+    } catch {
+      return;
+    }
+  }
+
+  const merged = mergeLuarc(existing, stubPath);
+  fs.writeFileSync(luarcPath, JSON.stringify(merged, null, 2) + "\n");
 }
 
 async function pushCommand(): Promise<void> {
