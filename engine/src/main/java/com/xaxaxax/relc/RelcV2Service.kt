@@ -22,6 +22,8 @@ import android.hardware.display.VirtualDisplay
 import android.hardware.input.InputManager
 import android.hardware.input.InputManagerHidden
 import android.os.Build
+import android.os.PowerManager
+import android.os.PowerManagerHidden
 import android.os.Process
 import android.os.SystemClock
 import android.os.UserHandle
@@ -474,6 +476,31 @@ class RelcV2Service @JvmOverloads constructor(
             granted
         }
 
+    /**
+     * `FLAG_OWN_DISPLAY_GROUP` 的顯示器有自己獨立的 wakefulness 計時器，閒置逾時後
+     * `state` 變 OFF——而 OFF 之後 `InputDispatcher` 直接丟棄送進來的輸入事件，
+     * 正常的「輸入喚醒 userActivity」路徑因此叫不醒它，是個死結（issue #6）。
+     *
+     * 在每個會讓使用者看到/操作這個顯示器的入口都主動喚醒一次，讓它沒有機會卡進那個死結。
+     * 只對本服務自己建立、確實拿到這個旗標的顯示器做，不動主螢幕或其他一般顯示器。
+     */
+    private fun wakeDisplayGroupIfOwned(displayId: Int) {
+        if (displayId == Display.DEFAULT_DISPLAY) return
+        if (!vdStore.containsKey(displayId)) return
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        try {
+            val pm = context.getSystemService(PowerManager::class.java)
+            Refine.unsafeCast<PowerManagerHidden>(pm).wakeUp(
+                SystemClock.uptimeMillis(),
+                PowerManagerHidden.WAKE_REASON_APPLICATION,
+                "ReLC own-display-group keep-awake",
+                displayId,
+            )
+        } catch (t: Throwable) {
+            Timber.d(t, "wakeUp(displayId=$displayId) failed")
+        }
+    }
+
     private val grantedPermissions = ConcurrentHashMap<String, Boolean>()
 
     /**
@@ -499,6 +526,7 @@ class RelcV2Service @JvmOverloads constructor(
 
     override fun addVirtualDisplaySurface(displayId: Int, surface: Surface): Int {
         Timber.d("addVirtualDisplaySurface: id=$displayId surfaceValid=${surface.isValid}")
+        wakeDisplayGroupIfOwned(displayId)
         val ptr = distributorStore[displayId] ?: run {
             Timber.e("addVirtualDisplaySurface: distributor not found for id=$displayId")
             return -1
@@ -529,6 +557,7 @@ class RelcV2Service @JvmOverloads constructor(
     private external fun nativeDestroyDistributor(ptr: Long)
 
     override fun launchInDisplay(packageName: String, displayId: Int): Boolean {
+        wakeDisplayGroupIfOwned(displayId)
         // IActivityManager 的 startActivity/createStackOnDisplay/moveTaskToStack 只到 API 28
         // 為止（見 HIDDEN_API_CONTRACTS），API 29 起一律走 ActivityTaskManager。
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -645,6 +674,7 @@ class RelcV2Service @JvmOverloads constructor(
         return try {
             if (displayId!=0 && !event.setDisplayId(displayId))
                 return false
+            wakeDisplayGroupIfOwned(displayId)
             inputManager.injectInputEvent(event, 0)
         } catch (t: Throwable) {
             Timber.d(t, "Failed to inject $event on display#$displayId.")
@@ -654,6 +684,7 @@ class RelcV2Service @JvmOverloads constructor(
 
     override fun injectKeyEvent(event: KeyEvent, displayId: Int): Boolean {
         return try {
+            wakeDisplayGroupIfOwned(displayId)
             inputManager.injectInputEvent(event, 0)
         } catch (t: Throwable) {
             Timber.d(t, "Failed to inject $event on display#$displayId.")
