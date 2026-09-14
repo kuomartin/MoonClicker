@@ -105,6 +105,7 @@ ktor-server-core = { group = "io.ktor", name = "ktor-server-core", version.ref =
 ktor-server-cio = { group = "io.ktor", name = "ktor-server-cio", version.ref = "ktor" }
 ktor-server-websockets = { group = "io.ktor", name = "ktor-server-websockets", version.ref = "ktor" }
 ktor-server-test-host = { group = "io.ktor", name = "ktor-server-test-host", version.ref = "ktor" }
+ktor-client-websockets = { group = "io.ktor", name = "ktor-client-websockets", version.ref = "ktor" }
 
 zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
 
