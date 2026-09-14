@@ -1,6 +1,8 @@
 package com.xaxaxax.relc.workbench
 
+import com.xaxaxax.relc.script.Script
 import com.xaxaxax.relc.script.ScriptArchive
+import com.xaxaxax.relc.script.ScriptSession
 import com.xaxaxax.relc.script.ScriptStore
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
@@ -14,6 +16,7 @@ import io.ktor.server.request.receiveStream
 import io.ktor.server.response.respondBytes
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
+import io.ktor.server.routing.post
 import io.ktor.server.routing.put
 import io.ktor.server.routing.routing
 import io.ktor.server.websocket.WebSockets
@@ -40,10 +43,26 @@ import timber.log.Timber
  * 監聽所有網卡（不只 loopback）是刻意的：VS Code 端在開發者的電腦上，透過同一個區網連進來，
  * milestone 1 沒有配對驗證（見 #53 Out of Scope），這是已知、記錄在案的風險，不是這裡能修的漏洞。
  */
+/**
+ * 觸發執行需要的最小介面（見 #61）。真正實作直接轉呼叫 [ScriptSession]；存在這一層是為了讓
+ * `workbenchModule` 比照 [ScriptStore.scan] 的可測試模式，JVM 測試能餵假的執行器，不需要
+ * 真的 `ScriptSession`/Hilt。
+ */
+interface ScriptRunner {
+    fun isRunning(): Boolean
+    fun start(script: Script)
+}
+
 @Singleton
 class WorkbenchServer @Inject constructor(
     private val scriptStore: ScriptStore,
+    private val scriptSession: ScriptSession,
 ) {
+    private val scriptRunner = object : ScriptRunner {
+        override fun isRunning() = scriptSession.state.value.isRunning
+        override fun start(script: Script) = scriptSession.start(script)
+    }
+
     private var server: EmbeddedServer<*, *>? = null
 
     private val _address = MutableStateFlow<String?>(null)
@@ -66,7 +85,7 @@ class WorkbenchServer @Inject constructor(
                 CIO,
                 port = PORT,
                 host = host,
-                module = { workbenchModule(scriptsRoot) },
+                module = { workbenchModule(scriptsRoot, scriptRunner) },
             ).start(wait = false)
             _address.value = "$host:$PORT"
             true
@@ -116,7 +135,7 @@ data class WorkbenchScriptSummary(val id: String, val name: String)
  * [scriptsRoot] 拆成參數而不是內部自己算，是為了比照 [ScriptStore.scan] 的作法，讓
  * `WorkbenchServerTest` 能直接餵一個暫存目錄進來，不需要 Hilt 或真的 Android Context。
  */
-fun Application.workbenchModule(scriptsRoot: File) {
+fun Application.workbenchModule(scriptsRoot: File, scriptRunner: ScriptRunner) {
     install(WebSockets)
     routing {
         get("/health") {
@@ -163,6 +182,22 @@ fun Application.workbenchModule(scriptsRoot: File) {
                 is ScriptArchive.ImportResult.Failed ->
                     call.respondText(result.reason, status = HttpStatusCode.BadRequest)
             }
+        }
+
+        // 觸發執行（見 #61）：統一經過既有 ScriptSession，不建立第二條執行路徑——
+        // 透過 VS Code 觸發跟透過 App UI 觸發，都會是同一個 ScriptSession.start()。
+        post("/scripts/{id}/run") {
+            val script = call.parameters["id"]?.let { id -> ScriptStore.scan(scriptsRoot).find { it.id == id } }
+            if (script == null) {
+                call.respondText("Script not found", status = HttpStatusCode.NotFound)
+                return@post
+            }
+            if (scriptRunner.isRunning()) {
+                call.respondText("A script is already running", status = HttpStatusCode.Conflict)
+                return@post
+            }
+            scriptRunner.start(script)
+            call.respondText("Started", status = HttpStatusCode.Accepted)
         }
     }
 }

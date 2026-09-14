@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import { ConnectionState, WorkbenchConnection } from "./workbenchConnection";
-import { listScripts, pullScript, pushScript } from "./scriptSync";
+import { listScripts, pullScript, pushScript, runScript } from "./scriptSync";
 
 let connection: WorkbenchConnection | undefined;
 let statusBarItem: vscode.StatusBarItem | undefined;
@@ -24,6 +24,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("relc.disconnect", () => connection?.disconnect()),
     vscode.commands.registerCommand("relc.pull", pullCommand),
     vscode.commands.registerCommand("relc.push", pushCommand),
+    vscode.commands.registerCommand("relc.run", runCommand),
   );
 }
 
@@ -79,6 +80,22 @@ async function pullCommand(): Promise<void> {
     if (!destDir) return;
     await pullScript(address, id, destDir);
     vscode.window.showInformationMessage(`ReLC: 已把「${id}」同步到 ${destDir}`);
+  } catch (err) {
+    vscode.window.showErrorMessage(`ReLC: ${(err as Error).message}`);
+  }
+}
+
+async function runCommand(): Promise<void> {
+  const address = connectedAddress();
+  if (!address) return;
+  const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+  if (!workspaceFolder) {
+    vscode.window.showErrorMessage("ReLC: 請先開啟要執行的腳本專案資料夾");
+    return;
+  }
+  try {
+    await runScript(address, workspaceFolder.name);
+    vscode.window.showInformationMessage(`ReLC: 已在裝置上觸發「${workspaceFolder.name}」執行`);
   } catch (err) {
     vscode.window.showErrorMessage(`ReLC: ${(err as Error).message}`);
   }

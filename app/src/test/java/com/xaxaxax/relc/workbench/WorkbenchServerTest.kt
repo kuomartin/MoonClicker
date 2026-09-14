@@ -1,8 +1,10 @@
 package com.xaxaxax.relc.workbench
 
+import com.xaxaxax.relc.script.Script
 import io.ktor.client.plugins.websocket.WebSockets as ClientWebSockets
 import io.ktor.client.plugins.websocket.webSocket
 import io.ktor.client.request.get
+import io.ktor.client.request.post
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsBytes
@@ -23,9 +25,23 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 
+/** [ScriptSession] 是 Hilt @Singleton、沒有現成的假實作——測試只需要 [ScriptRunner] 這個縮小介面。 */
+private class FakeScriptRunner : ScriptRunner {
+    var running = false
+    var startedScript: Script? = null
+
+    override fun isRunning() = running
+
+    override fun start(script: Script) {
+        startedScript = script
+    }
+}
+
 class WorkbenchServerTest {
     @get:Rule
     val temp = TemporaryFolder()
+
+    private val fakeRunner = FakeScriptRunner()
 
     private fun scriptFolder(id: String, mainLua: String): File {
         val dir = temp.newFolder(id)
@@ -60,7 +76,7 @@ class WorkbenchServerTest {
     @Test
     fun `health route returns 200`() = runTest {
         testApplication {
-            application { workbenchModule(temp.root) }
+            application { workbenchModule(temp.root, fakeRunner) }
 
             val response = client.get("/health")
 
@@ -71,7 +87,7 @@ class WorkbenchServerTest {
     @Test
     fun `websocket route echoes back what it receives`() = runTest {
         testApplication {
-            application { workbenchModule(temp.root) }
+            application { workbenchModule(temp.root, fakeRunner) }
             val client = createClient { install(ClientWebSockets) }
 
             client.webSocket("/") {
@@ -86,7 +102,7 @@ class WorkbenchServerTest {
     fun `scripts route lists script folders on device`() = runTest {
         scriptFolder("hello", "log('hi')")
         testApplication {
-            application { workbenchModule(temp.root) }
+            application { workbenchModule(temp.root, fakeRunner) }
 
             val response = client.get("/scripts")
 
@@ -101,7 +117,7 @@ class WorkbenchServerTest {
         File(dir, "template.png").writeText("fake image bytes")
 
         testApplication {
-            application { workbenchModule(temp.root) }
+            application { workbenchModule(temp.root, fakeRunner) }
 
             val response = client.get("/scripts/hello/export")
 
@@ -115,7 +131,7 @@ class WorkbenchServerTest {
     @Test
     fun `export route 404s for an unknown script id`() = runTest {
         testApplication {
-            application { workbenchModule(temp.root) }
+            application { workbenchModule(temp.root, fakeRunner) }
 
             val response = client.get("/scripts/does-not-exist/export")
 
@@ -129,7 +145,7 @@ class WorkbenchServerTest {
         File(dir, "old.png").writeText("stale")
 
         testApplication {
-            application { workbenchModule(temp.root) }
+            application { workbenchModule(temp.root, fakeRunner) }
 
             val response = client.put("/scripts/hello/import") {
                 setBody(zipOf("main.lua" to "log('new')"))
@@ -144,13 +160,51 @@ class WorkbenchServerTest {
     @Test
     fun `import route rejects an archive with no main lua`() = runTest {
         testApplication {
-            application { workbenchModule(temp.root) }
+            application { workbenchModule(temp.root, fakeRunner) }
 
             val response = client.put("/scripts/hello/import") {
                 setBody(zipOf("readme.txt" to "nothing here"))
             }
 
             assertEquals(HttpStatusCode.BadRequest, response.status)
+        }
+    }
+
+    @Test
+    fun `run route starts the script through the existing runner`() = runTest {
+        scriptFolder("hello", "log('hi')")
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner) }
+
+            val response = client.post("/scripts/hello/run")
+
+            assertEquals(HttpStatusCode.Accepted, response.status)
+            assertEquals("hello", fakeRunner.startedScript?.id)
+        }
+    }
+
+    @Test
+    fun `run route 404s for an unknown script id`() = runTest {
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner) }
+
+            val response = client.post("/scripts/does-not-exist/run")
+
+            assertEquals(HttpStatusCode.NotFound, response.status)
+        }
+    }
+
+    @Test
+    fun `run route rejects when a script is already running`() = runTest {
+        scriptFolder("hello", "log('hi')")
+        fakeRunner.running = true
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner) }
+
+            val response = client.post("/scripts/hello/run")
+
+            assertEquals(HttpStatusCode.Conflict, response.status)
+            assertEquals(null, fakeRunner.startedScript)
         }
     }
 }
