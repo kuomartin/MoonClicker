@@ -9,7 +9,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** 使用者偏好。目前只有一項，但它得是可觀察的，設定頁與執行路徑都要看到同一個值。 */
+/** 使用者偏好。都得是可觀察的，設定頁與執行路徑要看到同一個值。 */
 @Singleton
 class AppSettings @Inject constructor(
     @param:ApplicationContext private val context: Context,
@@ -31,7 +31,24 @@ class AppSettings @Inject constructor(
         _autoOpenFullscreen.value = enabled
     }
 
+    private val _autoStartUserService =
+        MutableStateFlow(prefs.getBoolean(KEY_AUTO_START_USER_SERVICE, true))
+
+    /**
+     * 沒有執行中的 UserService 時，要不要自動把它啟動起來。
+     *
+     * 關閉時仍會自動接上已在執行的服務（Shizuku 的 user service 是 daemon，會活過 App 被殺），
+     * 只是不再主動建立新的——想完全掌握特權行程何時存在的人要的是這個。
+     */
+    val autoStartUserService: StateFlow<Boolean> = _autoStartUserService.asStateFlow()
+
+    fun setAutoStartUserService(enabled: Boolean) {
+        prefs.edit { putBoolean(KEY_AUTO_START_USER_SERVICE, enabled) }
+        _autoStartUserService.value = enabled
+    }
+
     private companion object {
         const val KEY_AUTO_FULLSCREEN = "auto_open_fullscreen"
+        const val KEY_AUTO_START_USER_SERVICE = "auto_start_user_service"
     }
 }
