@@ -11,7 +11,6 @@ import androidx.core.net.toUri
 import com.xaxaxax.relc.BuildConfig
 import com.xaxaxax.relc.IRelcV2Service
 import com.xaxaxax.relc.RelcV2Service
-import com.xaxaxax.relc.core.AppSettings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -47,13 +46,7 @@ private val STOP_TIMEOUT = 5.seconds
  */
 private enum class ShizukuAccess { NOT_AVAILABLE, NEED_PERMISSION, GRANTED }
 
-/** 自動連線這一輪該做什麼。ATTACH 只接上已在跑的服務，START 會在沒跑時把它建立起來。 */
-private enum class AutoConnect { NONE, ATTACH, START }
-
-class ShizukuManager(
-    private val context: Context,
-    private val appSettings: AppSettings,
-) {
+class ShizukuManager(private val context: Context) {
     private val myUid: Int get() = Process.myUid()
 
     /** 與 App 生命週期等長，不需要取消。 */
@@ -69,12 +62,6 @@ class ShizukuManager(
 
     /** bind 已送出但服務還沒接上，也就是 UI 的「連線中」。 */
     private val _isBinding = MutableStateFlow(false)
-
-    /**
-     * 使用者按過「關閉」。只擋自動「啟動」，不擋自動 attach——服務已經被殺了，attach 探不到東西，
-     * 所以不需要為它多加一道條件。只存在記憶體裡：重開 App 就回到設定所描述的行為。
-     */
-    private val _stoppedByUser = MutableStateFlow(false)
 
     /** 唯一對外的 Shizuku 狀態，Displays/Scripts/Settings 共用同一份判斷。 */
     val statusFlow: StateFlow<ShizukuConnectionStatus> = combine(
@@ -133,8 +120,6 @@ class ShizukuManager(
         Shizuku.addBinderDeadListener {
             _access.value = ShizukuAccess.NOT_AVAILABLE
             _serviceFlow.value = null
-            // Shizuku 重啟會連帶殺掉所有 user service，這一輪的「使用者要它關著」也就到此為止。
-            _stoppedByUser.value = false
         }
         Shizuku.addRequestPermissionResultListener { requestCode, grantResult ->
             if (requestCode == myUid) {
@@ -146,27 +131,16 @@ class ShizukuManager(
             }
         }
 
-        // 條件一齊就自己連上，使用者不必在每個畫面各按一次。
+        // 已授權卻沒連上時，探一次有沒有現成的服務可接。只 attach 不啟動：要不要「存在」一個特權
+        // 行程是 UI 的政策（見 UserServiceAutoStarter），這裡只負責「已經存在就接上」。
         //
-        // 決策只在 access / 服務 / 設定 / 停止意圖任一真的變了時重算，所以連不上不會變成無止境的
-        // 背景重試——連不上通常是環境問題，交給按鈕讓使用者決定何時重試。
+        // 探不到不會改變下面任何一個值，所以 distinctUntilChanged 會擋掉重算——一次狀態轉換探一次，
+        // 不會在背景重試。服務非預期斷線同理：探一次，探不到就停在未連線等使用者。
         scope.launch {
-            combine(
-                _access, serviceFlow, appSettings.autoStartUserService, _stoppedByUser
-            ) { access, service, autoStart, stoppedByUser ->
-                when {
-                    access != ShizukuAccess.GRANTED || service != null -> AutoConnect.NONE
-                    // 使用者剛把它關掉，連探都不用探。
-                    stoppedByUser -> AutoConnect.NONE
-                    autoStart -> AutoConnect.START
-                    else -> AutoConnect.ATTACH
-                }
-            }.distinctUntilChanged().collect { action ->
-                when (action) {
-                    AutoConnect.NONE -> Unit
-                    AutoConnect.START -> connect(startIfNotRunning = true)
-                    AutoConnect.ATTACH -> connect(startIfNotRunning = false)
-                }
+            combine(_access, serviceFlow) { access, service ->
+                access == ShizukuAccess.GRANTED && service == null
+            }.distinctUntilChanged().collect { canAttach ->
+                if (canAttach) connect(startIfNotRunning = false)
             }
         }
     }
@@ -198,10 +172,7 @@ class ShizukuManager(
     }
 
     /** 啟動 UserService（沒在跑就建立），並解除先前的「關閉」意圖。 */
-    fun startUserService() {
-        _stoppedByUser.value = false
-        connect(startIfNotRunning = true, force = true)
-    }
+    fun startUserService() = connect(startIfNotRunning = true, force = true)
 
     /**
      * 關閉 UserService。
@@ -211,8 +182,6 @@ class ShizukuManager(
      */
     @Synchronized
     fun stopUserService() {
-        // 先立起意圖再送出要求，否則服務斷線的瞬間自動連線會搶先把它重新拉起來。
-        _stoppedByUser.value = true
         bindJob?.cancel()
         try {
             Shizuku.unbindUserService(serviceArgs, serviceConnection, true)
