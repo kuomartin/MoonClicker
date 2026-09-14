@@ -6,13 +6,13 @@ import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.viewModels
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.mutableStateOf
 import androidx.core.content.ContextCompat
 import com.xaxaxax.relc.ui.theme.ReLCTheme
 import dagger.hilt.android.AndroidEntryPoint
-import javax.inject.Inject
 
 
 /** Set on the [RelcActivity] intent to ask the nav graph to open the Scripts page. */
@@ -27,9 +27,13 @@ class RelcActivity : ComponentActivity() {
      */
     private val openScriptsPage = mutableStateOf(false)
 
+    /** 決定這次打開 App 要不要把 UserService 啟動起來。 */
+    private val autoStarter: UserServiceAutoStarter by viewModels()
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        autoStarter.onAppOpened()
         consumeNavTarget(intent)
         requestNotificationPermissionIfNeeded()
         enableEdgeToEdge()
