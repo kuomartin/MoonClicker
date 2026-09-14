@@ -52,4 +52,18 @@
     <string name="settings_general">一般</string>
     <string name="settings_auto_fullscreen">在虛擬顯示執行時自動開啟全螢幕</string>
     <string name="settings_auto_fullscreen_note">關閉時腳本仍在背景執行，只是不會跳出鏡像畫面。</string>
+
+    <string name="settings_user_service">UserService</string>
+    <string name="settings_auto_start_user_service">自動啟動 UserService</string>
+    <string name="settings_auto_start_user_service_note">關閉時仍會自動接上已在執行的服務，只是不會主動把它啟動起來。</string>
+    <string name="settings_user_service_start">啟動</string>
+    <string name="settings_user_service_restart">重新啟動</string>
+    <string name="settings_user_service_stop">關閉</string>
+    <string name="settings_user_service_script_running">腳本執行中，先停止腳本才能關閉或重啟服務。</string>
+    <string name="settings_user_service_stop_title">關閉 UserService？</string>
+    <string name="settings_user_service_stop_message">服務結束前會釋放所有虛擬顯示，目前建立的 display 都會消失。</string>
+    <string name="settings_user_service_restart_title">重新啟動 UserService？</string>
+    <string name="settings_user_service_restart_message">服務會先結束再啟動，過程中所有虛擬顯示都會被釋放。</string>
+    <string name="settings_user_service_confirm">確定</string>
+    <string name="settings_user_service_cancel">取消</string>
 </resources>

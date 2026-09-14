@@ -8,6 +8,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.xaxaxax.relc.core.AppSettings
 import com.xaxaxax.relc.permission.PermissionManager
+import com.xaxaxax.relc.script.ScriptSession
 import com.xaxaxax.relc.shizuku.ShizukuConnectionStatus
 import com.xaxaxax.relc.shizuku.ShizukuManager
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -28,7 +29,17 @@ data class SettingsUiState(
     val osAllowSecondaryDisplays: Boolean = false,
     val isRefreshing: Boolean = false,
     val autoOpenFullscreen: Boolean = false,
-)
+    val autoStartUserService: Boolean = true,
+    /** 腳本跑在 UserService 上，停掉服務會把它一起帶走。 */
+    val isScriptRunning: Boolean = false,
+) {
+    val canStartUserService: Boolean
+        get() = shizukuStatus == ShizukuConnectionStatus.DISCONNECTED
+
+    /** 停止與重啟都會銷毀所有虛擬顯示，執行中的腳本更是直接陪葬。 */
+    val canStopUserService: Boolean
+        get() = shizukuStatus == ShizukuConnectionStatus.CONNECTED && !isScriptRunning
+}
 
 private const val REFRESH_DELAY = 500
 
@@ -39,21 +50,31 @@ class SettingsViewModel @Inject constructor(
     private val permissionManager: PermissionManager,
     private val shizukuManager: ShizukuManager,
     private val appSettings: AppSettings,
+    private val scriptSession: ScriptSession,
 ) : ViewModel() {
     private val _osAllowSecondaryDisplays = MutableStateFlow(false)
     private val isRefreshing = MutableStateFlow(false)
 
-    val uiState: StateFlow<SettingsUiState> = combine(
+    /** 先併成一份，是為了讓外層 combine 停在四個具名參數上，不必退化成靠索引轉型的 vararg 版。 */
+    private val userServiceState = combine(
         shizukuManager.statusFlow,
+        appSettings.autoStartUserService,
+        scriptSession.state,
+    ) { status, autoStart, session -> Triple(status, autoStart, session.isRunning) }
+
+    val uiState: StateFlow<SettingsUiState> = combine(
+        userServiceState,
         permissionManager.osAllowSecondaryDisplaysFlow,
         isRefreshing,
         appSettings.autoOpenFullscreen,
-    ) { shizukuStatus, allowSecondary, isRefreshing, autoOpenFullscreen ->
+    ) { (status, autoStart, scriptRunning), allowSecondary, refreshing, autoOpenFullscreen ->
         SettingsUiState(
-            shizukuStatus = shizukuStatus,
+            shizukuStatus = status,
             osAllowSecondaryDisplays = allowSecondary,
-            isRefreshing = isRefreshing,
+            isRefreshing = refreshing,
             autoOpenFullscreen = autoOpenFullscreen,
+            autoStartUserService = autoStart,
+            isScriptRunning = scriptRunning,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -90,6 +111,14 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun setAutoOpenFullscreen(enabled: Boolean) = appSettings.setAutoOpenFullscreen(enabled)
+
+    fun setAutoStartUserService(enabled: Boolean) = appSettings.setAutoStartUserService(enabled)
+
+    fun startUserService() = shizukuManager.startUserService()
+
+    fun stopUserService() = shizukuManager.stopUserService()
+
+    fun restartUserService() = shizukuManager.restartUserService()
 
     fun getOpenShizukuIntent() = shizukuManager.getOpenShizukuIntent()
     fun requestShizukuPermission() = shizukuManager.requestPermission()

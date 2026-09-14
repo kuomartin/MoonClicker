@@ -11,6 +11,7 @@ import androidx.core.net.toUri
 import com.xaxaxax.relc.BuildConfig
 import com.xaxaxax.relc.IRelcV2Service
 import com.xaxaxax.relc.RelcV2Service
+import com.xaxaxax.relc.core.AppSettings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -35,6 +36,9 @@ import kotlin.time.Duration.Companion.seconds
 /** 放棄等待 bind 的時限，逾時後狀態退回 [ShizukuConnectionStatus.DISCONNECTED] 讓使用者手動重試。 */
 private val BIND_TIMEOUT = 10.seconds
 
+/** 重啟時等舊行程退場的時限。 */
+private val STOP_TIMEOUT = 5.seconds
+
 /**
  * Shizuku 的可用程度：一條階梯，後面的必然蘊含前面的。
  *
@@ -43,7 +47,13 @@ private val BIND_TIMEOUT = 10.seconds
  */
 private enum class ShizukuAccess { NOT_AVAILABLE, NEED_PERMISSION, GRANTED }
 
-class ShizukuManager(private val context: Context) {
+/** 自動連線這一輪該做什麼。ATTACH 只接上已在跑的服務，START 會在沒跑時把它建立起來。 */
+private enum class AutoConnect { NONE, ATTACH, START }
+
+class ShizukuManager(
+    private val context: Context,
+    private val appSettings: AppSettings,
+) {
     private val myUid: Int get() = Process.myUid()
 
     /** 與 App 生命週期等長，不需要取消。 */
@@ -59,6 +69,12 @@ class ShizukuManager(private val context: Context) {
 
     /** bind 已送出但服務還沒接上，也就是 UI 的「連線中」。 */
     private val _isBinding = MutableStateFlow(false)
+
+    /**
+     * 使用者按過「關閉」。只擋自動「啟動」，不擋自動 attach——服務已經被殺了，attach 探不到東西，
+     * 所以不需要為它多加一道條件。只存在記憶體裡：重開 App 就回到設定所描述的行為。
+     */
+    private val _stoppedByUser = MutableStateFlow(false)
 
     /** 唯一對外的 Shizuku 狀態，Displays/Scripts/Settings 共用同一份判斷。 */
     val statusFlow: StateFlow<ShizukuConnectionStatus> = combine(
@@ -107,6 +123,9 @@ class ShizukuManager(private val context: Context) {
 
     private var bindJob: Job? = null
 
+    /** 分辨「當前這次連線嘗試」與被取消的前一次，只有當前那次能清掉 [_isBinding]。 */
+    private var connectGeneration = 0
+
     init {
         // Sticky：ShizukuProvider 在 Application attach 階段就送出 binder，很可能早於本物件被建立，
         // 非 sticky 版不會補發。
@@ -114,6 +133,8 @@ class ShizukuManager(private val context: Context) {
         Shizuku.addBinderDeadListener {
             _access.value = ShizukuAccess.NOT_AVAILABLE
             _serviceFlow.value = null
+            // Shizuku 重啟會連帶殺掉所有 user service，這一輪的「使用者要它關著」也就到此為止。
+            _stoppedByUser.value = false
         }
         Shizuku.addRequestPermissionResultListener { requestCode, grantResult ->
             if (requestCode == myUid) {
@@ -127,14 +148,26 @@ class ShizukuManager(private val context: Context) {
 
         // 條件一齊就自己連上，使用者不必在每個畫面各按一次。
         //
-        // 只在「授權或服務狀態真的變了」時試一次：bind 逾時不改變這兩者，所以連不上不會變成無止境的
-        // 背景重試——連不上通常是環境問題，交給狀態列的按鈕讓使用者決定何時重試。
+        // 決策只在 access / 服務 / 設定 / 停止意圖任一真的變了時重算，所以連不上不會變成無止境的
+        // 背景重試——連不上通常是環境問題，交給按鈕讓使用者決定何時重試。
         scope.launch {
-            combine(_access, serviceFlow) { access, service -> access to service }
-                .distinctUntilChanged()
-                .collect { (access, service) ->
-                    if (access == ShizukuAccess.GRANTED && service == null) bindUserService()
+            combine(
+                _access, serviceFlow, appSettings.autoStartUserService, _stoppedByUser
+            ) { access, service, autoStart, stoppedByUser ->
+                when {
+                    access != ShizukuAccess.GRANTED || service != null -> AutoConnect.NONE
+                    // 使用者剛把它關掉，連探都不用探。
+                    stoppedByUser -> AutoConnect.NONE
+                    autoStart -> AutoConnect.START
+                    else -> AutoConnect.ATTACH
                 }
+            }.distinctUntilChanged().collect { action ->
+                when (action) {
+                    AutoConnect.NONE -> Unit
+                    AutoConnect.START -> connect(startIfNotRunning = true)
+                    AutoConnect.ATTACH -> connect(startIfNotRunning = false)
+                }
+            }
         }
     }
 
@@ -159,7 +192,48 @@ class ShizukuManager(private val context: Context) {
         when (_access.value) {
             ShizukuAccess.NOT_AVAILABLE -> Timber.w("Shizuku binder is not available")
             ShizukuAccess.NEED_PERMISSION -> requestPermission()
-            ShizukuAccess.GRANTED -> bindUserService()
+            // 使用者按了才叫它連，這時就該把服務啟動起來，而不是只看看有沒有在跑。
+            ShizukuAccess.GRANTED -> startUserService()
+        }
+    }
+
+    /** 啟動 UserService（沒在跑就建立），並解除先前的「關閉」意圖。 */
+    fun startUserService() {
+        _stoppedByUser.value = false
+        connect(startIfNotRunning = true, force = true)
+    }
+
+    /**
+     * 關閉 UserService。
+     *
+     * 副作用不小：RelcV2Service.destroy() 會 release 掉所有虛擬顯示再結束行程，所以呼叫端
+     * 必須先確認沒有腳本在跑，並讓使用者知道 display 會一起消失。
+     */
+    @Synchronized
+    fun stopUserService() {
+        // 先立起意圖再送出要求，否則服務斷線的瞬間自動連線會搶先把它重新拉起來。
+        _stoppedByUser.value = true
+        bindJob?.cancel()
+        try {
+            Shizuku.unbindUserService(serviceArgs, serviceConnection, true)
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to stop UserService")
+        }
+    }
+
+    /**
+     * 重新啟動 UserService。
+     *
+     * debug build 沿用同一個 versionCode 時 Shizuku 不會重載服務，改了 RelcV2Service 的程式碼
+     * 卻還是跑到舊行程——這顆是那時候用的。副作用同 [stopUserService]。
+     */
+    fun restartUserService() {
+        scope.launch {
+            stopUserService()
+            // 等舊行程真的退場再啟動，否則新的請求可能接到還沒死透的那一個。
+            withTimeoutOrNull(STOP_TIMEOUT) { serviceFlow.first { it == null } }
+                ?: Timber.w("Timed out waiting for RelcV2Service to stop")
+            startUserService()
         }
     }
 
@@ -167,24 +241,40 @@ class ShizukuManager(private val context: Context) {
      * 連上 UserService。等到服務真的接上才離開「連線中」，逾時就放棄，
      * 讓狀態退回 DISCONNECTED 而不是永遠卡在 CONNECTING。
      */
-    fun bindUserService() {
-        if (bindJob?.isActive == true || _serviceFlow.value != null) return
+    @Synchronized // 自動連線在背景執行緒上跑，可能與使用者按下的按鈕同時抵達這裡。
+    private fun connect(startIfNotRunning: Boolean, force: Boolean = false) {
+        if (_serviceFlow.value != null) return
+        if (bindJob?.isActive == true) {
+            // 使用者按下的啟動要能蓋過進行中的自動嘗試，否則重啟會被剛觸發的 attach 卡住，
+            // 而那個 attach 探的正是我們剛殺掉的服務。
+            if (!force) return
+            bindJob?.cancel()
+        }
         if (_access.value != ShizukuAccess.GRANTED) {
-            Timber.w("Shizuku permission not available, skip binding")
+            Timber.w("Shizuku permission not available, skip connecting")
             return
         }
 
+        val generation = ++connectGeneration
+        _isBinding.value = true
         bindJob = scope.launch {
-            _isBinding.value = true
             try {
-                Shizuku.bindUserService(serviceArgs, serviceConnection)
+                if (startIfNotRunning) {
+                    Shizuku.bindUserService(serviceArgs, serviceConnection)
+                } else if (Shizuku.peekUserService(serviceArgs, serviceConnection) < 0) {
+                    Timber.d("RelcV2Service is not running, staying disconnected")
+                    return@launch
+                }
                 withTimeoutOrNull(BIND_TIMEOUT) { serviceFlow.filterNotNull().first() }
                     ?: Timber.w("Timed out waiting for RelcV2Service to connect")
             } catch (e: Exception) {
-                Timber.e(e, "Failed to bind UserService")
+                Timber.e(e, "Failed to connect to UserService")
                 _serviceFlow.value = null
             } finally {
-                _isBinding.value = false
+                // 被 force 取消的舊嘗試不該把接手的新嘗試的「連線中」關掉。
+                synchronized(this@ShizukuManager) {
+                    if (generation == connectGeneration) _isBinding.value = false
+                }
             }
         }
     }

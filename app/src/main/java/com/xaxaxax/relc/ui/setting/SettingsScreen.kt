@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -20,10 +21,12 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MediumTopAppBar
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
@@ -70,6 +73,10 @@ fun SettingsScreen(
         onRequestShizukuPermission = { viewModel.requestShizukuPermission() },
         onRefresh = { viewModel.refreshPermissions(true) },
         onAutoOpenFullscreenChange = viewModel::setAutoOpenFullscreen,
+        onAutoStartUserServiceChange = viewModel::setAutoStartUserService,
+        onStartUserService = viewModel::startUserService,
+        onStopUserService = viewModel::stopUserService,
+        onRestartUserService = viewModel::restartUserService,
     )
 }
 
@@ -81,7 +88,13 @@ private fun SettingsScreenContent(
     onRequestShizukuPermission: () -> Unit,
     onRefresh: () -> Unit,
     onAutoOpenFullscreenChange: (Boolean) -> Unit,
+    onAutoStartUserServiceChange: (Boolean) -> Unit = {},
+    onStartUserService: () -> Unit = {},
+    onStopUserService: () -> Unit = {},
+    onRestartUserService: () -> Unit = {},
 ) {
+    // 關閉與重啟都會連帶銷毀虛擬顯示，值得先問一句。
+    var pendingAction by remember { mutableStateOf<UserServiceAction?>(null) }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val pullRefreshState = rememberPullToRefreshState()
 
@@ -182,7 +195,114 @@ private fun SettingsScreenContent(
                         )
                     }
                 }
+
+                item {
+                    Section(name = stringResource(R.string.settings_user_service)) {
+                        ToggleSettingItem(
+                            name = stringResource(R.string.settings_auto_start_user_service),
+                            description = stringResource(R.string.settings_auto_start_user_service_note),
+                            checked = uiState.autoStartUserService,
+                            onCheckedChange = onAutoStartUserServiceChange,
+                        )
+                        UserServiceActions(
+                            uiState = uiState,
+                            onStart = onStartUserService,
+                            onRequestStop = { pendingAction = UserServiceAction.STOP },
+                            onRequestRestart = { pendingAction = UserServiceAction.RESTART },
+                        )
+                    }
+                }
             }
+        }
+    }
+
+    pendingAction?.let { action ->
+        UserServiceConfirmDialog(
+            action = action,
+            onConfirm = {
+                pendingAction = null
+                when (action) {
+                    UserServiceAction.STOP -> onStopUserService()
+                    UserServiceAction.RESTART -> onRestartUserService()
+                }
+            },
+            onDismiss = { pendingAction = null },
+        )
+    }
+}
+
+/** 需要先跟使用者確認的兩個動作——兩者都會銷毀虛擬顯示。 */
+private enum class UserServiceAction { STOP, RESTART }
+
+@Composable
+private fun UserServiceConfirmDialog(
+    action: UserServiceAction,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val (title, message) = when (action) {
+        UserServiceAction.STOP ->
+            R.string.settings_user_service_stop_title to
+                    R.string.settings_user_service_stop_message
+        UserServiceAction.RESTART ->
+            R.string.settings_user_service_restart_title to
+                    R.string.settings_user_service_restart_message
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(title)) },
+        text = { Text(stringResource(message)) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(stringResource(R.string.settings_user_service_confirm))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.settings_user_service_cancel))
+            }
+        },
+    )
+}
+
+@Composable
+private fun UserServiceActions(
+    uiState: SettingsUiState,
+    onStart: () -> Unit,
+    onRequestStop: () -> Unit,
+    onRequestRestart: () -> Unit,
+) {
+    Column(modifier = Modifier.padding(vertical = 8.dp)) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Button(
+                onClick = onStart,
+                enabled = uiState.canStartUserService,
+            ) {
+                Text(stringResource(R.string.settings_user_service_start))
+            }
+            OutlinedButton(
+                onClick = onRequestRestart,
+                enabled = uiState.canStopUserService,
+            ) {
+                Text(stringResource(R.string.settings_user_service_restart))
+            }
+            OutlinedButton(
+                onClick = onRequestStop,
+                enabled = uiState.canStopUserService,
+            ) {
+                Text(stringResource(R.string.settings_user_service_stop))
+            }
+        }
+        if (uiState.isScriptRunning) {
+            Text(
+                text = stringResource(R.string.settings_user_service_script_running),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp),
+            )
         }
     }
 }
