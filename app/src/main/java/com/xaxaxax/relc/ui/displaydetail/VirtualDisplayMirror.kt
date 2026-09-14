@@ -1,6 +1,7 @@
 package com.xaxaxax.relc.ui.displaydetail
 
 import android.annotation.SuppressLint
+import android.graphics.Bitmap
 import android.graphics.Matrix
 import android.graphics.Point
 import android.graphics.SurfaceTexture
@@ -273,6 +274,18 @@ private fun quarterTurnMatrix(quarterTurns: Int, width: Float, height: Float): M
         3 -> matrix.setValues(floatArrayOf(0f, -1f, height, 1f, 0f, 0f, 0f, 0f, 1f))
     }
     return matrix
+}
+
+/**
+ * 把原始 buffer bitmap（[TextureView.getBitmap] 回傳的，未套用 view 旋轉）依 VD 自己的
+ * rotation 轉正。跟 [touchTransform] 疊的 v 旋轉是同一個 [quarterTurnMatrix]，只是套用對象
+ * 從座標換成 bitmap 內容——兩處共用同一份旋轉方向，不重新猜一次。
+ */
+internal fun rotateBufferBitmap(bitmap: Bitmap, rotation: Int): Bitmap {
+    val quarterTurns = rotation and 3
+    if (quarterTurns == 0) return bitmap
+    val matrix = quarterTurnMatrix(quarterTurns, bitmap.width.toFloat(), bitmap.height.toFloat())
+    return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
 }
 
 /** 虛擬顯示的 surface 尺寸與當前方向，全部取自公開的 `Display` API。 */
