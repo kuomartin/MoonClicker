@@ -8,6 +8,7 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
     alias(libs.plugins.kotlin.parcelize)
+    alias(libs.plugins.wire)
 }
 
 android {
@@ -62,6 +63,15 @@ kotlin {
     compilerOptions {
         freeCompilerArgs.addAll("-XXLanguage:+ContextParameters")
     }
+}
+
+// Workbench 的串流事件 schema 是唯一來源，Kotlin（這裡）與 vscode-extension（@bufbuild/protobuf）
+// 都從同一份 .proto 產生型別，見 proto/workbench_stream_event.proto。
+wire {
+    sourcePath {
+        srcDir("../proto")
+    }
+    kotlin {}
 }
 dependencies {
     implementation(platform(libs.androidx.compose.bom))
@@ -134,4 +144,7 @@ dependencies {
 
     // QR code (workbench pairing)
     implementation(libs.zxing.core)
+
+    // Workbench 串流事件 schema（proto/workbench_stream_event.proto 產生的型別）
+    implementation(libs.wire.runtime)
 }

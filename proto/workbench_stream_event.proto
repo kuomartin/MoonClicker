@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package relc.workbench;
+
+import "google/protobuf/struct.proto";
+
+// Script Workbench 的 WebSocket 串流事件唯一 schema。app 端 WorkbenchServer.kt
+// （Wire）與 vscode-extension 端 workbenchConnection.ts（@bufbuild/protobuf）
+// 都從這一份 .proto 產生型別。
+
+message StreamEvent {
+  oneof event {
+    string log = 1;
+    // ScriptEngine.sharedData 的值只會是 Double/String/Boolean（table 在引擎端
+    // 已經 JSON 字串化）；Struct 是剛好對應這種動態小型 map 的標準型別。
+    google.protobuf.Struct data = 2;
+  }
+}

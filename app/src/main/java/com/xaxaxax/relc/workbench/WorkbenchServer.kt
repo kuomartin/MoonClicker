@@ -37,8 +37,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
+import relc.workbench.StreamEvent
 import timber.log.Timber
 
 /**
@@ -172,10 +171,10 @@ fun Application.workbenchModule(
         // log 是 logLines 這個 SharedFlow，live-only，斷線期間錯過的行不補、不維護歷史 buffer。
         webSocket("/") {
             val dataJob = launch {
-                scriptStream.sharedData.collect { send(Frame.Text(dataEnvelope(it))) }
+                scriptStream.sharedData.collect { send(dataFrame(it)) }
             }
             val logJob = launch {
-                scriptStream.logLines.collect { send(Frame.Text(logEnvelope(it))) }
+                scriptStream.logLines.collect { send(logFrame(it)) }
             }
             try {
                 for (frame in incoming) {
@@ -240,23 +239,24 @@ fun Application.workbenchModule(
     }
 }
 
-/** `{"type":"log","line":"..."}`——extension 端不用猜形狀就能用 `type` 正確路由。 */
-private fun logEnvelope(line: String): String =
-    JsonObject(mapOf("type" to JsonPrimitive("log"), "line" to JsonPrimitive(line))).toString()
+/**
+ * `StreamEvent{log=...}` 編碼成二進位 proto frame——形狀來自 `proto/workbench_stream_event.proto`，
+ * 跟 extension 端的 `@bufbuild/protobuf` 生成型別是同一份 schema，不用兩邊手動同步解析。
+ */
+private fun logFrame(line: String): Frame =
+    Frame.Binary(true, StreamEvent.ADAPTER.encode(StreamEvent(log = line)))
 
-/** `{"type":"data","data":{...}}`，每次變動送整個 map，不算 diff。 */
-private fun dataEnvelope(data: Map<String, Any>): String =
-    JsonObject(
-        mapOf(
-            "type" to JsonPrimitive("data"),
-            "data" to JsonObject(data.mapValues { (_, value) -> value.toJsonPrimitive() }),
-        )
-    ).toString()
+/**
+ * 每次變動送整個 map，不算 diff。`data` 的值理應只有 Double/String/Boolean，但
+ * `ScriptEngine.sharedData` 型別是 `Map<String, Any>`，這個假設不是型別系統保證的——
+ * Wire 的 Struct 編碼只接受 null/Boolean/Double/String/List/Map，其餘一律
+ * `IllegalArgumentException`，未知型別因此在送出前先轉成字串，不讓一個不符預期的值
+ * 讓整個 WebSocket session 崩潰。
+ */
+private fun dataFrame(data: Map<String, Any>): Frame =
+    Frame.Binary(true, StreamEvent.ADAPTER.encode(StreamEvent(data_ = data.mapValues { (_, value) -> value.toStructValue() })))
 
-/** `ScriptEngine.sharedData` 的值只會是 Double/String/Boolean（table 在引擎端已經 JSON 字串化）。 */
-private fun Any.toJsonPrimitive(): JsonPrimitive = when (this) {
-    is Double -> JsonPrimitive(this)
-    is Boolean -> JsonPrimitive(this)
-    is String -> JsonPrimitive(this)
-    else -> JsonPrimitive(toString())
+private fun Any.toStructValue(): Any = when (this) {
+    is Double, is Boolean, is String -> this
+    else -> toString()
 }

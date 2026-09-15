@@ -29,11 +29,11 @@ export function activate(context: vscode.ExtensionContext): void {
   });
 
   connection.onDidReceiveStreamEvent((event) => {
-    if (event.type === "log") {
-      logChannel.appendLine(event.line);
-    } else {
+    if (event.event.case === "log") {
+      logChannel.appendLine(event.event.value);
+    } else if (event.event.case === "data") {
       dataChannel.clear();
-      dataChannel.appendLine(JSON.stringify(event.data, null, 2));
+      dataChannel.appendLine(JSON.stringify(event.event.value, null, 2));
     }
   });
 
