@@ -126,20 +126,29 @@ internal fun isQuarterTurn(quarterTurns: Int): Boolean =
     quarterTurns == 1 || quarterTurns == 3
 
 /**
- * buffer 空間中的一點旋轉 [quarterTurns] 個直角（`Surface.ROTATION_*`，VD 自己的 rotation）
- * 到 VD 目前的邏輯空間，即 `injectMotionEvent` 要的座標系。
+ * 一個 quarter-turn 仿射變換的係數，row-major、9 元素（`android.graphics.Matrix.setValues`
+ * 的格式）：`x' = c[0]·x + c[1]·y + c[2]`，`y' = c[3]·x + c[4]·y + c[5]`。
  *
- * 跟 `VirtualDisplayMirror.kt` 的 `quarterTurnMatrix` 是同一個仿射變換寫成兩份——那邊要用
- * `android.graphics.Matrix` 才能餵給 `MotionEvent.transform()`，這裡是它的純 Kotlin 版本，
- * 供測試把四個方向的公式釘住（`Matrix` 在 `app/src/test` 會丟 `not mocked`）。
+ * 觸控（[rotateQuarterTurn]）與畫面／bitmap（`VirtualDisplayMirror.kt` 的 `quarterTurnMatrix`）
+ * 兩邊都只是這份係數的 adapter，不各自重新推導一次仿射變換。
  */
-internal fun rotateToLogical(px: Float, py: Float, width: Float, height: Float, quarterTurns: Int): DisplayPoint =
+internal fun quarterTurnCoefficients(quarterTurns: Int, width: Float, height: Float): FloatArray =
     when (quarterTurns and 3) {
-        1 -> DisplayPoint(py, width - px)
-        2 -> DisplayPoint(width - px, height - py)
-        3 -> DisplayPoint(height - py, px)
-        else -> DisplayPoint(px, py)
+        1 -> floatArrayOf(0f, 1f, 0f, -1f, 0f, width, 0f, 0f, 1f)
+        2 -> floatArrayOf(-1f, 0f, width, 0f, -1f, height, 0f, 0f, 1f)
+        3 -> floatArrayOf(0f, -1f, height, 1f, 0f, 0f, 0f, 0f, 1f)
+        else -> floatArrayOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f)
     }
+
+/**
+ * buffer 空間中的一點旋轉 [quarterTurns] 個直角（`Surface.ROTATION_*`，VD 自己的 rotation）
+ * 到 VD 目前的邏輯空間，即 `injectMotionEvent` 要的座標系。[quarterTurnCoefficients] 的純
+ * Kotlin adapter，供測試把四個方向的公式釘住（`Matrix` 在 `app/src/test` 會丟 `not mocked`）。
+ */
+internal fun rotateQuarterTurn(px: Float, py: Float, width: Float, height: Float, quarterTurns: Int): DisplayPoint {
+    val c = quarterTurnCoefficients(quarterTurns, width, height)
+    return DisplayPoint(c[0] * px + c[1] * py + c[2], c[3] * px + c[4] * py + c[5])
+}
 
 private val EMPTY_VIEWPORT = Viewport(
     contentLeft = 0f,
