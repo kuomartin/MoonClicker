@@ -73,9 +73,10 @@ interface ScriptStream {
 }
 
 /**
- * Realtime mirror 串流需要的最小介面（見 #73）。真正實作串到 [com.xaxaxax.relc.ui.displaydetail.VirtualDisplayMirror]
- * 既有的擷取路徑是 #76 的範圍；存在這一層是為了讓 `workbenchModule` 的 JVM 測試餵假的
- * frame flow，不需要真的 `Display`/`Surface`/`TextureView`。
+ * Realtime mirror 串流需要的最小介面（見 #73）。正式實作是
+ * [com.xaxaxax.relc.ui.displaydetail.MirrorFrameSource]，接 [com.xaxaxax.relc.ui.displaydetail.VirtualDisplayMirror]
+ * 那個 `TextureView`；存在這一層是為了讓 `workbenchModule` 的 JVM 測試餵假的 frame flow，
+ * 不需要真的 `Display`/`Surface`/`TextureView`。
  */
 interface FrameSource {
     /**
@@ -91,6 +92,7 @@ interface FrameSource {
 class WorkbenchServer @Inject constructor(
     private val scriptStore: ScriptStore,
     private val scriptSession: ScriptSession,
+    private val frameSource: FrameSource,
 ) {
     private val scriptRunner = object : ScriptRunner {
         override fun isRunning() = scriptSession.state.value.isRunning
@@ -100,11 +102,6 @@ class WorkbenchServer @Inject constructor(
     private val scriptStream = object : ScriptStream {
         override val logLines: Flow<String> get() = ScriptEngine.logLines
         override val sharedData: StateFlow<Map<String, Any>> get() = ScriptEngine.sharedData
-    }
-
-    // #76 之前還沒有真正的擷取路徑可接——不假裝有資料，一律當作未知 displayId（404）。
-    private val frameSource = object : FrameSource {
-        override fun frames(displayId: Int): Flow<ByteArray>? = null
     }
 
     private var server: EmbeddedServer<*, *>? = null
@@ -299,9 +296,10 @@ fun Application.workbenchModule(
             }
         }
 
-        // Realtime mirror（見 #73）：假 FrameSource 先行，真正接上 VirtualDisplayMirror 擷取
-        // 是 #76。選 multipart/x-mixed-replace（MJPEG）而不是逐張輪詢或 WebRTC 是 #72/#52
-        // 已經定案的決策，這條路由跟 webSocket("/") 是分開的傳輸，互不干擾。
+        // Realtime mirror（見 #73、#76）。選 multipart/x-mixed-replace（MJPEG）而不是逐張輪詢
+        // 或 WebRTC 是 #72/#52 已經定案的決策，這條路由跟 webSocket("/") 是分開的傳輸，互不
+        // 干擾。404 涵蓋兩種情況：displayId 不是數字，以及那台顯示目前沒有活著的擷取來源
+        // （鏡像畫面沒開，見 MirrorFrameSource）。
         get("/mirror/{displayId}") {
             val displayId = call.parameters["displayId"]?.toIntOrNull()
             val frames = displayId?.let(frameSource::frames)
