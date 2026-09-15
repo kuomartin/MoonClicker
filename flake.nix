@@ -1,14 +1,18 @@
 {
-  description = "DevShell for nodejs";
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
-  inputs.systems.url = "github:nix-systems/default";
-  inputs.flake-utils = {
-    url = "github:numtide/flake-utils";
-    inputs.systems.follows = "systems";
+  description = "Project devShell composed with Finix presets";
+
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    systems.url = "github:nix-systems/default";
+    flake-utils = {
+      url = "github:numtide/flake-utils";
+      inputs.systems.follows = "systems";
+    };
+    finix.url = "git+ssh://git@github.com/kuomartin/finix-config.git";
   };
 
   outputs =
-    { nixpkgs, flake-utils, ... }:
+    { nixpkgs, flake-utils, finix, ... }:
     flake-utils.lib.eachDefaultSystem (
       system:
       let
@@ -16,6 +20,11 @@
       in
       {
         devShells.default = pkgs.mkShell {
+          inputsFrom = [
+            finix.devShells.${system}.node
+            finix.devShells.${system}.android
+          ];
+
           packages = with pkgs; [
             nodejs_24
           ];
