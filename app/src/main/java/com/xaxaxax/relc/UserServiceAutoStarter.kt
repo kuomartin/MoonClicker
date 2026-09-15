@@ -2,8 +2,8 @@ package com.xaxaxax.relc
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.xaxaxax.relc.core.AppSettings
 import com.xaxaxax.relc.shizuku.ShizukuManager
+import com.xaxaxax.relc.shizuku.UserServiceLifecycle
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -22,7 +22,7 @@ import javax.inject.Inject
 @HiltViewModel
 class UserServiceAutoStarter @Inject constructor(
     private val shizukuManager: ShizukuManager,
-    private val appSettings: AppSettings,
+    private val userServiceLifecycle: UserServiceLifecycle,
 ) : ViewModel() {
 
     private var triggered = false
@@ -30,13 +30,17 @@ class UserServiceAutoStarter @Inject constructor(
     /**
      * App 打開了。轉螢幕會讓 Activity 重建、[onAppOpened] 再被呼叫一次，但本物件跨重建存活，
      * 所以這個旗標擋得住；回前景則連 Activity 都沒重建，根本不會走到這裡。
+     *
+     * `autoStartEnabled` 只在這裡讀一次：這次呼叫之後才切換設定不會回溯生效，要等下次冷啟
+     * （新的 [UserServiceAutoStarter] 實例）才會看到新值。
      */
     fun onAppOpened() {
         if (triggered) return
         triggered = true
 
+        if (!userServiceLifecycle.snapshot.value.autoStartEnabled) return
+
         viewModelScope.launch {
-            if (!appSettings.autoStartUserService.value) return@launch
             // 冷啟時 Shizuku 的 binder 是非同步送達的，onCreate 很可能跑在它之前。
             // 唯一的一次觸發不能就這樣用掉，所以等到授權就緒再啟動。
             shizukuManager.statusFlow.first { it.isAuthorized }

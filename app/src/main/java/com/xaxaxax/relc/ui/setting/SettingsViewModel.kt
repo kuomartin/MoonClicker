@@ -12,6 +12,7 @@ import com.xaxaxax.relc.permission.PermissionManager
 import com.xaxaxax.relc.script.ScriptSession
 import com.xaxaxax.relc.shizuku.ShizukuConnectionStatus
 import com.xaxaxax.relc.shizuku.ShizukuManager
+import com.xaxaxax.relc.shizuku.UserServiceLifecycle
 import com.xaxaxax.relc.workbench.WorkbenchServer
 import com.xaxaxax.relc.workbench.WorkbenchService
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -56,6 +57,7 @@ class SettingsViewModel @Inject constructor(
     private val permissionManager: PermissionManager,
     private val shizukuManager: ShizukuManager,
     private val appSettings: AppSettings,
+    private val userServiceLifecycle: UserServiceLifecycle,
     private val scriptSession: ScriptSession,
     private val workbenchServer: WorkbenchServer,
 ) : ViewModel() {
@@ -64,10 +66,9 @@ class SettingsViewModel @Inject constructor(
 
     /** 先併成一份，是為了讓外層 combine 停在五個具名參數上，不必退化成靠索引轉型的 vararg 版。 */
     private val userServiceState = combine(
-        shizukuManager.statusFlow,
-        appSettings.autoStartUserService,
+        userServiceLifecycle.snapshot,
         scriptSession.state,
-    ) { status, autoStart, session -> Triple(status, autoStart, session.isRunning) }
+    ) { snapshot, session -> Triple(snapshot.connection, snapshot.autoStartEnabled, session.isRunning) }
 
     private val workbenchState = combine(
         appSettings.workbenchEnabled,
