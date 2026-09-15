@@ -133,6 +133,20 @@ fun FullscreenDisplayScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
+    // issue #76：workbench 的 `/mirror/{displayId}` 也從這個 TextureView 取畫面。擷取只取原始
+    // buffer，轉正與 JPEG 編碼在 MirrorFrameSource 的背景執行緒做，不佔 UI thread。
+    val mirrorTextureView = textureViewRef.value
+    DisposableEffect(targetDisplayId, mirrorTextureView) {
+        if (mirrorTextureView != null) {
+            viewModel.mirrorFrames.register(targetDisplayId) {
+                mirrorTextureView.bitmap?.let {
+                    MirrorFrameSource.Captured(it, currentGeometry.rotation)
+                }
+            }
+        }
+        onDispose { viewModel.mirrorFrames.unregister(targetDisplayId) }
+    }
+
     // ADR-0014：鏡像釘在 MainDisplay 的面板座標，不再跟 VD 的方向互相牽制——VD 怎麼轉
     // 是它自己的事，這個 activity 也不再把 VD 的方向鎖進 requestedOrientation。
 
@@ -166,7 +180,8 @@ fun FullscreenDisplayScreen(
                 service = service!!,
                 isReadOnly = uiState.isReadOnly,
                 modifier = Modifier.fillMaxSize(),
-                onTextureViewCreated = { textureViewRef.value = it }
+                onTextureViewCreated = { textureViewRef.value = it },
+                onFrameAvailable = { viewModel.mirrorFrames.onFrameAvailable(targetDisplayId) },
             )
         }
 
