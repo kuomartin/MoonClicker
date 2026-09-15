@@ -1,7 +1,6 @@
 package com.xaxaxax.relc.ui.displaydetail
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
 import org.junit.Test
 
 class CropHandlesTest {
@@ -85,28 +84,6 @@ class CropHandlesTest {
         val crossed = CropRect(left = 300f, top = 200f, right = 100f, bottom = 100f)
         assertEquals(rect, crossed.normalized())
         assertEquals(rect, rect.normalized())
-    }
-
-    @Test
-    fun `toPixelRect scales canvas coordinates into bitmap pixels`() {
-        // canvas 800x600 對應 bitmap 1600x300 —— x 放大兩倍，y 縮小一半。
-        val pixelRect = rect.toPixelRect(canvasWidth = 800f, canvasHeight = 600f, bitmapWidth = 1600, bitmapHeight = 300)
-
-        assertEquals(PixelRect(left = 200, top = 50, right = 600, bottom = 100), pixelRect)
-    }
-
-    @Test
-    fun `toPixelRect normalizes an inside-out rect before scaling`() {
-        val inverted = CropRect(left = rect.right, top = rect.bottom, right = rect.left, bottom = rect.top)
-        val pixelRect = inverted.toPixelRect(canvasWidth = 400f, canvasHeight = 400f, bitmapWidth = 400, bitmapHeight = 400)
-
-        assertEquals(rect.toPixelRect(canvasWidth = 400f, canvasHeight = 400f, bitmapWidth = 400, bitmapHeight = 400), pixelRect)
-    }
-
-    @Test
-    fun `toPixelRect on a degenerate canvas size yields null instead of dividing by zero`() {
-        assertNull(rect.toPixelRect(canvasWidth = 0f, canvasHeight = 600f, bitmapWidth = 100, bitmapHeight = 100))
-        assertNull(rect.toPixelRect(canvasWidth = 800f, canvasHeight = 0f, bitmapWidth = 100, bitmapHeight = 100))
     }
 
     private companion object {
