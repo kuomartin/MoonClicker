@@ -21,26 +21,35 @@ let connection: MirrorConnection | undefined;
  */
 export function openMirrorPanel(address: string, displayId: number): void {
   connection?.stop();
+  connection = undefined;
 
   if (panel) {
-    panel.title = mirrorTitle(displayId);
-    panel.reveal(vscode.ViewColumn.Beside);
-  } else {
-    panel = vscode.window.createWebviewPanel(
+    try {
+      panel.title = mirrorTitle(displayId);
+      panel.reveal(vscode.ViewColumn.Beside);
+    } catch {
+      panel = undefined;
+    }
+  }
+
+  if (!panel) {
+    const newPanel = vscode.window.createWebviewPanel(
       "relc.mirror",
       mirrorTitle(displayId),
       vscode.ViewColumn.Beside,
       { enableScripts: true, retainContextWhenHidden: true },
     );
-    panel.webview.html = renderHtml();
+    panel = newPanel;
+    newPanel.webview.html = renderHtml();
     // 面板關閉是「串流要確實停止」的兩個入口之一（另一個是下面的 stop 訊息）——
     // 兩者都導向同一個 connection.stop()，不留背景繼續拉流的路徑。
-    panel.onDidDispose(() => {
-      connection?.stop();
+    newPanel.onDidDispose(() => {
+      const conn = connection;
       connection = undefined;
       panel = undefined;
+      conn?.stop();
     });
-    panel.webview.onDidReceiveMessage(async (message: {
+    newPanel.webview.onDidReceiveMessage(async (message: {
       type?: string;
       scriptId?: string;
       templateName?: string;
@@ -52,14 +61,14 @@ export function openMirrorPanel(address: string, displayId: number): void {
       } else if (message?.type === "requestScripts") {
         try {
           const scripts = await listScripts(address);
-          panel?.webview.postMessage({ type: "scripts", scripts });
+          safePostMessage({ type: "scripts", scripts });
         } catch {
-          panel?.webview.postMessage({ type: "scripts", scripts: [] });
+          safePostMessage({ type: "scripts", scripts: [] });
         }
       } else if (message?.type === "saveTemplate") {
         const { scriptId, templateName, roi, pngBase64 } = message;
         if (!scriptId || !templateName || !roi || !pngBase64) {
-          panel?.webview.postMessage({
+          safePostMessage({
             type: "saveTemplateResult",
             success: false,
             error: "缺少必要的裁切參數",
@@ -69,7 +78,7 @@ export function openMirrorPanel(address: string, displayId: number): void {
         try {
           const pngBytes = Buffer.from(pngBase64, "base64");
           await saveTemplate(address, scriptId, templateName, roi, pngBytes);
-          panel?.webview.postMessage({
+          safePostMessage({
             type: "saveTemplateResult",
             success: true,
             templateName,
@@ -77,7 +86,7 @@ export function openMirrorPanel(address: string, displayId: number): void {
           vscode.window.showInformationMessage(`ReLC: 模板「${templateName}」已成功存入腳本「${scriptId}」`);
         } catch (err) {
           const errMsg = (err as Error).message;
-          panel?.webview.postMessage({
+          safePostMessage({
             type: "saveTemplateResult",
             success: false,
             error: errMsg,
@@ -98,7 +107,7 @@ export function openMirrorPanel(address: string, displayId: number): void {
       staleness.armFromConnect();
       // 連線成功時自動請求腳本清單以供裁切存檔選擇
       listScripts(address)
-        .then((scripts) => panel?.webview.postMessage({ type: "scripts", scripts }))
+        .then((scripts) => safePostMessage({ type: "scripts", scripts }))
         .catch(() => {});
     } else {
       staleness.disarm();
@@ -113,24 +122,38 @@ export function openMirrorPanel(address: string, displayId: number): void {
 
 /** extension 停用時的收尾——面板還開著也要確實停止串流，不留給 VS Code 自己處理。 */
 export function disposeMirrorPanel(): void {
-  connection?.stop();
-  panel?.dispose();
+  const conn = connection;
+  const p = panel;
+  connection = undefined;
+  panel = undefined;
+  conn?.stop();
+  try {
+    p?.dispose();
+  } catch {}
 }
 
 function mirrorTitle(displayId: number): string {
   return `ReLC Mirror — display ${displayId}`;
 }
 
+function safePostMessage(message: unknown): void {
+  try {
+    panel?.webview.postMessage(message);
+  } catch {
+    // webview might be disposed
+  }
+}
+
 function postState(state: MirrorConnectionState): void {
-  panel?.webview.postMessage({ type: "state", state });
+  safePostMessage({ type: "state", state });
 }
 
 function postFrame(frame: Buffer): void {
-  panel?.webview.postMessage({ type: "frame", dataUri: `data:image/jpeg;base64,${frame.toString("base64")}` });
+  safePostMessage({ type: "frame", dataUri: `data:image/jpeg;base64,${frame.toString("base64")}` });
 }
 
 function postStaleness(state: StalenessState): void {
-  panel?.webview.postMessage({ type: "staleness", stale: state === "stale" });
+  safePostMessage({ type: "staleness", stale: state === "stale" });
 }
 
 function renderHtml(): string {

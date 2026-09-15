@@ -27,22 +27,21 @@ function on_stop() end
 ---@type relc.Screen
 screen = {}
 
----@class relc.VisionRoi
----@field [1] integer
----@field [2] integer
----@field [3] integer
----@field [4] integer
----@field x integer
----@field y integer
----@field w integer
----@field h integer
+---@class relc.VisionRoiRect
+---@field x integer 外框左上角 x
+---@field y integer 外框左上角 y
+---@field w integer 外框寬
+---@field h integer 外框高
+
+--- 限制搜尋範圍（邏輯座標）。接受具名欄位 `{ x = .., y = .., w = .., h = .. }` 或陣列 `{ x, y, w, h }`。
+---@alias relc.VisionRoi relc.VisionRoiRect | [integer, integer, integer, integer] | integer[]
 
 ---@class relc.VisionRequest
 ---@field image string 必填，相對腳本資料夾的圖片路徑（也接受絕對路徑）
----@field threshold number? 預設 0.8（`TM_CCOEFF_NORMED`）
----@field scale number? `0 < scale <= 1`，比對前把影格與模板一起縮小；不是拿來配不同大小的目標
----@field gray boolean? 轉灰階後比對
----@field roi relc.VisionRoi? 限制搜尋範圍（邏輯座標）
+---@field threshold number? 選填，預設 0.8（`TM_CCOEFF_NORMED`）
+---@field scale number? 選填，`0 < scale <= 1`，比對前把影格與模板一起縮小；不是拿來配不同大小的目標
+---@field gray boolean? 選填，轉灰階後比對，預設 false
+---@field roi relc.VisionRoi? 選填，限制搜尋範圍（邏輯座標）
 
 ---@class relc.VisionHit
 ---@field x number 外框左上角 x
@@ -51,29 +50,29 @@ screen = {}
 ---@field h number 外框高
 ---@field cx number 中心點 x，餵給 `input.tap`
 ---@field cy number 中心點 y，餵給 `input.tap`
----@field confidence number
+---@field confidence number 比對信心度
 
 ---@class relc.Vision
 vision = {}
 
 --- 對目前最新的影格比對一次，不等待。找不到回傳 `nil`。
----@param request relc.VisionRequest
----@return relc.VisionHit? hit
+---@param request relc.VisionRequest|string 完整的 request 物件或圖片路徑字串簡寫
+---@return relc.VisionHit? hit 命中結果，找不到為 `nil`
 ---@overload fun(image: string): relc.VisionHit?
 function vision.find(request) end
 
 --- 等到出現為止，逾時回傳 `nil`。
----@param request relc.VisionRequest
----@param timeout_ms integer? 預設 10000
----@return relc.VisionHit? hit
+---@param request relc.VisionRequest|string 完整的 request 物件或圖片路徑字串簡寫
+---@param timeout_ms integer? 逾時毫秒數，選填，預設 10000
+---@return relc.VisionHit? hit 命中結果，逾時為 `nil`
 ---@overload fun(image: string, timeout_ms?: integer): relc.VisionHit?
 function vision.wait(request, timeout_ms) end
 
 --- 同時等多個目標；命中哪個就回傳它的 1-based index 與結果，逾時回傳 `nil`。
----@param requests (relc.VisionRequest|string)[]
----@param timeout_ms integer? 預設 10000
----@return integer? index
----@return relc.VisionHit? hit
+---@param requests (relc.VisionRequest|string)[] 目標列表（可混用 request table 或圖片路徑字串）
+---@param timeout_ms integer? 逾時毫秒數，選填，預設 10000
+---@return integer? index 1-based 索引，逾時為 `nil`
+---@return relc.VisionHit? hit 命中結果，逾時為 `nil`
 function vision.wait_any(requests, timeout_ms) end
 
 ---@alias relc.InputPoints (number[])|(number[][]) 攤平的 `{x1,y1,x2,y2,...}` 或巢狀的 `{{x1,y1},{x2,y2},...}`
@@ -82,70 +81,73 @@ function vision.wait_any(requests, timeout_ms) end
 input = {}
 
 --- 單點點擊。
----@param x number
----@param y number
----@param hold_ms integer? 預設 50
+---@param x number 邏輯座標 x
+---@param y number 邏輯座標 y
+---@param hold_ms integer? 按住毫秒數，選填，預設 50
 function input.tap(x, y, hold_ms) end
 
 --- 沿座標序列滑動。
----@param points relc.InputPoints
----@param duration_ms integer? 預設 300
+---@param points relc.InputPoints 座標點序列
+---@param duration_ms integer? 滑動毫秒數，選填，預設 300
 function input.swipe(points, duration_ms) end
 
 --- 多指同時滑動。
----@param map table<integer, relc.InputPoints> `{[pointerId] = points}`
----@param duration_ms integer? 預設 300
+---@param map table<integer, relc.InputPoints> 多指座標對應 `{[pointerId] = points}`
+---@param duration_ms integer? 滑動毫秒數，選填，預設 300
 function input.multi_swipe(map, duration_ms) end
 
 --- 按下並保持——記得之後要呼叫 `input.up`，忘了的話引擎會在腳本結束時幫你放開，
 --- 但中途的行為會像手指一直按著。
----@param id integer
----@param x number
----@param y number
+---@param id integer 觸控點 ID（pointerId）
+---@param x number 邏輯座標 x
+---@param y number 邏輯座標 y
 function input.down(id, x, y) end
 
 --- 移動一個按住中的 pointer。
----@param id integer
----@param x number
----@param y number
+---@param id integer 觸控點 ID（pointerId）
+---@param x number 邏輯座標 x
+---@param y number 邏輯座標 y
 function input.move(id, x, y) end
 
---- 放開。
----@param id integer
+--- 放開指定的觸控點。
+---@param id integer 觸控點 ID（pointerId）
 function input.up(id) end
 
 --- 注入按鍵（Android `KeyEvent` keycode）。
----@param keycode integer
----@return boolean ok
+---@param keycode integer Android KeyEvent keycode（例如 4 為 BACK、3 為 HOME）
+---@return boolean ok 是否成功注入
 function input.key(keycode) end
 
----@return boolean ok
+--- 模擬按下返回鍵（`AKEYCODE_BACK`）。
+---@return boolean ok 是否成功注入
 function input.back() end
 
----@return boolean ok
+--- 模擬按下 Home 鍵（`AKEYCODE_HOME`）。
+---@return boolean ok 是否成功注入
 function input.home() end
 
----@return boolean ok
+--- 模擬按下多工/最近任務鍵（`AKEYCODE_APP_SWITCH`）。
+---@return boolean ok 是否成功注入
 function input.recents() end
 
 ---@class relc.App
 app = {}
 
 --- 在目標顯示器上啟動 app。
----@param package_name string
----@return boolean ok
+---@param package_name string 應用程式套件名稱（Package Name）
+---@return boolean ok 是否成功發送啟動請求
 function app.launch(package_name) end
 
 ---@class relc.Device
 device = {}
 
 --- 發一則系統通知（與執行狀態通知分開）。
----@param title string
----@param text string?
+---@param title string 通知標題
+---@param text string? 通知內文，選填，預設空字串
 function device.notify(title, text) end
 
 --- 以 `Intent.parseUri` 解析並開啟。
----@param uri string
+---@param uri string 目標 URI（例如 `https://...` 或 `intent:...`）
 function device.open_uri(uri) end
 
 ---@class relc.Data
@@ -153,6 +155,6 @@ data = {}
 
 --- 把鍵值發佈給 App，顯示在腳本詳情頁。`value` 傳 `nil` 會移除該鍵；
 --- table 會以 JSON 字串過橋。
----@param key string
----@param value number|string|boolean|table|nil
+---@param key string 鍵名
+---@param value number|string|boolean|table|nil 發佈的值（傳 `nil` 刪除）
 function data.set(key, value) end
