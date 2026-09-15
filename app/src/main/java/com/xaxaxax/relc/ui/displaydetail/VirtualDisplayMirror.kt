@@ -243,7 +243,7 @@ private fun touchTransform(viewport: Viewport, geometry: DisplayGeometry): Matri
 
     val dTurns = viewport.d and 3
     if (dTurns != 0) {
-        // rotateToLogical(dTurns) 的反函式：轉回 (4 - dTurns) % 4，長寬互換的規則跟著反過來。
+        // rotateQuarterTurn(dTurns) 的反函式：轉回 (4 - dTurns) % 4，長寬互換的規則跟著反過來。
         val inverseTurns = (4 - dTurns) % 4
         val (inverseWidth, inverseHeight) = if (isQuarterTurn(dTurns)) {
             geometry.surfaceHeight.toFloat() to geometry.surfaceWidth.toFloat()
@@ -263,18 +263,11 @@ private fun touchTransform(viewport: Viewport, geometry: DisplayGeometry): Matri
 }
 
 /**
- * [rotateToLogical] 的 `android.graphics.Matrix` 版本——同一個仿射變換的兩份寫法，
- * 測試釘住 [rotateToLogical] 就等於釘住這裡。
+ * [quarterTurnCoefficients] 的 `android.graphics.Matrix` adapter，供 `MotionEvent.transform()`
+ * 與 bitmap 旋轉使用。
  */
-private fun quarterTurnMatrix(quarterTurns: Int, width: Float, height: Float): Matrix {
-    val matrix = Matrix()
-    when (quarterTurns and 3) {
-        1 -> matrix.setValues(floatArrayOf(0f, 1f, 0f, -1f, 0f, width, 0f, 0f, 1f))
-        2 -> matrix.setValues(floatArrayOf(-1f, 0f, width, 0f, -1f, height, 0f, 0f, 1f))
-        3 -> matrix.setValues(floatArrayOf(0f, -1f, height, 1f, 0f, 0f, 0f, 0f, 1f))
-    }
-    return matrix
-}
+private fun quarterTurnMatrix(quarterTurns: Int, width: Float, height: Float): Matrix =
+    Matrix().apply { setValues(quarterTurnCoefficients(quarterTurns, width, height)) }
 
 /**
  * 把原始 buffer bitmap（[TextureView.getBitmap] 回傳的，未套用 view 旋轉）依 VD 自己的

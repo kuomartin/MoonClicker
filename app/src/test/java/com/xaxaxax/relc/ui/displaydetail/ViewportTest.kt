@@ -228,29 +228,29 @@ class ViewportTest {
     }
 
     @Test
-    fun `rotateToLogical maps buffer points into VD's logical space at every v`() {
+    fun `rotateQuarterTurn maps buffer points into VD's logical space at every v`() {
         // buffer 1080x2400，四個角在每個 v 都要落在（互換後）邏輯矩形的四個角上。
         val width = 1080f
         val height = 2400f
 
-        assertEquals(DisplayPoint(0f, 0f), rotateToLogical(0f, 0f, width, height, quarterTurns = 0))
-        assertEquals(DisplayPoint(width, height), rotateToLogical(width, height, width, height, quarterTurns = 0))
+        assertEquals(DisplayPoint(0f, 0f), rotateQuarterTurn(0f, 0f, width, height, quarterTurns = 0))
+        assertEquals(DisplayPoint(width, height), rotateQuarterTurn(width, height, width, height, quarterTurns = 0))
 
         // v=1：邏輯尺寸互換成 2400x1080，buffer 右上角 (width, 0) 轉到邏輯左上角。
-        assertEquals(DisplayPoint(0f, 0f), rotateToLogical(width, 0f, width, height, quarterTurns = 1))
-        assertEquals(DisplayPoint(height, width), rotateToLogical(0f, height, width, height, quarterTurns = 1))
+        assertEquals(DisplayPoint(0f, 0f), rotateQuarterTurn(width, 0f, width, height, quarterTurns = 1))
+        assertEquals(DisplayPoint(height, width), rotateQuarterTurn(0f, height, width, height, quarterTurns = 1))
 
         // v=2：buffer 右下角轉到邏輯左上角。
-        assertEquals(DisplayPoint(0f, 0f), rotateToLogical(width, height, width, height, quarterTurns = 2))
-        assertEquals(DisplayPoint(width, height), rotateToLogical(0f, 0f, width, height, quarterTurns = 2))
+        assertEquals(DisplayPoint(0f, 0f), rotateQuarterTurn(width, height, width, height, quarterTurns = 2))
+        assertEquals(DisplayPoint(width, height), rotateQuarterTurn(0f, 0f, width, height, quarterTurns = 2))
 
         // v=3：buffer 左下角轉到邏輯左上角。
-        assertEquals(DisplayPoint(0f, 0f), rotateToLogical(0f, height, width, height, quarterTurns = 3))
-        assertEquals(DisplayPoint(height, width), rotateToLogical(width, 0f, width, height, quarterTurns = 3))
+        assertEquals(DisplayPoint(0f, 0f), rotateQuarterTurn(0f, height, width, height, quarterTurns = 3))
+        assertEquals(DisplayPoint(height, width), rotateQuarterTurn(width, 0f, width, height, quarterTurns = 3))
     }
 
     @Test
-    fun `rotateToLogical inverts cleanly at every quarter turn`() {
+    fun `rotateQuarterTurn inverts cleanly at every quarter turn`() {
         // touchTransform 用「(4-d) mod 4、長寬互換規則跟著反過來」反轉 d 那一段旋轉。
         // 這裡不跑 Matrix（app 的 stub 會丟 not mocked），直接釘住這個反函式規則本身。
         val width = 1080f
@@ -263,8 +263,8 @@ class ViewportTest {
                 if (isQuarterTurn(quarterTurns)) height to width else width to height
 
             for ((px, py) in points) {
-                val logical = rotateToLogical(px, py, width, height, quarterTurns)
-                val back = rotateToLogical(logical.x, logical.y, inverseWidth, inverseHeight, inverseTurns)
+                val logical = rotateQuarterTurn(px, py, width, height, quarterTurns)
+                val back = rotateQuarterTurn(logical.x, logical.y, inverseWidth, inverseHeight, inverseTurns)
                 assertEquals("quarterTurns=$quarterTurns", px, back.x, TOLERANCE)
                 assertEquals("quarterTurns=$quarterTurns", py, back.y, TOLERANCE)
             }
