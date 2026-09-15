@@ -16,7 +16,8 @@
     "commands": [
       {
         "command": "relc.connect",
-        "title": "ReLC: Connect to Device"
+        "title": "ReLC: Connect to Device",
+        "icon": "$(plug)"
       },
       {
         "command": "relc.disconnect",
@@ -57,11 +58,6 @@
           "command": "relc.connect",
           "when": "view == relc.workspace",
           "group": "navigation"
-        },
-        {
-          "command": "relc.disconnect",
-          "when": "view == relc.workspace",
-          "group": "navigation"
         }
       ],
       "view/item/context": [
@@ -83,6 +79,10 @@
         },
         {
           "command": "relc.openMirror",
+          "when": "viewItem == remoteRoot"
+        },
+        {
+          "command": "relc.disconnect",
           "when": "viewItem == remoteRoot"
         }
       ]
