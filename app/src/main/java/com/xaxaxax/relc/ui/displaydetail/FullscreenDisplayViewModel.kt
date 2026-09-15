@@ -24,13 +24,6 @@ class FullscreenDisplayViewModel @Inject constructor(
     private val shizukuManager: ShizukuManager,
     private val thumbnailCache: DisplayThumbnailCache,
 ) : ViewModel() {
-    /**
-     * 這個畫面只管顯示器本身與模板裁切。跑腳本是 ScriptSession 的事（issue #5），
-     * 所以這裡沒有 RUNNING。
-     */
-    enum class ExecutionState {
-        IDLE, CROPPING
-    }
 
     data class UiState(
         val isReadOnly: Boolean = false,
@@ -39,14 +32,13 @@ class FullscreenDisplayViewModel @Inject constructor(
         val menuOffsetY: Float = 0f,
         val showAppList: Boolean = false,
         val apps: List<AppEntry> = emptyList(),
-        val executionState: ExecutionState = ExecutionState.IDLE
     )
 
     private val _uiState = MutableStateFlow(UiState())
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
-    private val _capturedBitmap = MutableStateFlow<android.graphics.Bitmap?>(null)
-    val capturedBitmap: StateFlow<android.graphics.Bitmap?> = _capturedBitmap.asStateFlow()
+    /** 裁切工作流的唯一權威，見 [CropSession]。 */
+    val cropSession = CropSession(context)
 
     /**
      * 綁好的服務，也是 UI 判斷「可以顯示鏡像了沒」的依據——服務在，鏡像才有東西可映。
@@ -61,11 +53,7 @@ class FullscreenDisplayViewModel @Inject constructor(
     }
 
     fun startCropping() {
-        _uiState.value = _uiState.value.copy(executionState = ExecutionState.CROPPING)
-    }
-
-    fun setCapturedBitmap(bitmap: android.graphics.Bitmap) {
-        _capturedBitmap.value = bitmap
+        cropSession.start()
     }
 
     /**
@@ -75,48 +63,6 @@ class FullscreenDisplayViewModel @Inject constructor(
     fun captureThumbnail(displayId: Int, bitmap: android.graphics.Bitmap, rotation: Int) {
         viewModelScope.launch(Dispatchers.IO) {
             thumbnailCache.put(displayId, bitmap, rotation)
-        }
-    }
-
-    fun cancelCropping() {
-        _uiState.value = _uiState.value.copy(executionState = ExecutionState.IDLE)
-        _capturedBitmap.value = null
-    }
-
-    fun saveCroppedImage(
-        scriptDir: String,
-        name: String,
-        cropRect: android.graphics.Rect
-    ): Boolean {
-        val bitmap = _capturedBitmap.value ?: return false
-        try {
-            val left = cropRect.left.coerceAtLeast(0)
-            val top = cropRect.top.coerceAtLeast(0)
-            val right = cropRect.right.coerceAtMost(bitmap.width)
-            val bottom = cropRect.bottom.coerceAtMost(bitmap.height)
-            val width = right - left
-            val height = bottom - top
-
-            if (width <= 0 || height <= 0) return false
-
-            val croppedBitmap =
-                android.graphics.Bitmap.createBitmap(bitmap, left, top, width, height)
-            val templateDir = if (scriptDir.isBlank()) {
-                java.io.File(context.getExternalFilesDir(null), "images")
-            } else {
-                java.io.File(scriptDir)
-            }
-            if (!templateDir.exists()) templateDir.mkdirs()
-
-            val file = java.io.File(templateDir, "$name.png")
-            java.io.FileOutputStream(file).use { out ->
-                croppedBitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
-            }
-            cancelCropping()
-            return true
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to save cropped image")
-            return false
         }
     }
 

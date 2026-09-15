@@ -6,9 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -33,8 +31,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
@@ -42,7 +38,6 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -56,16 +51,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.core.view.WindowCompat
@@ -124,7 +112,7 @@ fun FullscreenDisplayScreen(
     val activity = LocalActivity.current
     val uiState by viewModel.uiState.collectAsState()
     val service by viewModel.service.collectAsState()
-    val capturedBitmap by viewModel.capturedBitmap.collectAsState()
+    val cropState by viewModel.cropSession.state.collectAsState()
     val textureViewRef = remember { mutableStateOf<android.view.TextureView?>(null) }
     // 單一來源：鏡像的 Viewport 讀這一份，決定 letterbox 與內容尺寸。
     val geometry = rememberDisplayGeometry(targetDisplayId)
@@ -148,18 +136,18 @@ fun FullscreenDisplayScreen(
     // ADR-0014：鏡像釘在 MainDisplay 的面板座標，不再跟 VD 的方向互相牽制——VD 怎麼轉
     // 是它自己的事，這個 activity 也不再把 VD 的方向鎖進 requestedOrientation。
 
-    LaunchedEffect(uiState.executionState) {
-        if (uiState.executionState == FullscreenDisplayViewModel.ExecutionState.CROPPING && capturedBitmap == null) {
+    LaunchedEffect(cropState.isActive) {
+        if (cropState.isActive && cropState.bitmap == null) {
             // TextureView 取代 SurfaceView 之後，擷取畫面不需要 PixelCopy —— getBitmap()
             // 直接同步回傳 texture 的內容，但那是 surface 空間（未套用 VD 自己的 rotation）。
             // ADR-0013：模板圖是邏輯空間的產物，所以裁切前先用 rotateBufferBitmap 轉正——
             // 跟 DisplayThumbnailCache.put 存縮圖用的是同一個轉換，理由也一樣。
             val bitmap = textureViewRef.value?.bitmap?.let { rotateBufferBitmap(it, geometry.rotation) }
             if (bitmap != null) {
-                viewModel.setCapturedBitmap(bitmap)
+                viewModel.cropSession.setCapturedBitmap(bitmap)
             } else {
                 Timber.e("TextureView.getBitmap() returned null")
-                viewModel.cancelCropping()
+                viewModel.cropSession.cancel()
             }
         }
     }
@@ -182,149 +170,8 @@ fun FullscreenDisplayScreen(
             )
         }
 
-        if (uiState.executionState == FullscreenDisplayViewModel.ExecutionState.CROPPING) {
-            Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-                if (capturedBitmap != null) {
-                    val density = LocalDensity.current
-                    val handleRadius = with(density) { 24.dp.toPx() }
-                    var cropRect by remember { mutableStateOf<CropRect?>(null) }
-                    var activeHandle by remember { mutableStateOf(DragHandle.None) }
-                    var showSaveDialog by remember { mutableStateOf(false) }
-                    var canvasSize by remember { mutableStateOf(IntSize.Zero) }
-                    // letterbox 內容矩形——跟一般顯示鏡像用同一套 Viewport，因為
-                    // capturedBitmap 轉正後（v=90/270°）長寬會互換，硬拉伸塞滿 canvasSize
-                    // 會讓畫面變形。存檔的 onClick 也要用同一個 viewport 換算座標，故 hoist。
-                    var viewport by remember { mutableStateOf(viewportOf(0, 0, 0, 0, 0)) }
-
-                    Canvas(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .pointerInput(Unit) {
-                                detectDragGestures(
-                                    onDragStart = { offset ->
-                                        activeHandle = hitTest(cropRect, offset.x, offset.y, handleRadius)
-                                        if (activeHandle == DragHandle.None) {
-                                            cropRect = CropRect(offset.x, offset.y, offset.x, offset.y)
-                                            activeHandle = DragHandle.BottomRight
-                                        }
-                                    },
-                                    onDrag = { change, dragAmount ->
-                                        change.consume()
-                                        val r = cropRect ?: return@detectDragGestures
-                                        cropRect = dragResize(r, activeHandle, dragAmount.x, dragAmount.y)
-                                    },
-                                    onDragEnd = {
-                                        cropRect = cropRect?.normalized()
-                                        activeHandle = DragHandle.None
-                                    }
-                                )
-                            }
-                    ) {
-                        canvasSize = IntSize(size.width.toInt(), size.height.toInt())
-                        val bitmap = capturedBitmap!!
-                        viewport = viewportOf(
-                            surfaceWidth = bitmap.width,
-                            surfaceHeight = bitmap.height,
-                            d = 0,
-                            viewWidth = canvasSize.width,
-                            viewHeight = canvasSize.height,
-                        )
-
-                        drawImage(
-                            image = bitmap.asImageBitmap(),
-                            dstOffset = IntOffset(viewport.contentLeft.roundToInt(), viewport.contentTop.roundToInt()),
-                            dstSize = IntSize(viewport.contentWidth.roundToInt(), viewport.contentHeight.roundToInt()),
-                        )
-                        drawRect(Color.Black.copy(alpha = 0.5f))
-
-                        cropRect?.let { rect ->
-                            val topLeft = Offset(rect.left, rect.top)
-                            val rectSize = Size(rect.width, rect.height)
-                            drawRect(
-                                color = Color.Transparent,
-                                topLeft = topLeft,
-                                size = rectSize,
-                                blendMode = BlendMode.Clear
-                            )
-                            drawRect(
-                                color = Color.Red,
-                                topLeft = topLeft,
-                                size = rectSize,
-                                style = Stroke(width = 4f)
-                            )
-                            drawCircle(Color.Red, radius = 10f, center = Offset(rect.left, rect.top))
-                            drawCircle(Color.Red, radius = 10f, center = Offset(rect.right, rect.top))
-                            drawCircle(Color.Red, radius = 10f, center = Offset(rect.left, rect.bottom))
-                            drawCircle(Color.Red, radius = 10f, center = Offset(rect.right, rect.bottom))
-                        }
-                    }
-
-                    if (showSaveDialog && cropRect != null) {
-                        var templateName by remember { mutableStateOf("") }
-                        AlertDialog(
-                            onDismissRequest = { showSaveDialog = false },
-                            title = { Text("Save Template") },
-                            text = {
-                                OutlinedTextField(
-                                    value = templateName,
-                                    onValueChange = { templateName = it },
-                                    label = { Text("Template Name") }
-                                )
-                            },
-                            confirmButton = {
-                                TextButton(onClick = {
-                                    activity ?: return@TextButton
-                                    cropRect?.normalized()?.let { r ->
-                                        val topLeft = viewport.toDisplay(r.left, r.top)
-                                        val bottomRight = viewport.toDisplay(r.right, r.bottom)
-                                        val cRect = android.graphics.Rect(
-                                            topLeft.x.roundToInt(), topLeft.y.roundToInt(),
-                                            bottomRight.x.roundToInt(), bottomRight.y.roundToInt(),
-                                        )
-                                        viewModel.saveCroppedImage(scriptDir, templateName, cRect)
-                                    }
-                                    showSaveDialog = false
-                                }) { Text("Save") }
-                            },
-                            dismissButton = {
-                                TextButton(onClick = { showSaveDialog = false }) { Text("Cancel") }
-                            }
-                        )
-                    }
-
-                    Row(
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(32.dp),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        TextButton(
-                            onClick = { viewModel.cancelCropping() },
-                            colors = ButtonDefaults.textButtonColors(contentColor = Color.White)
-                        ) {
-                            Text("Cancel")
-                        }
-                        if (cropRect != null && cropRect!!.width > 0 && cropRect!!.height > 0) {
-                            Button(
-                                onClick = { showSaveDialog = true },
-                            ) {
-                                Text("Save Crop")
-                            }
-                        }
-                    }
-                } else {                    Text(
-                        text = "Capturing...",
-                        color = Color.White,
-                        modifier = Modifier.align(Alignment.Center)
-                    )
-                    TextButton(
-                        onClick = { viewModel.cancelCropping() },
-                        modifier = Modifier.align(Alignment.BottomCenter).padding(32.dp)
-                    ) {
-                        Text("Cancel", color = Color.White)
-                    }
-                }
-            }
+        if (cropState.isActive) {
+            CropScreen(session = viewModel.cropSession, scriptDir = scriptDir)
         } else {
             // Floating Control Bar
             Box(
