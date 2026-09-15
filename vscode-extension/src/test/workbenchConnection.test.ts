@@ -1,25 +1,29 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { WebSocketServer } from "ws";
+import { create, toBinary } from "@bufbuild/protobuf";
+import { StreamEventSchema } from "../generated/workbench_stream_event_pb";
 import { ConnectionState, WorkbenchConnection, parseStreamEvent } from "../workbenchConnection";
 
+function encode(event: Parameters<typeof create<typeof StreamEventSchema>>[1]): Uint8Array {
+  return toBinary(StreamEventSchema, create(StreamEventSchema, event));
+}
+
 test("parseStreamEvent recognizes a log envelope", () => {
-  assert.deepEqual(parseStreamEvent('{"type":"log","line":"hi"}'), { type: "log", line: "hi" });
+  const event = parseStreamEvent(encode({ event: { case: "log", value: "hi" } }));
+  assert.equal(event?.event.case, "log");
+  assert.equal(event?.event.case === "log" ? event.event.value : undefined, "hi");
 });
 
 test("parseStreamEvent recognizes a data envelope", () => {
-  assert.deepEqual(parseStreamEvent('{"type":"data","data":{"k":"v"}}'), {
-    type: "data",
-    data: { k: "v" },
-  });
+  const event = parseStreamEvent(encode({ event: { case: "data", value: { k: "v" } } }));
+  assert.equal(event?.event.case, "data");
+  assert.deepEqual(event?.event.case === "data" ? event.event.value : undefined, { k: "v" });
 });
 
-test("parseStreamEvent ignores malformed JSON", () => {
-  assert.equal(parseStreamEvent("not json"), undefined);
-});
-
-test("parseStreamEvent ignores an unknown type", () => {
-  assert.equal(parseStreamEvent('{"type":"ping"}'), undefined);
+test("parseStreamEvent ignores malformed bytes", () => {
+  // field number 0 不是合法的 protobuf 欄位編號，binary decode 會直接丟例外。
+  assert.equal(parseStreamEvent(new Uint8Array([0, 0])), undefined);
 });
 
 function withServer(fn: (port: number) => Promise<void>): Promise<void> {
@@ -76,13 +80,41 @@ test("connect to a closed port reaches the error state", async () => {
   assert.equal(state.status, "error");
 });
 
+test("connection ignores text frames instead of decoding them as protobuf", async () => {
+  // 文字 frame 是 #57 的連線 echo，不是 StreamEvent——decode 任意位元組不保證丟例外，
+  // 混進來會被誤判成一筆假造的事件。
+  await new Promise<void>((resolve, reject) => {
+    const server = new WebSocketServer({ port: 0 });
+    server.on("listening", () => {
+      const port = (server.address() as { port: number }).port;
+      server.on("connection", (ws) => {
+        ws.send("not a stream event");
+        ws.send(encode({ event: { case: "data", value: { status: "claimed" } } }));
+      });
+
+      const connection = new WorkbenchConnection();
+      connection.onDidReceiveStreamEvent((event) => {
+        try {
+          assert.equal(event.event.case, "data");
+          connection.disconnect();
+          server.close();
+          resolve();
+        } catch (err) {
+          reject(err);
+        }
+      });
+      connection.connect(`127.0.0.1:${port}`);
+    });
+  });
+});
+
 test("connection forwards parsed stream events to listeners", async () => {
   await new Promise<void>((resolve, reject) => {
     const server = new WebSocketServer({ port: 0 });
     server.on("listening", () => {
       const port = (server.address() as { port: number }).port;
       server.on("connection", (ws) => {
-        ws.send('{"type":"data","data":{"status":"claimed"}}');
+        ws.send(encode({ event: { case: "data", value: { status: "claimed" } } }));
       });
 
       const connection = new WorkbenchConnection();
@@ -91,7 +123,11 @@ test("connection forwards parsed stream events to listeners", async () => {
         received.push(event);
         if (received.length === 1) {
           try {
-            assert.deepEqual(received[0], { type: "data", data: { status: "claimed" } });
+            assert.equal(event.event.case, "data");
+            assert.deepEqual(
+              event.event.case === "data" ? event.event.value : undefined,
+              { status: "claimed" },
+            );
             connection.disconnect();
             server.close();
             resolve();

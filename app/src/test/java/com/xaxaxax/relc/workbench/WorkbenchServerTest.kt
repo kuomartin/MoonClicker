@@ -1,6 +1,7 @@
 package com.xaxaxax.relc.workbench
 
 import com.xaxaxax.relc.script.Script
+import io.ktor.client.plugins.websocket.DefaultClientWebSocketSession
 import io.ktor.client.plugins.websocket.WebSockets as ClientWebSockets
 import io.ktor.client.plugins.websocket.webSocket
 import io.ktor.client.request.get
@@ -23,14 +24,13 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.test.runTest
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import relc.workbench.StreamEvent
 
 /** [ScriptSession] 是 Hilt @Singleton、沒有現成的假實作——測試只需要 [ScriptRunner] 這個縮小介面。 */
 private class FakeScriptRunner : ScriptRunner {
@@ -58,6 +58,12 @@ private class FakeScriptStream : ScriptStream {
     fun emitLog(line: String) {
         _logLines.tryEmit(line)
     }
+}
+
+/** 收一筆二進位 frame，解碼成 [StreamEvent]——跟 WorkbenchServer.kt 產生它用的是同一份 schema。 */
+private suspend fun DefaultClientWebSocketSession.receiveStreamEvent(): StreamEvent {
+    val frame = incoming.receive() as Frame.Binary
+    return StreamEvent.ADAPTER.decode(frame.data)
 }
 
 class WorkbenchServerTest {
@@ -133,11 +139,9 @@ class WorkbenchServerTest {
             val client = createClient { install(ClientWebSockets) }
 
             client.webSocket("/") {
-                val first = (incoming.receive() as Frame.Text).readText()
-                val json = Json.parseToJsonElement(first).jsonObject
+                val event = receiveStreamEvent()
 
-                assertEquals("data", json["type"]?.jsonPrimitive?.content)
-                assertEquals("claimed", json["data"]?.jsonObject?.get("status")?.jsonPrimitive?.content)
+                assertEquals("claimed", event.data_?.get("status"))
             }
         }
     }
@@ -149,14 +153,13 @@ class WorkbenchServerTest {
             val client = createClient { install(ClientWebSockets) }
 
             client.webSocket("/") {
-                incoming.receive() // 初始 data 快照，見上一個測試。
+                receiveStreamEvent() // 初始 data 快照，見上一個測試。
 
                 fakeStream.emitLog("hello from script")
 
-                val frame = (incoming.receive() as Frame.Text).readText()
-                val json = Json.parseToJsonElement(frame).jsonObject
-                assertEquals("log", json["type"]?.jsonPrimitive?.content)
-                assertEquals("hello from script", json["line"]?.jsonPrimitive?.content)
+                val event = receiveStreamEvent()
+                assertEquals("hello from script", event.log)
+                assertNull(event.data_)
             }
         }
     }
@@ -168,14 +171,30 @@ class WorkbenchServerTest {
             val client = createClient { install(ClientWebSockets) }
 
             client.webSocket("/") {
-                incoming.receive() // 初始（空）data 快照。
+                receiveStreamEvent() // 初始（空）data 快照。
 
                 fakeStream.setData(mapOf("progress" to 0.5))
 
-                val frame = (incoming.receive() as Frame.Text).readText()
-                val json = Json.parseToJsonElement(frame).jsonObject
-                assertEquals("data", json["type"]?.jsonPrimitive?.content)
-                assertEquals(0.5, json["data"]?.jsonObject?.get("progress")?.jsonPrimitive?.content?.toDouble())
+                val event = receiveStreamEvent()
+                assertEquals(0.5, event.data_?.get("progress"))
+            }
+        }
+    }
+
+    @Test
+    fun `data values outside Double, String or Boolean are stringified instead of crashing the session`() = runTest {
+        // sharedData 的型別是 Map<String, Any>，Double/String/Boolean 只是註解上的約定，
+        // 型別系統不保證；Wire 的 Struct 編碼遇到其他型別會丟例外，這裡驗證不會讓整個
+        // WebSocket session 崩潰。
+        fakeStream.setData(mapOf("count" to 3))
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream) }
+            val client = createClient { install(ClientWebSockets) }
+
+            client.webSocket("/") {
+                val event = receiveStreamEvent()
+
+                assertEquals("3", event.data_?.get("count"))
             }
         }
     }
@@ -187,16 +206,15 @@ class WorkbenchServerTest {
             val client = createClient { install(ClientWebSockets) }
 
             client.webSocket("/") {
-                incoming.receive() // 第一次連線的初始快照。
+                receiveStreamEvent() // 第一次連線的初始快照。
                 fakeStream.setData(mapOf("status" to "claimed"))
-                incoming.receive() // 消費掉這次變動的推播，模擬「這行資料在斷線前已經送過」。
+                receiveStreamEvent() // 消費掉這次變動的推播，模擬「這行資料在斷線前已經送過」。
             }
 
             // 重新連線：不需要重播任何歷史，新連線一開始就該看到目前的完整快照。
             client.webSocket("/") {
-                val first = (incoming.receive() as Frame.Text).readText()
-                val json = Json.parseToJsonElement(first).jsonObject
-                assertEquals("claimed", json["data"]?.jsonObject?.get("status")?.jsonPrimitive?.content)
+                val event = receiveStreamEvent()
+                assertEquals("claimed", event.data_?.get("status"))
             }
         }
     }
