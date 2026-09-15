@@ -1,4 +1,8 @@
 import WebSocket from "ws";
+import { fromBinary } from "@bufbuild/protobuf";
+import { StreamEventSchema, type StreamEvent } from "./generated/workbench_stream_event_pb";
+
+export type { StreamEvent };
 
 export type ConnectionState =
   | { status: "disconnected" }
@@ -6,31 +10,24 @@ export type ConnectionState =
   | { status: "connected"; address: string }
   | { status: "error"; address: string; message: string };
 
-/** 裝置端串流過來的兩種訊息（見 #62），用 `type` 判別，不用猜形狀。 */
-export type StreamEvent =
-  | { type: "log"; line: string }
-  | { type: "data"; data: Record<string, unknown> };
-
 /**
- * 解析一筆原始 WebSocket 訊息。不是合法 envelope（milestone 1 沒有其他訊息格式）就回傳
- * `undefined`，呼叫端直接忽略——不是這個連線該處理的東西，不代表連線壞了。
+ * 解析一筆原始 WebSocket 二進位訊息成 [StreamEvent]。形狀來自
+ * proto/workbench_stream_event.proto，跟裝置端 WorkbenchServer.kt 是同一份 schema
+ * 產生的型別，不是這裡手動猜出來的。不是合法 protobuf 就回傳 `undefined`，呼叫端
+ * 直接忽略——不是這個連線該處理的東西，不代表連線壞了。
  */
-export function parseStreamEvent(raw: string): StreamEvent | undefined {
-  let parsed: unknown;
+export function parseStreamEvent(raw: Uint8Array): StreamEvent | undefined {
   try {
-    parsed = JSON.parse(raw);
+    return fromBinary(StreamEventSchema, raw);
   } catch {
     return undefined;
   }
-  if (typeof parsed !== "object" || parsed === null) return undefined;
-  const obj = parsed as Record<string, unknown>;
-  if (obj.type === "log" && typeof obj.line === "string") {
-    return { type: "log", line: obj.line };
-  }
-  if (obj.type === "data" && typeof obj.data === "object" && obj.data !== null) {
-    return { type: "data", data: obj.data as Record<string, unknown> };
-  }
-  return undefined;
+}
+
+/** `ws` 的 `message` 事件依 fragmentation 可能給 Buffer、Buffer[] 或 ArrayBuffer。 */
+function toBytes(raw: WebSocket.RawData): Uint8Array {
+  if (raw instanceof ArrayBuffer) return new Uint8Array(raw);
+  return Buffer.isBuffer(raw) ? raw : Buffer.concat(raw);
 }
 
 /**
@@ -66,8 +63,11 @@ export class WorkbenchConnection {
       this.setState({ status: "connected", address });
     });
 
-    socket.on("message", (raw) => {
-      const event = parseStreamEvent(raw.toString());
+    socket.on("message", (raw, isBinary) => {
+      // 文字 frame 是 #57 的連線 echo，不是 StreamEvent——protobuf binary decode
+      // 對任意位元組不保證會丟例外，讓文字 frame 也去解碼可能得到一筆假造的事件。
+      if (!isBinary) return;
+      const event = parseStreamEvent(toBytes(raw));
       if (event) {
         for (const listener of this.streamListeners) listener(event);
       }
