@@ -45,7 +45,7 @@ class DisplayThumbnailCache @Inject constructor(
         // 先縮到目標大小再轉正，而不是反過來：原始 buffer 可能是全解析度，轉正是全像素的
         // 仿射運算，對只會顯示成縮圖的內容沒必要在轉正前吃這筆成本。
         val quarterTurns = rotation and 3
-        val swapped = quarterTurns == 1 || quarterTurns == 3
+        val swapped = isQuarterTurn(quarterTurns)
         val (finalWidth, finalHeight) = if (swapped) {
             rawBitmap.height to rawBitmap.width
         } else {
