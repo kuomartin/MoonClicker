@@ -30,8 +30,18 @@ object ScriptArchive {
      * 拒絕的情況：entry 路徑逃出目標目錄（zip slip）、entry 數或總大小超標、
      * 解完找不到 `main.lua`。三種都會回 [ImportResult.Failed] 而不是留下半個資料夾。
      */
-    fun import(input: InputStream, root: File, suggestedName: String): ImportResult {
-        val id = uniqueId(root, sanitizeId(suggestedName))
+    fun import(input: InputStream, root: File, suggestedName: String): ImportResult =
+        unpackInto(input, root, uniqueId(root, sanitizeId(suggestedName)))
+
+    /**
+     * 跟 [import] 一樣把 zip 解開驗證，但目的地是**指定的既有 id**，整份覆蓋掉，不像
+     * [import] 那樣在 id 衝突時退讓成 `-2`。這是 VS Code push 回裝置（見 #58）要的語意：
+     * 「這就是這份腳本現在該有的內容」，不是「多一份新腳本」。
+     */
+    fun replace(input: InputStream, root: File, id: String): ImportResult =
+        unpackInto(input, root, sanitizeId(id))
+
+    private fun unpackInto(input: InputStream, root: File, id: String): ImportResult {
         val staging = File(root, ".import-$id")
         staging.deleteRecursively()
         if (!staging.mkdirs()) return ImportResult.Failed("無法建立暫存目錄")

@@ -12,6 +12,7 @@ import com.xaxaxax.relc.permission.PermissionManager
 import com.xaxaxax.relc.script.ScriptSession
 import com.xaxaxax.relc.shizuku.ShizukuConnectionStatus
 import com.xaxaxax.relc.shizuku.ShizukuManager
+import com.xaxaxax.relc.workbench.WorkbenchServer
 import com.xaxaxax.relc.workbench.WorkbenchService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -33,6 +34,8 @@ data class SettingsUiState(
     val autoOpenFullscreen: Boolean = false,
     val autoStartUserService: Boolean = true,
     val workbenchEnabled: Boolean = false,
+    /** Server 目前監聽的 "ip:port"，供 QR code 配對顯示；未啟動或還沒 bind 完成時是 null。 */
+    val workbenchAddress: String? = null,
     /** 腳本跑在 UserService 上，停掉服務會把它一起帶走。 */
     val isScriptRunning: Boolean = false,
 ) {
@@ -54,24 +57,30 @@ class SettingsViewModel @Inject constructor(
     private val shizukuManager: ShizukuManager,
     private val appSettings: AppSettings,
     private val scriptSession: ScriptSession,
+    private val workbenchServer: WorkbenchServer,
 ) : ViewModel() {
     private val _osAllowSecondaryDisplays = MutableStateFlow(false)
     private val isRefreshing = MutableStateFlow(false)
 
-    /** 先併成一份，是為了讓外層 combine 停在四個具名參數上，不必退化成靠索引轉型的 vararg 版。 */
+    /** 先併成一份，是為了讓外層 combine 停在五個具名參數上，不必退化成靠索引轉型的 vararg 版。 */
     private val userServiceState = combine(
         shizukuManager.statusFlow,
         appSettings.autoStartUserService,
         scriptSession.state,
     ) { status, autoStart, session -> Triple(status, autoStart, session.isRunning) }
 
+    private val workbenchState = combine(
+        appSettings.workbenchEnabled,
+        workbenchServer.address,
+    ) { enabled, address -> enabled to address }
+
     val uiState: StateFlow<SettingsUiState> = combine(
         userServiceState,
         permissionManager.osAllowSecondaryDisplaysFlow,
         isRefreshing,
         appSettings.autoOpenFullscreen,
-        appSettings.workbenchEnabled,
-    ) { (status, autoStart, scriptRunning), allowSecondary, refreshing, autoOpenFullscreen, workbenchEnabled ->
+        workbenchState,
+    ) { (status, autoStart, scriptRunning), allowSecondary, refreshing, autoOpenFullscreen, (workbenchEnabled, workbenchAddress) ->
         SettingsUiState(
             shizukuStatus = status,
             osAllowSecondaryDisplays = allowSecondary,
@@ -80,6 +89,7 @@ class SettingsViewModel @Inject constructor(
             autoStartUserService = autoStart,
             isScriptRunning = scriptRunning,
             workbenchEnabled = workbenchEnabled,
+            workbenchAddress = workbenchAddress,
         )
     }.stateIn(
         scope = viewModelScope,
