@@ -378,6 +378,84 @@ class WorkbenchServerTest {
     }
 
     @Test
+    fun `templates route writes the template image and roi into templates json`() = runTest {
+        val dir = scriptFolder("hello", "log('hi')")
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames) }
+
+            val response = client.put("/scripts/hello/templates/button.png?x=1&y=2&w=30&h=40") {
+                setBody("fake png bytes".toByteArray())
+            }
+
+            assertEquals(HttpStatusCode.OK, response.status)
+            assertEquals("fake png bytes", File(dir, "button.png").readText())
+            val templatesJson = File(dir, "templates.json").readText()
+            assertTrue(templatesJson.contains("\"button.png\""))
+            assertTrue(templatesJson.contains("\"x\": 1"))
+            assertTrue(templatesJson.contains("\"h\": 40"))
+        }
+    }
+
+    @Test
+    fun `templates route rejects a name that already exists with 409`() = runTest {
+        val dir = scriptFolder("hello", "log('hi')")
+        File(dir, "button.png").writeText("existing")
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames) }
+
+            val response = client.put("/scripts/hello/templates/button.png?x=1&y=2&w=3&h=4") {
+                setBody("new png bytes".toByteArray())
+            }
+
+            assertEquals(HttpStatusCode.Conflict, response.status)
+            assertEquals("existing", File(dir, "button.png").readText())
+        }
+    }
+
+    @Test
+    fun `templates route 404s for an unknown script id`() = runTest {
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames) }
+
+            val response = client.put("/scripts/does-not-exist/templates/button.png?x=1&y=2&w=3&h=4") {
+                setBody("png bytes".toByteArray())
+            }
+
+            assertEquals(HttpStatusCode.NotFound, response.status)
+        }
+    }
+
+    @Test
+    fun `templates route rejects when roi query params are missing or invalid`() = runTest {
+        scriptFolder("hello", "log('hi')")
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames) }
+
+            val response = client.put("/scripts/hello/templates/button.png?x=1&y=2&w=3") {
+                setBody("png bytes".toByteArray())
+            }
+
+            assertEquals(HttpStatusCode.BadRequest, response.status)
+        }
+    }
+
+    @Test
+    fun `templates route rejects when existing templates json cannot be parsed`() = runTest {
+        val dir = scriptFolder("hello", "log('hi')")
+        File(dir, "templates.json").writeText("not valid json")
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames) }
+
+            val response = client.put("/scripts/hello/templates/button.png?x=1&y=2&w=3&h=4") {
+                setBody("png bytes".toByteArray())
+            }
+
+            assertEquals(HttpStatusCode.BadRequest, response.status)
+            assertTrue(!File(dir, "button.png").exists())
+        }
+    }
+
+    @Test
     fun `mirror route streams fake frames as a multipart boundary response`() = runTest {
         val frame1 = "frame-one".toByteArray()
         val frame2 = "frame-two".toByteArray()
