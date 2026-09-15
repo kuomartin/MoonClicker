@@ -5,6 +5,8 @@ import com.xaxaxax.relc.script.Script
 import com.xaxaxax.relc.script.ScriptArchive
 import com.xaxaxax.relc.script.ScriptSession
 import com.xaxaxax.relc.script.ScriptStore
+import com.xaxaxax.relc.script.TemplateRoi
+import com.xaxaxax.relc.script.TemplateStore
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
@@ -15,6 +17,7 @@ import io.ktor.server.engine.EmbeddedServer
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.request.receiveStream
 import io.ktor.server.response.respondBytes
+import io.ktor.server.response.respondBytesWriter
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
@@ -22,6 +25,8 @@ import io.ktor.server.routing.put
 import io.ktor.server.routing.routing
 import io.ktor.server.websocket.WebSockets
 import io.ktor.server.websocket.webSocket
+import io.ktor.utils.io.writeFully
+import io.ktor.utils.io.writeStringUtf8
 import io.ktor.websocket.Frame
 import io.ktor.websocket.readText
 import java.io.ByteArrayOutputStream
@@ -67,10 +72,27 @@ interface ScriptStream {
     val sharedData: StateFlow<Map<String, Any>>
 }
 
+/**
+ * Realtime mirror 串流需要的最小介面（見 #73）。正式實作是
+ * [com.xaxaxax.relc.ui.displaydetail.MirrorFrameSource]，接 [com.xaxaxax.relc.ui.displaydetail.VirtualDisplayMirror]
+ * 那個 `TextureView`；存在這一層是為了讓 `workbenchModule` 的 JVM 測試餵假的 frame flow，
+ * 不需要真的 `Display`/`Surface`/`TextureView`。
+ */
+interface FrameSource {
+    /**
+     * @return [displayId] 的 frame flow；displayId 未知時回傳 null，route 依此回 404。
+     * 回傳的 flow 是「活的鏡像串流」，正常情況下不會自己結束——收集者斷線時，route 寫入
+     * 失敗會讓 collect 拋出並結束，flow 本身的 finally/cancellation 語意就地完成清理，
+     * 呼叫端不需要另外追蹤一份 job。
+     */
+    fun frames(displayId: Int): Flow<ByteArray>?
+}
+
 @Singleton
 class WorkbenchServer @Inject constructor(
     private val scriptStore: ScriptStore,
     private val scriptSession: ScriptSession,
+    private val frameSource: FrameSource,
 ) {
     private val scriptRunner = object : ScriptRunner {
         override fun isRunning() = scriptSession.state.value.isRunning
@@ -104,7 +126,7 @@ class WorkbenchServer @Inject constructor(
                 CIO,
                 port = PORT,
                 host = host,
-                module = { workbenchModule(scriptsRoot, scriptRunner, scriptStream) },
+                module = { workbenchModule(scriptsRoot, scriptRunner, scriptStream, frameSource) },
             ).start(wait = false)
             _address.value = "$host:$PORT"
             true
@@ -158,6 +180,7 @@ fun Application.workbenchModule(
     scriptsRoot: File,
     scriptRunner: ScriptRunner,
     scriptStream: ScriptStream,
+    frameSource: FrameSource,
 ) {
     install(WebSockets)
     routing {
@@ -236,8 +259,71 @@ fun Application.workbenchModule(
             scriptRunner.start(script)
             call.respondText("Started", status = HttpStatusCode.Accepted)
         }
+
+        // 裁切模板存回裝置（見 #75）：body 是裁切完的 PNG bytes，roi（邏輯座標，依 ADR-0013）
+        // 走 query string，因為 body 已經是純圖片 bytes、不留給欄位混進去的空間。
+        // 已存在同名模板回 409（見 #72 story 8）；script 目錄不存在或 templates.json 現有
+        // 內容解析失敗回 4xx，不靜默失敗（見 #72 story 9）。
+        put("/scripts/{id}/templates/{name}") {
+            val id = call.parameters["id"]
+            val name = call.parameters["name"]
+            if (id.isNullOrBlank() || name.isNullOrBlank() || name.contains('/') || name.contains("..")) {
+                call.respondText("Invalid script id or template name", status = HttpStatusCode.BadRequest)
+                return@put
+            }
+            val script = ScriptStore.scan(scriptsRoot).find { it.id == id }
+            if (script == null) {
+                call.respondText("Script not found", status = HttpStatusCode.NotFound)
+                return@put
+            }
+            val query = call.request.queryParameters
+            val roi = listOf("x", "y", "w", "h").map { query[it]?.toIntOrNull() }
+                .let { (x, y, w, h) -> if (x != null && y != null && w != null && h != null) TemplateRoi(x, y, w, h) else null }
+            if (roi == null) {
+                call.respondText(
+                    "Missing or invalid roi (expects integer x, y, w, h query params)",
+                    status = HttpStatusCode.BadRequest,
+                )
+                return@put
+            }
+            val pngBytes = call.receiveStream().readBytes()
+            when (val result = TemplateStore.write(script.dir, name, roi, pngBytes)) {
+                is TemplateStore.WriteResult.Written -> call.respondText("OK")
+                is TemplateStore.WriteResult.Conflict ->
+                    call.respondText("Template already exists: ${result.name}", status = HttpStatusCode.Conflict)
+                is TemplateStore.WriteResult.Failed ->
+                    call.respondText(result.reason, status = HttpStatusCode.BadRequest)
+            }
+        }
+
+        // Realtime mirror（見 #73、#76）。選 multipart/x-mixed-replace（MJPEG）而不是逐張輪詢
+        // 或 WebRTC 是 #72/#52 已經定案的決策，這條路由跟 webSocket("/") 是分開的傳輸，互不
+        // 干擾。404 涵蓋兩種情況：displayId 不是數字，以及那台顯示目前沒有活著的擷取來源
+        // （鏡像畫面沒開，見 MirrorFrameSource）。
+        get("/mirror/{displayId}") {
+            val displayId = call.parameters["displayId"]?.toIntOrNull()
+            val frames = displayId?.let(frameSource::frames)
+            if (frames == null) {
+                call.respondText("Unknown displayId", status = HttpStatusCode.NotFound)
+                return@get
+            }
+            call.respondBytesWriter(ContentType.parse("multipart/x-mixed-replace; boundary=$MIRROR_BOUNDARY")) {
+                // frames 正常不會自己完成；寫入失敗（client 斷線）讓 collect 拋出並結束，
+                // 不需要另外 launch 一個 job 來追蹤——這個 suspend lambda 本身就是要被清理的
+                // coroutine，收集動作直接發生在它裡面。
+                frames.collect { frame ->
+                    writeStringUtf8("--$MIRROR_BOUNDARY\r\nContent-Type: image/jpeg\r\nContent-Length: ${frame.size}\r\n\r\n")
+                    writeFully(frame)
+                    writeStringUtf8("\r\n")
+                    flush()
+                }
+            }
+        }
     }
 }
+
+/** MJPEG multipart 串流的 boundary token，跟內容本身無關，純粹是個不會出現在 JPEG bytes 裡的分隔字串。 */
+private const val MIRROR_BOUNDARY = "relc-mirror-frame"
 
 /**
  * `StreamEvent{log=...}` 編碼成二進位 proto frame——形狀來自 `proto/workbench_stream_event.proto`，
