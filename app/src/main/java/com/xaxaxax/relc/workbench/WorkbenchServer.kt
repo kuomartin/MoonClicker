@@ -5,6 +5,8 @@ import com.xaxaxax.relc.script.Script
 import com.xaxaxax.relc.script.ScriptArchive
 import com.xaxaxax.relc.script.ScriptSession
 import com.xaxaxax.relc.script.ScriptStore
+import com.xaxaxax.relc.script.TemplateRoi
+import com.xaxaxax.relc.script.TemplateStore
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
@@ -259,6 +261,42 @@ fun Application.workbenchModule(
             }
             scriptRunner.start(script)
             call.respondText("Started", status = HttpStatusCode.Accepted)
+        }
+
+        // 裁切模板存回裝置（見 #75）：body 是裁切完的 PNG bytes，roi（邏輯座標，依 ADR-0013）
+        // 走 query string，因為 body 已經是純圖片 bytes、不留給欄位混進去的空間。
+        // 已存在同名模板回 409（見 #72 story 8）；script 目錄不存在或 templates.json 現有
+        // 內容解析失敗回 4xx，不靜默失敗（見 #72 story 9）。
+        put("/scripts/{id}/templates/{name}") {
+            val id = call.parameters["id"]
+            val name = call.parameters["name"]
+            if (id.isNullOrBlank() || name.isNullOrBlank() || name.contains('/') || name.contains("..")) {
+                call.respondText("Invalid script id or template name", status = HttpStatusCode.BadRequest)
+                return@put
+            }
+            val script = ScriptStore.scan(scriptsRoot).find { it.id == id }
+            if (script == null) {
+                call.respondText("Script not found", status = HttpStatusCode.NotFound)
+                return@put
+            }
+            val query = call.request.queryParameters
+            val roi = listOf("x", "y", "w", "h").map { query[it]?.toIntOrNull() }
+                .let { (x, y, w, h) -> if (x != null && y != null && w != null && h != null) TemplateRoi(x, y, w, h) else null }
+            if (roi == null) {
+                call.respondText(
+                    "Missing or invalid roi (expects integer x, y, w, h query params)",
+                    status = HttpStatusCode.BadRequest,
+                )
+                return@put
+            }
+            val pngBytes = call.receiveStream().readBytes()
+            when (val result = TemplateStore.write(script.dir, name, roi, pngBytes)) {
+                is TemplateStore.WriteResult.Written -> call.respondText("OK")
+                is TemplateStore.WriteResult.Conflict ->
+                    call.respondText("Template already exists: ${result.name}", status = HttpStatusCode.Conflict)
+                is TemplateStore.WriteResult.Failed ->
+                    call.respondText(result.reason, status = HttpStatusCode.BadRequest)
+            }
         }
 
         // Realtime mirror（見 #73）：假 FrameSource 先行，真正接上 VirtualDisplayMirror 擷取
