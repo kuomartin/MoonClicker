@@ -55,35 +55,35 @@
       "view/title": [
         {
           "command": "relc.connect",
-          "when": "view == relc.deviceConnection",
+          "when": "view == relc.workspace",
           "group": "navigation"
         },
         {
           "command": "relc.disconnect",
-          "when": "view == relc.deviceConnection",
+          "when": "view == relc.workspace",
           "group": "navigation"
         }
       ],
       "view/item/context": [
         {
           "command": "relc.push",
-          "when": "view == relc.localScripts",
-          "group": "inline"
+          "when": "viewItem == localScript"
         },
         {
           "command": "relc.pushAndRun",
-          "when": "view == relc.localScripts",
-          "group": "inline"
+          "when": "viewItem == localScript"
         },
         {
           "command": "relc.runRemote",
-          "when": "view == relc.remoteScripts",
-          "group": "inline"
+          "when": "viewItem == remoteScript"
         },
         {
           "command": "relc.pullRemote",
-          "when": "view == relc.remoteScripts",
-          "group": "inline"
+          "when": "viewItem == remoteScript"
+        },
+        {
+          "command": "relc.openMirror",
+          "when": "viewItem == remoteRoot"
         }
       ]
     },
@@ -106,16 +106,8 @@
     "views": {
       "relc-scripts": [
         {
-          "id": "relc.deviceConnection",
-          "name": "Device Connection"
-        },
-        {
-          "id": "relc.localScripts",
-          "name": "Local Scripts"
-        },
-        {
-          "id": "relc.remoteScripts",
-          "name": "Remote Scripts"
+          "id": "relc.workspace",
+          "name": "Workspace"
         }
       ]
     }
