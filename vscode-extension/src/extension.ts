@@ -4,6 +4,7 @@ import * as vscode from "vscode";
 import { ConnectionState, WorkbenchConnection } from "./workbenchConnection";
 import { mergeLuarc } from "./luarc";
 import { listScripts, pullScript, pushScript, runScript } from "./scriptSync";
+import { disposeMirrorPanel, openMirrorPanel } from "./mirrorPanel";
 
 let connection: WorkbenchConnection | undefined;
 let statusBarItem: vscode.StatusBarItem | undefined;
@@ -46,11 +47,13 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("relc.pull", pullCommand),
     vscode.commands.registerCommand("relc.push", pushCommand),
     vscode.commands.registerCommand("relc.run", runCommand),
+    vscode.commands.registerCommand("relc.openMirror", openMirrorCommand),
   );
 }
 
 export function deactivate(): void {
   connection?.disconnect();
+  disposeMirrorPanel();
 }
 
 async function connectCommand(): Promise<void> {
@@ -164,6 +167,18 @@ async function pushCommand(): Promise<void> {
   } catch (err) {
     vscode.window.showErrorMessage(`ReLC: ${(err as Error).message}`);
   }
+}
+
+async function openMirrorCommand(): Promise<void> {
+  const address = connectedAddress();
+  if (!address) return;
+  const input = await vscode.window.showInputBox({
+    prompt: "要鏡像哪個 displayId？",
+    value: "0",
+    validateInput: (value) => (/^\d+$/.test(value) ? undefined : "displayId 需要是非負整數"),
+  });
+  if (input === undefined) return;
+  openMirrorPanel(address, Number(input));
 }
 
 function renderStatusBar(state: ConnectionState): void {
