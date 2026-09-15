@@ -1,0 +1,9 @@
+{
+  "name": "Alto's Adventure",
+  "description": "End-to-end test for ReLC Lua API",
+  "display": {
+    "width": 1080,
+    "height": 2400,
+    "densityDpi": 440
+  }
+}
