@@ -15,6 +15,7 @@ import io.ktor.server.engine.EmbeddedServer
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.request.receiveStream
 import io.ktor.server.response.respondBytes
+import io.ktor.server.response.respondBytesWriter
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
@@ -22,6 +23,8 @@ import io.ktor.server.routing.put
 import io.ktor.server.routing.routing
 import io.ktor.server.websocket.WebSockets
 import io.ktor.server.websocket.webSocket
+import io.ktor.utils.io.writeFully
+import io.ktor.utils.io.writeStringUtf8
 import io.ktor.websocket.Frame
 import io.ktor.websocket.readText
 import java.io.ByteArrayOutputStream
@@ -67,6 +70,21 @@ interface ScriptStream {
     val sharedData: StateFlow<Map<String, Any>>
 }
 
+/**
+ * Realtime mirror 串流需要的最小介面（見 #73）。真正實作串到 [com.xaxaxax.relc.ui.displaydetail.VirtualDisplayMirror]
+ * 既有的擷取路徑是 #76 的範圍；存在這一層是為了讓 `workbenchModule` 的 JVM 測試餵假的
+ * frame flow，不需要真的 `Display`/`Surface`/`TextureView`。
+ */
+interface FrameSource {
+    /**
+     * @return [displayId] 的 frame flow；displayId 未知時回傳 null，route 依此回 404。
+     * 回傳的 flow 是「活的鏡像串流」，正常情況下不會自己結束——收集者斷線時，route 寫入
+     * 失敗會讓 collect 拋出並結束，flow 本身的 finally/cancellation 語意就地完成清理，
+     * 呼叫端不需要另外追蹤一份 job。
+     */
+    fun frames(displayId: Int): Flow<ByteArray>?
+}
+
 @Singleton
 class WorkbenchServer @Inject constructor(
     private val scriptStore: ScriptStore,
@@ -80,6 +98,11 @@ class WorkbenchServer @Inject constructor(
     private val scriptStream = object : ScriptStream {
         override val logLines: Flow<String> get() = ScriptEngine.logLines
         override val sharedData: StateFlow<Map<String, Any>> get() = ScriptEngine.sharedData
+    }
+
+    // #76 之前還沒有真正的擷取路徑可接——不假裝有資料，一律當作未知 displayId（404）。
+    private val frameSource = object : FrameSource {
+        override fun frames(displayId: Int): Flow<ByteArray>? = null
     }
 
     private var server: EmbeddedServer<*, *>? = null
@@ -104,7 +127,7 @@ class WorkbenchServer @Inject constructor(
                 CIO,
                 port = PORT,
                 host = host,
-                module = { workbenchModule(scriptsRoot, scriptRunner, scriptStream) },
+                module = { workbenchModule(scriptsRoot, scriptRunner, scriptStream, frameSource) },
             ).start(wait = false)
             _address.value = "$host:$PORT"
             true
@@ -158,6 +181,7 @@ fun Application.workbenchModule(
     scriptsRoot: File,
     scriptRunner: ScriptRunner,
     scriptStream: ScriptStream,
+    frameSource: FrameSource,
 ) {
     install(WebSockets)
     routing {
@@ -236,8 +260,34 @@ fun Application.workbenchModule(
             scriptRunner.start(script)
             call.respondText("Started", status = HttpStatusCode.Accepted)
         }
+
+        // Realtime mirror（見 #73）：假 FrameSource 先行，真正接上 VirtualDisplayMirror 擷取
+        // 是 #76。選 multipart/x-mixed-replace（MJPEG）而不是逐張輪詢或 WebRTC 是 #72/#52
+        // 已經定案的決策，這條路由跟 webSocket("/") 是分開的傳輸，互不干擾。
+        get("/mirror/{displayId}") {
+            val displayId = call.parameters["displayId"]?.toIntOrNull()
+            val frames = displayId?.let(frameSource::frames)
+            if (frames == null) {
+                call.respondText("Unknown displayId", status = HttpStatusCode.NotFound)
+                return@get
+            }
+            call.respondBytesWriter(ContentType.parse("multipart/x-mixed-replace; boundary=$MIRROR_BOUNDARY")) {
+                // frames 正常不會自己完成；寫入失敗（client 斷線）讓 collect 拋出並結束，
+                // 不需要另外 launch 一個 job 來追蹤——這個 suspend lambda 本身就是要被清理的
+                // coroutine，收集動作直接發生在它裡面。
+                frames.collect { frame ->
+                    writeStringUtf8("--$MIRROR_BOUNDARY\r\nContent-Type: image/jpeg\r\nContent-Length: ${frame.size}\r\n\r\n")
+                    writeFully(frame)
+                    writeStringUtf8("\r\n")
+                    flush()
+                }
+            }
+        }
     }
 }
+
+/** MJPEG multipart 串流的 boundary token，跟內容本身無關，純粹是個不會出現在 JPEG bytes 裡的分隔字串。 */
+private const val MIRROR_BOUNDARY = "relc-mirror-frame"
 
 /**
  * `StreamEvent{log=...}` 編碼成二進位 proto frame——形狀來自 `proto/workbench_stream_event.proto`，
