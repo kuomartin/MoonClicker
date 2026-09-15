@@ -4,72 +4,97 @@ import * as path from "node:path";
 import { listScripts, type ScriptSummary } from "./scriptSync";
 import type { ConnectionState } from "./workbenchConnection";
 
-export class DeviceConnectionProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
-  private _onDidChangeTreeData = new vscode.EventEmitter<void>();
-  readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
-  private state: ConnectionState = { status: "disconnected" };
-
-  updateState(state: ConnectionState) {
-    this.state = state;
-    this._onDidChangeTreeData.fire();
-  }
-
-  getTreeItem(element: vscode.TreeItem): vscode.TreeItem {
-    return element;
-  }
-
-  getChildren(element?: vscode.TreeItem): vscode.ProviderResult<vscode.TreeItem[]> {
-    if (element) return [];
-    const item = new vscode.TreeItem(
-      this.state.status === "connected" ? `Connected: ${this.state.address}` : 
-      this.state.status === "connecting" ? `Connecting: ${this.state.address}` : 
-      this.state.status === "error" ? `Error: ${this.state.message}` : "Disconnected",
-      vscode.TreeItemCollapsibleState.None
-    );
-    item.iconPath = new vscode.ThemeIcon(
-      this.state.status === "connected" ? "check" :
-      this.state.status === "connecting" ? "sync~spin" :
-      this.state.status === "error" ? "error" : "circle-slash"
-    );
-    return [item];
+export class ReLCTreeItem extends vscode.TreeItem {
+  constructor(
+    public readonly label: string,
+    public readonly collapsibleState: vscode.TreeItemCollapsibleState,
+    public readonly contextValue?: string
+  ) {
+    super(label, collapsibleState);
+    if (contextValue) {
+      this.contextValue = contextValue;
+    }
   }
 }
 
-export class LocalScriptItem extends vscode.TreeItem {
+export class LocalScriptItem extends ReLCTreeItem {
   constructor(
-    public readonly label: string,
+    label: string,
     public readonly scriptId: string,
     public readonly scriptPath: string,
     public readonly isMonorepo: boolean
   ) {
-    super(label, vscode.TreeItemCollapsibleState.None);
-    this.contextValue = "localScript";
+    super(label, vscode.TreeItemCollapsibleState.None, "localScript");
     this.iconPath = new vscode.ThemeIcon("file-code");
     this.description = scriptId;
   }
 }
 
-export class LocalScriptsProvider implements vscode.TreeDataProvider<LocalScriptItem> {
-  private _onDidChangeTreeData = new vscode.EventEmitter<void>();
+export class RemoteScriptItem extends ReLCTreeItem {
+  constructor(public readonly summary: ScriptSummary) {
+    super(summary.name || summary.id, vscode.TreeItemCollapsibleState.None, "remoteScript");
+    this.iconPath = new vscode.ThemeIcon("cloud");
+    this.description = summary.id;
+  }
+}
+
+export class WorkspaceTreeProvider implements vscode.TreeDataProvider<ReLCTreeItem> {
+  private _onDidChangeTreeData = new vscode.EventEmitter<ReLCTreeItem | undefined | void>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
+  
+  private state: ConnectionState = { status: "disconnected" };
+
+  updateState(state: ConnectionState) {
+    this.state = state;
+    this.refresh();
+  }
 
   refresh() {
     this._onDidChangeTreeData.fire();
   }
 
-  getTreeItem(element: LocalScriptItem): vscode.TreeItem {
+  getTreeItem(element: ReLCTreeItem): vscode.TreeItem {
     return element;
   }
 
-  getChildren(element?: LocalScriptItem): vscode.ProviderResult<LocalScriptItem[]> {
-    if (element) return [];
+  async getChildren(element?: ReLCTreeItem): Promise<ReLCTreeItem[]> {
+    if (!element) {
+      // Root level: Local and Remote categories
+      const items: ReLCTreeItem[] = [];
+      
+      const localRoot = new ReLCTreeItem("Local Scripts", vscode.TreeItemCollapsibleState.Expanded, "localRoot");
+      localRoot.iconPath = new vscode.ThemeIcon("folder-library");
+      items.push(localRoot);
+
+      if (this.state.status === "connected") {
+        const remoteRoot = new ReLCTreeItem(`Remote Scripts (${this.state.address})`, vscode.TreeItemCollapsibleState.Expanded, "remoteRoot");
+        remoteRoot.iconPath = new vscode.ThemeIcon("server");
+        items.push(remoteRoot);
+      } else {
+        const remoteRoot = new ReLCTreeItem("Remote Scripts (Disconnected)", vscode.TreeItemCollapsibleState.None, "remoteRootDisconnected");
+        remoteRoot.iconPath = new vscode.ThemeIcon("server");
+        items.push(remoteRoot);
+      }
+
+      return items;
+    }
+
+    if (element.contextValue === "localRoot") {
+      return this.getLocalScripts();
+    } else if (element.contextValue === "remoteRoot") {
+      return this.getRemoteScripts();
+    }
+
+    return [];
+  }
+
+  private getLocalScripts(): LocalScriptItem[] {
     const workspaceFolders = vscode.workspace.workspaceFolders;
     if (!workspaceFolders || workspaceFolders.length === 0) return [];
     
     const root = workspaceFolders[0].uri.fsPath;
     const items: LocalScriptItem[] = [];
 
-    // Check Single-Script mode
     if (fs.existsSync(path.join(root, "main.lua"))) {
       let scriptId = path.basename(root);
       const jsonPath = path.join(root, "script.json");
@@ -83,7 +108,6 @@ export class LocalScriptsProvider implements vscode.TreeDataProvider<LocalScript
       return items;
     }
 
-    // Check Monorepo mode
     const children = fs.readdirSync(root, { withFileTypes: true });
     for (const child of children) {
       if (child.isDirectory()) {
@@ -103,39 +127,11 @@ export class LocalScriptsProvider implements vscode.TreeDataProvider<LocalScript
     }
     return items;
   }
-}
 
-export class RemoteScriptItem extends vscode.TreeItem {
-  constructor(public readonly summary: ScriptSummary) {
-    super(summary.name || summary.id, vscode.TreeItemCollapsibleState.None);
-    this.contextValue = "remoteScript";
-    this.iconPath = new vscode.ThemeIcon("cloud");
-    this.description = summary.id;
-  }
-}
-
-export class RemoteScriptsProvider implements vscode.TreeDataProvider<RemoteScriptItem> {
-  private _onDidChangeTreeData = new vscode.EventEmitter<void>();
-  readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
-  private address: string | undefined;
-
-  setAddress(address: string | undefined) {
-    this.address = address;
-    this.refresh();
-  }
-
-  refresh() {
-    this._onDidChangeTreeData.fire();
-  }
-
-  getTreeItem(element: RemoteScriptItem): vscode.TreeItem {
-    return element;
-  }
-
-  async getChildren(element?: RemoteScriptItem): Promise<RemoteScriptItem[]> {
-    if (element || !this.address) return [];
+  private async getRemoteScripts(): Promise<RemoteScriptItem[]> {
+    if (this.state.status !== "connected") return [];
     try {
-      const scripts = await listScripts(this.address);
+      const scripts = await listScripts(this.state.address);
       return scripts.map(s => new RemoteScriptItem(s));
     } catch {
       return [];

@@ -5,14 +5,12 @@ import { ConnectionState, WorkbenchConnection } from "./workbenchConnection";
 import { mergeLuarc } from "./luarc";
 import { listScripts, pullScript, pushScript, runScript } from "./scriptSync";
 import { disposeMirrorPanel, openMirrorPanel, postStreamEventToMirror } from "./mirrorPanel";
-import { DeviceConnectionProvider, LocalScriptsProvider, RemoteScriptsProvider, LocalScriptItem, RemoteScriptItem } from "./treeViews";
+import { WorkspaceTreeProvider, LocalScriptItem, RemoteScriptItem } from "./treeViews";
 
 let connection: WorkbenchConnection | undefined;
 let statusBarItem: vscode.StatusBarItem | undefined;
 let extensionContext: vscode.ExtensionContext | undefined;
-let deviceConnectionProvider: DeviceConnectionProvider;
-let localScriptsProvider: LocalScriptsProvider;
-let remoteScriptsProvider: RemoteScriptsProvider;
+let workspaceProvider: WorkspaceTreeProvider;
 
 export function activate(context: vscode.ExtensionContext): void {
   extensionContext = context;
@@ -21,20 +19,15 @@ export function activate(context: vscode.ExtensionContext): void {
   statusBarItem.show();
   renderStatusBar({ status: "disconnected" });
 
-  deviceConnectionProvider = new DeviceConnectionProvider();
-  localScriptsProvider = new LocalScriptsProvider();
-  remoteScriptsProvider = new RemoteScriptsProvider();
-
-  vscode.window.registerTreeDataProvider("relc.deviceConnection", deviceConnectionProvider);
-  vscode.window.registerTreeDataProvider("relc.localScripts", localScriptsProvider);
-  vscode.window.registerTreeDataProvider("relc.remoteScripts", remoteScriptsProvider);
+  workspaceProvider = new WorkspaceTreeProvider();
+  vscode.window.registerTreeDataProvider("relc.workspace", workspaceProvider);
 
   const watcher = vscode.workspace.createFileSystemWatcher("**/{main.lua,script.json}");
   context.subscriptions.push(
-    watcher.onDidCreate(() => localScriptsProvider.refresh()),
-    watcher.onDidChange(() => localScriptsProvider.refresh()),
-    watcher.onDidDelete(() => localScriptsProvider.refresh()),
-    vscode.workspace.onDidChangeWorkspaceFolders(() => localScriptsProvider.refresh())
+    watcher.onDidCreate(() => workspaceProvider.refresh()),
+    watcher.onDidChange(() => workspaceProvider.refresh()),
+    watcher.onDidDelete(() => workspaceProvider.refresh()),
+    vscode.workspace.onDidChangeWorkspaceFolders(() => workspaceProvider.refresh())
   );
 
   const logChannel = vscode.window.createOutputChannel("ReLC Script Log");
@@ -42,8 +35,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   connection.onDidChangeState((state) => {
     renderStatusBar(state);
-    deviceConnectionProvider.updateState(state);
-    remoteScriptsProvider.setAddress(state.status === "connected" ? state.address : undefined);
+    workspaceProvider.updateState(state);
     if (state.status === "error") {
       vscode.window.showErrorMessage(`ReLC: 連線到 ${state.address} 失敗——${state.message}`);
     }
@@ -221,7 +213,7 @@ async function pushCommand(item?: LocalScriptItem): Promise<void> {
     const id = await ensureScriptJson(target.path, target.id);
     await pushScript(address, id, target.path);
     vscode.window.showInformationMessage(`ReLC: 已把目前專案推送到裝置的「${id}」`);
-    remoteScriptsProvider.refresh();
+    workspaceProvider.refresh();
   } catch (err) {
     vscode.window.showErrorMessage(`ReLC: ${(err as Error).message}`);
   }
@@ -239,7 +231,7 @@ async function pushAndRunCommand(item?: LocalScriptItem): Promise<void> {
     insertRunDivider();
     await runScript(address, id);
     vscode.window.showInformationMessage(`ReLC: 已推送並執行「${id}」`);
-    remoteScriptsProvider.refresh();
+    workspaceProvider.refresh();
   } catch (err) {
     vscode.window.showErrorMessage(`ReLC: ${(err as Error).message}`);
   }
