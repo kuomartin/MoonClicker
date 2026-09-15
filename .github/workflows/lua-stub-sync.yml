@@ -1,0 +1,25 @@
+name: Lua stub sync
+
+on:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Run the checker's own tests
+        run: node --test .github/scripts/check-lua-stub-sync.test.mjs
+
+      - name: Check LuaBindings/stub stay in sync
+        run: |
+          node .github/scripts/check-lua-stub-sync.mjs \
+            "${{ github.event.pull_request.base.sha }}" \
+            "${{ github.event.pull_request.head.sha }}"

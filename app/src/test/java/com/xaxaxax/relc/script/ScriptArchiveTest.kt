@@ -107,6 +107,37 @@ class ScriptArchiveTest {
     }
 
     @Test
+    fun `replace overwrites the existing folder in place instead of creating a new id`() {
+        import(zipOf("main.lua" to "first", "old.png" to "stale"))
+
+        val result = ScriptArchive.replace(
+            ByteArrayInputStream(zipOf("main.lua" to "second")),
+            temp.root,
+            "pack",
+        )
+
+        val replaced = result as ScriptArchive.ImportResult.Imported
+        assertEquals("pack", replaced.dir.name)
+        assertEquals("second", File(temp.root, "pack/main.lua").readText())
+        assertFalse(File(temp.root, "pack/old.png").exists())
+        assertEquals(listOf("pack"), temp.root.listFiles()!!.map { it.name })
+    }
+
+    @Test
+    fun `replace rejects an archive with no main lua and leaves the existing folder untouched`() {
+        import(zipOf("main.lua" to "first"))
+
+        val result = ScriptArchive.replace(
+            ByteArrayInputStream(zipOf("readme.txt" to "nothing here")),
+            temp.root,
+            "pack",
+        )
+
+        assertTrue(result is ScriptArchive.ImportResult.Failed)
+        assertEquals("first", File(temp.root, "pack/main.lua").readText())
+    }
+
+    @Test
     fun `sanitizes unsafe names into folder ids`() {
         assertEquals("my-script", ScriptArchive.sanitizeId("my script.zip"))
         assertEquals("script", ScriptArchive.sanitizeId("../../.zip"))

@@ -1,0 +1,54 @@
+{
+  "name": "relc-script-workbench",
+  "displayName": "ReLC Script Workbench",
+  "description": "Connect VS Code to a ReLC device running Script Workbench.",
+  "version": "0.0.1",
+  "private": true,
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "relc.connect",
+        "title": "ReLC: Connect to Device"
+      },
+      {
+        "command": "relc.disconnect",
+        "title": "ReLC: Disconnect from Device"
+      },
+      {
+        "command": "relc.pull",
+        "title": "ReLC: Pull Script Folder from Device"
+      },
+      {
+        "command": "relc.push",
+        "title": "ReLC: Push Script Folder to Device"
+      },
+      {
+        "command": "relc.run",
+        "title": "ReLC: Run Current Script on Device"
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -w -p .",
+    "pretest": "npm run compile",
+    "test": "node --test out/test/**/*.test.js"
+  },
+  "devDependencies": {
+    "@types/adm-zip": "^0.5.0",
+    "@types/node": "^22.0.0",
+    "@types/vscode": "^1.90.0",
+    "@types/ws": "^8.5.0",
+    "typescript": "^5.6.0"
+  },
+  "dependencies": {
+    "adm-zip": "^0.6.1",
+    "ws": "^8.18.0"
+  }
+}

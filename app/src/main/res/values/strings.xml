@@ -76,6 +76,8 @@
 
     <string name="settings_workbench">Script Workbench</string>
     <string name="settings_workbench_note">開啟裝置端的內嵌 server，供電腦端的 Script Workbench 連線。</string>
+    <string name="settings_workbench_qr_description">Script Workbench 配對用 QR code</string>
+    <string name="settings_workbench_qr_pending">Server 啟動中…</string>
     <string name="workbench_notification_channel_label">Script Workbench</string>
     <string name="workbench_notification_channel_description">Script Workbench server 開啟時的常駐通知。</string>
     <string name="workbench_notification_title">Script Workbench 正在監聽</string>
