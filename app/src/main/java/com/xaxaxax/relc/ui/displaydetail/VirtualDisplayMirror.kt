@@ -57,6 +57,7 @@ fun VirtualDisplayMirror(
     isReadOnly: Boolean,
     modifier: Modifier = Modifier,
     onTextureViewCreated: (TextureView) -> Unit = {},
+    onFrameAvailable: () -> Unit = {},
 ) {
     BoxWithConstraints(modifier.background(Color.Black)) {
         // ADR-0014：letterbox 尺寸與反向旋轉都只看 d（MainDisplay 的 rotation），
@@ -91,6 +92,7 @@ fun VirtualDisplayMirror(
                 addSurface = addSurface,
                 removeSurface = removeSurface,
                 onTextureViewCreated = onTextureViewCreated,
+                onFrameAvailable = onFrameAvailable,
                 modifier = Modifier
                     .align(Alignment.Center)
                     // requiredSize 而非 size：旋轉前的佈局框比父層還長，size() 會被父層
@@ -122,11 +124,15 @@ private fun MirrorSurface(
     addSurface: (Surface) -> Unit,
     removeSurface: (Surface) -> Unit,
     onTextureViewCreated: (TextureView) -> Unit,
+    onFrameAvailable: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     // TextureView 而非 SurfaceView：SurfaceView 的 surface 是獨立硬體圖層，不吃 view 的
     // 旋轉變換；TextureView 走一般繪製路徑，graphicsLayer 的旋轉才會真的套用。
     val currentGeometry by rememberUpdatedState(geometry)
+    // rememberUpdatedState 而非把它放進 remember 的 key：listener 重建會連帶重建 Surface，
+    // 為了換一個 callback 而重接一次虛擬顯示不划算。
+    val currentOnFrameAvailable by rememberUpdatedState(onFrameAvailable)
     val listener = remember(addSurface, removeSurface) {
         object : TextureView.SurfaceTextureListener {
             private var surface: Surface? = null
@@ -160,7 +166,9 @@ private fun MirrorSurface(
                 return true
             }
 
-            override fun onSurfaceTextureUpdated(texture: SurfaceTexture) = Unit
+            // VD 每送一張新畫面就會進來一次，是「有新東西可擷取」唯一的即時訊號（見 #76 的
+            // [MirrorFrameSource]）；閒置時不會被呼叫，遠端串流因此自然停住而不是空轉。
+            override fun onSurfaceTextureUpdated(texture: SurfaceTexture) = currentOnFrameAvailable()
         }
     }
 

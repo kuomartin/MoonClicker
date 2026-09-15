@@ -476,8 +476,8 @@ class WorkbenchServerTest {
 
     @Test
     fun `mirror route 404s for an unknown displayId`() = runTest {
-        // fakeFrames 沒有註冊任何 displayId——沒有真正的擷取路徑（見 #76）之前，
-        // WorkbenchServer 的正式產線也是這個狀態：一律回 404，不是遺漏。
+        // fakeFrames 沒有註冊任何 displayId，對應正式產線的 MirrorFrameSource 在鏡像畫面
+        // 沒開、沒有活著的擷取來源時的狀態（見 #76）。
         testApplication {
             application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames) }
 
