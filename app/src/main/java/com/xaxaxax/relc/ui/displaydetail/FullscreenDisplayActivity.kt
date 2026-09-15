@@ -46,12 +46,14 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -65,10 +67,13 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.xaxaxax.relc.ui.theme.ReLCTheme
 import dagger.hilt.android.AndroidEntryPoint
 import timber.log.Timber
@@ -124,15 +129,32 @@ fun FullscreenDisplayScreen(
     // 單一來源：鏡像的 Viewport 讀這一份，決定 letterbox 與內容尺寸。
     val geometry = rememberDisplayGeometry(targetDisplayId)
 
+    // issue #41：退出畫面（返回鍵、Home、或畫面上的 Exit 按鈕，onPause 一律涵蓋）時留一張
+    // 縮圖給 Displays 列表用；只在真的有鏡像畫面時才有東西可擷取。
+    val currentGeometry by rememberUpdatedState(geometry)
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, targetDisplayId) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_PAUSE) {
+                textureViewRef.value?.bitmap?.let { bitmap ->
+                    viewModel.captureThumbnail(targetDisplayId, bitmap, currentGeometry.rotation)
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     // ADR-0014：鏡像釘在 MainDisplay 的面板座標，不再跟 VD 的方向互相牽制——VD 怎麼轉
     // 是它自己的事，這個 activity 也不再把 VD 的方向鎖進 requestedOrientation。
 
     LaunchedEffect(uiState.executionState) {
         if (uiState.executionState == FullscreenDisplayViewModel.ExecutionState.CROPPING && capturedBitmap == null) {
             // TextureView 取代 SurfaceView 之後，擷取畫面不需要 PixelCopy —— getBitmap()
-            // 直接同步回傳 texture 的內容。注意它回傳的是**未套用 view 旋轉**的影格，
-            // 亦即 surface 空間；虛擬顯示旋轉時模板的座標系該怎麼算，見地圖 #9 的迷霧。
-            val bitmap = textureViewRef.value?.bitmap
+            // 直接同步回傳 texture 的內容，但那是 surface 空間（未套用 VD 自己的 rotation）。
+            // ADR-0013：模板圖是邏輯空間的產物，所以裁切前先用 rotateBufferBitmap 轉正——
+            // 跟 DisplayThumbnailCache.put 存縮圖用的是同一個轉換，理由也一樣。
+            val bitmap = textureViewRef.value?.bitmap?.let { rotateBufferBitmap(it, geometry.rotation) }
             if (bitmap != null) {
                 viewModel.setCapturedBitmap(bitmap)
             } else {
@@ -169,6 +191,10 @@ fun FullscreenDisplayScreen(
                     var activeHandle by remember { mutableStateOf(DragHandle.None) }
                     var showSaveDialog by remember { mutableStateOf(false) }
                     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
+                    // letterbox 內容矩形——跟一般顯示鏡像用同一套 Viewport，因為
+                    // capturedBitmap 轉正後（v=90/270°）長寬會互換，硬拉伸塞滿 canvasSize
+                    // 會讓畫面變形。存檔的 onClick 也要用同一個 viewport 換算座標，故 hoist。
+                    var viewport by remember { mutableStateOf(viewportOf(0, 0, 0, 0, 0)) }
 
                     Canvas(
                         modifier = Modifier
@@ -195,10 +221,19 @@ fun FullscreenDisplayScreen(
                             }
                     ) {
                         canvasSize = IntSize(size.width.toInt(), size.height.toInt())
+                        val bitmap = capturedBitmap!!
+                        viewport = viewportOf(
+                            surfaceWidth = bitmap.width,
+                            surfaceHeight = bitmap.height,
+                            d = 0,
+                            viewWidth = canvasSize.width,
+                            viewHeight = canvasSize.height,
+                        )
 
                         drawImage(
-                            image = capturedBitmap!!.asImageBitmap(),
-                            dstSize = canvasSize
+                            image = bitmap.asImageBitmap(),
+                            dstOffset = IntOffset(viewport.contentLeft.roundToInt(), viewport.contentTop.roundToInt()),
+                            dstSize = IntSize(viewport.contentWidth.roundToInt(), viewport.contentHeight.roundToInt()),
                         )
                         drawRect(Color.Black.copy(alpha = 0.5f))
 
@@ -239,15 +274,12 @@ fun FullscreenDisplayScreen(
                             confirmButton = {
                                 TextButton(onClick = {
                                     activity ?: return@TextButton
-                                    val pixelRect = cropRect?.toPixelRect(
-                                        canvasWidth = canvasSize.width.toFloat(),
-                                        canvasHeight = canvasSize.height.toFloat(),
-                                        bitmapWidth = capturedBitmap!!.width,
-                                        bitmapHeight = capturedBitmap!!.height,
-                                    )
-                                    if (pixelRect != null) {
+                                    cropRect?.normalized()?.let { r ->
+                                        val topLeft = viewport.toDisplay(r.left, r.top)
+                                        val bottomRight = viewport.toDisplay(r.right, r.bottom)
                                         val cRect = android.graphics.Rect(
-                                            pixelRect.left, pixelRect.top, pixelRect.right, pixelRect.bottom
+                                            topLeft.x.roundToInt(), topLeft.y.roundToInt(),
+                                            bottomRight.x.roundToInt(), bottomRight.y.roundToInt(),
                                         )
                                         viewModel.saveCroppedImage(scriptDir, templateName, cRect)
                                     }

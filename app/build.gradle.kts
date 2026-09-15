@@ -130,4 +130,8 @@ dependencies {
     implementation(libs.ktor.server.cio)
     implementation(libs.ktor.server.websockets)
     testImplementation(libs.ktor.server.test.host)
+    testImplementation(libs.ktor.client.websockets)
+
+    // QR code (workbench pairing)
+    implementation(libs.zxing.core)
 }

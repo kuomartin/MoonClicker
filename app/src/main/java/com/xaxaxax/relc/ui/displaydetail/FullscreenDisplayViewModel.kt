@@ -9,6 +9,7 @@ import com.xaxaxax.relc.IRelcV2Service
 import com.xaxaxax.relc.shizuku.ShizukuManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -18,9 +19,10 @@ import javax.inject.Inject
 
 @HiltViewModel
 class FullscreenDisplayViewModel @Inject constructor(
-    @ApplicationContext context: Context,
+    @ApplicationContext private val context: Context,
     savedStateHandle: SavedStateHandle,
-    private val shizukuManager: ShizukuManager
+    private val shizukuManager: ShizukuManager,
+    private val thumbnailCache: DisplayThumbnailCache,
 ) : ViewModel() {
     /**
      * 這個畫面只管顯示器本身與模板裁切。跑腳本是 ScriptSession 的事（issue #5），
@@ -66,6 +68,16 @@ class FullscreenDisplayViewModel @Inject constructor(
         _capturedBitmap.value = bitmap
     }
 
+    /**
+     * issue #41：退出 fullscreen（不論哪條離開路徑，見呼叫端掛在 `onPause`）時留一張縮圖。
+     * 縮放/轉正/寫檔都不是可以卡在 onPause 上的工作，丟到 IO dispatcher 做。
+     */
+    fun captureThumbnail(displayId: Int, bitmap: android.graphics.Bitmap, rotation: Int) {
+        viewModelScope.launch(Dispatchers.IO) {
+            thumbnailCache.put(displayId, bitmap, rotation)
+        }
+    }
+
     fun cancelCropping() {
         _uiState.value = _uiState.value.copy(executionState = ExecutionState.IDLE)
         _capturedBitmap.value = null
@@ -89,7 +101,11 @@ class FullscreenDisplayViewModel @Inject constructor(
 
             val croppedBitmap =
                 android.graphics.Bitmap.createBitmap(bitmap, left, top, width, height)
-            val templateDir = java.io.File(scriptDir)
+            val templateDir = if (scriptDir.isBlank()) {
+                java.io.File(context.getExternalFilesDir(null), "images")
+            } else {
+                java.io.File(scriptDir)
+            }
             if (!templateDir.exists()) templateDir.mkdirs()
 
             val file = java.io.File(templateDir, "$name.png")
@@ -147,6 +163,8 @@ class FullscreenDisplayViewModel @Inject constructor(
         viewModelScope.launch {
             shizukuManager.withService { service ->
                 service.destroyVirtualDisplay(displayId)
+            }.onSuccess {
+                thumbnailCache.remove(displayId)
             }.onFailure {
                 Timber.e(it)
             }

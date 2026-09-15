@@ -10,4 +10,5 @@ build/
 local.properties
 /TODO.md
 .kotlin/
+.envrc
 .direnv/
