@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8" />
+<title>PROTOTYPE — surface crop → logical roi</title>
+<style>
+  :root { --accent: #3b6ef0; --bg: #16181d; --panel: #21242b; --text: #e8eaf0; --dim: #8a90a2; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 32px; background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, sans-serif; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .question { color: var(--dim); max-width: 720px; line-height: 1.6; margin-bottom: 24px; font-size: 14px; }
+  .question b { color: var(--text); }
+  .layout { display: flex; gap: 24px; flex-wrap: wrap; }
+  .panel { background: var(--panel); border-radius: 12px; padding: 16px; }
+  canvas { background: #0c0d10; border-radius: 8px; display: block; touch-action: none; }
+  .panel-title { font-size: 13px; color: var(--dim); margin-bottom: 8px; }
+  .controls { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  button { background: #2a2e38; color: var(--text); border: 1px solid #3a3f4c; border-radius: 8px; padding: 8px 14px; font-size: 13px; cursor: pointer; }
+  button:hover { background: #333846; }
+  button.active { background: var(--accent); border-color: var(--accent); color: white; }
+  .state { font-family: ui-monospace, monospace; font-size: 12.5px; white-space: pre; line-height: 1.7; }
+  .state .ok { color: #5fd97a; }
+  .state .bad { color: #f06868; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+  .tab { padding: 6px 12px; border-radius: 999px; font-size: 12.5px; }
+  .scenario-desc { color: var(--dim); font-size: 13px; margin-bottom: 10px; line-height: 1.6; }
+  .steps { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 4px; }
+</style>
+</head>
+<body>
+
+<h1>surface 裁切框 → 邏輯座標 roi</h1>
+<div class="question">
+  <b>問題：</b>#51 決定 <code>templates.json</code> 存邏輯座標 roi（ADR-0013），但
+  <code>FullscreenDisplayActivity</code> 目前 <code>saveCroppedImage</code> 直接裁切
+  <code>TextureView.getBitmap()</code> 回傳的 surface 空間 bitmap，沒有轉換。這個 demo 驗證：
+  能不能只用 <code>Viewport.kt</code> 既有的 <code>rotateToLogical</code>（VD 自己的 rotation v
+  對應的直角旋轉）把 crop 的四個角轉過去，不用另外發明新的座標系；以及
+  <code>CropHandles.kt</code> 的 <code>hitTest</code>/<code>dragResize</code> 能不能原封不動搬進
+  webview 前端用。拖動下方「使用者畫的裁切框」，切換 v，看右側「邏輯空間」裡框是否還準確圈住同一個圖案。
+</div>
+
+<div class="layout">
+  <div class="panel">
+    <div class="panel-title">左：surface 空間（raw bitmap，使用者在這上面拖框）</div>
+    <div class="controls" id="rotationButtons"></div>
+    <canvas id="surfaceCanvas" width="320" height="200"></canvas>
+  </div>
+  <div class="panel">
+    <div class="panel-title">右：邏輯空間（rotateToLogical 轉換後，畫面應永遠正的）</div>
+    <canvas id="logicalCanvas" width="320" height="200"></canvas>
+  </div>
+  <div class="panel" style="min-width: 300px;">
+    <div class="panel-title">狀態</div>
+    <div class="state" id="stateOut"></div>
+  </div>
+</div>
+
+<div class="panel" style="margin-top: 24px; max-width: 900px;">
+  <div class="panel-title">導覽情境</div>
+  <div class="tabs" id="scenarioTabs"></div>
+  <div class="scenario-desc" id="scenarioDesc"></div>
+  <div class="steps" id="scenarioSteps"></div>
+</div>
+
+<script>
+// ── 純模組：直接對應 CropHandles.kt + Viewport.kt，可原樣搬進 webview 前端 ──
+const CropGeometry = (() => {
+  function normalized(r) {
+    return {
+      left: Math.min(r.left, r.right), top: Math.min(r.top, r.bottom),
+      right: Math.max(r.left, r.right), bottom: Math.max(r.top, r.bottom),
+    };
+  }
+  function hitTest(rect, x, y, handleRadius) {
+    if (!rect) return "None";
+    const r = normalized(rect);
+    const nearPoint = (px, py) => Math.hypot(x - px, y - py) < handleRadius;
+    const nearX = (vx) => Math.abs(x - vx) < handleRadius;
+    const nearY = (vy) => Math.abs(y - vy) < handleRadius;
+    if (nearPoint(r.left, r.top)) return "TopLeft";
+    if (nearPoint(r.right, r.top)) return "TopRight";
+    if (nearPoint(r.left, r.bottom)) return "BottomLeft";
+    if (nearPoint(r.right, r.bottom)) return "BottomRight";
+    if (nearX(r.left) && y >= r.top && y <= r.bottom) return "Left";
+    if (nearX(r.right) && y >= r.top && y <= r.bottom) return "Right";
+    if (nearY(r.top) && x >= r.left && x <= r.right) return "Top";
+    if (nearY(r.bottom) && x >= r.left && x <= r.right) return "Bottom";
+    if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return "Center";
+    return "None";
+  }
+  function dragResize(rect, handle, dx, dy) {
+    const r = { ...rect };
+    switch (handle) {
+      case "TopLeft": r.left += dx; r.top += dy; break;
+      case "TopRight": r.top += dy; r.right += dx; break;
+      case "BottomLeft": r.left += dx; r.bottom += dy; break;
+      case "BottomRight": r.right += dx; r.bottom += dy; break;
+      case "Top": r.top += dy; break;
+      case "Bottom": r.bottom += dy; break;
+      case "Left": r.left += dx; break;
+      case "Right": r.right += dx; break;
+      case "Center": r.left += dx; r.top += dy; r.right += dx; r.bottom += dy; break;
+    }
+    return r;
+  }
+  // Viewport.kt 的 rotateToLogical 原樣搬過來：buffer 空間一點旋轉 quarterTurns 個直角到邏輯空間。
+  function rotateToLogical(px, py, width, height, quarterTurns) {
+    switch (((quarterTurns % 4) + 4) % 4) {
+      case 1: return { x: py, y: width - px };
+      case 2: return { x: width - px, y: height - py };
+      case 3: return { x: height - py, y: px };
+      default: return { x: px, y: py };
+    }
+  }
+  // #52 新增範圍：把 surface 空間的 pixel rect 轉成邏輯空間 roi，重用 rotateToLogical，
+  // 不發明新座標系——旋轉的是矩形的兩個對角點，直角旋轉保證轉完仍是軸對齊矩形。
+  function pixelRectToLogicalRoi(rect, bitmapWidth, bitmapHeight, quarterTurns) {
+    const r = normalized(rect);
+    const a = rotateToLogical(r.left, r.top, bitmapWidth, bitmapHeight, quarterTurns);
+    const b = rotateToLogical(r.right, r.bottom, bitmapWidth, bitmapHeight, quarterTurns);
+    return normalized({ left: a.x, top: a.y, right: b.x, bottom: b.y });
+  }
+  return { normalized, hitTest, dragResize, rotateToLogical, pixelRectToLogicalRoi };
+})();
+
+// ── 展示殼層（throwaway）：不算進上面的純模組 ──
+const W = 320, H = 200;
+const surfaceCanvas = document.getElementById("surfaceCanvas");
+const logicalCanvas = document.getElementById("logicalCanvas");
+const sctx = surfaceCanvas.getContext("2d");
+const lctx = logicalCanvas.getContext("2d");
+
+let quarterTurns = 0; // 模擬 VD 自己的 rotation v
+let cropRect = { left: 60, top: 40, right: 180, bottom: 120 };
+let dragHandle = "None";
+let dragStart = null;
+let dragRectStart = null;
+
+function turnedDims(qt) {
+  return (qt % 2 === 1) ? { w: H, h: W } : { w: W, h: H };
+}
+
+// 畫一個方向感明確的圖案（箭頭朝「使用者看到的上方」），用來肉眼驗證裁切框跟對了沒有。
+function drawContent(ctx, w, h, label) {
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = "#1c2030";
+  ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = "#3a3f4c";
+  ctx.strokeRect(0.5, 0.5, w - 1, h - 1);
+  // 星星圖案放在畫面 1/4 處，是待裁切的「目標」
+  const cx = w * 0.28, cy = h * 0.32, r = Math.min(w, h) * 0.12;
+  ctx.fillStyle = "#f2c94c";
+  ctx.beginPath();
+  for (let i = 0; i < 5; i++) {
+    const a1 = (Math.PI * 2 * i) / 5 - Math.PI / 2;
+    const a2 = a1 + Math.PI / 5;
+    ctx.lineTo(cx + r * Math.cos(a1), cy + r * Math.sin(a1));
+    ctx.lineTo(cx + (r * 0.4) * Math.cos(a2), cy + (r * 0.4) * Math.sin(a2));
+  }
+  ctx.closePath();
+  ctx.fill();
+  // 頂邊標「TOP」代表使用者看到的方向
+  ctx.fillStyle = "#8a90a2";
+  ctx.font = "12px monospace";
+  ctx.fillText(label, 8, 16);
+}
+
+function renderSurface() {
+  // ADR-0014 的道理套用在 v 身上一樣成立：VD 自己的 rotation 不改變它 buffer 的尺寸，
+  // 只改變畫進那個固定畫布裡的內容方向——所以 raw buffer 尺寸永遠是 W×H，不隨 v 互換。
+  surfaceCanvas.width = W; surfaceCanvas.height = H;
+  drawContent(sctx, W, H, `raw buffer (v=${quarterTurns * 90}°, 星星固定畫在同一個 buffer 位置)`);
+  const r = CropGeometry.normalized(cropRect);
+  sctx.strokeStyle = "#3b6ef0";
+  sctx.lineWidth = 2;
+  sctx.strokeRect(r.left, r.top, r.right - r.left, r.bottom - r.top);
+  for (const [x, y] of [[r.left, r.top], [r.right, r.top], [r.left, r.bottom], [r.right, r.bottom]]) {
+    sctx.fillStyle = "#3b6ef0";
+    sctx.beginPath(); sctx.arc(x, y, 4, 0, Math.PI * 2); sctx.fill();
+  }
+}
+
+// 跟 VirtualDisplayMirror.kt 的 quarterTurnMatrix 逐項對應（Android Matrix 的
+// [a,b,c / d,e,f] 排法換成 canvas setTransform(a,b,c,d,e,f) 的 [a,c,e / b,d,f] 排法），
+// 純粹用來在畫面上肉眼核對 rotateBufferBitmap 實際搬動像素的方向——不是 CropGeometry 模組的一部分。
+function applyQuarterTurnTransform(ctx, quarterTurns, width, height) {
+  switch (quarterTurns % 4) {
+    case 1: ctx.setTransform(0, -1, 1, 0, 0, width); break;
+    case 2: ctx.setTransform(-1, 0, 0, -1, width, height); break;
+    case 3: ctx.setTransform(0, 1, -1, 0, height, 0); break;
+    default: ctx.setTransform(1, 0, 0, 1, 0, 0);
+  }
+}
+
+function renderLogical() {
+  // 輸出尺寸才會因為直角旋轉互換長寬（Bitmap.createBitmap 依 matrix 映射後的邊界自動算出）；
+  // 換算矩陣吃的仍是 raw 的 W×H，跟 rotateBufferBitmap 傳給 quarterTurnMatrix 的是同一組尺寸。
+  const dims = turnedDims(quarterTurns);
+  logicalCanvas.width = dims.w; logicalCanvas.height = dims.h;
+  lctx.save();
+  lctx.setTransform(1, 0, 0, 1, 0, 0);
+  lctx.clearRect(0, 0, dims.w, dims.h);
+  applyQuarterTurnTransform(lctx, quarterTurns, W, H);
+  drawContent(lctx, W, H, "");
+  lctx.restore();
+  lctx.fillStyle = "#8a90a2";
+  lctx.font = "12px monospace";
+  lctx.fillText("logical（星星應永遠停在同一個相對位置）", 8, 16);
+
+  const roi = CropGeometry.pixelRectToLogicalRoi(cropRect, W, H, quarterTurns);
+  lctx.strokeStyle = "#5fd97a";
+  lctx.lineWidth = 2;
+  lctx.strokeRect(roi.left, roi.top, roi.right - roi.left, roi.bottom - roi.top);
+  return roi;
+}
+
+function renderState() {
+  const r = CropGeometry.normalized(cropRect);
+  const roi = CropGeometry.pixelRectToLogicalRoi(cropRect, W, H, quarterTurns);
+  document.getElementById("stateOut").innerHTML =
+`v (quarterTurns)     = ${quarterTurns}  (${quarterTurns * 90}°)
+raw buffer 尺寸       = ${W} × ${H}（不隨 v 互換）
+logical bitmap 尺寸   = ${turnedDims(quarterTurns).w} × ${turnedDims(quarterTurns).h}
+
+surface 空間 crop rect（今天 saveCroppedImage 直接用這個，是 bug）:
+  left=${r.left.toFixed(0)} top=${r.top.toFixed(0)} right=${r.right.toFixed(0)} bottom=${r.bottom.toFixed(0)}
+
+邏輯空間 roi（pixelRectToLogicalRoi 轉換後，要存進 templates.json 的值）:
+  left=${roi.left.toFixed(0)} top=${roi.top.toFixed(0)} right=${roi.right.toFixed(0)} bottom=${roi.bottom.toFixed(0)}
+
+<span class="ok">→ 右側綠框若持續圈住星星，代表轉換正確，且只用到 Viewport.kt 既有的 rotateToLogical，沒有新發明座標系。</span>`;
+}
+
+function render() {
+  renderSurface();
+  renderLogical();
+  renderState();
+}
+
+function pointerPos(e) {
+  const rect = surfaceCanvas.getBoundingClientRect();
+  return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+}
+
+surfaceCanvas.addEventListener("pointerdown", (e) => {
+  const p = pointerPos(e);
+  dragHandle = CropGeometry.hitTest(cropRect, p.x, p.y, 14);
+  if (dragHandle === "None") {
+    cropRect = { left: p.x, top: p.y, right: p.x, bottom: p.y };
+    dragHandle = "BottomRight";
+  }
+  dragStart = p;
+  dragRectStart = { ...cropRect };
+  surfaceCanvas.setPointerCapture(e.pointerId);
+});
+surfaceCanvas.addEventListener("pointermove", (e) => {
+  if (!dragStart) return;
+  const p = pointerPos(e);
+  cropRect = CropGeometry.dragResize(dragRectStart, dragHandle, p.x - dragStart.x, p.y - dragStart.y);
+  render();
+});
+surfaceCanvas.addEventListener("pointerup", () => { dragStart = null; });
+
+const rotationButtonsEl = document.getElementById("rotationButtons");
+[0, 1, 2, 3].forEach((qt) => {
+  const btn = document.createElement("button");
+  btn.textContent = `v = ${qt * 90}°`;
+  btn.onclick = () => { quarterTurns = qt; updateActiveRotationButton(); render(); };
+  btn.dataset.qt = qt;
+  rotationButtonsEl.appendChild(btn);
+});
+function updateActiveRotationButton() {
+  [...rotationButtonsEl.children].forEach((b) => b.classList.toggle("active", Number(b.dataset.qt) === quarterTurns));
+}
+
+// ── 導覽情境 ──
+const scenarios = [
+  {
+    name: "Happy path：v=0",
+    desc: "裝置沒轉，surface 空間跟邏輯空間應該完全一樣。拖框後直接比對左右兩個 canvas 的框位置。",
+    steps: [
+      { label: "重置到 v=0", run: () => { quarterTurns = 0; cropRect = { left: 40, top: 20, right: 150, bottom: 100 }; } },
+    ],
+  },
+  {
+    name: "v=90°：長寬互換",
+    desc: "quarterTurns=1 時 buffer 長寬互換（跟 Viewport.kt 的 isQuarterTurn 一致）。驗證轉換後的 roi 仍落在星星上，不會因為長寬互換而錯位。",
+    steps: [
+      { label: "切到 v=90°、拖出框住星星的裁切框", run: () => { quarterTurns = 1; cropRect = { left: 30, top: 40, right: 100, bottom: 120 }; } },
+    ],
+  },
+  {
+    name: "v=180°：應該是點對稱",
+    desc: "quarterTurns=2 沒有長寬互換，但整張圖上下左右都反了。驗證 pixelRectToLogicalRoi 對 180° 的處理跟 rotateBufferBitmap 畫面旋轉是同一個方向。",
+    steps: [
+      { label: "切到 v=180°、拖出框住星星的裁切框", run: () => { quarterTurns = 2; cropRect = { left: 180, top: 100, right: 260, bottom: 170 }; } },
+    ],
+  },
+  {
+    name: "反例：框超出邊界",
+    desc: "拖到畫面外，看 dragResize 是否仍回傳合理值（不會噴例外），normalized() 是否能救回被拖到「左大於右」的退化框。CropHandles.kt 的既有邏輯本來就處理這個，這裡只是確認搬過來也一樣成立。",
+    steps: [
+      { label: "切到 v=0、拖一個 left > right 的反向框", run: () => { quarterTurns = 0; cropRect = { left: 200, top: 150, right: 40, bottom: 30 }; } },
+    ],
+  },
+];
+const tabsEl = document.getElementById("scenarioTabs");
+const descEl = document.getElementById("scenarioDesc");
+const stepsEl = document.getElementById("scenarioSteps");
+let activeScenario = 0;
+
+function renderScenarioChrome() {
+  tabsEl.innerHTML = "";
+  scenarios.forEach((s, i) => {
+    const t = document.createElement("button");
+    t.className = "tab" + (i === activeScenario ? " active" : "");
+    t.textContent = s.name;
+    t.onclick = () => { activeScenario = i; renderScenarioChrome(); };
+    tabsEl.appendChild(t);
+  });
+  const s = scenarios[activeScenario];
+  descEl.textContent = s.desc;
+  stepsEl.innerHTML = "";
+  s.steps.forEach((step) => {
+    const b = document.createElement("button");
+    b.textContent = step.label;
+    b.onclick = () => { step.run(); updateActiveRotationButton(); render(); };
+    stepsEl.appendChild(b);
+  });
+}
+
+renderScenarioChrome();
+updateActiveRotationButton();
+render();
+</script>
+</body>
+</html>
