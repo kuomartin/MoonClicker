@@ -65,6 +65,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("relc.run", runCommand),
     vscode.commands.registerCommand("relc.runRemote", runRemoteCommand),
     vscode.commands.registerCommand("relc.openMirror", openMirrorCommand),
+    vscode.commands.registerCommand("relc.renameScript", renameScriptCommand),
   );
 }
 
@@ -249,6 +250,43 @@ async function runCommand(): Promise<void> {
     vscode.window.showInformationMessage(`ReLC: 已在裝置上觸發「${target.id}」執行`);
   } catch (err) {
     vscode.window.showErrorMessage(`ReLC: ${(err as Error).message}`);
+  }
+}
+
+async function renameScriptCommand(item?: LocalScriptItem): Promise<void> {
+  const target = await getLocalScriptTarget(item);
+  if (!target) return;
+  
+  const newName = await vscode.window.showInputBox({
+    prompt: "輸入新的腳本名稱 (將同時重新命名資料夾與 script.json)",
+    value: target.id
+  });
+  if (!newName || newName === target.id) return;
+  
+  const parentDir = path.dirname(target.path);
+  const newPath = path.join(parentDir, newName);
+  
+  if (fs.existsSync(newPath)) {
+    vscode.window.showErrorMessage(`ReLC: 已經存在名為「${newName}」的資料夾。`);
+    return;
+  }
+  
+  try {
+    const jsonPath = path.join(target.path, "script.json");
+    if (fs.existsSync(jsonPath)) {
+      const json = JSON.parse(fs.readFileSync(jsonPath, "utf8"));
+      json.id = newName;
+      if (json.name === target.id) {
+        json.name = newName;
+      }
+      fs.writeFileSync(jsonPath, JSON.stringify(json, null, 2) + "\n");
+    }
+    
+    fs.renameSync(target.path, newPath);
+    vscode.window.showInformationMessage(`ReLC: 腳本已重新命名為「${newName}」`);
+    workspaceProvider.refresh();
+  } catch (err) {
+    vscode.window.showErrorMessage(`ReLC: 重新命名失敗 - ${(err as Error).message}`);
   }
 }
 
