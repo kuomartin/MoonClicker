@@ -33,6 +33,10 @@
       {
         "command": "relc.run",
         "title": "ReLC: Run Current Script on Device"
+      },
+      {
+        "command": "relc.openMirror",
+        "title": "ReLC: Open Realtime Mirror"
       }
     ]
   },
