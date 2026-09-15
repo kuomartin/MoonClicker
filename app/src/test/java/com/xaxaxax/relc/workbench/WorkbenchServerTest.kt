@@ -107,6 +107,11 @@ private class FakeFrameSource(
     }
 }
 
+private class FakeDisplaySource : DisplaySource {
+    var displaysToReturn: List<WorkbenchDisplaySummary>? = null
+    override fun getDisplays(): List<WorkbenchDisplaySummary>? = displaysToReturn
+}
+
 /** 收一筆二進位 frame，解碼成 [StreamEvent]——跟 WorkbenchServer.kt 產生它用的是同一份 schema。 */
 private suspend fun DefaultClientWebSocketSession.receiveStreamEvent(): StreamEvent {
     val frame = incoming.receive() as Frame.Binary
@@ -120,6 +125,9 @@ class WorkbenchServerTest {
     private val fakeRunner = FakeScriptRunner()
     private val fakeStream = FakeScriptStream()
     private val fakeFrames = FakeFrameSource(displays = emptyMap())
+    private val fakeDisplays = FakeDisplaySource().apply {
+        displaysToReturn = listOf(WorkbenchDisplaySummary(0, "Physical Display", 1080, 1920, false))
+    }
 
     private fun scriptFolder(id: String, mainLua: String): File {
         val dir = temp.newFolder(id)
@@ -154,7 +162,7 @@ class WorkbenchServerTest {
     @Test
     fun `health route returns 200`() = runTest {
         testApplication {
-            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames) }
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames, fakeDisplays) }
 
             val response = client.get("/health")
 
@@ -163,9 +171,34 @@ class WorkbenchServerTest {
     }
 
     @Test
+    fun `displays route returns list of displays`() = runTest {
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames, fakeDisplays) }
+
+            val response = client.get("/displays")
+
+            assertEquals(HttpStatusCode.OK, response.status)
+            assertTrue(response.bodyAsText().contains("\"Physical Display\""))
+            assertTrue(response.bodyAsText().contains("\"width\":1080"))
+        }
+    }
+
+    @Test
+    fun `displays route returns 503 if service is disconnected`() = runTest {
+        fakeDisplays.displaysToReturn = null
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames, fakeDisplays) }
+
+            val response = client.get("/displays")
+
+            assertEquals(HttpStatusCode.ServiceUnavailable, response.status)
+        }
+    }
+
+    @Test
     fun `websocket route echoes back what it receives`() = runTest {
         testApplication {
-            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames) }
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames, fakeDisplays) }
             val client = createClient { install(ClientWebSockets) }
 
             client.webSocket("/") {
@@ -183,7 +216,7 @@ class WorkbenchServerTest {
     fun `websocket connect immediately sends the current data snapshot`() = runTest {
         fakeStream.setData(mapOf("status" to "claimed", "count" to 3.0))
         testApplication {
-            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames) }
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames, fakeDisplays) }
             val client = createClient { install(ClientWebSockets) }
 
             client.webSocket("/") {
@@ -197,7 +230,7 @@ class WorkbenchServerTest {
     @Test
     fun `websocket streams log lines as they happen`() = runTest {
         testApplication {
-            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames) }
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames, fakeDisplays) }
             val client = createClient { install(ClientWebSockets) }
 
             client.webSocket("/") {
@@ -215,7 +248,7 @@ class WorkbenchServerTest {
     @Test
     fun `websocket streams data updates as they happen`() = runTest {
         testApplication {
-            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames) }
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames, fakeDisplays) }
             val client = createClient { install(ClientWebSockets) }
 
             client.webSocket("/") {
@@ -236,7 +269,7 @@ class WorkbenchServerTest {
         // WebSocket session 崩潰。
         fakeStream.setData(mapOf("count" to 3))
         testApplication {
-            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames) }
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames, fakeDisplays) }
             val client = createClient { install(ClientWebSockets) }
 
             client.webSocket("/") {
@@ -250,7 +283,7 @@ class WorkbenchServerTest {
     @Test
     fun `reconnecting resends the full current data snapshot, not history`() = runTest {
         testApplication {
-            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames) }
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames, fakeDisplays) }
             val client = createClient { install(ClientWebSockets) }
 
             client.webSocket("/") {
@@ -271,7 +304,7 @@ class WorkbenchServerTest {
     fun `scripts route lists script folders on device`() = runTest {
         scriptFolder("hello", "log('hi')")
         testApplication {
-            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames) }
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames, fakeDisplays) }
 
             val response = client.get("/scripts")
 
@@ -286,7 +319,7 @@ class WorkbenchServerTest {
         File(dir, "template.png").writeText("fake image bytes")
 
         testApplication {
-            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames) }
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames, fakeDisplays) }
 
             val response = client.get("/scripts/hello/export")
 
@@ -300,7 +333,7 @@ class WorkbenchServerTest {
     @Test
     fun `export route 404s for an unknown script id`() = runTest {
         testApplication {
-            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames) }
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames, fakeDisplays) }
 
             val response = client.get("/scripts/does-not-exist/export")
 
@@ -314,7 +347,7 @@ class WorkbenchServerTest {
         File(dir, "old.png").writeText("stale")
 
         testApplication {
-            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames) }
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames, fakeDisplays) }
 
             val response = client.put("/scripts/hello/import") {
                 setBody(zipOf("main.lua" to "log('new')"))
@@ -329,7 +362,7 @@ class WorkbenchServerTest {
     @Test
     fun `import route rejects an archive with no main lua`() = runTest {
         testApplication {
-            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames) }
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames, fakeDisplays) }
 
             val response = client.put("/scripts/hello/import") {
                 setBody(zipOf("readme.txt" to "nothing here"))
@@ -343,7 +376,7 @@ class WorkbenchServerTest {
     fun `run route starts the script through the existing runner`() = runTest {
         scriptFolder("hello", "log('hi')")
         testApplication {
-            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames) }
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames, fakeDisplays) }
 
             val response = client.post("/scripts/hello/run")
 
@@ -355,7 +388,7 @@ class WorkbenchServerTest {
     @Test
     fun `run route 404s for an unknown script id`() = runTest {
         testApplication {
-            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames) }
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames, fakeDisplays) }
 
             val response = client.post("/scripts/does-not-exist/run")
 
@@ -368,7 +401,7 @@ class WorkbenchServerTest {
         scriptFolder("hello", "log('hi')")
         fakeRunner.running = true
         testApplication {
-            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames) }
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames, fakeDisplays) }
 
             val response = client.post("/scripts/hello/run")
 
@@ -381,7 +414,7 @@ class WorkbenchServerTest {
     fun `templates route writes the template image and roi into templates json`() = runTest {
         val dir = scriptFolder("hello", "log('hi')")
         testApplication {
-            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames) }
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames, fakeDisplays) }
 
             val response = client.put("/scripts/hello/templates/button.png?x=1&y=2&w=30&h=40") {
                 setBody("fake png bytes".toByteArray())
@@ -401,7 +434,7 @@ class WorkbenchServerTest {
         val dir = scriptFolder("hello", "log('hi')")
         File(dir, "button.png").writeText("existing")
         testApplication {
-            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames) }
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames, fakeDisplays) }
 
             val response = client.put("/scripts/hello/templates/button.png?x=1&y=2&w=3&h=4") {
                 setBody("new png bytes".toByteArray())
@@ -415,7 +448,7 @@ class WorkbenchServerTest {
     @Test
     fun `templates route 404s for an unknown script id`() = runTest {
         testApplication {
-            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames) }
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames, fakeDisplays) }
 
             val response = client.put("/scripts/does-not-exist/templates/button.png?x=1&y=2&w=3&h=4") {
                 setBody("png bytes".toByteArray())
@@ -429,7 +462,7 @@ class WorkbenchServerTest {
     fun `templates route rejects when roi query params are missing or invalid`() = runTest {
         scriptFolder("hello", "log('hi')")
         testApplication {
-            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames) }
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames, fakeDisplays) }
 
             val response = client.put("/scripts/hello/templates/button.png?x=1&y=2&w=3") {
                 setBody("png bytes".toByteArray())
@@ -444,7 +477,7 @@ class WorkbenchServerTest {
         val dir = scriptFolder("hello", "log('hi')")
         File(dir, "templates.json").writeText("not valid json")
         testApplication {
-            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames) }
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames, fakeDisplays) }
 
             val response = client.put("/scripts/hello/templates/button.png?x=1&y=2&w=3&h=4") {
                 setBody("png bytes".toByteArray())
@@ -479,7 +512,7 @@ class WorkbenchServerTest {
         // fakeFrames 沒有註冊任何 displayId，對應正式產線的 MirrorFrameSource 在鏡像畫面
         // 沒開、沒有活著的擷取來源時的狀態（見 #76）。
         testApplication {
-            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames) }
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames, fakeDisplays) }
 
             val response = client.get("/mirror/0")
 
