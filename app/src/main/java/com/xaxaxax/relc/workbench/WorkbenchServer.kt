@@ -7,6 +7,7 @@ import com.xaxaxax.relc.script.ScriptSession
 import com.xaxaxax.relc.script.ScriptStore
 import com.xaxaxax.relc.script.TemplateRoi
 import com.xaxaxax.relc.script.TemplateStore
+import com.xaxaxax.relc.shizuku.ShizukuManager
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
@@ -40,6 +41,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import relc.workbench.StreamEvent
@@ -88,11 +90,22 @@ interface FrameSource {
     fun frames(displayId: Int): Flow<ByteArray>?
 }
 
+/**
+ * Display info needed by the extension to show mirror choices (見 #87).
+ */
+@Serializable
+data class WorkbenchDisplaySummary(val id: Int, val name: String, val width: Int, val height: Int, val isVirtual: Boolean)
+
+interface DisplaySource {
+    fun getDisplays(): List<WorkbenchDisplaySummary>?
+}
+
 @Singleton
 class WorkbenchServer @Inject constructor(
     private val scriptStore: ScriptStore,
     private val scriptSession: ScriptSession,
     private val frameSource: FrameSource,
+    private val shizukuManager: ShizukuManager,
 ) {
     private val scriptRunner = object : ScriptRunner {
         override fun isRunning() = scriptSession.state.value.isRunning
@@ -102,6 +115,24 @@ class WorkbenchServer @Inject constructor(
     private val scriptStream = object : ScriptStream {
         override val logLines: Flow<String> get() = ScriptEngine.logLines
         override val sharedData: StateFlow<Map<String, Any>> get() = ScriptEngine.sharedData
+    }
+
+    private val displaySource = object : DisplaySource {
+        override fun getDisplays(): List<WorkbenchDisplaySummary>? {
+            val service = shizukuManager.service ?: return null
+            val displayIds = mutableListOf(0)
+            displayIds.addAll(service.virtualDisplays.toList())
+            return displayIds.mapNotNull { id ->
+                val size = service.getDisplaySize(id) ?: return@mapNotNull null
+                WorkbenchDisplaySummary(
+                    id = id,
+                    name = if (id == 0) "Physical Display" else "Virtual Display $id",
+                    width = size[0],
+                    height = size[1],
+                    isVirtual = id != 0
+                )
+            }
+        }
     }
 
     private var server: EmbeddedServer<*, *>? = null
@@ -126,7 +157,7 @@ class WorkbenchServer @Inject constructor(
                 CIO,
                 port = PORT,
                 host = host,
-                module = { workbenchModule(scriptsRoot, scriptRunner, scriptStream, frameSource) },
+                module = { workbenchModule(scriptsRoot, scriptRunner, scriptStream, frameSource, displaySource) },
             ).start(wait = false)
             _address.value = "$host:$PORT"
             true
@@ -181,12 +212,23 @@ fun Application.workbenchModule(
     scriptRunner: ScriptRunner,
     scriptStream: ScriptStream,
     frameSource: FrameSource,
+    displaySource: DisplaySource,
 ) {
     install(WebSockets)
     routing {
         get("/health") {
             call.respondText("OK")
         }
+
+        get("/displays") {
+            val displays = displaySource.getDisplays()
+            if (displays == null) {
+                call.respondText("Service not connected", status = HttpStatusCode.ServiceUnavailable)
+                return@get
+            }
+            call.respondText(Json.encodeToString(displays), ContentType.Application.Json)
+        }
+
         // log + data.set 即時串流（見 #62），外加保留 #57 用來驗證連線本身的 echo。
         //
         // data 用 sharedData 這個 StateFlow 的訂閱語意天生就有「重連重送目前快照」的效果——

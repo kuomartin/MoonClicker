@@ -19,6 +19,10 @@ let connection: MirrorConnection | undefined;
  * 分開的一份連線與狀態——再次呼叫這個指令只會重啟 mirror 自己的連線，不影響 log/data.set
  * 那條 WebSocket，反之亦然。
  */
+export function postStreamEventToMirror(event: any): void {
+  safePostMessage({ type: "streamEvent", event });
+}
+
 export function openMirrorPanel(address: string, displayId: number): void {
   connection?.stop();
   connection = undefined;
@@ -55,6 +59,7 @@ export function openMirrorPanel(address: string, displayId: number): void {
       templateName?: string;
       roi?: TemplateRoi;
       pngBase64?: string;
+      displayId?: number;
     }) => {
       if (message?.type === "stop") {
         connection?.stop();
@@ -93,6 +98,10 @@ export function openMirrorPanel(address: string, displayId: number): void {
           });
           vscode.window.showErrorMessage(`ReLC 儲存模板失敗: ${errMsg}`);
         }
+      } else if (message?.type === "switchDisplay") {
+        if (typeof message.displayId === "number") {
+          openMirrorPanel(address, message.displayId);
+        }
       }
     });
   }
@@ -108,6 +117,10 @@ export function openMirrorPanel(address: string, displayId: number): void {
       // 連線成功時自動請求腳本清單以供裁切存檔選擇
       listScripts(address)
         .then((scripts) => safePostMessage({ type: "scripts", scripts }))
+        .catch(() => {});
+      fetch(`http://${address}/displays`)
+        .then(res => res.json())
+        .then(displays => safePostMessage({ type: "displays", displays, currentDisplayId: displayId }))
         .catch(() => {});
     } else {
       staleness.disarm();
@@ -169,11 +182,56 @@ function renderHtml(): string {
     color: var(--vscode-editor-foreground);
     font-family: var(--vscode-font-family);
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     height: 100vh;
     overflow: hidden;
     user-select: none;
   }
+  #leftPanel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid var(--vscode-panel-border);
+    min-width: 0;
+  }
+  #rightPanel {
+    width: 350px;
+    display: flex;
+    flex-direction: column;
+    background: var(--vscode-sideBar-background);
+  }
+  #logContainer {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+    font-family: var(--vscode-editor-font-family);
+    font-size: 12px;
+    border-bottom: 1px solid var(--vscode-panel-border);
+  }
+  #logToolbar {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--vscode-panel-border);
+    font-size: 11px;
+    background: var(--vscode-editor-background);
+  }
+  #dataContainer {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+    font-family: var(--vscode-editor-font-family);
+    font-size: 12px;
+  }
+  .logLine { margin: 2px 0; word-wrap: break-word; }
+  .runDivider { border-top: 1px dashed var(--vscode-panel-border); margin: 8px 0; }
+  .flash { animation: flash 1s; }
+  @keyframes flash { from { background: var(--vscode-editor-findMatchHighlightBackground); } to { background: transparent; } }
+  .tree-node { margin-left: 12px; margin-bottom: 2px; }
+  .tree-key { color: var(--vscode-symbolIcon-propertyForeground); }
+  .tree-val-string { color: var(--vscode-debugTokenExpression-string); }
+  .tree-val-number { color: var(--vscode-debugTokenExpression-number); }
+  .tree-val-boolean { color: var(--vscode-debugTokenExpression-boolean); }
   #toolbar {
     display: flex;
     align-items: center;
@@ -278,7 +336,9 @@ function renderHtml(): string {
 </style>
 </head>
 <body>
+<div id="leftPanel">
   <div id="toolbar">
+    <select id="displaySelect"></select>
     <span id="status">連線中…</span>
     <button id="cropBtn" type="button" disabled>開始裁切</button>
     <button id="stopButton" type="button">停止</button>
@@ -298,6 +358,19 @@ function renderHtml(): string {
     <canvas id="cropCanvas" hidden></canvas>
     <div id="overlay">尚未收到畫面</div>
   </div>
+</div>
+<div id="rightPanel">
+  <div id="logToolbar">
+    <span>Console</span>
+    <div>
+      <label><input type="checkbox" id="autoScroll" checked> Auto-scroll</label>
+      <button id="clearLogBtn" style="padding: 2px 6px; font-size: 10px;">Clear</button>
+    </div>
+  </div>
+  <div id="logContainer"></div>
+  <div style="padding: 4px 8px; border-bottom: 1px solid var(--vscode-panel-border); font-size: 11px; background: var(--vscode-editor-background);">Data View</div>
+  <div id="dataContainer"></div>
+</div>
   <script>
     const vscode = acquireVsCodeApi();
     const statusEl = document.getElementById("status");
@@ -314,6 +387,11 @@ function renderHtml(): string {
     const cancelCropBtn = document.getElementById("cancelCropBtn");
     const cropCanvas = document.getElementById("cropCanvas");
     const ctx = cropCanvas.getContext("2d");
+    const displaySelect = document.getElementById("displaySelect");
+    const logContainer = document.getElementById("logContainer");
+    const dataContainer = document.getElementById("dataContainer");
+    const autoScrollCb = document.getElementById("autoScroll");
+    const clearLogBtn = document.getElementById("clearLogBtn");
 
     let isCropping = false;
     let stale = false;
@@ -327,6 +405,14 @@ function renderHtml(): string {
 
     stopButton.addEventListener("click", () => {
       vscode.postMessage({ type: "stop" });
+    });
+
+    displaySelect.addEventListener("change", (e) => {
+      vscode.postMessage({ type: "switchDisplay", displayId: parseInt(e.target.value, 10) });
+    });
+
+    clearLogBtn.addEventListener("click", () => {
+      logContainer.innerHTML = "";
     });
 
     cropBtn.addEventListener("click", () => {
@@ -697,6 +783,17 @@ function renderHtml(): string {
         if (currentVal && scriptsList.some(s => s.id === currentVal)) {
           scriptSelect.value = currentVal;
         }
+      } else if (msg.type === "displays") {
+        displaySelect.innerHTML = "";
+        msg.displays.forEach(d => {
+          const opt = document.createElement("option");
+          opt.value = d.id;
+          opt.textContent = \`\${d.name} (\${d.width}x\${d.height})\`;
+          if (d.id === msg.currentDisplayId) opt.selected = true;
+          displaySelect.appendChild(opt);
+        });
+      } else if (msg.type === "streamEvent") {
+        handleStreamEvent(msg.event);
       } else if (msg.type === "saveTemplateResult") {
         saveCropBtn.disabled = false;
         if (msg.success) {
@@ -733,6 +830,56 @@ function renderHtml(): string {
           cropBtn.disabled = true;
           break;
       }
+    }
+
+    let lastData = {};
+    function handleStreamEvent(e) {
+      if (e.case === "log") {
+        const div = document.createElement("div");
+        div.className = "logLine";
+        div.textContent = e.value;
+        logContainer.appendChild(div);
+        if (autoScrollCb.checked) {
+          logContainer.scrollTop = logContainer.scrollHeight;
+        }
+      } else if (e.case === "data") {
+        renderDataTree(dataContainer, e.value || {});
+      }
+    }
+
+    function renderDataTree(container, data) {
+      container.innerHTML = "";
+      for (const [k, v] of Object.entries(data)) {
+        const node = document.createElement("div");
+        node.className = "tree-node";
+        
+        const keySpan = document.createElement("span");
+        keySpan.className = "tree-key";
+        keySpan.textContent = k + ": ";
+        
+        const valSpan = document.createElement("span");
+        if (typeof v === "string") {
+          valSpan.className = "tree-val-string";
+          valSpan.textContent = '"' + v + '"';
+        } else if (typeof v === "number") {
+          valSpan.className = "tree-val-number";
+          valSpan.textContent = v;
+        } else if (typeof v === "boolean") {
+          valSpan.className = "tree-val-boolean";
+          valSpan.textContent = v;
+        } else {
+          valSpan.textContent = String(v);
+        }
+        
+        if (lastData[k] !== v) {
+          valSpan.classList.add("flash");
+        }
+        
+        node.appendChild(keySpan);
+        node.appendChild(valSpan);
+        container.appendChild(node);
+      }
+      lastData = data;
     }
   </script>
 </body>

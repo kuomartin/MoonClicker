@@ -37,8 +37,88 @@
       {
         "command": "relc.openMirror",
         "title": "ReLC: Open Realtime Mirror"
+      },
+      {
+        "command": "relc.pushAndRun",
+        "title": "ReLC: Push & Run"
+      },
+      {
+        "command": "relc.runRemote",
+        "title": "ReLC: Run Remote Script"
+      },
+      {
+        "command": "relc.pullRemote",
+        "title": "ReLC: Pull Remote Script"
       }
-    ]
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "relc.connect",
+          "when": "view == relc.deviceConnection",
+          "group": "navigation"
+        },
+        {
+          "command": "relc.disconnect",
+          "when": "view == relc.deviceConnection",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "relc.push",
+          "when": "view == relc.localScripts",
+          "group": "inline"
+        },
+        {
+          "command": "relc.pushAndRun",
+          "when": "view == relc.localScripts",
+          "group": "inline"
+        },
+        {
+          "command": "relc.runRemote",
+          "when": "view == relc.remoteScripts",
+          "group": "inline"
+        },
+        {
+          "command": "relc.pullRemote",
+          "when": "view == relc.remoteScripts",
+          "group": "inline"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "relc.pushAndRun",
+        "key": "F5",
+        "when": "editorFocus && resourceLangId == lua && resourceFilename == main.lua"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "relc-scripts",
+          "title": "ReLC Scripts",
+          "icon": "$(device-mobile)"
+        }
+      ]
+    },
+    "views": {
+      "relc-scripts": [
+        {
+          "id": "relc.deviceConnection",
+          "name": "Device Connection"
+        },
+        {
+          "id": "relc.localScripts",
+          "name": "Local Scripts"
+        },
+        {
+          "id": "relc.remoteScripts",
+          "name": "Remote Scripts"
+        }
+      ]
+    }
   },
   "scripts": {
     "generate": "buf generate ../proto",
