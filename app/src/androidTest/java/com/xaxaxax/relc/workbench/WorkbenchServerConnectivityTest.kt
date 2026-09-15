@@ -2,16 +2,28 @@ package com.xaxaxax.relc.workbench
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
+import androidx.test.platform.app.InstrumentationRegistry
+import com.xaxaxax.relc.core.AppSettings
+import com.xaxaxax.relc.notification.ScriptStatusNotifier
+import com.xaxaxax.relc.script.ScriptSession
+import com.xaxaxax.relc.script.ScriptStore
+import com.xaxaxax.relc.shizuku.ShizukuManager
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.InetSocketAddress
 import java.net.Socket
+import kotlinx.coroutines.flow.Flow
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+
+/** [FrameSource] 這條測試不需要真的鏡像串流——不註冊任何 displayId 就好。 */
+private class FakeFrameSource : FrameSource {
+    override fun frames(displayId: Int): Flow<ByteArray>? = null
+}
 
 /**
  * 真機上重現過的 bug：`embeddedServer` 綁 wildcard host 會變成 dual-stack IPv6 socket，
@@ -27,7 +39,17 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 @LargeTest
 class WorkbenchServerConnectivityTest {
-    private val server = WorkbenchServer()
+    private val context = InstrumentationRegistry.getInstrumentation().targetContext
+    private val server = WorkbenchServer(
+        scriptStore = ScriptStore(context),
+        scriptSession = ScriptSession(
+            context = context,
+            shizukuManager = ShizukuManager(context),
+            notifier = ScriptStatusNotifier(context),
+            settings = AppSettings(context),
+        ),
+        frameSource = FakeFrameSource(),
+    )
 
     @After
     fun tearDown() {
