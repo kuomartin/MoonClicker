@@ -42,6 +42,10 @@ _Avoid_: 縮放矩陣、觸控映射（兩者都只講了它的一半）。
 The embedded Lua runtime that drives automation. A script is a **linear program** — `main.lua` runs top to bottom on its own thread and finishing means done; there is no tick loop ([ADR-0010](docs/adr/0010-linear-scripts-replace-the-tick-loop.md)). It drives input and vision on **one** virtual display chosen by the app, and never creates or destroys displays ([ADR-0011](docs/adr/0011-scripts-do-not-own-displays.md)). See also [ADR-0002](docs/adr/0002-lua-as-scripting-engine.md) and `docs/lua-api.md`.
 _Avoid_: Automation engine, macro engine, tick loop.
 
+**Script Workbench**:
+The embedded HTTP and WebSocket development server inside the ReLC app (`WorkbenchServer`, `WorkbenchService`) paired with the VS Code extension (`relc-script-workbench`). Enables local workspace detection (Single-Script or Monorepo), bidirectional script synchronization (Push/Pull), remote execution control, virtual display mirroring, template cropping, and real-time log/data streaming over the local network.
+_Avoid_: Dev server, debugger backend, sync service.
+
 **Script Folder**:
 A script *is* a folder under the app's external private directory (`Android/data/com.xaxaxax.relc/files/scripts/<id>/`): `main.lua` plus an optional `script.json` and its template images. The id is the folder name. There is no in-app editor — the folder is edited from a file manager or a PC, which is why the path is external and visible rather than in `filesDir`.
 _Avoid_: Script file, script record, script database entry.
