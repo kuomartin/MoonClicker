@@ -50,6 +50,10 @@
       {
         "command": "relc.pullRemote",
         "title": "ReLC: Pull Remote Script"
+      },
+      {
+        "command": "relc.renameScript",
+        "title": "ReLC: Rename (Script + Folder)"
       }
     ],
     "menus": {
@@ -61,6 +65,10 @@
         }
       ],
       "view/item/context": [
+        {
+          "command": "relc.renameScript",
+          "when": "viewItem == localScript"
+        },
         {
           "command": "relc.push",
           "when": "viewItem == localScript"

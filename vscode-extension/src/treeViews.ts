@@ -24,9 +24,28 @@ export class LocalScriptItem extends ReLCTreeItem {
     public readonly scriptPath: string,
     public readonly isMonorepo: boolean
   ) {
-    super(label, vscode.TreeItemCollapsibleState.None, "localScript");
+    super(label, vscode.TreeItemCollapsibleState.Collapsed, "localScript");
+    this.resourceUri = vscode.Uri.file(scriptPath);
     this.iconPath = new vscode.ThemeIcon("file-code");
     this.description = scriptId;
+  }
+}
+
+export class LocalFileItem extends ReLCTreeItem {
+  constructor(public readonly filePath: string, isDirectory: boolean) {
+    super(
+      path.basename(filePath),
+      isDirectory ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None,
+      isDirectory ? "localFolder" : "localFile"
+    );
+    this.resourceUri = vscode.Uri.file(filePath);
+    if (!isDirectory) {
+      this.command = {
+        command: "vscode.open",
+        title: "Open File",
+        arguments: [this.resourceUri]
+      };
+    }
   }
 }
 
@@ -83,9 +102,29 @@ export class WorkspaceTreeProvider implements vscode.TreeDataProvider<ReLCTreeIt
       return this.getLocalScripts();
     } else if (element.contextValue === "remoteRoot") {
       return this.getRemoteScripts();
+    } else if (element instanceof LocalScriptItem || element instanceof LocalFileItem) {
+      if (element.collapsibleState === vscode.TreeItemCollapsibleState.Collapsed && element.resourceUri) {
+        return this.getLocalFiles(element.resourceUri.fsPath);
+      }
     }
 
     return [];
+  }
+
+  private getLocalFiles(dirPath: string): LocalFileItem[] {
+    try {
+      const children = fs.readdirSync(dirPath, { withFileTypes: true });
+      // Sort directories first, then files
+      children.sort((a, b) => {
+        if (a.isDirectory() === b.isDirectory()) {
+          return a.name.localeCompare(b.name);
+        }
+        return a.isDirectory() ? -1 : 1;
+      });
+      return children.map(child => new LocalFileItem(path.join(dirPath, child.name), child.isDirectory()));
+    } catch {
+      return [];
+    }
   }
 
   private getLocalScripts(): LocalScriptItem[] {
