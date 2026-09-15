@@ -23,6 +23,11 @@ class FullscreenDisplayViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val shizukuManager: ShizukuManager,
     private val thumbnailCache: DisplayThumbnailCache,
+    /**
+     * workbench 的 `/mirror/{displayId}` 從這裡取畫面（見 #76）。直接把 singleton 露給畫面用，
+     * 比照 [cropSession]：登記/解除登記是畫面自己的生命週期事件，再包一層轉呼叫不會更清楚。
+     */
+    val mirrorFrames: MirrorFrameSource,
 ) : ViewModel() {
 
     data class UiState(
