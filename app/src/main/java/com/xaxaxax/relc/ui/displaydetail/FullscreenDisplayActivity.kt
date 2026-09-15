@@ -151,9 +151,10 @@ fun FullscreenDisplayScreen(
     LaunchedEffect(uiState.executionState) {
         if (uiState.executionState == FullscreenDisplayViewModel.ExecutionState.CROPPING && capturedBitmap == null) {
             // TextureView 取代 SurfaceView 之後，擷取畫面不需要 PixelCopy —— getBitmap()
-            // 直接同步回傳 texture 的內容。注意它回傳的是**未套用 view 旋轉**的影格，
-            // 亦即 surface 空間；虛擬顯示旋轉時模板的座標系該怎麼算，見地圖 #9 的迷霧。
-            val bitmap = textureViewRef.value?.bitmap
+            // 直接同步回傳 texture 的內容，但那是 surface 空間（未套用 VD 自己的 rotation）。
+            // ADR-0013：模板圖是邏輯空間的產物，所以裁切前先用 rotateBufferBitmap 轉正——
+            // 跟 DisplayThumbnailCache.put 存縮圖用的是同一個轉換，理由也一樣。
+            val bitmap = textureViewRef.value?.bitmap?.let { rotateBufferBitmap(it, geometry.rotation) }
             if (bitmap != null) {
                 viewModel.setCapturedBitmap(bitmap)
             } else {
@@ -190,6 +191,10 @@ fun FullscreenDisplayScreen(
                     var activeHandle by remember { mutableStateOf(DragHandle.None) }
                     var showSaveDialog by remember { mutableStateOf(false) }
                     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
+                    // letterbox 內容矩形——跟一般顯示鏡像用同一套 Viewport，因為
+                    // capturedBitmap 轉正後（v=90/270°）長寬會互換，硬拉伸塞滿 canvasSize
+                    // 會讓畫面變形。存檔的 onClick 也要用同一個 viewport 換算座標，故 hoist。
+                    var viewport by remember { mutableStateOf(viewportOf(0, 0, 0, 0, 0)) }
 
                     Canvas(
                         modifier = Modifier
@@ -216,10 +221,19 @@ fun FullscreenDisplayScreen(
                             }
                     ) {
                         canvasSize = IntSize(size.width.toInt(), size.height.toInt())
+                        val bitmap = capturedBitmap!!
+                        viewport = viewportOf(
+                            surfaceWidth = bitmap.width,
+                            surfaceHeight = bitmap.height,
+                            d = 0,
+                            viewWidth = canvasSize.width,
+                            viewHeight = canvasSize.height,
+                        )
 
                         drawImage(
-                            image = capturedBitmap!!.asImageBitmap(),
-                            dstSize = canvasSize
+                            image = bitmap.asImageBitmap(),
+                            dstOffset = IntOffset(viewport.contentLeft.roundToInt(), viewport.contentTop.roundToInt()),
+                            dstSize = IntSize(viewport.contentWidth.roundToInt(), viewport.contentHeight.roundToInt()),
                         )
                         drawRect(Color.Black.copy(alpha = 0.5f))
 
@@ -260,15 +274,12 @@ fun FullscreenDisplayScreen(
                             confirmButton = {
                                 TextButton(onClick = {
                                     activity ?: return@TextButton
-                                    val pixelRect = cropRect?.toPixelRect(
-                                        canvasWidth = canvasSize.width.toFloat(),
-                                        canvasHeight = canvasSize.height.toFloat(),
-                                        bitmapWidth = capturedBitmap!!.width,
-                                        bitmapHeight = capturedBitmap!!.height,
-                                    )
-                                    if (pixelRect != null) {
+                                    cropRect?.normalized()?.let { r ->
+                                        val topLeft = viewport.toDisplay(r.left, r.top)
+                                        val bottomRight = viewport.toDisplay(r.right, r.bottom)
                                         val cRect = android.graphics.Rect(
-                                            pixelRect.left, pixelRect.top, pixelRect.right, pixelRect.bottom
+                                            topLeft.x.roundToInt(), topLeft.y.roundToInt(),
+                                            bottomRight.x.roundToInt(), bottomRight.y.roundToInt(),
                                         )
                                         viewModel.saveCroppedImage(scriptDir, templateName, cRect)
                                     }

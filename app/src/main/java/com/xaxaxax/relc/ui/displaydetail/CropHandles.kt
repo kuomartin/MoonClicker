@@ -24,9 +24,6 @@ data class CropRect(
     )
 }
 
-/** 把裁切框換算到 bitmap 的像素座標時的結果——四個整數角，不含任何 android 型別。 */
-data class PixelRect(val left: Int, val top: Int, val right: Int, val bottom: Int)
-
 enum class DragHandle {
     TopLeft, TopRight, BottomLeft, BottomRight,
     Top, Bottom, Left, Right, Center, None
@@ -75,21 +72,4 @@ fun dragResize(rect: CropRect, handle: DragHandle, dx: Float, dy: Float): CropRe
         right = rect.right + dx, bottom = rect.bottom + dy,
     )
     DragHandle.None -> rect
-}
-
-/**
- * 把畫在 [canvasWidth] x [canvasHeight] 的 canvas 座標系裡的裁切框，換算成
- * [bitmapWidth] x [bitmapHeight] 原始 bitmap 的像素座標；canvas 尺寸未知（<= 0）時回 null。
- */
-fun CropRect.toPixelRect(canvasWidth: Float, canvasHeight: Float, bitmapWidth: Int, bitmapHeight: Int): PixelRect? {
-    if (canvasWidth <= 0f || canvasHeight <= 0f) return null
-    val scaleX = bitmapWidth / canvasWidth
-    val scaleY = bitmapHeight / canvasHeight
-    val n = normalized()
-    return PixelRect(
-        left = (n.left * scaleX).toInt(),
-        top = (n.top * scaleY).toInt(),
-        right = (n.right * scaleX).toInt(),
-        bottom = (n.bottom * scaleY).toInt(),
-    )
 }
