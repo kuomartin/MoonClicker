@@ -146,9 +146,17 @@ void reportHits(ScriptRuntime *runtime, const std::vector<VisionRequest> &reques
 }
 
 void requireVision(lua_State *L, ScriptRuntime *runtime) {
+    if (runtime->isPhysicalDisplay() && !runtime->isMirrorActive()) {
+        luaL_error(L, "vision on physical display requires active mirror (call screen.start_mirror() first)");
+    }
     if (!runtime->hasVision()) {
-        luaL_error(L, "vision is unavailable on this target: the physical display produces no "
-                      "frames, so only input.* works there. Run the script on a virtual display.");
+        luaL_error(L, "vision is unavailable: run the script on a virtual display or call screen.start_mirror() on physical display");
+    }
+}
+
+void requireInput(lua_State *L, ScriptRuntime *runtime) {
+    if (runtime->isPhysicalDisplay() && !runtime->isMirrorActive()) {
+        luaL_error(L, "input on physical display requires active mirror (call screen.start_mirror() first)");
     }
 }
 
@@ -218,6 +226,18 @@ int lua_sleep(lua_State *L) {
 
 // --- screen ----------------------------------------------------------------
 
+int lua_screen_start_mirror(lua_State *L) {
+    ScriptRuntime *runtime = self(L);
+    lua_pushboolean(L, runtime->startMirror());
+    return 1;
+}
+
+int lua_screen_stop_mirror(lua_State *L) {
+    ScriptRuntime *runtime = self(L);
+    lua_pushboolean(L, runtime->stopMirror());
+    return 1;
+}
+
 /** `screen` 的欄位是即時算的（旋轉會改變 width/height），所以走 __index 而不是固定值。 */
 int lua_screen_index(lua_State *L) {
     ScriptRuntime *runtime = self(L);
@@ -234,6 +254,8 @@ int lua_screen_index(lua_State *L) {
         lua_pushinteger(L, runtime->vision().rotation());
     } else if (strcmp(key, "has_vision") == 0) {
         lua_pushboolean(L, runtime->hasVision());
+    } else if (strcmp(key, "is_mirror_active") == 0) {
+        lua_pushboolean(L, runtime->isMirrorActive());
     } else {
         lua_pushnil(L);
     }
@@ -344,6 +366,7 @@ std::vector<int> readPoints(lua_State *L, int index) {
 
 int lua_input_tap(lua_State *L) {
     ScriptRuntime *runtime = self(L);
+    requireInput(L, runtime);
     auto x = static_cast<int>(luaL_checknumber(L, 1));
     auto y = static_cast<int>(luaL_checknumber(L, 2));
     auto hold = static_cast<long>(luaL_optinteger(L, 3, kDefaultTapHoldMs));
@@ -356,6 +379,7 @@ int lua_input_tap(lua_State *L) {
 
 int lua_input_swipe(lua_State *L) {
     ScriptRuntime *runtime = self(L);
+    requireInput(L, runtime);
     std::vector<int> points = readPoints(L, 1);
     auto duration = static_cast<long>(luaL_optinteger(L, 2, kDefaultSwipeDurationMs));
 
@@ -366,6 +390,7 @@ int lua_input_swipe(lua_State *L) {
 
 int lua_input_multi_swipe(lua_State *L) {
     ScriptRuntime *runtime = self(L);
+    requireInput(L, runtime);
     luaL_checktype(L, 1, LUA_TTABLE);
     auto duration = static_cast<long>(luaL_optinteger(L, 2, kDefaultSwipeDurationMs));
 
@@ -383,52 +408,58 @@ int lua_input_multi_swipe(lua_State *L) {
 }
 
 int lua_input_down(lua_State *L) {
+    ScriptRuntime *runtime = self(L);
+    requireInput(L, runtime);
     auto id = static_cast<int>(luaL_checkinteger(L, 1));
     auto x = static_cast<int>(luaL_checknumber(L, 2));
     auto y = static_cast<int>(luaL_checknumber(L, 3));
-    callSwipe(self(L), id, {x, y}, 0, true);
+    callSwipe(runtime, id, {x, y}, 0, true);
     return 0;
 }
 
 int lua_input_move(lua_State *L) {
+    ScriptRuntime *runtime = self(L);
+    requireInput(L, runtime);
     auto id = static_cast<int>(luaL_checkinteger(L, 1));
     auto x = static_cast<int>(luaL_checknumber(L, 2));
     auto y = static_cast<int>(luaL_checknumber(L, 3));
-    callSwipe(self(L), id, {x, y}, 0, true);
+    callSwipe(runtime, id, {x, y}, 0, true);
     return 0;
 }
 
 int lua_input_up(lua_State *L) {
     ScriptRuntime *runtime = self(L);
+    requireInput(L, runtime);
     auto id = static_cast<int>(luaL_checkinteger(L, 1));
     JNIEnv *env = runtime->env();
     if (env) env->CallBooleanMethod(runtime->hostObject(), runtime->host().pointerUp, id);
     return 0;
 }
 
-bool callKey(ScriptRuntime *runtime, int keyCode) {
+bool callKey(lua_State *L, ScriptRuntime *runtime, int keyCode) {
+    requireInput(L, runtime);
     JNIEnv *env = runtime->env();
     if (env == nullptr) return false;
     return env->CallBooleanMethod(runtime->hostObject(), runtime->host().key, keyCode);
 }
 
 int lua_input_key(lua_State *L) {
-    lua_pushboolean(L, callKey(self(L), static_cast<int>(luaL_checkinteger(L, 1))));
+    lua_pushboolean(L, callKey(L, self(L), static_cast<int>(luaL_checkinteger(L, 1))));
     return 1;
 }
 
 int lua_input_back(lua_State *L) {
-    lua_pushboolean(L, callKey(self(L), AKEYCODE_BACK));
+    lua_pushboolean(L, callKey(L, self(L), AKEYCODE_BACK));
     return 1;
 }
 
 int lua_input_home(lua_State *L) {
-    lua_pushboolean(L, callKey(self(L), AKEYCODE_HOME));
+    lua_pushboolean(L, callKey(L, self(L), AKEYCODE_HOME));
     return 1;
 }
 
 int lua_input_recents(lua_State *L) {
-    lua_pushboolean(L, callKey(self(L), AKEYCODE_APP_SWITCH));
+    lua_pushboolean(L, callKey(L, self(L), AKEYCODE_APP_SWITCH));
     return 1;
 }
 
@@ -554,8 +585,16 @@ void registerApi(lua_State *L, ScriptRuntime *runtime) {
     lua_pushcclosure(L, lua_sleep, 1);
     lua_setglobal(L, "sleep");
 
-    // screen 是空表 + __index，欄位每次讀都重新計算（旋轉會改變 width/height）。
+    // screen 是表 + __index，start_mirror / stop_mirror 放在表上，屬性走 __index。
     lua_newtable(L);
+    lua_pushlightuserdata(L, runtime);
+    lua_pushcclosure(L, lua_screen_start_mirror, 1);
+    lua_setfield(L, -2, "start_mirror");
+
+    lua_pushlightuserdata(L, runtime);
+    lua_pushcclosure(L, lua_screen_stop_mirror, 1);
+    lua_setfield(L, -2, "stop_mirror");
+
     lua_newtable(L);
     lua_pushlightuserdata(L, runtime);
     lua_pushcclosure(L, lua_screen_index, 1);

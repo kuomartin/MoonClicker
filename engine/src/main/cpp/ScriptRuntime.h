@@ -59,7 +59,7 @@ public:
      * @param initialRotation 啟動當下的 rotation，在腳本執行緒起跑前就設好。
      * @param scriptDir     腳本資料夾，必須以 '/' 結尾，內含 main.lua。
      */
-    bool start(int displayId, bool withVision, int surfaceWidth, int surfaceHeight,
+    bool start(int displayId, bool isPhysical, bool withVision, int surfaceWidth, int surfaceHeight,
                int initialRotation, const std::string &scriptDir);
 
     /** 要求停止並等執行緒結束。可重入。 */
@@ -81,6 +81,14 @@ public:
 
     bool hasVision() const { return visionEnabled; }
 
+    bool isPhysicalDisplay() const { return isPhysical; }
+
+    bool isMirrorActive();
+
+    bool startMirror();
+
+    bool stopMirror();
+
     /** 可被 [stop] 打斷的 sleep。回傳 false 表示被叫停，binding 應盡快收手。 */
     bool interruptibleSleep(long ms);
 
@@ -97,6 +105,7 @@ private:
     /** 每 1000 個指令檢查一次是否被叫停；被叫停就把腳本中斷掉。 */
     static void stopHook(lua_State *L, lua_Debug *ar);
 
+    bool attachImageReader();
     void detachImageReader();
 
     std::unique_ptr<LuaEngine> luaEngine;
@@ -117,6 +126,9 @@ private:
     jmethodID addSurfaceMethodId = nullptr;     // IRelcV2Service.addVirtualDisplaySurface
     jmethodID removeSurfaceMethodId = nullptr;  // IRelcV2Service.removeVirtualDisplaySurface
     jmethodID surfaceReleaseMethodId = nullptr; // android.view.Surface.release
+    jmethodID acquireMirrorMethodId = nullptr;  // IRelcV2Service.acquireDisplayMirror
+    jmethodID releaseMirrorMethodId = nullptr;  // IRelcV2Service.releaseDisplayMirror
+    jmethodID isMirrorActiveMethodId = nullptr; // IRelcV2Service.isDisplayMirrorActive
 
     /**
      * ANativeWindow_toSurface 產生的 Java Surface。必須留著到收尾時明確 release()——
@@ -127,6 +139,10 @@ private:
 
     std::string scriptDir;
     int displayId = -1;
+    bool isPhysical = false;
+    bool heldMirrorRef = false;
+    int surfaceWidth = 0;
+    int surfaceHeight = 0;
     int sinkHandle = -1;
     bool visionEnabled = false;
 
