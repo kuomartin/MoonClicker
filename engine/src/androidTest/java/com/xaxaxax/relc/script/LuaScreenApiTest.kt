@@ -93,4 +93,50 @@ class LuaScreenApiTest {
         assertEquals(EngineRunState.Finished, outcome.runState)
         assertEquals(true, outcome.data["missing"])
     }
+
+    @Test
+    fun input_on_physical_display_requires_active_mirror() {
+        val service = RecordingRelcService().apply { mirrorActive = false }
+        LuaScriptRunner(service = service, displayId = 0).use { runner ->
+            val outcome = runner.run("input.tap(100, 100)")
+            val error = outcome.error
+            assertNotNull("expected Error, got ${outcome.runState}", error)
+            assertTrue("unexpected message: $error", error!!.contains("requires active mirror"))
+        }
+    }
+
+    @Test
+    fun vision_on_physical_display_requires_active_mirror() {
+        val service = RecordingRelcService().apply { mirrorActive = false }
+        LuaScriptRunner(service = service, displayId = 0).use { runner ->
+            val outcome = runner.run("vision.find('anything.png')")
+            val error = outcome.error
+            assertNotNull("expected Error, got ${outcome.runState}", error)
+            assertTrue("unexpected message: $error", error!!.contains("requires active mirror"))
+        }
+    }
+
+    @Test
+    fun screen_start_mirror_and_stop_mirror_work() {
+        val service = RecordingRelcService().apply { mirrorActive = false }
+        LuaScriptRunner(service = service, displayId = 0).use { runner ->
+            val outcome = runner.run(
+                """
+                data.set('initial_mirror', screen.is_mirror_active)
+                local started = screen.start_mirror()
+                data.set('started', started)
+                data.set('after_start_mirror', screen.is_mirror_active)
+                local stopped = screen.stop_mirror()
+                data.set('stopped', stopped)
+                data.set('after_stop_mirror', screen.is_mirror_active)
+                """.trimIndent()
+            )
+            assertEquals(EngineRunState.Finished, outcome.runState)
+            assertEquals(false, outcome.data["initial_mirror"])
+            assertEquals(true, outcome.data["started"])
+            assertEquals(true, outcome.data["after_start_mirror"])
+            assertEquals(true, outcome.data["stopped"])
+            assertEquals(false, outcome.data["after_stop_mirror"])
+        }
+    }
 }

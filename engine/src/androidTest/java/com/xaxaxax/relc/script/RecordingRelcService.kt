@@ -76,13 +76,10 @@ internal class RecordingRelcService(
 
     override fun getDisplaySize(displayId: Int): IntArray = logicalSize
 
-    /**
-     * 回 -1 代表「掛不上影格來源」。這一層永遠以 `hasVision = false` 執行，native 端根本
-     * 不會走到這裡；真的走到了就是測試設定錯了，讓它以 vision 不可用的方式失敗。
-     */
-    override fun addVirtualDisplaySurface(displayId: Int, surface: Surface): Int = -1
+    override fun addVirtualDisplaySurface(displayId: Int, surface: Surface): Int =
+        if (mirrorActive) 1001 else -1
 
-    override fun removeVirtualDisplaySurface(displayId: Int, handle: Int): Boolean = false
+    override fun removeVirtualDisplaySurface(displayId: Int, handle: Int): Boolean = true
 
     // --- 這一層用不到的 ------------------------------------------------------
 
@@ -114,6 +111,34 @@ internal class RecordingRelcService(
         unused("injectMotionEvent")
 
     override fun debug(input: String): String = unused("debug")
+
+    var mirrorActive: Boolean = true
+
+    override fun acquireDisplayMirror(displayId: Int): Boolean {
+        mirrorActive = true
+        return true
+    }
+
+    override fun releaseDisplayMirror(displayId: Int): Boolean {
+        mirrorActive = false
+        return true
+    }
+
+    override fun isDisplayMirrorActive(displayId: Int): Boolean = mirrorActive
+
+    override fun getDisplayInfo(displayId: Int): com.xaxaxax.relc.RelcDisplayInfo =
+        com.xaxaxax.relc.RelcDisplayInfo().apply {
+            this.displayId = displayId
+            this.name = "Recording Display $displayId"
+            this.width = logicalSize[0]
+            this.height = logicalSize[1]
+            this.densityDpi = 420
+            this.isPhysical = (displayId == 0)
+            this.isMirrorActive = mirrorActive
+        }
+
+    override fun getDisplayInfos(): Array<com.xaxaxax.relc.RelcDisplayInfo> =
+        arrayOf(getDisplayInfo(0))
 
     override fun destroy() {
         unused("destroy")

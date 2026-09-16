@@ -1,0 +1,39 @@
+<div id="leftPanel">
+  <div id="toolbar">
+    <select id="displaySelect"></select>
+    <button id="toggleMirrorBtn" type="button" class="secondary" hidden>啟動鏡像</button>
+    <span id="status">連線中…</span>
+    <button id="cropBtn" type="button" disabled>開始裁切</button>
+    <button id="stopButton" type="button">停止</button>
+  </div>
+  <div id="cropToolbar" hidden>
+    <span>腳本:</span>
+    <select id="scriptSelect"></select>
+    <span>模板名稱:</span>
+    <input id="templateNameInput" type="text" placeholder="例如: btn_confirm" />
+    <span id="roiInfo" style="color:var(--vscode-descriptionForeground);"></span>
+    <span id="cropStatus"></span>
+    <button id="saveCropBtn" type="button">儲存</button>
+    <button id="cancelCropBtn" type="button" class="secondary">取消</button>
+  </div>
+  <div id="stage">
+    <video id="frame" autoplay muted playsinline></video>
+    <canvas id="cropCanvas" hidden></canvas>
+    <div id="overlay">
+      <div id="overlayText">尚未收到畫面</div>
+      <button id="overlayActionBtn" type="button" hidden>立即啟動實體螢幕鏡像</button>
+    </div>
+  </div>
+</div>
+<div id="rightPanel">
+  <div id="logToolbar">
+    <span>Console</span>
+    <div>
+      <label><input type="checkbox" id="autoScroll" checked> Auto-scroll</label>
+      <button id="clearLogBtn" style="padding: 2px 6px; font-size: 10px;">Clear</button>
+    </div>
+  </div>
+  <div id="logContainer"></div>
+  <div style="padding: 4px 8px; border-bottom: 1px solid var(--vscode-panel-border); font-size: 11px; background: var(--vscode-editor-background);">Data View</div>
+  <div id="dataContainer"></div>
+</div>

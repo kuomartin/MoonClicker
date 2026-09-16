@@ -62,6 +62,7 @@ Java_com_xaxaxax_relc_lua_LuaNative_nativeStart(
         jobject host,
         jobject service,
         jint displayId,
+        jboolean isPhysical,
         jboolean withVision,
         jint surfaceWidth,
         jint surfaceHeight,
@@ -79,7 +80,7 @@ Java_com_xaxaxax_relc_lua_LuaNative_nativeStart(
     if (dirCopy.empty() || dirCopy.back() != '/') dirCopy += '/';
 
     auto *runtime = new ScriptRuntime(env, host, service);
-    if (!runtime->start(displayId, withVision, surfaceWidth, surfaceHeight, initialRotation,
+    if (!runtime->start(displayId, isPhysical, withVision, surfaceWidth, surfaceHeight, initialRotation,
                         dirCopy)) {
         delete runtime;
         return JNI_FALSE;

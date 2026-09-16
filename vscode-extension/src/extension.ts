@@ -3,6 +3,7 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { ConnectionState, WorkbenchConnection } from "./workbenchConnection";
 import { mergeLuarc } from "./luarc";
+import { listDisplays, toggleDisplayMirror, type DisplaySummary } from "./displaySync";
 import { listScripts, pullScript, pushScript, runScript } from "./scriptSync";
 import { disposeMirrorPanel, openMirrorPanel, postStreamEventToMirror } from "./mirrorPanel";
 import { WorkspaceTreeProvider, LocalScriptItem, RemoteScriptItem } from "./treeViews";
@@ -67,6 +68,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("relc.openMirror", openMirrorCommand),
     vscode.commands.registerCommand("relc.renameScript", renameScriptCommand),
     vscode.commands.registerCommand("relc.setupStubs", setupStubsCommand),
+    vscode.commands.registerCommand("relc.toggleMirror", toggleMirrorCommand),
   );
 }
 
@@ -344,9 +346,7 @@ async function openMirrorCommand(): Promise<void> {
   if (!address) return;
   
   try {
-    const response = await fetch(`http://${address}/displays`);
-    if (!response.ok) throw new Error("Could not fetch displays");
-    const displays = await response.json() as any[];
+    const displays = await listDisplays(address);
     
     if (displays.length === 0) {
       vscode.window.showErrorMessage("ReLC: 裝置上沒有可用的 display");
@@ -354,15 +354,45 @@ async function openMirrorCommand(): Promise<void> {
     }
     
     let displayId = 0;
+    let pickedDisplay: DisplaySummary = displays[0];
     if (displays.length > 1) {
-      const picked = await vscode.window.showQuickPick(
-        displays.map(d => ({ label: d.name, description: `${d.width}x${d.height}`, displayId: d.id })),
-        { placeHolder: "選擇要鏡像的 display" }
-      );
+      const items = displays.map(d => {
+        let desc = `${d.width}x${d.height}`;
+        if (d.isVirtual === false) {
+          desc += d.isMirrorActive ? " (實體螢幕 · 鏡像中)" : " (實體螢幕 · 鏡像未啟動)";
+        }
+        return {
+          label: d.name,
+          description: desc,
+          display: d,
+        };
+      });
+      const picked = await vscode.window.showQuickPick(items, {
+        placeHolder: "選擇要鏡像的 display",
+      });
       if (!picked) return;
-      displayId = picked.displayId;
+      displayId = picked.display.id;
+      pickedDisplay = picked.display;
     } else {
       displayId = displays[0].id;
+      pickedDisplay = displays[0];
+    }
+
+    if (pickedDisplay.isVirtual === false && !pickedDisplay.isMirrorActive) {
+      const choice = await vscode.window.showWarningMessage(
+        `實體螢幕 (Display ${displayId}) 尚未啟動鏡像管線。是否立即啟動？`,
+        "啟動鏡像",
+        "直接開啟面板"
+      );
+      if (!choice) return;
+      if (choice === "啟動鏡像") {
+        try {
+          await toggleDisplayMirror(address, displayId, true);
+          vscode.window.showInformationMessage(`ReLC: 實體螢幕 (Display ${displayId}) 鏡像管線已啟動`);
+        } catch (e) {
+          vscode.window.showErrorMessage(`ReLC: 啟動鏡像失敗: ${(e as Error).message}`);
+        }
+      }
     }
     if (extensionContext) {
       openMirrorPanel(extensionContext.extensionUri, address, displayId);
@@ -376,6 +406,42 @@ async function openMirrorCommand(): Promise<void> {
     });
     if (input === undefined || !extensionContext) return;
     openMirrorPanel(extensionContext.extensionUri, address, Number(input));
+  }
+}
+
+async function toggleMirrorCommand(): Promise<void> {
+  const address = connectedAddress();
+  if (!address) return;
+
+  try {
+    const displays = await listDisplays(address);
+    const target = displays.find(d => !d.isVirtual) || displays[0];
+    if (!target) {
+      vscode.window.showErrorMessage("ReLC: 裝置上沒有找到顯示器");
+      return;
+    }
+
+    let targetDisplay = target;
+    if (displays.length > 1) {
+      const items = displays.map(d => ({
+        label: d.name,
+        description: `${d.width}x${d.height} [${d.isVirtual ? "虛擬" : (d.isMirrorActive ? "實體·鏡像中" : "實體·未啟動")}]`,
+        display: d,
+      }));
+      const picked = await vscode.window.showQuickPick(items, {
+        placeHolder: "選擇要切換鏡像狀態的顯示器",
+      });
+      if (!picked) return;
+      targetDisplay = picked.display;
+    }
+
+    const nextState = !targetDisplay.isMirrorActive;
+    await toggleDisplayMirror(address, targetDisplay.id, nextState);
+    vscode.window.showInformationMessage(
+      `ReLC: 顯示器 ${targetDisplay.id} (${targetDisplay.name}) 鏡像已${nextState ? "開啟" : "關閉"}`
+    );
+  } catch (err) {
+    vscode.window.showErrorMessage(`ReLC: 切換鏡像失敗 - ${(err as Error).message}`);
   }
 }
 

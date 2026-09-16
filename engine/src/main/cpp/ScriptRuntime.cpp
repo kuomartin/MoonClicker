@@ -25,6 +25,9 @@ ScriptRuntime::ScriptRuntime(JNIEnv *env, jobject host, jobject service) {
     addSurfaceMethodId = env->GetMethodID(serviceClass, "addVirtualDisplaySurface",
                                           "(ILandroid/view/Surface;)I");
     removeSurfaceMethodId = env->GetMethodID(serviceClass, "removeVirtualDisplaySurface", "(II)Z");
+    acquireMirrorMethodId = env->GetMethodID(serviceClass, "acquireDisplayMirror", "(I)Z");
+    releaseMirrorMethodId = env->GetMethodID(serviceClass, "releaseDisplayMirror", "(I)Z");
+    isMirrorActiveMethodId = env->GetMethodID(serviceClass, "isDisplayMirrorActive", "(I)Z");
 
     jclass surfaceClass = env->FindClass("android/view/Surface");
     surfaceReleaseMethodId = env->GetMethodID(surfaceClass, "release", "()V");
@@ -54,7 +57,7 @@ ScriptRuntime::~ScriptRuntime() {
     if (attached) javaVM->DetachCurrentThread();
 }
 
-bool ScriptRuntime::start(int displayId, bool withVision, int surfaceWidth, int surfaceHeight,
+bool ScriptRuntime::start(int displayId, bool isPhysical, bool withVision, int surfaceWidth, int surfaceHeight,
                           int initialRotation, const std::string &scriptDir) {
     if (running.load()) {
         LOGE("start() called while a script is already running");
@@ -62,44 +65,24 @@ bool ScriptRuntime::start(int displayId, bool withVision, int surfaceWidth, int 
     }
 
     this->displayId = displayId;
+    this->isPhysical = isPhysical;
     this->scriptDir = scriptDir;
-    this->visionEnabled = withVision;
+    this->surfaceWidth = surfaceWidth;
+    this->surfaceHeight = surfaceHeight;
+    this->heldMirrorRef = false;
 
     visionMatcher = std::make_unique<VisionMatcher>(surfaceWidth, surfaceHeight, scriptDir);
     // 一定要在腳本執行緒起跑前設好，否則第一行 screen.width 讀到的是未旋轉的值。
     visionMatcher->setRotation(initialRotation);
 
     if (withVision) {
-        imageReader = std::make_unique<NativeImageReader>(surfaceWidth, surfaceHeight);
-        if (!imageReader->init()) {
-            LOGE("Failed to init NativeImageReader");
-            imageReader.reset();
+        if (!attachImageReader()) {
+            LOGE("attachImageReader failed in start() for display %d", displayId);
             return false;
         }
-        imageReader->setCallback([this](const cv::Mat &frame) {
-            if (running.load()) visionMatcher->onFrame(frame);
-        });
-
-        JNIEnv *env;
-        bool attached = false;
-        if (javaVM->GetEnv((void **) &env, JNI_VERSION_1_6) == JNI_EDETACHED) {
-            if (javaVM->AttachCurrentThread(&env, nullptr) != JNI_OK) return false;
-            attached = true;
-        }
-        jobject surface = ANativeWindow_toSurface(env, imageReader->getWindow());
-        sinkHandle = env->CallIntMethod(serviceObj, addSurfaceMethodId, displayId, surface);
-        // 服務在另一個進程，拿到的是 parcel 過去的副本；但我們這一份要留到收尾才 release，
-        // 現在就放掉的話沒辦法保證自己這側的資源有被明確回收。
-        sinkSurface = env->NewGlobalRef(surface);
-        env->DeleteLocalRef(surface);
-        if (attached) javaVM->DetachCurrentThread();
-
-        if (sinkHandle < 0) {
-            LOGE("addVirtualDisplaySurface failed for display %d; vision unavailable", displayId);
-            imageReader->release();
-            imageReader.reset();
-            return false;
-        }
+        visionEnabled = true;
+    } else {
+        visionEnabled = false;
     }
 
     luaEngine = std::make_unique<LuaEngine>();
@@ -122,7 +105,53 @@ void ScriptRuntime::stop() {
     if (luaThread.joinable()) luaThread.join();
 
     detachImageReader();
+    if (heldMirrorRef) {
+        JNIEnv *env = nullptr;
+        bool attached = false;
+        if (javaVM->GetEnv((void **) &env, JNI_VERSION_1_6) == JNI_EDETACHED) {
+            if (javaVM->AttachCurrentThread(&env, nullptr) == JNI_OK) attached = true;
+        }
+        if (env && releaseMirrorMethodId) {
+            env->CallBooleanMethod(serviceObj, releaseMirrorMethodId, displayId);
+            if (attached) javaVM->DetachCurrentThread();
+        }
+        heldMirrorRef = false;
+    }
     if (luaEngine) luaEngine->close();
+}
+
+bool ScriptRuntime::attachImageReader() {
+    if (sinkHandle >= 0 && sinkSurface != nullptr) {
+        return true;
+    }
+    imageReader = std::make_unique<NativeImageReader>(surfaceWidth, surfaceHeight);
+    if (!imageReader->init()) {
+        LOGE("Failed to init NativeImageReader");
+        imageReader.reset();
+        return false;
+    }
+    imageReader->setCallback([this](const cv::Mat &frame) {
+        if (running.load()) visionMatcher->onFrame(frame);
+    });
+
+    JNIEnv *env = nullptr;
+    bool attached = false;
+    if (javaVM->GetEnv((void **) &env, JNI_VERSION_1_6) == JNI_EDETACHED) {
+        if (javaVM->AttachCurrentThread(&env, nullptr) != JNI_OK) return false;
+        attached = true;
+    }
+    jobject surface = ANativeWindow_toSurface(env, imageReader->getWindow());
+    sinkHandle = env->CallIntMethod(serviceObj, addSurfaceMethodId, displayId, surface);
+    sinkSurface = env->NewGlobalRef(surface);
+    env->DeleteLocalRef(surface);
+    if (attached) javaVM->DetachCurrentThread();
+
+    if (sinkHandle < 0) {
+        LOGE("addVirtualDisplaySurface failed for display %d", displayId);
+        detachImageReader();
+        return false;
+    }
+    return true;
 }
 
 void ScriptRuntime::detachImageReader() {
@@ -154,6 +183,68 @@ void ScriptRuntime::detachImageReader() {
         imageReader->release();
         imageReader.reset();
     }
+}
+
+bool ScriptRuntime::isMirrorActive() {
+    if (!isPhysical) return true;
+    if (heldMirrorRef) return true;
+    JNIEnv *env = nullptr;
+    bool attached = false;
+    if (javaVM->GetEnv((void **) &env, JNI_VERSION_1_6) == JNI_EDETACHED) {
+        if (javaVM->AttachCurrentThread(&env, nullptr) == JNI_OK) attached = true;
+    }
+    if (!env || !isMirrorActiveMethodId) return false;
+    jboolean active = env->CallBooleanMethod(serviceObj, isMirrorActiveMethodId, displayId);
+    if (attached) javaVM->DetachCurrentThread();
+    return active;
+}
+
+bool ScriptRuntime::startMirror() {
+    if (!isPhysical) return true;
+    if (heldMirrorRef) return true;
+
+    JNIEnv *env = nullptr;
+    bool attached = false;
+    if (javaVM->GetEnv((void **) &env, JNI_VERSION_1_6) == JNI_EDETACHED) {
+        if (javaVM->AttachCurrentThread(&env, nullptr) == JNI_OK) attached = true;
+    }
+    if (!env || !acquireMirrorMethodId) return false;
+
+    jboolean ok = env->CallBooleanMethod(serviceObj, acquireMirrorMethodId, displayId);
+    if (attached) javaVM->DetachCurrentThread();
+    if (!ok) {
+        LOGE("acquireDisplayMirror failed for display %d", displayId);
+        return false;
+    }
+    heldMirrorRef = true;
+
+    if (!attachImageReader()) {
+        LOGE("attachImageReader failed after acquireDisplayMirror");
+        stopMirror();
+        return false;
+    }
+    visionEnabled = true;
+    return true;
+}
+
+bool ScriptRuntime::stopMirror() {
+    if (!isPhysical) return true;
+    if (!heldMirrorRef) return false;
+
+    detachImageReader();
+    visionEnabled = false;
+
+    JNIEnv *env = nullptr;
+    bool attached = false;
+    if (javaVM->GetEnv((void **) &env, JNI_VERSION_1_6) == JNI_EDETACHED) {
+        if (javaVM->AttachCurrentThread(&env, nullptr) == JNI_OK) attached = true;
+    }
+    if (env && releaseMirrorMethodId) {
+        env->CallBooleanMethod(serviceObj, releaseMirrorMethodId, displayId);
+        if (attached) javaVM->DetachCurrentThread();
+    }
+    heldMirrorRef = false;
+    return true;
 }
 
 void ScriptRuntime::setRotation(int rotation) {
