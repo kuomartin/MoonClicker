@@ -16,7 +16,7 @@ appcompat = "1.7.1"
 
 shizuku = "13.1.5"
 rikka-refine = "4.4.0"
-hiddenapibypass = "+"
+hiddenapibypass = "6.1"
 
 lifecycle = "2.10.0"
 
