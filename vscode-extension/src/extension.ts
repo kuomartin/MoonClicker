@@ -364,7 +364,9 @@ async function openMirrorCommand(): Promise<void> {
     } else {
       displayId = displays[0].id;
     }
-    openMirrorPanel(address, displayId);
+    if (extensionContext) {
+      openMirrorPanel(extensionContext.extensionUri, address, displayId);
+    }
   } catch (err) {
     // Fallback to manual entry if /displays fails
     const input = await vscode.window.showInputBox({
@@ -372,8 +374,8 @@ async function openMirrorCommand(): Promise<void> {
       value: "0",
       validateInput: (value) => (/^\d+$/.test(value) ? undefined : "displayId 需要是非負整數"),
     });
-    if (input === undefined) return;
-    openMirrorPanel(address, Number(input));
+    if (input === undefined || !extensionContext) return;
+    openMirrorPanel(extensionContext.extensionUri, address, Number(input));
   }
 }
 
