@@ -20,12 +20,17 @@
   const dataContainer = document.getElementById("dataContainer");
   const autoScrollCb = document.getElementById("autoScroll");
   const clearLogBtn = document.getElementById("clearLogBtn");
+  const toggleMirrorBtn = document.getElementById("toggleMirrorBtn");
+  const overlayTextEl = document.getElementById("overlayText") || overlayEl;
+  const overlayActionBtn = document.getElementById("overlayActionBtn");
 
   let isCropping = false;
   let stale = false;
   let hasReceivedFrame = false;
   let receivedFramesCount = 0;
   let scriptsList = [];
+  let currentDisplays = [];
+  let currentDisplayId = null;
   let cropRect = null; // { left, top, right, bottom } in stage pixels
   let dragMode = "None"; // "Create" or DragHandle
   let dragStart = { x: 0, y: 0 };
@@ -37,7 +42,9 @@
   });
 
   displaySelect.addEventListener("change", (e) => {
-    vscode?.postMessage({ type: "switchDisplay", displayId: parseInt(e.target.value, 10) });
+    currentDisplayId = parseInt(e.target.value, 10);
+    updateToolbarMirrorState();
+    vscode?.postMessage({ type: "switchDisplay", displayId: currentDisplayId });
   });
 
   clearLogBtn.addEventListener("click", () => {
@@ -56,12 +63,77 @@
     saveCroppedTemplate();
   });
 
-  function showOverlay(text) {
-    overlayEl.textContent = text;
+  function updateToolbarMirrorState() {
+    if (!toggleMirrorBtn) return;
+    const current = currentDisplays.find((d) => d.id === currentDisplayId);
+    if (current && current.isVirtual === false) {
+      toggleMirrorBtn.hidden = false;
+      toggleMirrorBtn.disabled = false;
+      if (current.isMirrorActive) {
+        toggleMirrorBtn.textContent = "停止鏡像";
+        toggleMirrorBtn.className = "secondary";
+      } else {
+        toggleMirrorBtn.textContent = "啟動鏡像";
+        toggleMirrorBtn.className = "";
+      }
+    } else {
+      toggleMirrorBtn.hidden = true;
+    }
+  }
+
+  function triggerMirrorToggle(enable) {
+    if (currentDisplayId === null) return;
+    if (toggleMirrorBtn) {
+      toggleMirrorBtn.disabled = true;
+      toggleMirrorBtn.textContent = enable ? "啟動中…" : "停止中…";
+    }
+    if (overlayActionBtn) {
+      overlayActionBtn.disabled = true;
+      overlayActionBtn.textContent = enable ? "啟動中…" : "停止中…";
+    }
+    vscode?.postMessage({
+      type: "toggleMirror",
+      displayId: currentDisplayId,
+      enable,
+    });
+  }
+
+  if (toggleMirrorBtn) {
+    toggleMirrorBtn.addEventListener("click", () => {
+      const current = currentDisplays.find((d) => d.id === currentDisplayId);
+      const targetEnable = current ? !current.isMirrorActive : true;
+      triggerMirrorToggle(targetEnable);
+    });
+  }
+
+  if (overlayActionBtn) {
+    overlayActionBtn.addEventListener("click", () => {
+      triggerMirrorToggle(true);
+    });
+  }
+
+  function showOverlay(text, showAction = false) {
+    if (overlayTextEl) {
+      overlayTextEl.textContent = text;
+    } else {
+      overlayEl.textContent = text;
+    }
+    if (overlayActionBtn) {
+      const current = currentDisplays.find((d) => d.id === currentDisplayId);
+      const isPhysical = current ? current.isVirtual === false : false;
+      const isMirrorOff = current ? !current.isMirrorActive : false;
+      const needsAction = showAction || isMirrorOff || (text && (text.includes("404") || text.includes("實體螢幕需先啟動鏡像")));
+      overlayActionBtn.hidden = !(needsAction && isPhysical);
+      overlayActionBtn.disabled = false;
+      overlayActionBtn.textContent = "立即啟動實體螢幕鏡像";
+    }
     overlayEl.hidden = false;
   }
   function hideOverlayIfConnected() {
-    if (!stale) overlayEl.hidden = true;
+    if (!stale) {
+      overlayEl.hidden = true;
+      if (overlayActionBtn) overlayActionBtn.hidden = true;
+    }
   }
 
   function startCropping() {
@@ -413,8 +485,14 @@
         scriptSelect.value = currentVal;
       }
     } else if (msg.type === "displays") {
+      currentDisplays = msg.displays || [];
+      if (typeof msg.currentDisplayId === "number") {
+        currentDisplayId = msg.currentDisplayId;
+      } else if (currentDisplayId === null && currentDisplays.length > 0) {
+        currentDisplayId = currentDisplays[0].id;
+      }
       displaySelect.innerHTML = "";
-      (msg.displays || []).forEach((d) => {
+      currentDisplays.forEach((d) => {
         const opt = document.createElement("option");
         opt.value = d.id;
         let label = d.name + " (" + d.width + "x" + d.height + ")";
@@ -422,9 +500,10 @@
           label += d.isMirrorActive ? " [實體·鏡像中]" : " [實體·未開啟]";
         }
         opt.textContent = label;
-        if (d.id === msg.currentDisplayId) opt.selected = true;
+        if (d.id === currentDisplayId) opt.selected = true;
         displaySelect.appendChild(opt);
       });
+      updateToolbarMirrorState();
     } else if (msg.type === "streamEvent") {
       handleStreamEvent(msg.event);
     } else if (msg.type === "saveTemplateResult") {
@@ -529,13 +608,17 @@
       displaysCount: displaySelect.options.length,
       currentDisplayId: displaySelect.value,
       statusText: statusEl.textContent,
-      overlayText: overlayEl.textContent,
+      overlayText: overlayTextEl ? overlayTextEl.textContent : overlayEl.textContent,
       overlayHidden: overlayEl.hidden,
+      isMirrorButtonVisible: toggleMirrorBtn ? !toggleMirrorBtn.hidden : false,
+      mirrorButtonText: toggleMirrorBtn ? toggleMirrorBtn.textContent : "",
+      isOverlayActionVisible: overlayActionBtn ? !overlayActionBtn.hidden : false,
     }),
     selectDisplay: (id) => {
       displaySelect.value = id;
       displaySelect.dispatchEvent(new Event("change"));
     },
+    toggleMirror: (enable) => triggerMirrorToggle(enable),
     startCropping: () => startCropping(),
     stopCropping: () => stopCropping(),
     calculateRoi: () => calculateRoi(),
