@@ -148,6 +148,7 @@
     "watch": "tsc -w -p .",
     "pretest": "npm run compile",
     "test": "node --test out/test/**/*.test.js",
+    "test:client": "node scripts/test-server.mjs",
     "package": "vsce package"
   },
   "devDependencies": {
