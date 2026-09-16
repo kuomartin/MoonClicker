@@ -14,82 +14,84 @@ _Avoid_: Output handler, renderer.
 
 **VirtualDisplayController**:
 Owns the lifecycle of a virtual display — creation, sink attachment/replacement, and teardown.
+_Avoid_: DisplayManager, DisplayLifecycleOwner.
 
 **GLES Distributor**:
 The native OpenGL component that reads a virtual display's surface and fans it out to multiple consumers (streaming, frame capture, vision) at once.
 _Avoid_: Renderer, frame broadcaster.
 
 **Streaming Pipeline**:
-The path from a virtual display's output through `H264EncoderSink` to a consumer (like `WorkbenchServer`). Re-prioritized to address MJPEG lag ([ADR-0016](docs/adr/0016-h264-streaming-reprioritized.md)). The pipeline utilizes a Java `MediaCodec` providing an `InputSurface` that is registered as a sink via `RelcV2Service` to achieve zero-copy fan-out while keeping the video encoding isolated in the `:engine` module.
+The zero-copy H.264 video streaming path connecting `H264EncoderSink` via `MediaCodec` to remote consumers like `WorkbenchServer` ([ADR-0016](docs/adr/0016-h264-streaming-reprioritized.md)).
+_Avoid_: Video stream, screen recorder, MJPEG stream.
 
 **InputController**:
-Injects touch/swipe/multi-touch events into a specific virtual display via `IRelcV2Service`.
+Injects touch, swipe, and multi-touch events into a specific virtual display via `IRelcV2Service`.
 _Avoid_: Touch injector, event sender.
 
-**Surface 空間 / 邏輯空間**:
-同一個虛擬顯示的兩個座標系。**Surface 空間**是它建立時的尺寸，影格與 `AImageReader` 都在這裡，旋轉時尺寸不變、內容被轉「進」其中。**邏輯空間**是 WindowManager 眼中的顯示，旋轉 90/270 時長寬互換，`injectMotionEvent` 與 `match.*` 的對外座標都以它為準。兩者在未旋轉時恆等，旋轉時差一個直角——混用即為錯位的來源。surface 尺寸的權威是 [[RelcV2Service]]：它在建立顯示器時就知道，並透過 `getDisplaySurfaceSize` 回答，呼叫端不從（邏輯尺寸, rotation）回推——回推需要兩次獨立的讀取，中間旋轉就會算出錯得很有自信的答案（[ADR-0012](docs/adr/0012-surface-size-is-owned-not-derived.md)）。
-_Avoid_: 影格座標／畫面座標（沒有指明是哪一個）。
+**Surface Space / Logical Space (Surface 空間 / 邏輯空間)**:
+The two coordinate systems of a virtual display: Surface Space represents the fixed physical pixel dimensions at creation time (`AImageReader`), while Logical Space reflects WindowManager orientation used by input injection and vision matching ([ADR-0012](docs/adr/0012-surface-size-is-owned-not-derived.md)).
+_Avoid_: Frame coordinates, screen coordinates (when unspecified).
 
-**方向鏈**:
-`Y → VD → FullscreenDisplayActivity → MainDisplay` 的單向傳遞：虛擬顯示裡的 app（Y）或感測器決定虛擬顯示（VD）的方向，`FullscreenDisplayActivity` 跟隨虛擬顯示，實體螢幕再跟隨它。四環中兩環由系統提供（WindowManager 對 app 宣告方向的仲裁、實體螢幕跟隨前景 activity）。鏈失效時（API 27–28、sw ≥ 600dp、使用者關閉自動旋轉）畫面退回 [[Viewport]] 的幾何層，仍然正確、只是不填滿。
-_Avoid_: 旋轉同步（暗示雙向）。
+**Orientation Chain (方向鏈)**:
+The one-way orientation propagation sequence (`Target App → VD → FullscreenDisplayActivity → Physical Display`) that aligns activity and physical screen rotation with the virtual display.
+_Avoid_: Rotation sync, two-way orientation.
 
 **Viewport**:
-鏡像一個虛擬顯示時的幾何：它當前的邏輯尺寸與方向，投影到 view 的哪個矩形。同一個 instance 同時服務畫面呈現（內容矩形、反向旋轉角、未旋轉的佈局框）與觸控反向映射（view 座標 → 邏輯座標），因此兩側不可能算出不一致的幾何。純資料，不依賴 `android.graphics`，可在純 JVM 測試中窮舉「旋轉 × 長寬比 × letterbox」的組合。
-_Avoid_: 縮放矩陣、觸控映射（兩者都只講了它的一半）。
+A pure geometry model that maps a virtual display's logical dimensions and orientation into a target view rectangle for frame rendering and reverse touch coordinate mapping.
+_Avoid_: Scale matrix, touch mapper.
 
 **Script Engine**:
-The embedded Lua runtime that drives automation. A script is a **linear program** — `main.lua` runs top to bottom on its own thread and finishing means done; there is no tick loop ([ADR-0010](docs/adr/0010-linear-scripts-replace-the-tick-loop.md)). It drives input and vision on **one** virtual display chosen by the app, and never creates or destroys displays ([ADR-0011](docs/adr/0011-scripts-do-not-own-displays.md)). See also [ADR-0002](docs/adr/0002-lua-as-scripting-engine.md) and `docs/lua-api.md`.
+The embedded Lua runtime that drives automation as a linear program executing from top to bottom on its own thread without a tick loop ([ADR-0002](docs/adr/0002-lua-as-scripting-engine.md), [ADR-0010](docs/adr/0010-linear-scripts-replace-the-tick-loop.md), [ADR-0011](docs/adr/0011-scripts-do-not-own-displays.md)).
 _Avoid_: Automation engine, macro engine, tick loop.
 
 **Script Workbench**:
-The embedded HTTP and WebSocket development server inside the ReLC app (`WorkbenchServer`, `WorkbenchService`) paired with the VS Code extension (`relc-script-workbench`). Enables local workspace detection (Single-Script or Monorepo), bidirectional script synchronization (Push/Pull), remote execution control, virtual display mirroring, template cropping, and real-time log/data streaming over the local network. Protected by PIN-based [[Pairing Mode]] and Bearer [[Workbench Auth Token]].
+The embedded HTTP and WebSocket development server inside the ReLC app (`WorkbenchServer`, `WorkbenchService`) paired with the VS Code extension (`relc-script-workbench`) for script synchronization, remote control, display mirroring, and telemetry. Protected by [[Pairing Mode]] and [[Workbench Auth Token]].
 _Avoid_: Dev server, debugger backend, sync service.
 
 **Pairing Mode**:
-A temporary, user-initiated 5-minute security window on [[Script Workbench]] during which a randomized 6-digit PIN is displayed in the ReLC app. New clients (e.g. VS Code extension) must submit this PIN to obtain a long-lived [[Workbench Auth Token]]. Outside this window, pairing endpoints are closed and brute-force attempts are blocked.
+A temporary 5-minute security window on [[Script Workbench]] during which a randomized 6-digit PIN is displayed in the ReLC app to authenticate new development clients.
 _Avoid_: Open server, permanent PIN, discovery mode.
 
 **Workbench Auth Token**:
-A cryptographically secure random token issued by [[Script Workbench]] upon successful PIN verification. Stored securely in VS Code's SecretStorage and sent with every HTTP request (`Authorization: Bearer <token>`) and WebSocket connection (`?token=<token>`). Can be revoked individually or globally from the ReLC Settings screen.
+A cryptographically secure random token issued by [[Script Workbench]] upon successful PIN verification, required for all HTTP and WebSocket requests.
 _Avoid_: API key, session password.
 
 **Script Folder**:
-A script *is* a folder under the app's external private directory (`Android/data/com.xaxaxax.relc/files/scripts/<id>/`): `main.lua` plus an optional `script.json` and its template images. The id is the folder name. There is no in-app editor — the folder is edited from a file manager or a PC, which is why the path is external and visible rather than in `filesDir`.
+A directory under external private storage (`Android/data/com.xaxaxax.relc/files/scripts/<id>/`) containing `main.lua`, optional `script.json`, and template images.
 _Avoid_: Script file, script record, script database entry.
 
 **ScriptSession**:
-The one script that is currently running, in `:app`. Resolves a [[ScriptTarget]] to an actual display (creating one if needed), starts the Script Engine, drives the Script Status Notification, and releases the engine's frame sink when the run ends — **without destroying the display**. One run at a time, deliberately.
-_Avoid_: ScriptManager (the removed multi-script predecessor), script runner.
+The active script execution instance in `:app` that resolves a [[ScriptTarget]], runs the Script Engine, posts the status notification, and manages lifecycle without destroying the display.
+_Avoid_: ScriptManager, script runner.
 
 **ScriptTarget**:
-Where a script will run: the physical screen (input only), an existing virtual display, or a new one of a given size. Only displays created by [[RelcV2Service]] produce frames, so `vision.*` is unavailable on the physical screen and says so rather than silently never matching.
-_Avoid_: Display id (a target is resolved *into* one, and ids do not survive a rebuild).
+The designated execution target for a script: the physical screen (input only), an existing virtual display, or a newly allocated virtual display.
+_Avoid_: Display id, target screen.
 
 **Engine Module**:
-The `:engine` Gradle module — the sole boundary allowed to touch native internals (the Script Engine, VisionEngine, RelcV2Service). Other modules observe it only through `EngineStateRepository`; they never reach into its internals directly.
+The `:engine` Gradle module — the sole boundary allowed to touch native internals (Script Engine, VisionMatcher, RelcV2Service).
 _Avoid_: Native layer, backend module.
 
 **EngineStateRepository**:
-The Engine Module's single observable source of truth — a `StateFlow<EngineState>` aggregating run state (idle/starting/running/finished/error/stopped, with error detail), which script the state belongs to, and the latest vision result. Fed by native events rather than polled. Does not yet cover per-virtual-display state: that would mean wiring `RelcV2Service`'s display bookkeeping — a separate source of truth — into the same repository, deliberately left unstarted rather than half-built.
+The observable single source of truth (`StateFlow<EngineState>`) in the Engine Module aggregating script run states and vision matching results.
 _Avoid_: Engine status, native state holder.
 
 **ScriptEngine**:
-The public facade over `LuaNative` (the Engine Module's JNI bridge, `internal` to `:engine`). Other modules start/stop a [[Script Folder]] and read `sharedData` (what a script publishes via the Lua `data.set` API) through this — never through `LuaNative` directly.
-_Avoid_: LuaEngineControl (its former name), the JNI bridge, LuaNative (when describing what other modules call).
+The public Kotlin facade over native `LuaNative` bindings in `:engine`, used to start/stop scripts and exchange shared data.
+_Avoid_: LuaEngineControl, JNI bridge, LuaNative (when referencing public caller API).
 
 **ScriptHost**:
-The Engine Module's single JNI upcall target: everything the Lua API does that is not scheduling, frame capture, or OpenCV — `input.*`, `app.launch`, `device.*`, `data.set` — is implemented here in Kotlin, on top of `IRelcV2Service`. It exists so the multi-pointer injection state machine is not written a second time in C++.
-_Avoid_: JNI callbacks, the native bridge (that is `LuaNative`).
+The Engine Module's single JNI upcall target implementing non-native Lua APIs (`input.*`, `app.launch`, `device.*`, `data.set`) on top of `IRelcV2Service`.
+_Avoid_: JNI callbacks, native bridge.
 
 **VisionMatcher**:
-The native OpenCV-backed component that holds the latest frame of a virtual display and matches templates against it **on demand** — only while a script is inside a `vision.find`/`vision.wait` call, never per-frame. It is also the single place [[Surface 空間 / 邏輯空間]] conversion happens: frames go in as surface space, every coordinate it returns is logical, and template images are logical too — it turns them to the frame's orientation before matching, so a script's template survives the display rotating ([ADR-0013](docs/adr/0013-templates-are-logical-space.md)). Exposed to scripts as the `vision.*` API. See [ADR-0003](docs/adr/0003-opencv-for-vision-matching.md).
-_Avoid_: VisionEngine (the removed per-frame predecessor), image recognizer, matcher.
+The native OpenCV-backed component that performs on-demand template matching on virtual display frames in logical coordinates ([ADR-0003](docs/adr/0003-opencv-for-vision-matching.md), [ADR-0013](docs/adr/0013-templates-are-logical-space.md)).
+_Avoid_: VisionEngine, image recognizer, matcher.
 
 **RelcV2Service**:
-The current Shizuku-hosted service exposing virtual display, input, and launch capabilities over AIDL (`IRelcV2Service`), with native acceleration. Supersedes `RelcShizukuService` (V1), which is deprecated. See [ADR-0001](docs/adr/0001-v2-service-supersedes-v1.md).
-_Avoid_: Shizuku service (ambiguous between V1/V2), backend service.
+The Shizuku-hosted AIDL service (`IRelcV2Service`) providing virtual display management, native input injection, and app launching ([ADR-0001](docs/adr/0001-v2-service-supersedes-v1.md)).
+_Avoid_: Shizuku service, backend service.
 
 **Script Status Notification**:
-The persistent system notification for the running script, posted by `ScriptStatusNotifier` from [[ScriptSession]] and cancelled when nothing is running. Its body tap opens the Scripts page; its 「停止」 action stops the run. One run at a time means it needs no multi-script summary. Separate from the one-shot notifications a script sends with Lua's `device.notify`. It replaced the removed Overlay UI and needs no window permission. See [ADR-0007](docs/adr/0007-drop-lua-overlay-ui-for-status-notification.md).
+The persistent system notification posted during an active [[ScriptSession]] providing execution status and a stop action ([ADR-0007](docs/adr/0007-drop-lua-overlay-ui-for-status-notification.md)).
 _Avoid_: HUD, overlay, floating status.
