@@ -103,6 +103,8 @@ export function openMirrorPanel(extensionUri: vscode.Uri, address: string, displ
         if (typeof message.displayId === "number") {
           openMirrorPanel(extensionUri, address, message.displayId);
         }
+      } else if (message?.type === "refreshDisplays") {
+        refreshDisplays();
       } else if (message?.type === "error") {
         mirrorOutputChannel.appendLine(`[Webview Error] ${(message as any).message}`);
         mirrorOutputChannel.show(true);

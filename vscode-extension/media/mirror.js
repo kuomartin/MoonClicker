@@ -16,6 +16,7 @@
   const cropCanvas = document.getElementById("cropCanvas");
   const ctx = cropCanvas.getContext("2d");
   const displaySelect = document.getElementById("displaySelect");
+  const refreshDisplayBtn = document.getElementById("refreshDisplayBtn");
   const logContainer = document.getElementById("logContainer");
   const dataContainer = document.getElementById("dataContainer");
   const autoScrollCb = document.getElementById("autoScroll");
@@ -57,6 +58,12 @@
     updateToolbarMirrorState();
     vscode?.postMessage({ type: "switchDisplay", displayId: currentDisplayId });
   });
+
+  if (refreshDisplayBtn) {
+    refreshDisplayBtn.addEventListener("click", () => {
+      vscode?.postMessage({ type: "refreshDisplays" });
+    });
+  }
 
   clearLogBtn.addEventListener("click", () => {
     logContainer.innerHTML = "";
