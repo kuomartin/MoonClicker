@@ -61,7 +61,6 @@ import com.xaxaxax.relc.shizuku.ShizukuConnectionStatus
 import com.xaxaxax.relc.ui.component.Section
 import com.xaxaxax.relc.ui.component.shizukuStatusAppearance
 import com.xaxaxax.relc.ui.theme.ReLCTheme
-import com.xaxaxax.relc.workbench.QrCodeGenerator
 
 typealias HealthCheckActions = List<Pair<String, () -> Unit>>
 
@@ -231,7 +230,7 @@ private fun SettingsScreenContent(
                             onCheckedChange = onWorkbenchEnabledChange,
                         )
                         if (uiState.workbenchEnabled) {
-                            WorkbenchQrCode(address = uiState.workbenchAddress)
+                            WorkbenchAddressInfo(address = uiState.workbenchAddress)
                             WorkbenchPairingSection(
                                 uiState = uiState,
                                 onStartPairingMode = onStartPairingMode,
@@ -292,6 +291,7 @@ private fun UserServiceConfirmDialog(
         UserServiceAction.STOP ->
             R.string.settings_user_service_stop_title to
                     R.string.settings_user_service_stop_message
+
         UserServiceAction.RESTART ->
             R.string.settings_user_service_restart_title to
                     R.string.settings_user_service_restart_message
@@ -414,39 +414,22 @@ private fun ToggleSettingItem(
     }
 }
 
-/**
- * Server 開啟後才顯示（見呼叫端），[address] 是 server 目前 bind 到的位址；bind 還在進行中
- * （或者剛好卡在失敗邊緣）會是 null，此時顯示文字提示而不是空白或過期的 QR code。
- */
 @Composable
-private fun WorkbenchQrCode(address: String?) {
+private fun WorkbenchAddressInfo(address: String?) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 12.dp),
+            .padding(vertical = 4.dp),
     ) {
         if (address != null) {
-            val qrBitmap = remember(address) {
-                QrCodeGenerator.toBitmap(QrCodeGenerator.encode(address)).asImageBitmap()
-            }
-            Image(
-                bitmap = qrBitmap,
-                contentDescription = stringResource(R.string.settings_workbench_qr_description),
-                modifier = Modifier
-                    .size(200.dp)
-                    .align(Alignment.CenterHorizontally),
-            )
             Text(
-                text = address,
+                text = stringResource(R.string.settings_workbench_address, address),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier
-                    .align(Alignment.CenterHorizontally)
-                    .padding(top = 8.dp),
             )
         } else {
             Text(
-                text = stringResource(R.string.settings_workbench_qr_pending),
+                text = stringResource(R.string.settings_workbench_pending),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
