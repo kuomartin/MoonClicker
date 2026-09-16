@@ -143,9 +143,6 @@ dependencies {
     testImplementation(libs.ktor.server.test.host)
     testImplementation(libs.ktor.client.websockets)
 
-    // QR code (workbench pairing)
-    implementation(libs.zxing.core)
-
     // Workbench 串流事件 schema（proto/workbench_stream_event.proto 產生的型別）
     implementation(libs.wire.runtime)
 }
