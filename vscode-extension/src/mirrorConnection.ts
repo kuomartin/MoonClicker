@@ -28,12 +28,14 @@ export class MirrorConnection {
     this.frameListeners.push(listener);
   }
 
-  start(address: string, displayId: number): void {
+  start(address: string, displayId: number, token?: string): void {
     this.stop();
     this.setState({ status: "connecting", address, displayId });
 
     // WorkbenchServer 目前 export address = ip:port
-    const wsUrl = `ws://${address}/mirror/h264/${displayId}`;
+    const wsUrl = token
+      ? `ws://${address}/mirror/h264/${displayId}?token=${encodeURIComponent(token)}`
+      : `ws://${address}/mirror/h264/${displayId}`;
     const ws = new WebSocket(wsUrl);
     this.ws = ws;
 

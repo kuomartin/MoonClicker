@@ -61,7 +61,6 @@ import com.xaxaxax.relc.shizuku.ShizukuConnectionStatus
 import com.xaxaxax.relc.ui.component.Section
 import com.xaxaxax.relc.ui.component.shizukuStatusAppearance
 import com.xaxaxax.relc.ui.theme.ReLCTheme
-import com.xaxaxax.relc.workbench.QrCodeGenerator
 
 typealias HealthCheckActions = List<Pair<String, () -> Unit>>
 
@@ -99,6 +98,10 @@ fun SettingsScreen(
         onStartUserService = viewModel::startUserService,
         onStopUserService = viewModel::stopUserService,
         onRestartUserService = viewModel::restartUserService,
+        onStartPairingMode = viewModel::startPairingMode,
+        onStopPairingMode = viewModel::stopPairingMode,
+        onSetBruteForceProtection = viewModel::setBruteForceProtectionEnabled,
+        onRevokeAllTokens = viewModel::revokeAllTokens,
     )
 }
 
@@ -115,6 +118,10 @@ private fun SettingsScreenContent(
     onStartUserService: () -> Unit = {},
     onStopUserService: () -> Unit = {},
     onRestartUserService: () -> Unit = {},
+    onStartPairingMode: () -> Unit = {},
+    onStopPairingMode: () -> Unit = {},
+    onSetBruteForceProtection: (Boolean) -> Unit = {},
+    onRevokeAllTokens: () -> Unit = {},
 ) {
     // 關閉與重啟都會連帶銷毀虛擬顯示，值得先問一句。
     var pendingAction by remember { mutableStateOf<UserServiceAction?>(null) }
@@ -138,12 +145,12 @@ private fun SettingsScreenContent(
                 .fillMaxSize()
                 .padding(innerPadding),
             indicator = {
-                PullToRefreshDefaults.LoadingIndicator(
+                PullToRefreshDefaults.Indicator(
                     state = pullRefreshState,
                     isRefreshing = uiState.isRefreshing,
                     modifier = Modifier.align(Alignment.TopCenter),
                 )
-            }
+            },
         ) {
             LazyColumn(
                 modifier = Modifier
@@ -223,7 +230,14 @@ private fun SettingsScreenContent(
                             onCheckedChange = onWorkbenchEnabledChange,
                         )
                         if (uiState.workbenchEnabled) {
-                            WorkbenchQrCode(address = uiState.workbenchAddress)
+                            WorkbenchAddressInfo(address = uiState.workbenchAddress)
+                            WorkbenchPairingSection(
+                                uiState = uiState,
+                                onStartPairingMode = onStartPairingMode,
+                                onStopPairingMode = onStopPairingMode,
+                                onSetBruteForceProtection = onSetBruteForceProtection,
+                                onRevokeAllTokens = onRevokeAllTokens,
+                            )
                         }
                     }
                 }
@@ -277,6 +291,7 @@ private fun UserServiceConfirmDialog(
         UserServiceAction.STOP ->
             R.string.settings_user_service_stop_title to
                     R.string.settings_user_service_stop_message
+
         UserServiceAction.RESTART ->
             R.string.settings_user_service_restart_title to
                     R.string.settings_user_service_restart_message
@@ -399,42 +414,116 @@ private fun ToggleSettingItem(
     }
 }
 
-/**
- * Server 開啟後才顯示（見呼叫端），[address] 是 server 目前 bind 到的位址；bind 還在進行中
- * （或者剛好卡在失敗邊緣）會是 null，此時顯示文字提示而不是空白或過期的 QR code。
- */
 @Composable
-private fun WorkbenchQrCode(address: String?) {
+private fun WorkbenchAddressInfo(address: String?) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 12.dp),
+            .padding(vertical = 4.dp),
     ) {
         if (address != null) {
-            val qrBitmap = remember(address) {
-                QrCodeGenerator.toBitmap(QrCodeGenerator.encode(address)).asImageBitmap()
-            }
-            Image(
-                bitmap = qrBitmap,
-                contentDescription = stringResource(R.string.settings_workbench_qr_description),
-                modifier = Modifier
-                    .size(200.dp)
-                    .align(Alignment.CenterHorizontally),
-            )
             Text(
-                text = address,
+                text = stringResource(R.string.settings_workbench_address, address),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier
-                    .align(Alignment.CenterHorizontally)
-                    .padding(top = 8.dp),
             )
         } else {
             Text(
-                text = stringResource(R.string.settings_workbench_qr_pending),
+                text = stringResource(R.string.settings_workbench_pending),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+    }
+}
+
+@Composable
+private fun WorkbenchPairingSection(
+    uiState: SettingsUiState,
+    onStartPairingMode: () -> Unit,
+    onStopPairingMode: () -> Unit,
+    onSetBruteForceProtection: (Boolean) -> Unit,
+    onRevokeAllTokens: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+    ) {
+        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = "裝置配對 (PIN Pairing)", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    text = if (uiState.isPairingActive) "配對模式開啟中 (PIN 碼 5 分鐘內有效)" else "預設關閉，點擊開啟 5 分鐘配對視窗",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            if (uiState.isPairingActive) {
+                OutlinedButton(onClick = onStopPairingMode) {
+                    Text("關閉配對")
+                }
+            } else {
+                Button(onClick = onStartPairingMode) {
+                    Text("開啟配對模式")
+                }
+            }
+        }
+
+        if (uiState.isPairingActive && uiState.pairingPin != null) {
+            ElevatedCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(text = "請在 VS Code 連線視窗輸入 PIN 碼", style = MaterialTheme.typography.labelMedium)
+                    Text(
+                        text = uiState.pairingPin,
+                        style = MaterialTheme.typography.displayMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(vertical = 4.dp),
+                    )
+                }
+            }
+        }
+
+        ToggleSettingItem(
+            name = "防爆破鎖定",
+            description = "連續錯 3 次 PIN 碼即鎖定 60 秒並自動關閉配對模式",
+            checked = uiState.bruteForceProtectionEnabled,
+            onCheckedChange = onSetBruteForceProtection,
+        )
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "已配對裝置憑證 (${uiState.authorizedTokensCount})",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            TextButton(
+                onClick = onRevokeAllTokens,
+                enabled = uiState.authorizedTokensCount > 0,
+            ) {
+                Text("清除所有憑證")
+            }
         }
     }
 }

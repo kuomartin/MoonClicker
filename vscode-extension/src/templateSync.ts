@@ -1,3 +1,5 @@
+import { authHeaders } from "./authSync";
+
 export interface TemplateRoi {
   readonly x: number;
   readonly y: number;
@@ -32,6 +34,7 @@ export async function saveTemplate(
   templateName: string,
   roi: TemplateRoi,
   pngBytes: Uint8Array,
+  token?: string,
 ): Promise<void> {
   const normName = normalizeTemplateName(templateName);
   if (!normName) {
@@ -57,6 +60,7 @@ export async function saveTemplate(
     method: "PUT",
     headers: {
       "Content-Type": "image/png",
+      ...authHeaders(token),
     },
     body: pngBytes,
   });

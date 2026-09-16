@@ -52,11 +52,12 @@ export class WorkbenchConnection {
     this.listeners.push(listener);
   }
 
-  connect(address: string): void {
+  connect(address: string, token?: string): void {
     this.disconnect();
     this.setState({ status: "connecting", address });
 
-    const socket = new WebSocket(`ws://${address}/`);
+    const wsUrl = token ? `ws://${address}/?token=${encodeURIComponent(token)}` : `ws://${address}/`;
+    const socket = new WebSocket(wsUrl);
     this.socket = socket;
 
     socket.on("open", () => {

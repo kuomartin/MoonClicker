@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
-import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.xaxaxax.relc.core.AppSettings
@@ -13,6 +12,7 @@ import com.xaxaxax.relc.script.ScriptSession
 import com.xaxaxax.relc.shizuku.ShizukuConnectionStatus
 import com.xaxaxax.relc.shizuku.ShizukuManager
 import com.xaxaxax.relc.shizuku.UserServiceLifecycle
+import com.xaxaxax.relc.workbench.WorkbenchAuthStore
 import com.xaxaxax.relc.workbench.WorkbenchServer
 import com.xaxaxax.relc.workbench.WorkbenchService
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -39,6 +39,11 @@ data class SettingsUiState(
     val workbenchAddress: String? = null,
     /** 腳本跑在 UserService 上，停掉服務會把它一起帶走。 */
     val isScriptRunning: Boolean = false,
+    val isPairingActive: Boolean = false,
+    val pairingPin: String? = null,
+    val pairingExpiryMs: Long = 0L,
+    val bruteForceProtectionEnabled: Boolean = true,
+    val authorizedTokensCount: Int = 0,
 ) {
     val canStartUserService: Boolean
         get() = shizukuStatus == ShizukuConnectionStatus.DISCONNECTED
@@ -60,28 +65,40 @@ class SettingsViewModel @Inject constructor(
     private val userServiceLifecycle: UserServiceLifecycle,
     private val scriptSession: ScriptSession,
     private val workbenchServer: WorkbenchServer,
+    val authStore: WorkbenchAuthStore,
 ) : ViewModel() {
     private val _osAllowSecondaryDisplays = MutableStateFlow(false)
     private val isRefreshing = MutableStateFlow(false)
 
-    /** 先併成一份，是為了讓外層 combine 停在五個具名參數上，不必退化成靠索引轉型的 vararg 版。 */
+    /** 先併成一份，是為了讓外層 combine 停在小於等於 5 個具名參數上。 */
     private val userServiceState = combine(
         userServiceLifecycle.snapshot,
         scriptSession.state,
     ) { snapshot, session -> Triple(snapshot.connection, snapshot.autoStartEnabled, session.isRunning) }
 
-    private val workbenchState = combine(
+    private val authState = combine(
+        authStore.isPairingActive,
+        authStore.pairingPin,
+        authStore.pairingExpiryMs,
+        authStore.bruteForceProtectionEnabled,
+        authStore.authorizedTokens,
+    ) { active, pin, expiry, bruteForce, tokens ->
+        PairingStateHolder(active, pin, expiry, bruteForce, tokens.size)
+    }
+
+    private val workbenchCombinedState = combine(
         appSettings.workbenchEnabled,
         workbenchServer.address,
-    ) { enabled, address -> enabled to address }
+        authState,
+    ) { enabled, address, auth -> Triple(enabled, address, auth) }
 
     val uiState: StateFlow<SettingsUiState> = combine(
         userServiceState,
         permissionManager.osAllowSecondaryDisplaysFlow,
         isRefreshing,
         appSettings.autoOpenFullscreen,
-        workbenchState,
-    ) { (status, autoStart, scriptRunning), allowSecondary, refreshing, autoOpenFullscreen, (workbenchEnabled, workbenchAddress) ->
+        workbenchCombinedState,
+    ) { (status, autoStart, scriptRunning), allowSecondary, refreshing, autoOpenFullscreen, (workbenchEnabled, workbenchAddress, auth) ->
         SettingsUiState(
             shizukuStatus = status,
             osAllowSecondaryDisplays = allowSecondary,
@@ -91,6 +108,11 @@ class SettingsViewModel @Inject constructor(
             isScriptRunning = scriptRunning,
             workbenchEnabled = workbenchEnabled,
             workbenchAddress = workbenchAddress,
+            isPairingActive = auth.active,
+            pairingPin = auth.pin,
+            pairingExpiryMs = auth.expiry,
+            bruteForceProtectionEnabled = auth.bruteForce,
+            authorizedTokensCount = auth.tokensCount,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -148,4 +170,17 @@ class SettingsViewModel @Inject constructor(
 
     fun getOpenShizukuIntent() = shizukuManager.getOpenShizukuIntent()
     fun requestShizukuPermission() = shizukuManager.requestPermission()
+
+    fun startPairingMode() = authStore.startPairingMode()
+    fun stopPairingMode() = authStore.stopPairingMode()
+    fun setBruteForceProtectionEnabled(enabled: Boolean) = authStore.setBruteForceProtectionEnabled(enabled)
+    fun revokeAllTokens() = authStore.revokeAllTokens()
 }
+
+private data class PairingStateHolder(
+    val active: Boolean,
+    val pin: String?,
+    val expiry: Long,
+    val bruteForce: Boolean,
+    val tokensCount: Int,
+)
