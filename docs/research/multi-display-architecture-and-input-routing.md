@@ -85,3 +85,21 @@ Android 10（API 29）是 Android 多顯示器（Multi-Display）與多視窗系
 ### D. 硬體合成器 (HWC 2.3) 與 EDID 的重要性
 - Android 10 能夠打破 2 個螢幕限制，關鍵在於要求 HAL 實現 `IComposerClient@2.3::getDisplayIdentificationData`。
 - SurfaceFlinger 負責解析 EDID 中的廠商代碼與序號，將其壓縮合成 64-bit 的穩定 ID。若硬體晶片廠的 HWC 驅動不支援此 HIDL 呼叫，Android 10 會自動 fallback 回 Android 9 的舊版模式（螢幕 ID 隨機遞增，且上限 2 個）。
+
+---
+
+## 4. < Android 10 的操控與注入觸控切入點可能性分析
+
+在 `< Android 10`（Android 9 Pie / 8 Oreo / 7 Nougat）環境下，注入切入點的可行性必須嚴格區分**「預設主螢幕 (Display 0)」**與**「非預設顯示器 (VirtualDisplay / Secondary Display)」**：
+
+| 切入點 | 針對主螢幕 (Display 0) | 針對非 0 顯示器 (VirtualDisplay / 次要螢幕) | < Android 10 現況與限制說明 |
+| :--- | :---: | :---: | :--- |
+| **`InputManager.injectInputEvent(event, mode)`** (Java/Binder API) | **✅ 完全支援** | **❌ 不可能** | **Java 層能力邊界**。自 Android 1.6 起即支援主螢幕注入（需 `INJECT_EVENTS` 權限）。但在 Android < 10，Java API 及 JNI `nativeInjectInputEvent` 根本沒有 `displayId` 參數，所有事件強制派發給 Display 0。 |
+| **`MotionEvent.setDisplayId(int)`** (Hidden API) | — | **❌ 不存在** | `setDisplayId` 是 **API 29 (Android 10) 才新增**的 `@hide` 方法。在 API 27–28 呼叫會拋出 `NoSuchMethodError`。因此 Java 層沒有任何標準途徑為事件蓋上螢幕戳記。 |
+| **`adb shell input [-d <display_id>]`** | **✅ 完全支援** | **❌ 不支援 `-d`** | `adb shell input tap/swipe` 自古支援主螢幕；但 `-d` 旗標是在 Android 10 的 `InputShellCommand.java` 中才加入的解析邏輯，Android 9 及更舊版本無法指定顯示器。 |
+| **`UiAutomation.injectInputEvent` / `Instrumentation`** | **✅ 完全支援** | **❌ 不可能** | 測試框架在底層同樣仰賴 `MotionEvent` 自身的 display 屬性或系統預設路由；因事件無法標註目標螢幕，一律只會落在 Display 0。此外 `adoptShellPermissionIdentity` 亦為 API 29+。 |
+| **進程內 View 本地派發 (`DecorView.dispatchTouchEvent`)** | **✅ 完全支援** | **✅ 條件支援<br>(限同進程 Presentation)** | **唯一的免系統支援方案**。自 Android 4.2 (API 17) 起支援 `Presentation`。若 VirtualDisplay 上運行的是 App 自身進程內的 Presentation/View，可繞過系統 InputDispatcher，直接呼叫 `decorView.dispatchTouchEvent(event)` 操控。**限制：無法操控 VirtualDisplay 內由外部啟動的第三方 Activity。** |
+| **`/dev/uinput` 虛擬觸控裝置** | **✅ 完全支援** | **⚠️ 極端條件<br>(限硬體外接螢幕)** | 需要 root 或 uinput 權限。Android 9 Native `TouchInputMapper` 僅支援 `INTERNAL` 與 `EXTERNAL` 兩種視口；若外接了第二個實體螢幕且觸控板被宣告為外部裝置，可能映射到 Display 1。**但動態建立的 VirtualDisplay 無法透過此方式綁定。** |
+| **底層硬體節點寫入 (`/dev/input/eventX`)** | **✅ 完全支援** | **❌ 不可能** | 需要 root。直接寫入 Linux `input_event` 結構。但 VirtualDisplay 是 Android Framework 純軟體建立的 Buffer/Surface，在 Linux Kernel 根本沒有對應的硬體 Touch 節點。 |
+| **Native C++ Hooking (`InputDispatcher::injectInputEvent`)** | **✅ 完全支援** | **⚠️ 理論可能<br>(需 Root + Hook)** | AOSP 原始碼顯示，Android 9 的 Native C++ `InputDispatcher::injectInputEvent(...)` **其實已經具備 `int32_t displayId` 參數**，只是被上層 JNI 寫死為預設值。若在 Root 下 Hook 該 Native 函式，理論上有機會定向注入。 |
+
