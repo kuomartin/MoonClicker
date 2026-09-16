@@ -13,6 +13,7 @@ const STALE_AFTER_MS = 3000;
 
 let panel: vscode.WebviewPanel | undefined;
 let connection: MirrorConnection | undefined;
+const mirrorOutputChannel = vscode.window.createOutputChannel("ReLC Mirror");
 
 /**
  * `relc.openMirror` 的面板邏輯（見 #77、#78）。跟 `extension.ts` 的 [WorkbenchConnection] 是完全
@@ -44,9 +45,9 @@ export function openMirrorPanel(extensionUri: vscode.Uri, address: string, displ
       { enableScripts: true, retainContextWhenHidden: true },
     );
     panel = newPanel;
-    const jmuxerPath = vscode.Uri.joinPath(extensionUri, "node_modules", "jmuxer", "dist", "jmuxer.min.js");
+    const jmuxerPath = vscode.Uri.joinPath(extensionUri, "dist", "jmuxer.min.js");
     const jmuxerUri = newPanel.webview.asWebviewUri(jmuxerPath).toString();
-    newPanel.webview.html = renderHtml(jmuxerUri);
+    newPanel.webview.html = renderHtml(jmuxerUri, newPanel.webview.cspSource);
     // 面板關閉是「串流要確實停止」的兩個入口之一（另一個是下面的 stop 訊息）——
     // 兩者都導向同一個 connection.stop()，不留背景繼續拉流的路徑。
     newPanel.onDidDispose(() => {
@@ -98,12 +99,19 @@ export function openMirrorPanel(extensionUri: vscode.Uri, address: string, displ
             success: false,
             error: errMsg,
           });
+          mirrorOutputChannel.appendLine(`[ReLC Save Template Error] ${errMsg}`);
+          mirrorOutputChannel.show(true);
           vscode.window.showErrorMessage(`ReLC 儲存模板失敗: ${errMsg}`);
         }
       } else if (message?.type === "switchDisplay") {
         if (typeof message.displayId === "number") {
           openMirrorPanel(extensionUri, address, message.displayId);
         }
+      } else if (message?.type === "error") {
+        mirrorOutputChannel.appendLine(`[Webview Error] ${(message as any).message}`);
+        mirrorOutputChannel.show(true);
+      } else if (message?.type === "log") {
+        mirrorOutputChannel.appendLine(`[Webview Log] ${(message as any).message}`);
       }
     });
   }
@@ -119,11 +127,19 @@ export function openMirrorPanel(extensionUri: vscode.Uri, address: string, displ
       // 連線成功時自動請求腳本清單以供裁切存檔選擇
       listScripts(address)
         .then((scripts) => safePostMessage({ type: "scripts", scripts }))
-        .catch(() => {});
+        .catch((err) => {
+          mirrorOutputChannel.appendLine(`[ReLC Mirror] Failed to list scripts: ${(err as Error).message}`);
+        });
       fetch(`http://${address}/displays`)
         .then(res => res.json())
         .then(displays => safePostMessage({ type: "displays", displays, currentDisplayId: displayId }))
-        .catch(() => {});
+        .catch((err) => {
+          mirrorOutputChannel.appendLine(`[ReLC Mirror] Failed to fetch displays: ${(err as Error).message}`);
+        });
+    } else if (state.status === "error") {
+      mirrorOutputChannel.appendLine(`[ReLC Mirror Error] ${state.message}`);
+      mirrorOutputChannel.show(true);
+      staleness.disarm();
     } else {
       staleness.disarm();
     }
@@ -171,12 +187,12 @@ function postStaleness(state: StalenessState): void {
   safePostMessage({ type: "staleness", stale: state === "stale" });
 }
 
-function renderHtml(jmuxerUri: string): string {
+function renderHtml(jmuxerUri: string, cspSource: string): string {
   return `<!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
 <meta charset="UTF-8" />
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; media-src blob:; img-src data: blob:; style-src 'unsafe-inline'; script-src 'unsafe-inline' vscode-webview-resource:;" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; media-src blob:; img-src data: blob:; style-src 'unsafe-inline' ${cspSource}; script-src 'unsafe-inline' ${cspSource};" />
 <style>
   body {
     margin: 0;
@@ -373,9 +389,36 @@ function renderHtml(jmuxerUri: string): string {
   <div style="padding: 4px 8px; border-bottom: 1px solid var(--vscode-panel-border); font-size: 11px; background: var(--vscode-editor-background);">Data View</div>
   <div id="dataContainer"></div>
 </div>
-  <script src="${jmuxerUri}"></script>
   <script>
     const vscode = acquireVsCodeApi();
+    
+    // Catch errors before loading external scripts
+    window.onerror = function(message, source, lineno, colno, error) {
+      vscode.postMessage({ type: "error", message: "Global error: " + message + " at " + source + ":" + lineno });
+    };
+  </script>
+  <script src="${jmuxerUri}" onerror="vscode.postMessage({ type: 'error', message: 'Failed to load script: ' + this.src })"></script>
+  <script>
+    function appendLog(msg) {
+      const div = document.createElement("div");
+      div.textContent = msg;
+      div.style.color = "yellow";
+      dataContainer.appendChild(div);
+      dataContainer.scrollTop = dataContainer.scrollHeight;
+    }
+
+    const originalLog = console.log;
+    console.log = function(...args) {
+      originalLog.apply(console, args);
+      appendLog("LOG: " + args.join(" "));
+      vscode.postMessage({ type: "log", message: "LOG: " + args.join(" ") });
+    };
+    const originalError = console.error;
+    console.error = function(...args) {
+      originalError.apply(console, args);
+      appendLog("ERROR: " + args.join(" "));
+      vscode.postMessage({ type: "error", message: args.join(" ") });
+    };
     const statusEl = document.getElementById("status");
     const frameEl = document.getElementById("frame");
     const overlayEl = document.getElementById("overlay");
@@ -408,15 +451,37 @@ function renderHtml(jmuxerUri: string): string {
 
     let jmuxer = null;
 
+    frameEl.addEventListener("timeupdate", () => {
+      if (frameEl.buffered.length > 0) {
+        const end = frameEl.buffered.end(frameEl.buffered.length - 1);
+        const delay = end - frameEl.currentTime;
+        // Catch-up logic for low latency without seeking (which snaps to keyframes)
+        if (delay > 0.3) {
+          frameEl.playbackRate = 2.0;
+        } else if (delay > 0.15) {
+          frameEl.playbackRate = 1.5;
+        } else if (delay > 0.05) {
+          frameEl.playbackRate = 1.1;
+        } else {
+          frameEl.playbackRate = 1.0;
+        }
+      }
+    });
+
     function initJmuxer() {
-      if (jmuxer) jmuxer.destroy();
-      jmuxer = new JMuxer({
-        node: "frame",
-        mode: "video",
-        flushingTime: 0,
-        fps: 30,
-        debug: false
-      });
+      try {
+        if (jmuxer) jmuxer.destroy();
+        jmuxer = new JMuxer({
+          node: "frame",
+          mode: "video",
+          flushingTime: 1,
+          fps: 60,
+          clearBuffer: true,
+          debug: false
+        });
+      } catch (e) {
+        vscode.postMessage({ type: "error", message: "initJmuxer failed: " + (e.stack || e.toString()) });
+      }
     }
     initJmuxer();
 
@@ -774,7 +839,11 @@ function renderHtml(jmuxerUri: string): string {
       if (msg.type === "state") {
         renderState(msg.state);
       } else if (msg.type === "frame") {
-        jmuxer.feed({ video: msg.data });
+        let nalu = msg.data;
+        if (!(nalu instanceof Uint8Array)) {
+          nalu = new Uint8Array(nalu instanceof ArrayBuffer ? nalu : Object.values(nalu));
+        }
+        jmuxer.feed({ video: nalu });
         hasReceivedFrame = true;
         if (!isCropping) {
           cropBtn.disabled = false;

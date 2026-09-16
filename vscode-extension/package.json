@@ -137,7 +137,7 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run package-build",
-    "package-build": "npm run compile && esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify",
+    "package-build": "npm run compile && esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify && cp node_modules/jmuxer/dist/jmuxer.min.js dist/jmuxer.min.js",
     "generate": "buf generate ../proto",
     "precompile": "npm run generate",
     "compile": "tsc -p .",
