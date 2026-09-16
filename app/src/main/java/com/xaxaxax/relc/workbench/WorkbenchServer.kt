@@ -14,6 +14,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
 import io.ktor.server.application.call
 import io.ktor.server.application.install
+import io.ktor.server.plugins.cors.routing.CORS
 import io.ktor.server.cio.CIO
 import io.ktor.server.engine.EmbeddedServer
 import io.ktor.server.engine.embeddedServer
@@ -149,12 +150,11 @@ class WorkbenchServer @Inject constructor(
     fun start(): Boolean {
         if (server != null) return true
         return try {
-            // 不指定 host 會讓底層 bind 成 dual-stack IPv6 wildcard（已在真機上驗證：LISTEN
-            // 位址是全零的 ::，不是 0.0.0.0）。Android 的 epoll-based Selector 對「剛 accept、
-            // 來源是 IPv4-mapped-IPv6 位址」的 channel 會漏掉第一次 OP_READ 就緒事件，導致
-            // 連線停在 ESTABLISHED 卻永遠讀不到資料——loopback 走純 IPv4 不會踩到，跨裝置走
-            // WiFi 才會。直接 bind 裝置在區網上的實際 IPv4 位址，繞開 wildcard 的雙棧歧義。
-            val host = localIpv4Address()
+            // 為了支援 Android 模擬器透過 adb forward 連線 (來源 IP 為 127.0.0.1)，
+            // 這裡改為綁定 0.0.0.0 監聽所有網卡。
+            // 注意：如果在真機 WiFi 環境遇到連線卡 ESTABLISHED 讀不到資料的問題，
+            // 可能是 Ktor 的 0.0.0.0 觸發了 dual-stack wildcard bug。
+            val host = "0.0.0.0"
             val scriptsRoot = scriptStore.root
             server = embeddedServer(
                 CIO,
@@ -162,7 +162,7 @@ class WorkbenchServer @Inject constructor(
                 host = host,
                 module = { workbenchModule(scriptsRoot, scriptRunner, scriptStream, frameSource, displaySource, shizukuManager) },
             ).start(wait = false)
-            _address.value = "$host:$PORT"
+            _address.value = "${localIpv4Address()}:$PORT" // UI 顯示仍保留實際區網 IP 供參考
             true
         } catch (t: Throwable) {
             Timber.e(t, "WorkbenchServer failed to bind port $PORT")
@@ -219,6 +219,9 @@ fun Application.workbenchModule(
     shizukuManager: ShizukuManager,
 ) {
     install(WebSockets)
+    install(CORS) {
+        anyHost()
+    }
     routing {
         get("/health") {
             call.respondText("OK")
