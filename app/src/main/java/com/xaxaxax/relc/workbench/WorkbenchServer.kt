@@ -7,6 +7,7 @@ import com.xaxaxax.relc.script.ScriptSession
 import com.xaxaxax.relc.script.ScriptStore
 import com.xaxaxax.relc.script.TemplateRoi
 import com.xaxaxax.relc.script.TemplateStore
+import com.xaxaxax.relc.engine.streaming.H264EncoderSink
 import com.xaxaxax.relc.shizuku.ShizukuManager
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
@@ -29,6 +30,8 @@ import io.ktor.server.websocket.webSocket
 import io.ktor.utils.io.writeFully
 import io.ktor.utils.io.writeStringUtf8
 import io.ktor.websocket.Frame
+import io.ktor.websocket.close
+import io.ktor.websocket.CloseReason
 import io.ktor.websocket.readText
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -157,7 +160,7 @@ class WorkbenchServer @Inject constructor(
                 CIO,
                 port = PORT,
                 host = host,
-                module = { workbenchModule(scriptsRoot, scriptRunner, scriptStream, frameSource, displaySource) },
+                module = { workbenchModule(scriptsRoot, scriptRunner, scriptStream, frameSource, displaySource, shizukuManager) },
             ).start(wait = false)
             _address.value = "$host:$PORT"
             true
@@ -213,6 +216,7 @@ fun Application.workbenchModule(
     scriptStream: ScriptStream,
     frameSource: FrameSource,
     displaySource: DisplaySource,
+    shizukuManager: ShizukuManager,
 ) {
     install(WebSockets)
     routing {
@@ -359,6 +363,35 @@ fun Application.workbenchModule(
                     writeStringUtf8("\r\n")
                     flush()
                 }
+            }
+        }
+        // Realtime mirror (H.264) via WebSocket
+        webSocket("/mirror/h264/{displayId}") {
+            val displayId = call.parameters["displayId"]?.toIntOrNull()
+            if (displayId == null) {
+                close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "Unknown displayId"))
+                return@webSocket
+            }
+
+            val service = shizukuManager.service
+            if (service == null) {
+                close(CloseReason(CloseReason.Codes.INTERNAL_ERROR, "Service not connected"))
+                return@webSocket
+            }
+
+            val size = service.getDisplaySurfaceSize(displayId)
+            if (size == null || size[0] == 0) {
+                close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "Invalid displayId"))
+                return@webSocket
+            }
+
+            val sink = H264EncoderSink(service, displayId, size[0], size[1])
+            try {
+                sink.h264Flow.collect { nalu ->
+                    send(Frame.Binary(true, nalu))
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "H264 WebSocket error")
             }
         }
     }
