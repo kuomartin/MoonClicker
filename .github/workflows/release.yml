@@ -63,7 +63,12 @@ jobs:
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
         run: |
           if [ -n "$SIGNING_KEY" ]; then
-            echo "$SIGNING_KEY" | base64 --decode > "${{ runner.temp }}/release.keystore"
+            node -e '
+              const fs = require("fs");
+              const raw = process.env.SIGNING_KEY || "";
+              const clean = raw.replace(/\s+/g, "");
+              fs.writeFileSync("${{ runner.temp }}/release.keystore", Buffer.from(clean, "base64"));
+            '
             echo "KEYSTORE_PATH=${{ runner.temp }}/release.keystore" >> $GITHUB_ENV
           else
             echo "::warning::No SIGNING_KEY secret found. APKs will be built unsigned."
