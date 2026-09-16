@@ -112,10 +112,14 @@ object ScriptEngine {
         )
         host = scriptHost
 
+        val displayInfo = runCatching { service.getDisplayInfo(run.displayId) }.getOrNull()
+        val isPhysical = displayInfo?.isPhysical ?: (run.displayId == 0)
+
         val started = LuaNative.nativeStart(
             scriptHost,
             service,
             run.displayId,
+            isPhysical,
             run.hasVision,
             surfaceWidth,
             surfaceHeight,

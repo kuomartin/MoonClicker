@@ -64,6 +64,10 @@
         "command": "relc.setupStubs",
         "title": "ReLC: Setup Lua Stubs",
         "icon": "$(lightbulb)"
+      },
+      {
+        "command": "relc.toggleMirror",
+        "title": "ReLC: Toggle Display Mirror"
       }
     ],
     "menus": {
@@ -144,6 +148,7 @@
     "watch": "tsc -w -p .",
     "pretest": "npm run compile",
     "test": "node --test out/test/**/*.test.js",
+    "test:client": "node scripts/test-server.mjs",
     "package": "vsce package"
   },
   "devDependencies": {

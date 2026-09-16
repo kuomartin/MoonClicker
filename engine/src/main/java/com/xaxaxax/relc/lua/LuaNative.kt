@@ -30,6 +30,7 @@ internal object LuaNative {
         host: ScriptHost,
         service: IRelcV2Service,
         displayId: Int,
+        isPhysical: Boolean,
         withVision: Boolean,
         surfaceWidth: Int,
         surfaceHeight: Int,

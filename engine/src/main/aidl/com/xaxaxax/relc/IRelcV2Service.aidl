@@ -2,6 +2,7 @@ package com.xaxaxax.relc;
 
 import android.view.MotionEvent;
 import android.view.KeyEvent;
+import com.xaxaxax.relc.RelcDisplayInfo;
 
 interface IRelcV2Service {
     boolean setOverlayAllowed(String packageName) = 1;
@@ -13,6 +14,10 @@ interface IRelcV2Service {
     boolean destroyVirtualDisplay(int displayId) = 104;
 
     int[] getVirtualDisplays() = 105;
+
+    boolean acquireDisplayMirror(int displayId) = 109;
+    boolean releaseDisplayMirror(int displayId) = 110;
+    boolean isDisplayMirrorActive(int displayId) = 111;
 
     /**
      * Sets a virtual display's user rotation (Surface.ROTATION_*, 0..3).
@@ -55,6 +60,9 @@ interface IRelcV2Service {
      * Callers wanting the rotated, on-screen size want getDisplaySize instead.
      */
     int[] getDisplaySurfaceSize(int displayId) = 302;
+
+    RelcDisplayInfo getDisplayInfo(int displayId) = 303;
+    RelcDisplayInfo[] getDisplayInfos() = 304;
 
     String debug(String input) = 1001;
     void destroy() = 16777114;

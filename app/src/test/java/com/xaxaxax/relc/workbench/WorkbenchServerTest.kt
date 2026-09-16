@@ -109,7 +109,15 @@ private class FakeFrameSource(
 
 private class FakeDisplaySource : DisplaySource {
     var displaysToReturn: List<WorkbenchDisplaySummary>? = null
+    var lastToggle: Pair<Int, Boolean>? = null
+    var toggleResult: Boolean = true
+
     override fun getDisplays(): List<WorkbenchDisplaySummary>? = displaysToReturn
+
+    override fun toggleMirror(displayId: Int, enable: Boolean): Boolean {
+        lastToggle = displayId to enable
+        return toggleResult
+    }
 }
 
 /** 收一筆二進位 frame，解碼成 [StreamEvent]——跟 WorkbenchServer.kt 產生它用的是同一份 schema。 */
@@ -192,6 +200,35 @@ class WorkbenchServerTest {
             val response = client.get("/displays")
 
             assertEquals(HttpStatusCode.ServiceUnavailable, response.status)
+        }
+    }
+
+    @Test
+    fun `mirror control route toggles mirror via displaySource`() = runTest {
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames, fakeDisplays) }
+
+            val responseEnable = client.post("/displays/0/mirror?enable=true")
+            assertEquals(HttpStatusCode.OK, responseEnable.status)
+            assertEquals("Mirror acquired", responseEnable.bodyAsText())
+            assertEquals(0 to true, fakeDisplays.lastToggle)
+
+            val responseDisable = client.post("/displays/0/mirror?enable=false")
+            assertEquals(HttpStatusCode.OK, responseDisable.status)
+            assertEquals("Mirror released", responseDisable.bodyAsText())
+            assertEquals(0 to false, fakeDisplays.lastToggle)
+        }
+    }
+
+    @Test
+    fun `mirror control route returns 500 when displaySource fails`() = runTest {
+        fakeDisplays.toggleResult = false
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeFrames, fakeDisplays) }
+
+            val response = client.post("/displays/0/mirror?enable=true")
+            assertEquals(HttpStatusCode.InternalServerError, response.status)
+            assertEquals("Failed to update mirror", response.bodyAsText())
         }
     }
 
