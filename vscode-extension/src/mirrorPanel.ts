@@ -107,6 +107,8 @@ export function openMirrorPanel(extensionUri: vscode.Uri, address: string, displ
         if (typeof message.displayId === "number") {
           openMirrorPanel(extensionUri, address, message.displayId);
         }
+      } else if (message?.type === "refreshDisplays") {
+        fetchDisplays();
       } else if (message?.type === "error") {
         mirrorOutputChannel.appendLine(`[Webview Error] ${(message as any).message}`);
         mirrorOutputChannel.show(true);
@@ -120,6 +122,15 @@ export function openMirrorPanel(extensionUri: vscode.Uri, address: string, displ
   connection = mirror;
   const staleness = new FrameStalenessTracker(STALE_AFTER_MS, postStaleness);
 
+  function fetchDisplays(): void {
+    fetch(`http://${address}/displays`)
+      .then(res => res.json())
+      .then(displays => safePostMessage({ type: "displays", displays, currentDisplayId: displayId }))
+      .catch((err) => {
+        mirrorOutputChannel.appendLine(`[ReLC Mirror] Failed to fetch displays: ${(err as Error).message}`);
+      });
+  }
+
   mirror.onDidChangeState((state) => {
     postState(state);
     if (state.status === "connected") {
@@ -130,12 +141,7 @@ export function openMirrorPanel(extensionUri: vscode.Uri, address: string, displ
         .catch((err) => {
           mirrorOutputChannel.appendLine(`[ReLC Mirror] Failed to list scripts: ${(err as Error).message}`);
         });
-      fetch(`http://${address}/displays`)
-        .then(res => res.json())
-        .then(displays => safePostMessage({ type: "displays", displays, currentDisplayId: displayId }))
-        .catch((err) => {
-          mirrorOutputChannel.appendLine(`[ReLC Mirror] Failed to fetch displays: ${(err as Error).message}`);
-        });
+      fetchDisplays();
     } else if (state.status === "error") {
       mirrorOutputChannel.appendLine(`[ReLC Mirror Error] ${state.message}`);
       mirrorOutputChannel.show(true);
@@ -357,6 +363,7 @@ function renderHtml(jmuxerUri: string, cspSource: string): string {
 <div id="leftPanel">
   <div id="toolbar">
     <select id="displaySelect"></select>
+    <button id="refreshDisplayBtn" class="secondary" type="button" title="刷新 display 列表">↻ 刷新</button>
     <span id="status">連線中…</span>
     <button id="cropBtn" type="button" disabled>開始裁切</button>
     <button id="stopButton" type="button">停止</button>
@@ -434,6 +441,7 @@ function renderHtml(jmuxerUri: string, cspSource: string): string {
     const cropCanvas = document.getElementById("cropCanvas");
     const ctx = cropCanvas.getContext("2d");
     const displaySelect = document.getElementById("displaySelect");
+    const refreshDisplayBtn = document.getElementById("refreshDisplayBtn");
     const logContainer = document.getElementById("logContainer");
     const dataContainer = document.getElementById("dataContainer");
     const autoScrollCb = document.getElementById("autoScroll");
@@ -491,6 +499,10 @@ function renderHtml(jmuxerUri: string, cspSource: string): string {
 
     displaySelect.addEventListener("change", (e) => {
       vscode.postMessage({ type: "switchDisplay", displayId: parseInt(e.target.value, 10) });
+    });
+
+    refreshDisplayBtn.addEventListener("click", () => {
+      vscode.postMessage({ type: "refreshDisplays" });
     });
 
     clearLogBtn.addEventListener("click", () => {
