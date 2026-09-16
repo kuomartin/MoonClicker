@@ -259,14 +259,16 @@ fun FullscreenDisplayScreen(
                                         viewModel.setMenuExpanded(false)
                                     }
                                 )
-                                DropdownMenuItem(
-                                    text = { Text("Close Display") },
-                                    onClick = {
-                                        viewModel.setMenuExpanded(false)
-                                        viewModel.destroyDisplay(targetDisplayId)
-                                        activity?.finish()
-                                    }
-                                )
+                                if (targetDisplayId != 0) {
+                                    DropdownMenuItem(
+                                        text = { Text("Close Display") },
+                                        onClick = {
+                                            viewModel.setMenuExpanded(false)
+                                            viewModel.destroyDisplay(targetDisplayId)
+                                            activity?.finish()
+                                        }
+                                    )
+                                }
                                 DropdownMenuItem(
                                     text = { Text("Return to ReLC") },
                                     onClick = {

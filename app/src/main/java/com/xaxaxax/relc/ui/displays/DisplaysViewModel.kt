@@ -31,9 +31,12 @@ import kotlin.time.Duration.Companion.milliseconds
 
 data class DisplayCardInfo(
     val displayId: Int,
+    val name: String = "Display $displayId",
     val width: Int,
     val height: Int,
     val densityDpi: Int,
+    val isPhysical: Boolean = false,
+    val isMirrorActive: Boolean = false,
     val thumbnail: ImageBitmap? = null,
 )
 
@@ -114,11 +117,23 @@ class DisplaysViewModel @Inject constructor(
                     }
                 }
                 shizukuManager.withService { service ->
-                    val ids = service.virtualDisplays.toList()
+                    val displayInfos = runCatching { service.displayInfos.toList() }.getOrElse { emptyList() }
+                    val ids = displayInfos.map { it.displayId }
                     computeRemovedDisplayIds(displays.value.map { it.displayId }, ids)
                         .forEach { thumbnailCache.remove(it) }
                     displays.value = withContext(Dispatchers.Default) {
-                        ids.mapNotNull { id -> readDisplayCardInfo(id) }
+                        displayInfos.map { info ->
+                            DisplayCardInfo(
+                                displayId = info.displayId,
+                                name = info.name ?: "Display ${info.displayId}",
+                                width = info.width,
+                                height = info.height,
+                                densityDpi = info.densityDpi,
+                                isPhysical = info.isPhysical,
+                                isMirrorActive = info.isMirrorActive,
+                                thumbnail = if (info.isPhysical && !info.isMirrorActive) null else thumbnailCache.get(info.displayId),
+                            )
+                        }
                     }
                 }
             } catch (t: Throwable) {
@@ -133,19 +148,17 @@ class DisplaysViewModel @Inject constructor(
         }
     }
 
-    private fun readDisplayCardInfo(displayId: Int): DisplayCardInfo? {
-        val displayManager = context.getSystemService(DisplayManager::class.java) ?: return null
-        val display = displayManager.getDisplay(displayId) ?: return null
-        val metrics = DisplayMetrics()
-        @Suppress("DEPRECATION")
-        display.getRealMetrics(metrics)
-        return DisplayCardInfo(
-            displayId = displayId,
-            width = metrics.widthPixels,
-            height = metrics.heightPixels,
-            densityDpi = metrics.densityDpi,
-            thumbnail = thumbnailCache.get(displayId),
-        )
+    fun toggleMirror(displayId: Int, enable: Boolean) {
+        viewModelScope.launch {
+            shizukuManager.withService { service ->
+                if (enable) {
+                    service.acquireDisplayMirror(displayId)
+                } else {
+                    service.releaseDisplayMirror(displayId)
+                }
+            }
+            refreshDisplays()
+        }
     }
 
     fun createDisplay(config: DisplayConfig = defaultConfig) {
