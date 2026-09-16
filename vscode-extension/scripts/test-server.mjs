@@ -70,7 +70,17 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  // 3. 靜態檔案託管 (media/)
+  // 3. jmuxer 支援
+  if (pathname === "/jmuxer.min.js" || pathname === "/dist/jmuxer.min.js") {
+    const jmuxerPath = join(__dirname, "..", "dist", "jmuxer.min.js");
+    if (existsSync(jmuxerPath)) {
+      res.writeHead(200, { "Content-Type": "application/javascript; charset=utf-8" });
+      res.end(readFileSync(jmuxerPath));
+      return;
+    }
+  }
+
+  // 4. 靜態檔案託管 (media/)
   let filePath = join(MEDIA_DIR, pathname === "/" ? "index.html" : pathname);
   if (!existsSync(filePath) && existsSync(filePath + ".html")) {
     filePath += ".html";
@@ -248,7 +258,9 @@ wss.on("connection", (ws, req) => {
     return;
   }
 
-  const targetWs = new WebSocket(`ws://${target}/`);
+  const targetPath = url.searchParams.get("path") || "/";
+  const targetWs = new WebSocket(`ws://${target}${targetPath}`);
+  targetWs.binaryType = "nodebuffer";
   targetWs.on("open", () => {
     ws.on("message", (msg) => targetWs.send(msg));
     targetWs.on("message", (msg) => ws.send(msg));
@@ -261,6 +273,7 @@ wss.on("connection", (ws, req) => {
 });
 
 server.on("upgrade", (req, socket, head) => {
+  socket.setNoDelay?.(true);
   const url = new URL(req.url || "/", `http://${req.headers.host}`);
   if (url.pathname.startsWith("/proxy-ws") || url.pathname.startsWith("/mock/ws")) {
     wss.handleUpgrade(req, socket, head, (ws) => {
