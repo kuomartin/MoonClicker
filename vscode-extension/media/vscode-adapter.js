@@ -1,10 +1,10 @@
 // ReLC VS Code Webview Adapter & Diagnostic Test Harness
 // Polyfills `acquireVsCodeApi()` for standalone browser environments.
 (function () {
-  const urlParams = new URLSearchParams(window.location.search);
-  let currentTarget = urlParams.get("target") || (window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost" ? "192.168.68.110:8787" : window.location.host);
-  let currentMode = urlParams.get("mode") || "device"; // "device" or "mock"
-  let currentDisplayId = parseInt(urlParams.get("display") || "0", 10);
+  // Local UI state — synced from /__dev__/config on init
+  let currentMode = "mock";
+  let currentTarget = "192.168.68.110:8787";
+  let currentDisplayId = parseInt(new URLSearchParams(window.location.search).get("display") || "0", 10);
 
   let activeStreamAbort = null;
   let activeWs = null;
@@ -18,8 +18,12 @@
   let targetInput = null;
   let connectBtn = null;
   let toggleMirrorBtn = null;
+  let pinInput = null;
+  let pairBtn = null;
+  let pairStatus = null;
+  let authToken = null;
 
-  // 1. 注入頂部診斷與控制列
+  // ── Harness toolbar ──────────────────────────────────────────────────────────
   function initHarnessToolbar() {
     if (document.getElementById("reLCTestHarnessBar")) return;
     const harnessBar = document.createElement("div");
@@ -62,9 +66,7 @@
         border-radius: 3px;
         cursor: pointer;
       }
-      #reLCTestHarnessBar button:hover {
-        background: #1177bb;
-      }
+      #reLCTestHarnessBar button:hover { background: #1177bb; }
       #reLCTestHarnessBar .stats {
         margin-left: auto;
         display: flex;
@@ -81,10 +83,22 @@
       </select>
     </label>
     <label>目標位址:
-      <input type="text" id="thTargetInput" value="${currentTarget}" size="22" />
+      <input type="text" id="thTargetInput" size="22" />
     </label>
     <button id="thConnectBtn">連線 (Connect)</button>
-    <button id="thToggleMirrorBtn" style="background:#444;">切換實體鏡像 (Toggle Mirror)</button>
+    <span id="thPairSection" style="display:flex;align-items:center;gap:6px;border-left:1px solid #444;padding-left:12px;">
+      <label style="white-space:nowrap;">PIN:
+        <input type="text" id="thPinInput" placeholder="123456" size="8" maxlength="10"
+          style="letter-spacing:2px;font-family:monospace;width:70px;" />
+      </label>
+      <button id="thPairBtn" style="background:#2d7a2d;">配對 (Pair)</button>
+      <span id="thPairStatus" style="font-size:13px;"></span>
+    </span>
+    <a href="/__dev__/mdns" target="_blank"
+      style="color:#4ec9b0;font-size:11px;text-decoration:none;border-left:1px solid #444;padding-left:12px;">
+      🔍 mDNS
+    </a>
+    <button id="thToggleMirrorBtn" style="background:#444;">切換實體鏡像</button>
     <div class="stats">
       <span>FPS: <b id="thFps">0</b></span>
       <span>Frames: <b id="thFrameCount">0</b></span>
@@ -92,34 +106,66 @@
   `;
     document.body.prepend(harnessBar);
 
-    modeSelect = document.getElementById("thModeSelect");
-    targetInput = document.getElementById("thTargetInput");
-    connectBtn = document.getElementById("thConnectBtn");
+    modeSelect    = document.getElementById("thModeSelect");
+    targetInput   = document.getElementById("thTargetInput");
+    connectBtn    = document.getElementById("thConnectBtn");
     toggleMirrorBtn = document.getElementById("thToggleMirrorBtn");
-    fpsEl = document.getElementById("thFps");
-    frameCountEl = document.getElementById("thFrameCount");
+    pinInput      = document.getElementById("thPinInput");
+    pairBtn       = document.getElementById("thPairBtn");
+    pairStatus    = document.getElementById("thPairStatus");
+    fpsEl         = document.getElementById("thFps");
+    frameCountEl  = document.getElementById("thFrameCount");
 
-    modeSelect.value = currentMode;
-    targetInput.disabled = currentMode === "mock";
-
-    modeSelect.addEventListener("change", () => {
-      currentMode = modeSelect.value;
-      targetInput.disabled = currentMode === "mock";
+    modeSelect.addEventListener("change", async () => {
+      await postConfig({ mode: modeSelect.value, target: targetInput.value.trim() });
+      clearToken();
+      updatePairSection();
       reconnect();
     });
 
-    connectBtn.addEventListener("click", () => {
-      currentTarget = targetInput.value.trim();
+    connectBtn.addEventListener("click", async () => {
+      await postConfig({ mode: modeSelect.value, target: targetInput.value.trim() });
+      clearToken();
       reconnect();
     });
+
+    pairBtn.addEventListener("click", async () => {
+      const pin = pinInput.value.trim();
+      if (!pin) { alert("請輸入 PIN 碼"); return; }
+      pairBtn.disabled = true;
+      pairStatus.textContent = "⏳";
+      try {
+        const res = await authorizedFetch("/pair", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pin })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          authToken = data.token;
+          pairStatus.textContent = "✅ 已配對";
+          pairStatus.style.color = "#4ec9b0";
+          reconnect();
+        } else {
+          const msg = await res.text();
+          pairStatus.textContent = `❌ ${msg || res.status}`;
+          pairStatus.style.color = "#f48771";
+        }
+      } catch (e) {
+        pairStatus.textContent = `❌ ${e.message}`;
+        pairStatus.style.color = "#f48771";
+      } finally {
+        pairBtn.disabled = false;
+      }
+    });
+
+    pinInput.addEventListener("keydown", (e) => { if (e.key === "Enter") pairBtn.click(); });
 
     toggleMirrorBtn.addEventListener("click", async () => {
       try {
         toggleMirrorBtn.disabled = true;
-        const base = getApiBase();
-        const res = await fetch(`${base}/displays/${currentDisplayId}/mirror?enable=true`, { method: "POST" });
-        const text = await res.text();
-        alert(`鏡像控制回應: ${text}`);
+        const res = await authorizedFetch(`/displays/${currentDisplayId}/mirror?enable=true`, { method: "POST" });
+        alert(`鏡像控制回應: ${await res.text()}`);
         await refreshDisplays();
       } catch (e) {
         alert(`鏡像控制失敗: ${e.message}`);
@@ -129,27 +175,61 @@
     });
   }
 
-  function getApiBase() {
-    if (currentMode === "mock") {
-      return `/mock`;
+  // ── Config sync ──────────────────────────────────────────────────────────────
+  async function loadConfig() {
+    try {
+      const res = await fetch("/__dev__/config");
+      if (!res.ok) return;
+      const cfg = await res.json();
+      currentMode   = cfg.mode   || currentMode;
+      currentTarget = cfg.target || currentTarget;
+      if (modeSelect)   modeSelect.value        = currentMode;
+      if (targetInput)  targetInput.value        = currentTarget;
+      updatePairSection();
+    } catch { /* server not yet ready */ }
+  }
+
+  async function postConfig(patch) {
+    try {
+      const res = await fetch("/__dev__/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch)
+      });
+      if (!res.ok) return;
+      const cfg = await res.json();
+      currentMode   = cfg.mode;
+      currentTarget = cfg.target;
+    } catch { /* ignore */ }
+  }
+
+  // ── Helpers ──────────────────────────────────────────────────────────────────
+  function updatePairSection() {
+    const section = document.getElementById("thPairSection");
+    if (!section) return;
+    const isDevice = currentMode === "device";
+    section.style.display = isDevice ? "flex" : "none";
+    if (targetInput) targetInput.disabled = !isDevice;
+  }
+
+  function clearToken() {
+    authToken = null;
+    if (pairStatus) pairStatus.textContent = "";
+  }
+
+  function authorizedFetch(url, options = {}) {
+    if (authToken) {
+      options.headers = Object.assign({}, options.headers, { "Authorization": `Bearer ${authToken}` });
     }
-    // 使用本地測試伺服器的反向代理以避免瀏覽器 CORS
-    return `/proxy/${encodeURIComponent(currentTarget)}`;
+    return fetch(url, options);
   }
 
   function getWsUrl(subPath = "") {
-    if (currentMode === "mock") {
-      const loc = window.location;
-      const proto = loc.protocol === "https:" ? "wss:" : "ws:";
-      return `${proto}//${loc.host}/mock/ws`;
-    }
-    const loc = window.location;
-    const proto = loc.protocol === "https:" ? "wss:" : "ws:";
-    const pathParam = subPath ? `&path=${encodeURIComponent(subPath)}` : "";
-    return `${proto}//${loc.host}/proxy-ws?target=${encodeURIComponent(currentTarget)}${pathParam}`;
+    const proto = location.protocol === "https:" ? "wss:" : "ws:";
+    return `${proto}//${location.host}${subPath}`;
   }
 
-  // 2. Mock VsCode API
+  // ── Mock VS Code API ─────────────────────────────────────────────────────────
   const mockVsCodeApi = {
     postMessage: async (msg) => {
       if (!msg) return;
@@ -162,7 +242,7 @@
         window.postMessage({ type: "state", state: { status: "disconnected", displayId: currentDisplayId } }, "*");
       } else if (msg.type === "requestScripts") {
         try {
-          const res = await fetch(`${getApiBase()}/scripts`);
+          const res = await authorizedFetch("/scripts");
           const scripts = res.ok ? await res.json() : [];
           window.postMessage({ type: "scripts", scripts }, "*");
         } catch {
@@ -171,14 +251,13 @@
       } else if (msg.type === "saveTemplate") {
         try {
           const { scriptId, templateName, roi, pngBase64 } = msg;
-          const url = `${getApiBase()}/scripts/${encodeURIComponent(scriptId)}/templates/${encodeURIComponent(templateName)}?x=${roi.x}&y=${roi.y}&w=${roi.w}&h=${roi.h}`;
+          const url = `/scripts/${encodeURIComponent(scriptId)}/templates/${encodeURIComponent(templateName)}?x=${roi.x}&y=${roi.y}&w=${roi.w}&h=${roi.h}`;
           const bin = Uint8Array.from(atob(pngBase64), (c) => c.charCodeAt(0));
-          const res = await fetch(url, { method: "PUT", body: bin });
+          const res = await authorizedFetch(url, { method: "PUT", body: bin });
           if (res.ok) {
             window.postMessage({ type: "saveTemplateResult", success: true }, "*");
           } else {
-            const err = await res.text();
-            window.postMessage({ type: "saveTemplateResult", success: false, error: err }, "*");
+            window.postMessage({ type: "saveTemplateResult", success: false, error: await res.text() }, "*");
           }
         } catch (e) {
           window.postMessage({ type: "saveTemplateResult", success: false, error: e.message }, "*");
@@ -186,12 +265,14 @@
       } else if (msg.type === "toggleMirror") {
         try {
           const enable = msg.enable !== false;
-          await fetch(`${getApiBase()}/displays/${msg.displayId}/mirror?enable=${enable}`, { method: "POST" });
+          await authorizedFetch(`/displays/${msg.displayId}/mirror?enable=${enable}`, { method: "POST" });
           await refreshDisplays();
           connectStream(msg.displayId);
         } catch (e) {
           console.error("toggleMirror error:", e);
         }
+      } else if (msg.type === "refreshDisplays") {
+        await refreshDisplays();
       }
     },
   };
@@ -199,10 +280,10 @@
   window.acquireVsCodeApi = () => mockVsCodeApi;
   window.vscode = mockVsCodeApi;
 
-  // 3. 顯示器清單與串流管理
+  // ── Displays & stream management ─────────────────────────────────────────────
   async function refreshDisplays() {
     try {
-      const res = await fetch(`${getApiBase()}/displays`);
+      const res = await authorizedFetch("/displays");
       if (res.ok) {
         const displays = await res.json();
         window.postMessage({ type: "displays", displays, currentDisplayId }, "*");
@@ -213,14 +294,8 @@
   }
 
   function disconnectStream() {
-    if (activeMirrorWs) {
-      activeMirrorWs.close();
-      activeMirrorWs = null;
-    }
-    if (activeStreamAbort) {
-      activeStreamAbort.abort();
-      activeStreamAbort = null;
-    }
+    if (activeMirrorWs) { activeMirrorWs.close(); activeMirrorWs = null; }
+    if (activeStreamAbort) { activeStreamAbort.abort(); activeStreamAbort = null; }
   }
 
   async function connectStream(displayId) {
@@ -228,14 +303,14 @@
     window.postMessage({ type: "state", state: { status: "connecting", displayId } }, "*");
 
     if (currentMode === "mock") {
-      const abort = new AbortController();
-      activeStreamAbort = abort;
+      activeStreamAbort = new AbortController();
       window.postMessage({ type: "state", state: { status: "connected", displayId } }, "*");
       return;
     }
 
-    // 真機模式：直接連線 WebSocket H.264 (/mirror/h264/{displayId})
-    const wsUrl = getWsUrl(`/mirror/h264/${displayId}`);
+    // Device mode: WebSocket H.264 stream
+    let wsUrl = getWsUrl(`/mirror/h264/${displayId}`);
+    if (authToken) wsUrl += `${wsUrl.includes("?") ? "&" : "?"}token=${encodeURIComponent(authToken)}`;
     const ws = new WebSocket(wsUrl);
     ws.binaryType = "arraybuffer";
     activeMirrorWs = ws;
@@ -244,12 +319,9 @@
       if (activeMirrorWs !== ws) return;
       window.postMessage({ type: "state", state: { status: "connected", displayId } }, "*");
     };
-
     ws.onmessage = (event) => {
       if (activeMirrorWs !== ws) return;
-      const nalu = new Uint8Array(event.data);
-      window.postMessage({ type: "frame", data: nalu }, "*");
-
+      window.postMessage({ type: "frame", data: new Uint8Array(event.data) }, "*");
       frameCount++;
       if (frameCountEl) frameCountEl.textContent = frameCount;
       const now = performance.now();
@@ -260,22 +332,13 @@
         lastFrameTime = now;
       }
     };
-
-    ws.onerror = (e) => {
+    ws.onerror = () => {
       if (activeMirrorWs !== ws) return;
-      window.postMessage(
-        {
-          type: "state",
-          state: {
-            status: "error",
-            displayId,
-            message: "WebSocket 連線失敗（該顯示器未開啟鏡像畫面；實體螢幕需先啟動鏡像）",
-          },
-        },
-        "*"
-      );
+      window.postMessage({
+        type: "state",
+        state: { status: "error", displayId, message: "WebSocket 連線失敗（實體螢幕需先啟動鏡像）" }
+      }, "*");
     };
-
     ws.onclose = () => {
       if (activeMirrorWs !== ws) return;
       window.postMessage({ type: "state", state: { status: "disconnected", displayId } }, "*");
@@ -283,15 +346,11 @@
   }
 
   function connectWs() {
-    if (activeWs) {
-      activeWs.close();
-      activeWs = null;
-    }
+    if (activeWs) { activeWs.close(); activeWs = null; }
     try {
-      const ws = new WebSocket(getWsUrl());
+      const ws = new WebSocket(getWsUrl("/ws"));
       activeWs = ws;
       ws.onmessage = (event) => {
-        // Echo or StreamEvent
         try {
           const data = JSON.parse(event.data);
           window.postMessage({ type: "streamEvent", event: data }, "*");
@@ -311,8 +370,9 @@
     connectWs();
   }
 
-  function init() {
+  async function init() {
     initHarnessToolbar();
+    await loadConfig(); // sync UI from server config
     reconnect();
   }
 

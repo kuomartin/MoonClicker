@@ -9,6 +9,8 @@ import android.content.pm.ServiceInfo
 import android.net.ConnectivityManager
 import android.net.LinkProperties
 import android.net.Network
+import android.net.nsd.NsdManager
+import android.net.nsd.NsdServiceInfo
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
@@ -28,6 +30,8 @@ class WorkbenchService : Service() {
     lateinit var workbenchServer: WorkbenchServer
 
     private val connectivityManager by lazy { getSystemService<ConnectivityManager>() }
+    private val nsdManager by lazy { getSystemService<NsdManager>() }
+    private var registrationListener: NsdManager.RegistrationListener? = null
 
     // QR code（見 #56）顯示的位址要在切換網路（例如 WiFi 換一個）時跟著更新，不只是
     // server 剛啟動那一刻的快照。
@@ -50,6 +54,7 @@ class WorkbenchService : Service() {
         }
 
         connectivityManager?.registerDefaultNetworkCallback(networkCallback)
+        registerMdnsService()
 
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_menu_info_details)
@@ -58,9 +63,6 @@ class WorkbenchService : Service() {
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
 
-        // FOREGROUND_SERVICE_TYPE_SPECIAL_USE 是 API 34 才有的型別——用它不需要 connectedDevice
-        // 要求的藍牙/USB/NFC 類權限，這個 service 只是個 WiFi HTTP server，掛 connectedDevice
-        // 在真實裝置上會被系統以 SecurityException 直接拒絕啟動（見這次的 bug 回報）。
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             startForeground(
                 NOTIFICATION_ID,
@@ -75,8 +77,34 @@ class WorkbenchService : Service() {
 
     override fun onDestroy() {
         runCatching { connectivityManager?.unregisterNetworkCallback(networkCallback) }
+        unregisterMdnsService()
         workbenchServer.stop()
         super.onDestroy()
+    }
+
+    private fun registerMdnsService() {
+        val serviceInfo = NsdServiceInfo().apply {
+            serviceName = "ReLC (${Build.MODEL})"
+            serviceType = "_relc-workbench._tcp"
+            port = WorkbenchServer.PORT
+        }
+        val listener = object : NsdManager.RegistrationListener {
+            override fun onServiceRegistered(NsdServiceInfo: NsdServiceInfo) {}
+            override fun onRegistrationFailed(serviceInfo: NsdServiceInfo, errorCode: Int) {}
+            override fun onServiceUnregistered(arg0: NsdServiceInfo) {}
+            override fun onUnregistrationFailed(serviceInfo: NsdServiceInfo, errorCode: Int) {}
+        }
+        registrationListener = listener
+        runCatching {
+            nsdManager?.registerService(serviceInfo, NsdManager.PROTOCOL_DNS_SD, listener)
+        }
+    }
+
+    private fun unregisterMdnsService() {
+        registrationListener?.let { listener ->
+            runCatching { nsdManager?.unregisterService(listener) }
+            registrationListener = null
+        }
     }
 
     private fun createChannel() {

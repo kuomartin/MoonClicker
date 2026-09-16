@@ -43,8 +43,16 @@ The embedded Lua runtime that drives automation. A script is a **linear program*
 _Avoid_: Automation engine, macro engine, tick loop.
 
 **Script Workbench**:
-The embedded HTTP and WebSocket development server inside the ReLC app (`WorkbenchServer`, `WorkbenchService`) paired with the VS Code extension (`relc-script-workbench`). Enables local workspace detection (Single-Script or Monorepo), bidirectional script synchronization (Push/Pull), remote execution control, virtual display mirroring, template cropping, and real-time log/data streaming over the local network.
+The embedded HTTP and WebSocket development server inside the ReLC app (`WorkbenchServer`, `WorkbenchService`) paired with the VS Code extension (`relc-script-workbench`). Enables local workspace detection (Single-Script or Monorepo), bidirectional script synchronization (Push/Pull), remote execution control, virtual display mirroring, template cropping, and real-time log/data streaming over the local network. Protected by PIN-based [[Pairing Mode]] and Bearer [[Workbench Auth Token]].
 _Avoid_: Dev server, debugger backend, sync service.
+
+**Pairing Mode**:
+A temporary, user-initiated 5-minute security window on [[Script Workbench]] during which a randomized 6-digit PIN is displayed in the ReLC app. New clients (e.g. VS Code extension) must submit this PIN to obtain a long-lived [[Workbench Auth Token]]. Outside this window, pairing endpoints are closed and brute-force attempts are blocked.
+_Avoid_: Open server, permanent PIN, discovery mode.
+
+**Workbench Auth Token**:
+A cryptographically secure random token issued by [[Script Workbench]] upon successful PIN verification. Stored securely in VS Code's SecretStorage and sent with every HTTP request (`Authorization: Bearer <token>`) and WebSocket connection (`?token=<token>`). Can be revoked individually or globally from the ReLC Settings screen.
+_Avoid_: API key, session password.
 
 **Script Folder**:
 A script *is* a folder under the app's external private directory (`Android/data/com.xaxaxax.relc/files/scripts/<id>/`): `main.lua` plus an optional `script.json` and its template images. The id is the folder name. There is no in-app editor — the folder is edited from a file manager or a PC, which is why the path is external and visible rather than in `filesDir`.

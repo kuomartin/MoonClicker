@@ -62,9 +62,11 @@ export class WorkspaceTreeProvider implements vscode.TreeDataProvider<ReLCTreeIt
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
   
   private state: ConnectionState = { status: "disconnected" };
+  private token?: string;
 
-  updateState(state: ConnectionState) {
+  updateState(state: ConnectionState, token?: string) {
     this.state = state;
+    this.token = token;
     this.refresh();
   }
 
@@ -170,7 +172,7 @@ export class WorkspaceTreeProvider implements vscode.TreeDataProvider<ReLCTreeIt
   private async getRemoteScripts(): Promise<RemoteScriptItem[]> {
     if (this.state.status !== "connected") return [];
     try {
-      const scripts = await listScripts(this.state.address);
+      const scripts = await listScripts(this.state.address, this.token);
       return scripts.map(s => new RemoteScriptItem(s));
     } catch {
       return [];

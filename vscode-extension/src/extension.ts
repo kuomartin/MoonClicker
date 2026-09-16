@@ -7,13 +7,17 @@ import { listDisplays, toggleDisplayMirror, type DisplaySummary } from "./displa
 import { listScripts, pullScript, pushScript, runScript } from "./scriptSync";
 import { disposeMirrorPanel, openMirrorPanel, postStreamEventToMirror } from "./mirrorPanel";
 import { WorkspaceTreeProvider, LocalScriptItem, RemoteScriptItem } from "./treeViews";
+import { startMdnsDaemon, getCachedDevices, mdnsEvents, checkDeviceHealth, refreshMdns } from "./mdnsDiscovery";
+import { pairWithPin } from "./authSync";
 
 let connection: WorkbenchConnection | undefined;
 let statusBarItem: vscode.StatusBarItem | undefined;
 let extensionContext: vscode.ExtensionContext | undefined;
 let workspaceProvider: WorkspaceTreeProvider;
+let activeToken: string | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
+  startMdnsDaemon();
   extensionContext = context;
   connection = new WorkbenchConnection();
   statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
@@ -36,7 +40,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   connection.onDidChangeState((state) => {
     renderStatusBar(state);
-    workspaceProvider.updateState(state);
+    workspaceProvider.updateState(state, activeToken);
     if (state.status === "error") {
       vscode.window.showErrorMessage(`ReLC: 連線到 ${state.address} 失敗——${state.message}`);
     }
@@ -79,19 +83,133 @@ export function deactivate(): void {
 
 function insertRunDivider(): void {
   const divider = `--- Run triggered at ${new Date().toLocaleTimeString()} ---`;
-  // logChannel is local to activate(), let's just use postStreamEventToMirror for UI
   postStreamEventToMirror({ case: "log", value: divider });
 }
 
+interface ConnectItem extends vscode.QuickPickItem {
+  address?: string;
+  isManual?: boolean;
+}
+
 async function connectCommand(): Promise<void> {
-  const address = await vscode.window.showInputBox({
-    prompt: "裝置的 IP:port（見裝置端 Settings > Script Workbench 的 QR code）",
-    placeHolder: "192.168.1.23:8787",
-    validateInput: (value) =>
-      /^[^\s:]+:\d+$/.test(value) ? undefined : "格式需要是 ip:port",
+  if (!extensionContext) return;
+
+  const quickPick = vscode.window.createQuickPick<ConnectItem>();
+  quickPick.title = "ReLC: 搜尋區網內的裝置...";
+  quickPick.placeholder = "選擇要連線的 ReLC 裝置";
+  quickPick.busy = true;
+
+  const baseItems: ConnectItem[] = [
+    {
+      label: "$(edit) 手動輸入 IP:port",
+      description: "自行輸入裝置位址",
+      isManual: true,
+    }
+  ];
+
+  const updateItems = async () => {
+    const devices = getCachedDevices();
+    let currentItems: ConnectItem[] = [...baseItems];
+    
+    // Optimistic render
+    devices.forEach(dev => {
+      currentItems.push({
+        label: `$(circle-outline) ${dev.name}`,
+        description: dev.address,
+        detail: "Checking status...",
+        address: dev.address,
+      });
+    });
+    quickPick.items = currentItems;
+
+    // Async health checks
+    for (const dev of devices) {
+      checkDeviceHealth(dev.ip, dev.port).then((isOnline) => {
+        // Update specific item
+        const items = [...quickPick.items];
+        const idx = items.findIndex(i => i.address === dev.address);
+        if (idx !== -1) {
+          items[idx] = {
+            ...items[idx],
+            label: isOnline ? `$(pass-filled) ${dev.name}` : `$(circle-outline) ${dev.name}`,
+            detail: isOnline ? "mDNS 自動發現的裝置" : "(Offline / Cached)",
+          };
+          quickPick.items = items;
+        }
+      });
+    }
+  };
+
+  const listener = () => updateItems();
+  mdnsEvents.on("deviceAdded", listener);
+
+  quickPick.onDidHide(() => {
+    mdnsEvents.off("deviceAdded", listener);
+    quickPick.dispose();
   });
-  if (!address) return;
-  connection?.connect(address);
+
+  quickPick.onDidAccept(async () => {
+    const picked = quickPick.selectedItems[0];
+    if (!picked) return;
+    
+    quickPick.hide();
+    
+    let address: string | undefined;
+    if (picked.isManual) {
+      address = await vscode.window.showInputBox({
+        prompt: "裝置的 IP:port（見裝置端 Settings > Script Workbench）",
+        placeHolder: "192.168.1.23:8787",
+        validateInput: (value) =>
+          /^[^\s:]+:\d+$/.test(value) ? undefined : "格式需要是 ip:port",
+      });
+    } else {
+      address = picked.address;
+    }
+
+    if (!address) return;
+
+    const secretKey = `relc_token_${address}`;
+    let token = await extensionContext!.secrets.get(secretKey);
+
+    let authenticated = false;
+    if (token) {
+      try {
+        await listDisplays(address, token);
+        authenticated = true;
+      } catch {
+        authenticated = false;
+      }
+    }
+
+    if (!authenticated) {
+      const pin = await vscode.window.showInputBox({
+        prompt: `連線至 ${address} 需要驗證，請輸入 Android 裝置畫面上顯示的 6 位數 PIN 碼（若未開啟，請先在手機端開啟配對模式）`,
+        placeHolder: "123456",
+        password: true,
+        validateInput: (val) => (/^\d{6}$/.test(val) ? undefined : "PIN 碼格式需要是 6 位數字"),
+      });
+
+      if (!pin) return;
+
+      try {
+        token = await pairWithPin(address, pin);
+        await extensionContext!.secrets.store(secretKey, token);
+        vscode.window.showInformationMessage(`ReLC: 連線至 ${address} 配對成功！已儲存憑證。`);
+      } catch (err) {
+        vscode.window.showErrorMessage(`ReLC 配對失敗: ${(err as Error).message}`);
+        return;
+      }
+    }
+
+    activeToken = token;
+    connection?.connect(address, token);
+  });
+
+  updateItems();
+  refreshMdns();
+  quickPick.show();
+  
+  setTimeout(() => { quickPick.busy = false; }, 2000);
 }
 
 function connectedAddress(): string | undefined {
@@ -104,7 +222,7 @@ function connectedAddress(): string | undefined {
 }
 
 async function pickScript(address: string): Promise<string | undefined> {
-  const scripts = await listScripts(address);
+  const scripts = await listScripts(address, activeToken);
   if (scripts.length === 0) {
     vscode.window.showInformationMessage("ReLC: 裝置上還沒有任何腳本");
     return undefined;
@@ -129,7 +247,7 @@ async function pullCommand(): Promise<void> {
     });
     const destDir = folders?.[0]?.fsPath;
     if (!destDir) return;
-    await pullScript(address, id, destDir);
+    await pullScript(address, id, destDir, activeToken);
     ensureLuarcConfigured(destDir);
     vscode.window.showInformationMessage(`ReLC: 已把「${id}」同步到 ${destDir}`);
   } catch (err) {
@@ -150,7 +268,7 @@ async function pullRemoteCommand(item?: RemoteScriptItem): Promise<void> {
     });
     const destDir = folders?.[0]?.fsPath;
     if (!destDir) return;
-    await pullScript(address, id, destDir);
+    await pullScript(address, id, destDir, activeToken);
     ensureLuarcConfigured(destDir);
     vscode.window.showInformationMessage(`ReLC: 已把「${id}」同步到 ${destDir}`);
   } catch (err) {
@@ -175,7 +293,6 @@ async function getLocalScriptTarget(item?: LocalScriptItem): Promise<{ id: strin
     return { id, path: root };
   }
 
-  // Pick from monorepo
   const children = fs.readdirSync(root, { withFileTypes: true });
   const options = children
     .filter(c => c.isDirectory() && fs.existsSync(path.join(root, c.name, "main.lua")))
@@ -215,7 +332,7 @@ async function pushCommand(item?: LocalScriptItem): Promise<void> {
   
   try {
     const id = await ensureScriptJson(target.path, target.id);
-    await pushScript(address, id, target.path);
+    await pushScript(address, id, target.path, activeToken);
     vscode.window.showInformationMessage(`ReLC: 已把目前專案推送到裝置的「${id}」`);
     workspaceProvider.refresh();
   } catch (err) {
@@ -231,9 +348,9 @@ async function pushAndRunCommand(item?: LocalScriptItem): Promise<void> {
   
   try {
     const id = await ensureScriptJson(target.path, target.id);
-    await pushScript(address, id, target.path);
+    await pushScript(address, id, target.path, activeToken);
     insertRunDivider();
-    await runScript(address, id);
+    await runScript(address, id, activeToken);
     vscode.window.showInformationMessage(`ReLC: 已推送並執行「${id}」`);
     workspaceProvider.refresh();
   } catch (err) {
@@ -249,7 +366,7 @@ async function runCommand(): Promise<void> {
   
   try {
     insertRunDivider();
-    await runScript(address, target.id);
+    await runScript(address, target.id, activeToken);
     vscode.window.showInformationMessage(`ReLC: 已在裝置上觸發「${target.id}」執行`);
   } catch (err) {
     vscode.window.showErrorMessage(`ReLC: ${(err as Error).message}`);
@@ -293,7 +410,7 @@ async function renameScriptCommand(item?: LocalScriptItem): Promise<void> {
   }
 }
 
-async function setupStubsCommand(item?: LocalScriptItem): Promise<void> {
+async function setupStubsCommand(): Promise<void> {
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
   if (!workspaceFolder) {
     vscode.window.showErrorMessage("ReLC: 請先開啟專案資料夾");
@@ -316,7 +433,7 @@ async function runRemoteCommand(item?: RemoteScriptItem): Promise<void> {
     const id = item?.summary.id || await pickScript(address);
     if (!id) return;
     insertRunDivider();
-    await runScript(address, id);
+    await runScript(address, id, activeToken);
     vscode.window.showInformationMessage(`ReLC: 已在裝置上觸發「${id}」執行`);
   } catch (err) {
     vscode.window.showErrorMessage(`ReLC: ${(err as Error).message}`);
@@ -346,7 +463,7 @@ async function openMirrorCommand(): Promise<void> {
   if (!address) return;
   
   try {
-    const displays = await listDisplays(address);
+    const displays = await listDisplays(address, activeToken);
     
     if (displays.length === 0) {
       vscode.window.showErrorMessage("ReLC: 裝置上沒有可用的 display");
@@ -387,7 +504,7 @@ async function openMirrorCommand(): Promise<void> {
       if (!choice) return;
       if (choice === "啟動鏡像") {
         try {
-          await toggleDisplayMirror(address, displayId, true);
+          await toggleDisplayMirror(address, displayId, true, activeToken);
           vscode.window.showInformationMessage(`ReLC: 實體螢幕 (Display ${displayId}) 鏡像管線已啟動`);
         } catch (e) {
           vscode.window.showErrorMessage(`ReLC: 啟動鏡像失敗: ${(e as Error).message}`);
@@ -395,17 +512,16 @@ async function openMirrorCommand(): Promise<void> {
       }
     }
     if (extensionContext) {
-      openMirrorPanel(extensionContext.extensionUri, address, displayId);
+      openMirrorPanel(extensionContext.extensionUri, address, displayId, activeToken);
     }
   } catch (err) {
-    // Fallback to manual entry if /displays fails
     const input = await vscode.window.showInputBox({
       prompt: "要鏡像哪個 displayId？",
       value: "0",
       validateInput: (value) => (/^\d+$/.test(value) ? undefined : "displayId 需要是非負整數"),
     });
     if (input === undefined || !extensionContext) return;
-    openMirrorPanel(extensionContext.extensionUri, address, Number(input));
+    openMirrorPanel(extensionContext.extensionUri, address, Number(input), activeToken);
   }
 }
 
@@ -414,7 +530,7 @@ async function toggleMirrorCommand(): Promise<void> {
   if (!address) return;
 
   try {
-    const displays = await listDisplays(address);
+    const displays = await listDisplays(address, activeToken);
     const target = displays.find(d => !d.isVirtual) || displays[0];
     if (!target) {
       vscode.window.showErrorMessage("ReLC: 裝置上沒有找到顯示器");
@@ -436,7 +552,7 @@ async function toggleMirrorCommand(): Promise<void> {
     }
 
     const nextState = !targetDisplay.isMirrorActive;
-    await toggleDisplayMirror(address, targetDisplay.id, nextState);
+    await toggleDisplayMirror(address, targetDisplay.id, nextState, activeToken);
     vscode.window.showInformationMessage(
       `ReLC: 顯示器 ${targetDisplay.id} (${targetDisplay.name}) 鏡像已${nextState ? "開啟" : "關閉"}`
     );
@@ -454,11 +570,11 @@ function renderStatusBar(state: ConnectionState): void {
       break;
     case "connecting":
       statusBarItem.text = `$(sync~spin) ReLC: 連線中 ${state.address}`;
-      statusBarItem.command = undefined; // Don't disconnect on click when connecting
+      statusBarItem.command = undefined;
       break;
     case "connected":
       statusBarItem.text = `$(check) ReLC: 已連線 ${state.address}`;
-      statusBarItem.command = undefined; // Don't disconnect on click when connected
+      statusBarItem.command = undefined;
       break;
     case "error":
       statusBarItem.text = `$(error) ReLC: 連線失敗`;

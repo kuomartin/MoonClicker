@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ReLC — mDNS Device Discovery</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #1e1e1e;
+      color: #d4d4d4;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      background: #181818;
+      border-bottom: 2px solid #0e639c;
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    header .badge {
+      background: #0e639c;
+      color: #fff;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-weight: bold;
+      font-size: 12px;
+    }
+    header h1 { font-size: 15px; font-weight: 500; color: #ccc; }
+    header a {
+      margin-left: auto;
+      color: #4ec9b0;
+      font-size: 12px;
+      text-decoration: none;
+    }
+    header a:hover { text-decoration: underline; }
+
+    main {
+      flex: 1;
+      padding: 32px 40px;
+      max-width: 800px;
+      width: 100%;
+      margin: 0 auto;
+    }
+
+    .scan-row {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+
+    button.primary {
+      background: #0e639c;
+      color: #fff;
+      border: none;
+      padding: 8px 20px;
+      border-radius: 4px;
+      font-size: 13px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: background 0.15s;
+    }
+    button.primary:hover { background: #1177bb; }
+    button.primary:disabled { background: #444; cursor: default; }
+
+    #scanStatus {
+      font-size: 13px;
+      color: #888;
+    }
+
+    /* Spinner */
+    .spinner {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid #fff3;
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Device cards */
+    #deviceList {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .device-card {
+      background: #252526;
+      border: 1px solid #3c3c3c;
+      border-radius: 6px;
+      padding: 16px 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .device-card:hover {
+      border-color: #0e639c;
+      background: #2a2d2e;
+    }
+
+    .device-icon {
+      font-size: 28px;
+      flex-shrink: 0;
+    }
+
+    .device-info { flex: 1; }
+    .device-name { font-size: 14px; font-weight: 600; color: #e0e0e0; margin-bottom: 4px; }
+    .device-addr { font-size: 12px; font-family: monospace; color: #4ec9b0; }
+
+    .device-action {
+      background: #0e639c;
+      color: #fff;
+      border: none;
+      padding: 6px 14px;
+      border-radius: 4px;
+      font-size: 12px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .device-action:hover { background: #1177bb; }
+
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: #666;
+    }
+    .empty-state .icon { font-size: 48px; margin-bottom: 16px; }
+    .empty-state p { font-size: 14px; line-height: 1.6; }
+
+    .error-msg {
+      color: #f48771;
+      font-size: 13px;
+      padding: 12px;
+      background: #3d1a1a;
+      border-radius: 4px;
+      border: 1px solid #6e2c2c;
+    }
+
+    .service-label {
+      font-size: 11px;
+      color: #666;
+      margin-bottom: 12px;
+      font-family: monospace;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <span class="badge">ReLC LLM Test Harness</span>
+    <h1>🔍 mDNS Device Discovery</h1>
+    <a href="/__dev__">← 返回 Mirror Harness</a>
+  </header>
+
+  <main>
+    <div class="scan-row">
+      <button class="primary" id="scanBtn">
+        <span id="scanBtnIcon">📡</span>
+        <span id="scanBtnText">開始掃描 (Scan)</span>
+      </button>
+      <span id="scanStatus">尚未掃描</span>
+    </div>
+
+    <div class="service-label">Service: _relc-workbench._tcp.local. &nbsp;|&nbsp; Timeout: 2 s</div>
+
+    <div id="deviceList">
+      <div class="empty-state">
+        <div class="icon">📱</div>
+        <p>點擊「開始掃描」搜尋區網上的 ReLC 裝置<br/>
+        （需要裝置已開啟 Workbench Server）</p>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const scanBtn     = document.getElementById("scanBtn");
+    const scanBtnIcon = document.getElementById("scanBtnIcon");
+    const scanBtnText = document.getElementById("scanBtnText");
+    const scanStatus  = document.getElementById("scanStatus");
+    const deviceList  = document.getElementById("deviceList");
+
+    function renderDevices(devices) {
+      if (!devices || devices.length === 0) {
+        deviceList.innerHTML = `
+          <div class="empty-state">
+            <div class="icon">🔇</div>
+            <p>未發現任何 ReLC 裝置<br/>
+            請確認裝置已開啟 Workbench Server 且在同一區網</p>
+          </div>`;
+        return;
+      }
+
+      deviceList.innerHTML = "";
+      for (const d of devices) {
+        const card = document.createElement("div");
+        card.className = "device-card";
+        card.innerHTML = `
+          <div class="device-icon">📱</div>
+          <div class="device-info">
+            <div class="device-name">${escapeHtml(d.name)}</div>
+            <div class="device-addr">${escapeHtml(d.host)}:${d.port}</div>
+          </div>
+          <button class="device-action">連線使用</button>`;
+
+        card.querySelector("button").addEventListener("click", (e) => {
+          e.stopPropagation();
+          connectDevice(d);
+        });
+        card.addEventListener("click", () => connectDevice(d));
+        deviceList.appendChild(card);
+      }
+    }
+
+    function renderError(msg) {
+      deviceList.innerHTML = `<div class="error-msg">❌ 掃描失敗：${escapeHtml(msg)}</div>`;
+    }
+
+    async function doScan() {
+      scanBtn.disabled = true;
+      scanBtnIcon.innerHTML = `<span class="spinner"></span>`;
+      scanBtnText.textContent = "掃描中… (2 s)";
+      scanStatus.textContent = "正在發送 mDNS 查詢…";
+
+      try {
+        const res = await fetch("/__dev__/mdns/scan");
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const devices = await res.json();
+        if (devices.error) throw new Error(devices.error);
+        const count = Array.isArray(devices) ? devices.length : 0;
+        scanStatus.textContent = `找到 ${count} 台裝置（${new Date().toLocaleTimeString()}）`;
+        renderDevices(devices);
+      } catch (e) {
+        scanStatus.textContent = "掃描失敗";
+        renderError(e.message);
+      } finally {
+        scanBtn.disabled = false;
+        scanBtnIcon.textContent = "📡";
+        scanBtnText.textContent = "重新掃描";
+      }
+    }
+
+    async function connectDevice(device) {
+      const target = `${device.host}:${device.port}`;
+      // Update server config to device mode with this target
+      try {
+        await fetch("/__dev__/config", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mode: "device", target })
+        });
+      } catch { /* ignore, still navigate */ }
+      window.location.href = `/__dev__?target=${encodeURIComponent(target)}`;
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    scanBtn.addEventListener("click", doScan);
+  </script>
+</body>
+</html>

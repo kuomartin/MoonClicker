@@ -99,6 +99,10 @@ fun SettingsScreen(
         onStartUserService = viewModel::startUserService,
         onStopUserService = viewModel::stopUserService,
         onRestartUserService = viewModel::restartUserService,
+        onStartPairingMode = viewModel::startPairingMode,
+        onStopPairingMode = viewModel::stopPairingMode,
+        onSetBruteForceProtection = viewModel::setBruteForceProtectionEnabled,
+        onRevokeAllTokens = viewModel::revokeAllTokens,
     )
 }
 
@@ -115,6 +119,10 @@ private fun SettingsScreenContent(
     onStartUserService: () -> Unit = {},
     onStopUserService: () -> Unit = {},
     onRestartUserService: () -> Unit = {},
+    onStartPairingMode: () -> Unit = {},
+    onStopPairingMode: () -> Unit = {},
+    onSetBruteForceProtection: (Boolean) -> Unit = {},
+    onRevokeAllTokens: () -> Unit = {},
 ) {
     // 關閉與重啟都會連帶銷毀虛擬顯示，值得先問一句。
     var pendingAction by remember { mutableStateOf<UserServiceAction?>(null) }
@@ -138,12 +146,12 @@ private fun SettingsScreenContent(
                 .fillMaxSize()
                 .padding(innerPadding),
             indicator = {
-                PullToRefreshDefaults.LoadingIndicator(
+                PullToRefreshDefaults.Indicator(
                     state = pullRefreshState,
                     isRefreshing = uiState.isRefreshing,
                     modifier = Modifier.align(Alignment.TopCenter),
                 )
-            }
+            },
         ) {
             LazyColumn(
                 modifier = Modifier
@@ -224,6 +232,13 @@ private fun SettingsScreenContent(
                         )
                         if (uiState.workbenchEnabled) {
                             WorkbenchQrCode(address = uiState.workbenchAddress)
+                            WorkbenchPairingSection(
+                                uiState = uiState,
+                                onStartPairingMode = onStartPairingMode,
+                                onStopPairingMode = onStopPairingMode,
+                                onSetBruteForceProtection = onSetBruteForceProtection,
+                                onRevokeAllTokens = onRevokeAllTokens,
+                            )
                         }
                     }
                 }
@@ -435,6 +450,97 @@ private fun WorkbenchQrCode(address: String?) {
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+    }
+}
+
+@Composable
+private fun WorkbenchPairingSection(
+    uiState: SettingsUiState,
+    onStartPairingMode: () -> Unit,
+    onStopPairingMode: () -> Unit,
+    onSetBruteForceProtection: (Boolean) -> Unit,
+    onRevokeAllTokens: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+    ) {
+        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = "裝置配對 (PIN Pairing)", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    text = if (uiState.isPairingActive) "配對模式開啟中 (PIN 碼 5 分鐘內有效)" else "預設關閉，點擊開啟 5 分鐘配對視窗",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            if (uiState.isPairingActive) {
+                OutlinedButton(onClick = onStopPairingMode) {
+                    Text("關閉配對")
+                }
+            } else {
+                Button(onClick = onStartPairingMode) {
+                    Text("開啟配對模式")
+                }
+            }
+        }
+
+        if (uiState.isPairingActive && uiState.pairingPin != null) {
+            ElevatedCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(text = "請在 VS Code 連線視窗輸入 PIN 碼", style = MaterialTheme.typography.labelMedium)
+                    Text(
+                        text = uiState.pairingPin,
+                        style = MaterialTheme.typography.displayMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(vertical = 4.dp),
+                    )
+                }
+            }
+        }
+
+        ToggleSettingItem(
+            name = "防爆破鎖定",
+            description = "連續錯 3 次 PIN 碼即鎖定 60 秒並自動關閉配對模式",
+            checked = uiState.bruteForceProtectionEnabled,
+            onCheckedChange = onSetBruteForceProtection,
+        )
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "已配對裝置憑證 (${uiState.authorizedTokensCount})",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            TextButton(
+                onClick = onRevokeAllTokens,
+                enabled = uiState.authorizedTokensCount > 0,
+            ) {
+                Text("清除所有憑證")
+            }
         }
     }
 }
