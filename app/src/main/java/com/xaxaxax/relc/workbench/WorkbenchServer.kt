@@ -124,6 +124,18 @@ class WorkbenchServer @Inject constructor(
     private val displaySource = object : DisplaySource {
         override fun getDisplays(): List<WorkbenchDisplaySummary>? {
             val service = shizukuManager.service ?: return null
+            val displayInfos = runCatching { service.displayInfos.toList() }.getOrNull()
+            if (displayInfos != null) {
+                return displayInfos.map { info ->
+                    WorkbenchDisplaySummary(
+                        id = info.displayId,
+                        name = info.name ?: if (info.isPhysical) "Physical Display" else "Virtual Display ${info.displayId}",
+                        width = info.width,
+                        height = info.height,
+                        isVirtual = !info.isPhysical
+                    )
+                }
+            }
             val displayIds = mutableListOf(0)
             displayIds.addAll(service.virtualDisplays.toList())
             return displayIds.mapNotNull { id ->
@@ -215,8 +227,10 @@ fun Application.workbenchModule(
     scriptRunner: ScriptRunner,
     scriptStream: ScriptStream,
     frameSource: FrameSource,
-    displaySource: DisplaySource,
-    shizukuManager: ShizukuManager,
+    displaySource: DisplaySource = object : DisplaySource {
+        override fun getDisplays(): List<WorkbenchDisplaySummary> = emptyList()
+    },
+    shizukuManager: ShizukuManager? = null,
 ) {
     install(WebSockets)
     install(CORS) {
@@ -376,7 +390,7 @@ fun Application.workbenchModule(
                 return@webSocket
             }
 
-            val service = shizukuManager.service
+            val service = shizukuManager?.service
             if (service == null) {
                 close(CloseReason(CloseReason.Codes.INTERNAL_ERROR, "Service not connected"))
                 return@webSocket

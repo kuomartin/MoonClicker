@@ -123,6 +123,7 @@ fun DisplaysScreen(
         onPullRefresh = { viewModel.refreshDisplays(true) },
         onShizukuAction = { viewModel.onShizukuAction() },
         onDestroyDisplay = { viewModel.destroyDisplay(it) },
+        onToggleMirror = { displayId, enable -> viewModel.toggleMirror(displayId, enable) },
         onCreateDisplay = { width, height, densityDpi ->
             viewModel.createDisplay(
                 viewModel.defaultConfig.copy(width = width, height = height, densityDpi = densityDpi)
@@ -151,6 +152,7 @@ internal fun DisplaysScreenContent(
     onPullRefresh: () -> Unit,
     onShizukuAction: () -> Unit,
     onDestroyDisplay: (Int) -> Unit,
+    onToggleMirror: (Int, Boolean) -> Unit,
     onCreateDisplay: (width: Int, height: Int, densityDpi: Int) -> Unit,
     onFabClick: () -> Unit,
 ) {
@@ -246,6 +248,7 @@ internal fun DisplaysScreenContent(
                             info = info,
                             onEnter = { onNavigateToDetail(info.displayId.toString()) },
                             onClose = { onDestroyDisplay(info.displayId) },
+                            onToggleMirror = { enable -> onToggleMirror(info.displayId, enable) },
                         )
                     }
                 }
@@ -262,6 +265,7 @@ private fun PreviewDisplaysScreen() {
         DisplaysScreenContent(
             uiState = DisplaysUiState(
                 displays = listOf(
+                    DisplayCardInfo(displayId = 0, name = "Built-in Screen", width = 1080, height = 2400, densityDpi = 420, isPhysical = true, isMirrorActive = false),
                     DisplayCardInfo(displayId = 1, width = 1080, height = 1920, densityDpi = 320),
                     DisplayCardInfo(displayId = 42, width = 1280, height = 720, densityDpi = 240),
                 ),
@@ -274,6 +278,7 @@ private fun PreviewDisplaysScreen() {
             onPullRefresh = {},
             onShizukuAction = {},
             onDestroyDisplay = {},
+            onToggleMirror = { _, _ -> },
             onCreateDisplay = { _, _, _ -> },
             onFabClick = {},
         )
@@ -286,6 +291,7 @@ private fun DisplayCard(
     info: DisplayCardInfo,
     onEnter: () -> Unit,
     onClose: () -> Unit,
+    onToggleMirror: (Boolean) -> Unit,
 ) {
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
@@ -300,7 +306,8 @@ private fun DisplayCard(
                     .fillMaxWidth()
                     .height(100.dp)
                     .clip(MaterialTheme.shapes.medium)
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = Alignment.Center,
             ) {
                 if (info.thumbnail != null) {
                     Image(
@@ -309,10 +316,16 @@ private fun DisplayCard(
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize(),
                     )
+                } else if (info.isPhysical && !info.isMirrorActive) {
+                    Text(
+                        text = "鏡像未開啟",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
             Text(
-                text = "Display #${info.displayId}",
+                text = if (info.isPhysical) "Physical #${info.displayId}" else "Display #${info.displayId}",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(top = 8.dp),
@@ -322,33 +335,68 @@ private fun DisplayCard(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            // 目前清單只來自 relcV2Service 自己建立的 virtual display，所以恆為管轄中；
-            // 之後若改成列出裝置上所有 Display，這裡才需要真的判斷歸屬。
             AssistChip(
                 onClick = {},
                 enabled = false,
-                label = { Text("relcV2Service 管轄") },
+                label = {
+                    Text(
+                        if (info.isPhysical) {
+                            if (info.isMirrorActive) "實體螢幕 (鏡像運作中)" else "實體螢幕"
+                        } else {
+                            "relcV2Service 管轄"
+                        }
+                    )
+                },
                 modifier = Modifier.padding(top = 8.dp)
             )
 
             Box(modifier = Modifier.padding(top = 12.dp).fillMaxWidth()) {
                 Column {
-                    OutlinedButton(
-                        onClick = onClose,
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = MaterialTheme.colorScheme.error
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Close")
-                    }
-                    Button(
-                        onClick = onEnter,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 8.dp)
-                    ) {
-                        Text("Enter")
+                    if (info.isPhysical) {
+                        if (info.isMirrorActive) {
+                            OutlinedButton(
+                                onClick = { onToggleMirror(false) },
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = MaterialTheme.colorScheme.error
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("關閉鏡像")
+                            }
+                            Button(
+                                onClick = onEnter,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 8.dp)
+                            ) {
+                                Text("Enter")
+                            }
+                        } else {
+                            Button(
+                                onClick = { onToggleMirror(true) },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("開啟鏡像")
+                            }
+                        }
+                    } else {
+                        OutlinedButton(
+                            onClick = onClose,
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Close")
+                        }
+                        Button(
+                            onClick = onEnter,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 8.dp)
+                        ) {
+                            Text("Enter")
+                        }
                     }
                 }
             }
