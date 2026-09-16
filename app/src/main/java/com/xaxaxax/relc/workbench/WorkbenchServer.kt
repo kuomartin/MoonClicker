@@ -12,13 +12,16 @@ import com.xaxaxax.relc.shizuku.ShizukuManager
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
+import io.ktor.server.application.ApplicationCallPipeline
 import io.ktor.server.application.call
 import io.ktor.server.application.install
 import io.ktor.server.plugins.cors.routing.CORS
 import io.ktor.server.cio.CIO
 import io.ktor.server.engine.EmbeddedServer
 import io.ktor.server.engine.embeddedServer
+import io.ktor.server.request.path
 import io.ktor.server.request.receiveStream
+import io.ktor.server.request.receiveText
 import io.ktor.server.response.respondBytes
 import io.ktor.server.response.respondBytesWriter
 import io.ktor.server.response.respondText
@@ -118,6 +121,7 @@ class WorkbenchServer @Inject constructor(
     private val scriptSession: ScriptSession,
     private val frameSource: FrameSource,
     private val shizukuManager: ShizukuManager,
+    val authStore: WorkbenchAuthStore,
 ) {
     private val scriptRunner = object : ScriptRunner {
         override fun isRunning() = scriptSession.state.value.isRunning
@@ -190,7 +194,7 @@ class WorkbenchServer @Inject constructor(
                 CIO,
                 port = PORT,
                 host = host,
-                module = { workbenchModule(scriptsRoot, scriptRunner, scriptStream, frameSource, displaySource, shizukuManager) },
+                module = { workbenchModule(scriptsRoot, scriptRunner, scriptStream, frameSource, displaySource, shizukuManager, authStore) },
             ).start(wait = false)
             _address.value = "${localIpv4Address()}:$PORT" // UI 顯示仍保留實際區網 IP 供參考
             true
@@ -236,6 +240,12 @@ class WorkbenchServer @Inject constructor(
 @Serializable
 data class WorkbenchScriptSummary(val id: String, val name: String)
 
+@Serializable
+data class PairRequest(val pin: String = "")
+
+@Serializable
+data class PairResponse(val token: String)
+
 /**
  * [scriptsRoot] 拆成參數而不是內部自己算，是為了比照 [ScriptStore.scan] 的作法，讓
  * `WorkbenchServerTest` 能直接餵一個暫存目錄進來，不需要 Hilt 或真的 Android Context。
@@ -249,14 +259,69 @@ fun Application.workbenchModule(
         override fun getDisplays(): List<WorkbenchDisplaySummary> = emptyList()
     },
     shizukuManager: ShizukuManager? = null,
+    authStore: WorkbenchAuthStore? = null,
 ) {
     install(WebSockets)
     install(CORS) {
         anyHost()
     }
+
+    if (authStore != null) {
+        intercept(ApplicationCallPipeline.Plugins) {
+            val path = call.request.path()
+            if (path != "/pair" && path != "/health") {
+                val authHeader = call.request.headers["Authorization"]
+                val tokenFromHeader = if (authHeader != null && authHeader.startsWith("Bearer ")) {
+                    authHeader.removePrefix("Bearer ").trim()
+                } else {
+                    authHeader
+                }
+                val tokenFromQuery = call.request.queryParameters["token"]
+                val token = tokenFromHeader ?: tokenFromQuery
+
+                if (!authStore.isValidToken(token)) {
+                    call.respondText("Unauthorized", status = HttpStatusCode.Unauthorized)
+                    finish()
+                }
+            }
+        }
+    }
+
     routing {
         get("/health") {
             call.respondText("OK")
+        }
+
+        post("/pair") {
+            if (authStore == null) {
+                call.respondText("Pairing unsupported", status = HttpStatusCode.NotImplemented)
+                return@post
+            }
+            val pin = runCatching { call.receiveText() }.getOrNull()?.let { body ->
+                runCatching { Json.decodeFromString<PairRequest>(body).pin }.getOrNull()
+            } ?: call.request.queryParameters["pin"] ?: ""
+
+            when (val result = authStore.pairWithPin(pin)) {
+                is PairResult.Success -> {
+                    call.respondText(
+                        Json.encodeToString(PairResponse(result.token)),
+                        ContentType.Application.Json,
+                        HttpStatusCode.OK
+                    )
+                }
+                is PairResult.InvalidPin -> {
+                    call.respondText("Invalid PIN", status = HttpStatusCode.Unauthorized)
+                }
+                is PairResult.LockedOut -> {
+                    call.respondText(
+                        "Too many failed attempts. Try again in ${result.retryAfterSeconds} seconds.",
+                        status = HttpStatusCode.TooManyRequests
+                    )
+                }
+                is PairResult.PairingModeInactive -> {
+                    call.respondText("Pairing mode is not active", status = HttpStatusCode.Forbidden)
+                }
+            }
         }
 
         get("/displays") {
