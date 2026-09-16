@@ -33,8 +33,10 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.MotionEventHidden
 import android.view.Surface
+import android.util.DisplayMetrics
 import androidx.annotation.Keep
 import androidx.core.content.getSystemService
+import com.xaxaxax.relc.RelcDisplayInfo
 import com.xaxaxax.relc.script.DisplayGeometry
 import dev.rikka.tools.refine.Refine
 import kotlinx.coroutines.CoroutineScope
@@ -160,6 +162,8 @@ class RelcV2Service @JvmOverloads constructor(
 
     private val vdStore = mutableMapOf<Int, ManagedDisplay>()
     private val distributorStore = mutableMapOf<Int, Long>() // displayId -> nativePtr
+    private val mirrorRefCounts = mutableMapOf<Int, Int>() // physicalDisplayId -> refCount
+    private val mirrorDisplayMap = mutableMapOf<Int, Int>() // physicalDisplayId -> mirrorVirtualDisplayId
     private val fakeDisplayContext = object : ContextWrapper(context) {
         override fun getPackageName(): String = callerPackage
         override fun getOpPackageName(): String = callerPackage
@@ -391,7 +395,106 @@ class RelcV2Service @JvmOverloads constructor(
         }
     }
 
-    override fun getVirtualDisplays(): IntArray = vdStore.keys.sorted().toIntArray()
+    override fun getVirtualDisplays(): IntArray {
+        val internalMirrorVdIds = mirrorDisplayMap.values.toSet()
+        return vdStore.keys.filter { it !in internalMirrorVdIds }.sorted().toIntArray()
+    }
+
+    @Synchronized
+    override fun acquireDisplayMirror(displayId: Int): Boolean {
+        val current = mirrorRefCounts[displayId] ?: 0
+        if (current > 0 && mirrorDisplayMap.containsKey(displayId)) {
+            mirrorRefCounts[displayId] = current + 1
+            Timber.d("acquireDisplayMirror: display $displayId refCount incremented to ${current + 1}")
+            return true
+        }
+
+        val ok = createMirrorInternal(displayId)
+        if (ok) {
+            mirrorRefCounts[displayId] = 1
+            Timber.d("acquireDisplayMirror: display $displayId mirror created, refCount=1")
+        }
+        return ok
+    }
+
+    @Synchronized
+    override fun releaseDisplayMirror(displayId: Int): Boolean {
+        val current = mirrorRefCounts[displayId] ?: 0
+        if (current <= 0) {
+            Timber.w("releaseDisplayMirror: display $displayId has refCount <= 0")
+            return false
+        }
+        val newRef = current - 1
+        Timber.d("releaseDisplayMirror: display $displayId refCount decremented to $newRef")
+        if (newRef == 0) {
+            mirrorRefCounts.remove(displayId)
+            val mirrorVdId = mirrorDisplayMap.remove(displayId)
+            if (mirrorVdId != null) {
+                destroyVirtualDisplay(mirrorVdId)
+                Timber.d("releaseDisplayMirror: destroyed mirror VD $mirrorVdId for display $displayId")
+            }
+        } else {
+            mirrorRefCounts[displayId] = newRef
+        }
+        return true
+    }
+
+    override fun isDisplayMirrorActive(displayId: Int): Boolean {
+        return (mirrorRefCounts[displayId] ?: 0) > 0 && mirrorDisplayMap.containsKey(displayId)
+    }
+
+    private fun createMirrorInternal(displayId: Int): Boolean {
+        val dm = buildDisplayManagerForVirtualDisplay()
+        val sourceDisplay = dm.getDisplay(displayId) ?: run {
+            Timber.e("createMirrorInternal: source display $displayId not found")
+            return false
+        }
+        val metrics = DisplayMetrics()
+        @Suppress("DEPRECATION")
+        sourceDisplay.getRealMetrics(metrics)
+        val width = metrics.widthPixels
+        val height = metrics.heightPixels
+        val densityDpi = metrics.densityDpi
+
+        val nativePtr = nativeCreateDistributor(width, height)
+        if (nativePtr == 0L) return false
+        val sourceSurface = nativeGetDistributorSurface(nativePtr) ?: run {
+            nativeDestroyDistributor(nativePtr)
+            return false
+        }
+
+        val vd = try {
+            val method = DisplayManager::class.java.getMethod(
+                "createVirtualDisplay",
+                String::class.java,
+                Int::class.javaPrimitiveType,
+                Int::class.javaPrimitiveType,
+                Int::class.javaPrimitiveType,
+                Surface::class.java
+            )
+            method.invoke(null, "relc-mirror-$displayId", width, height, displayId, sourceSurface) as? VirtualDisplay
+        } catch (e: Throwable) {
+            Timber.e(e, "createMirrorInternal: reflection on createVirtualDisplay failed")
+            null
+        }
+
+        if (vd == null) {
+            nativeDestroyDistributor(nativePtr)
+            return false
+        }
+
+        val mirrorVdId = vd.display?.displayId ?: run {
+            vd.release()
+            nativeDestroyDistributor(nativePtr)
+            return false
+        }
+
+        vdStore[mirrorVdId] = ManagedDisplay(vd, surfaceWidth = width, surfaceHeight = height)
+        distributorStore[mirrorVdId] = nativePtr
+        mirrorDisplayMap[displayId] = mirrorVdId
+        Timber.d("createMirrorInternal: created mirror VD $mirrorVdId for source display $displayId (${width}x${height}@$densityDpi)")
+        return true
+    }
 
     override fun createVirtualDisplay(
         name: String,
@@ -527,8 +630,9 @@ class RelcV2Service @JvmOverloads constructor(
     override fun addVirtualDisplaySurface(displayId: Int, surface: Surface): Int {
         Timber.d("addVirtualDisplaySurface: id=$displayId surfaceValid=${surface.isValid}")
         wakeDisplayGroupIfOwned(displayId)
-        val ptr = distributorStore[displayId] ?: run {
-            Timber.e("addVirtualDisplaySurface: distributor not found for id=$displayId")
+        val actualId = mirrorDisplayMap[displayId] ?: displayId
+        val ptr = distributorStore[actualId] ?: run {
+            Timber.e("addVirtualDisplaySurface: distributor not found for id=$displayId (actualId=$actualId)")
             return -1
         }
         return nativeAddSurface(ptr, surface)
@@ -536,7 +640,8 @@ class RelcV2Service @JvmOverloads constructor(
 
     override fun removeVirtualDisplaySurface(displayId: Int, handle: Int): Boolean {
         Timber.d("removeVirtualDisplaySurface: id=$displayId handle=$handle")
-        val ptr = distributorStore[displayId] ?: return false
+        val actualId = mirrorDisplayMap[displayId] ?: displayId
+        val ptr = distributorStore[actualId] ?: return false
         nativeRemoveSurface(ptr, handle)
         return true
     }
@@ -748,19 +853,48 @@ class RelcV2Service @JvmOverloads constructor(
      * - 其他 id：回 [0, 0]，讓呼叫端當場失敗，好過帶著可能錯的尺寸跑完整個腳本。
      */
     override fun getDisplaySurfaceSize(displayId: Int): IntArray {
-        vdStore[displayId]?.let { return intArrayOf(it.surfaceWidth, it.surfaceHeight) }
-        if (displayId != Display.DEFAULT_DISPLAY) {
-            Timber.w("getDisplaySurfaceSize($displayId): not a display this service created")
-            return intArrayOf(0, 0)
-        }
+        val actualId = mirrorDisplayMap[displayId] ?: displayId
+        vdStore[actualId]?.let { return intArrayOf(it.surfaceWidth, it.surfaceHeight) }
 
         val dm = context.getSystemService(DisplayManager::class.java)
-        val display = dm.getDisplay(displayId) ?: return intArrayOf(0, 0)
+        val display = dm?.getDisplay(displayId) ?: run {
+            Timber.w("getDisplaySurfaceSize($displayId): display not found")
+            return intArrayOf(0, 0)
+        }
         val outSize = android.graphics.Point()
         @Suppress("DEPRECATION") // TODO: check if this method will still work in future Android versions.
         display.getRealSize(outSize)
         val (width, height) = DisplayGeometry.surfaceSize(outSize.x, outSize.y, display.rotation)
         return intArrayOf(width, height)
+    }
+
+    override fun getDisplayInfo(displayId: Int): RelcDisplayInfo? {
+        val dm = context.getSystemService(DisplayManager::class.java)
+        val display = dm?.getDisplay(displayId) ?: return null
+        val metrics = DisplayMetrics()
+        @Suppress("DEPRECATION")
+        display.getRealMetrics(metrics)
+        val isPhysical = !vdStore.containsKey(displayId)
+        val isMirrorActive = isDisplayMirrorActive(displayId)
+        return RelcDisplayInfo().apply {
+            this.displayId = displayId
+            this.name = display.name ?: "Display $displayId"
+            this.width = metrics.widthPixels
+            this.height = metrics.heightPixels
+            this.densityDpi = metrics.densityDpi
+            this.isPhysical = isPhysical
+            this.isMirrorActive = isMirrorActive
+        }
+    }
+
+    override fun getDisplayInfos(): Array<RelcDisplayInfo> {
+        val dm = context.getSystemService(DisplayManager::class.java)
+        val allDisplays = dm?.displays ?: emptyArray()
+        val internalMirrorVdIds = mirrorDisplayMap.values.toSet()
+        return allDisplays
+            .filter { it.displayId !in internalMirrorVdIds }
+            .mapNotNull { getDisplayInfo(it.displayId) }
+            .toTypedArray()
     }
 
     override fun debug(input: String?): String = "RelcV2Service Active"
