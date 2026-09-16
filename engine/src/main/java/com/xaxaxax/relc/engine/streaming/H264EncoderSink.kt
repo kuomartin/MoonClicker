@@ -36,6 +36,14 @@ class H264EncoderSink(
                 setInteger(MediaFormat.KEY_BIT_RATE, bitrate)
                 setInteger(MediaFormat.KEY_FRAME_RATE, frameRate)
                 setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1) // 1 second keyframe interval
+                
+                // Ultra-low latency tuning (inspired by scrcpy)
+                setInteger("max-bframes", 0) // Disable B-frames for real-time
+                setInteger("priority", 0)    // Real-time priority
+                setInteger("operating-rate", frameRate.toShort().toInt())
+                if (android.os.Build.VERSION.SDK_INT >= 30) {
+                    setInteger(MediaFormat.KEY_LOW_LATENCY, 1)
+                }
             }
             
             codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
@@ -68,7 +76,23 @@ class H264EncoderSink(
                     }
                     codec.releaseOutputBuffer(outputBufferId, false)
                 } else if (outputBufferId == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
-                    Timber.d("H264EncoderSink: output format changed to ${codec.outputFormat}")
+                    val newFormat = codec.outputFormat
+                    Timber.d("H264EncoderSink: output format changed to $newFormat")
+                    
+                    // JMuxer (and most H.264 decoders) needs SPS/PPS before the first IDR frame.
+                    // Some encoders don't emit them as separate buffers, so we extract them from the format.
+                    val csd0 = newFormat.getByteBuffer("csd-0")
+                    if (csd0 != null) {
+                        val bytes0 = ByteArray(csd0.remaining())
+                        csd0.get(bytes0)
+                        trySend(bytes0)
+                    }
+                    val csd1 = newFormat.getByteBuffer("csd-1")
+                    if (csd1 != null) {
+                        val bytes1 = ByteArray(csd1.remaining())
+                        csd1.get(bytes1)
+                        trySend(bytes1)
+                    }
                 }
             }
         } catch (e: Exception) {
