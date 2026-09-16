@@ -7,12 +7,14 @@ import com.xaxaxax.relc.script.ScriptSession
 import com.xaxaxax.relc.script.ScriptStore
 import com.xaxaxax.relc.script.TemplateRoi
 import com.xaxaxax.relc.script.TemplateStore
+import com.xaxaxax.relc.engine.streaming.H264EncoderSink
 import com.xaxaxax.relc.shizuku.ShizukuManager
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
 import io.ktor.server.application.call
 import io.ktor.server.application.install
+import io.ktor.server.plugins.cors.routing.CORS
 import io.ktor.server.cio.CIO
 import io.ktor.server.engine.EmbeddedServer
 import io.ktor.server.engine.embeddedServer
@@ -29,6 +31,8 @@ import io.ktor.server.websocket.webSocket
 import io.ktor.utils.io.writeFully
 import io.ktor.utils.io.writeStringUtf8
 import io.ktor.websocket.Frame
+import io.ktor.websocket.close
+import io.ktor.websocket.CloseReason
 import io.ktor.websocket.readText
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -146,20 +150,19 @@ class WorkbenchServer @Inject constructor(
     fun start(): Boolean {
         if (server != null) return true
         return try {
-            // 不指定 host 會讓底層 bind 成 dual-stack IPv6 wildcard（已在真機上驗證：LISTEN
-            // 位址是全零的 ::，不是 0.0.0.0）。Android 的 epoll-based Selector 對「剛 accept、
-            // 來源是 IPv4-mapped-IPv6 位址」的 channel 會漏掉第一次 OP_READ 就緒事件，導致
-            // 連線停在 ESTABLISHED 卻永遠讀不到資料——loopback 走純 IPv4 不會踩到，跨裝置走
-            // WiFi 才會。直接 bind 裝置在區網上的實際 IPv4 位址，繞開 wildcard 的雙棧歧義。
-            val host = localIpv4Address()
+            // 為了支援 Android 模擬器透過 adb forward 連線 (來源 IP 為 127.0.0.1)，
+            // 這裡改為綁定 0.0.0.0 監聽所有網卡。
+            // 注意：如果在真機 WiFi 環境遇到連線卡 ESTABLISHED 讀不到資料的問題，
+            // 可能是 Ktor 的 0.0.0.0 觸發了 dual-stack wildcard bug。
+            val host = "0.0.0.0"
             val scriptsRoot = scriptStore.root
             server = embeddedServer(
                 CIO,
                 port = PORT,
                 host = host,
-                module = { workbenchModule(scriptsRoot, scriptRunner, scriptStream, frameSource, displaySource) },
+                module = { workbenchModule(scriptsRoot, scriptRunner, scriptStream, frameSource, displaySource, shizukuManager) },
             ).start(wait = false)
-            _address.value = "$host:$PORT"
+            _address.value = "${localIpv4Address()}:$PORT" // UI 顯示仍保留實際區網 IP 供參考
             true
         } catch (t: Throwable) {
             Timber.e(t, "WorkbenchServer failed to bind port $PORT")
@@ -213,8 +216,12 @@ fun Application.workbenchModule(
     scriptStream: ScriptStream,
     frameSource: FrameSource,
     displaySource: DisplaySource,
+    shizukuManager: ShizukuManager,
 ) {
     install(WebSockets)
+    install(CORS) {
+        anyHost()
+    }
     routing {
         get("/health") {
             call.respondText("OK")
@@ -359,6 +366,35 @@ fun Application.workbenchModule(
                     writeStringUtf8("\r\n")
                     flush()
                 }
+            }
+        }
+        // Realtime mirror (H.264) via WebSocket
+        webSocket("/mirror/h264/{displayId}") {
+            val displayId = call.parameters["displayId"]?.toIntOrNull()
+            if (displayId == null) {
+                close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "Unknown displayId"))
+                return@webSocket
+            }
+
+            val service = shizukuManager.service
+            if (service == null) {
+                close(CloseReason(CloseReason.Codes.INTERNAL_ERROR, "Service not connected"))
+                return@webSocket
+            }
+
+            val size = service.getDisplaySurfaceSize(displayId)
+            if (size == null || size[0] == 0) {
+                close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "Invalid displayId"))
+                return@webSocket
+            }
+
+            val sink = H264EncoderSink(service, displayId, size[0], size[1])
+            try {
+                sink.h264Flow.collect { nalu ->
+                    send(Frame.Binary(true, nalu))
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "H264 WebSocket error")
             }
         }
     }
