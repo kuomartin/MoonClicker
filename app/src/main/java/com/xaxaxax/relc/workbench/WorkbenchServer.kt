@@ -98,10 +98,18 @@ interface FrameSource {
  * Display info needed by the extension to show mirror choices (見 #87).
  */
 @Serializable
-data class WorkbenchDisplaySummary(val id: Int, val name: String, val width: Int, val height: Int, val isVirtual: Boolean)
+data class WorkbenchDisplaySummary(
+    val id: Int,
+    val name: String,
+    val width: Int,
+    val height: Int,
+    val isVirtual: Boolean,
+    val isMirrorActive: Boolean = true,
+)
 
 interface DisplaySource {
     fun getDisplays(): List<WorkbenchDisplaySummary>?
+    fun toggleMirror(displayId: Int, enable: Boolean): Boolean = false
 }
 
 @Singleton
@@ -132,7 +140,8 @@ class WorkbenchServer @Inject constructor(
                         name = info.name ?: if (info.isPhysical) "Physical Display" else "Virtual Display ${info.displayId}",
                         width = info.width,
                         height = info.height,
-                        isVirtual = !info.isPhysical
+                        isVirtual = !info.isPhysical,
+                        isMirrorActive = if (info.isPhysical) info.isMirrorActive else true
                     )
                 }
             }
@@ -145,9 +154,18 @@ class WorkbenchServer @Inject constructor(
                     name = if (id == 0) "Physical Display" else "Virtual Display $id",
                     width = size[0],
                     height = size[1],
-                    isVirtual = id != 0
+                    isVirtual = id != 0,
+                    isMirrorActive = if (id == 0) runCatching { service.isDisplayMirrorActive(0) }.getOrDefault(false) else true
                 )
             }
+        }
+
+        override fun toggleMirror(displayId: Int, enable: Boolean): Boolean {
+            val service = shizukuManager.service ?: return false
+            return runCatching {
+                if (enable) service.acquireDisplayMirror(displayId)
+                else service.releaseDisplayMirror(displayId)
+            }.getOrDefault(false)
         }
     }
 
@@ -248,6 +266,21 @@ fun Application.workbenchModule(
                 return@get
             }
             call.respondText(Json.encodeToString(displays), ContentType.Application.Json)
+        }
+
+        post("/displays/{id}/mirror") {
+            val id = call.parameters["id"]?.toIntOrNull()
+            if (id == null) {
+                call.respondText("Invalid display id", status = HttpStatusCode.BadRequest)
+                return@post
+            }
+            val enable = call.request.queryParameters["enable"]?.toBooleanStrictOrNull() ?: true
+            val success = displaySource.toggleMirror(id, enable)
+            if (success) {
+                call.respondText(if (enable) "Mirror acquired" else "Mirror released")
+            } else {
+                call.respondText("Failed to update mirror", status = HttpStatusCode.InternalServerError)
+            }
         }
 
         // log + data.set 即時串流（見 #62），外加保留 #57 用來驗證連線本身的 echo。
