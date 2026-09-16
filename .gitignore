@@ -12,3 +12,7 @@ local.properties
 .kotlin/
 .envrc
 .direnv/
+*.jks
+*.keystore
+keystore.properties
+*.vsix

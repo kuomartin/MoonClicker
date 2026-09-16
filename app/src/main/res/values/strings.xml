@@ -44,7 +44,7 @@
     <string name="target_picker_title">在哪裡執行？</string>
     <string name="target_picker_new">＋ 建立新顯示器</string>
     <string name="target_picker_physical">本機螢幕</string>
-    <string name="target_picker_physical_note">不支援畫面辨識（vision.*）</string>
+    <string name="target_picker_physical_note">需在腳本中啟動鏡像（screen.start_mirror）方可辨識與輸入</string>
     <string name="target_picker_virtual">虛擬顯示 %1$d</string>
     <string name="target_picker_virtual_note">%1$d × %2$d</string>
 

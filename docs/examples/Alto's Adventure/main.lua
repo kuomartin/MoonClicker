@@ -1,6 +1,6 @@
--- 端到端冒煙測試用的腳本：不需要任何模板圖片就能跑完。
+-- 範例腳本：啟動遊戲並比對畫面按鈕
 -- 推上裝置：
--- adb push docs/examples/hello-relc /sdcard/Android/data/com.xaxaxax.relc/files/scripts/
+-- adb push "docs/examples/Alto's Adventure" /sdcard/Android/data/com.xaxaxax.relc/files/scripts/
 
 log("hello from ReLC", screen.width .. "x" .. screen.height, "rotation", screen.rotation)
 data.set("stage", "started")
@@ -52,14 +52,12 @@ if screen.has_vision then
     log("pictureMod_result", tostring(pictureMod))
 
     if pictureMod ~= nil then
-        local x = pictureMod.x + pictureMod.w / 2
-        local y = pictureMod.y + pictureMod.h / 2
-        log("pictureMod_center", x .. ", " .. y)
-        input.tap(x, y)
+        log("pictureMod_center", pictureMod.cx .. ", " .. pictureMod.cy)
+        input.tap(pictureMod.cx, pictureMod.cy)
         sleep(2000)
     end
 else
-    data.set("vision", "unavailable (physical display)")
+    data.set("vision", "unavailable (screen.has_vision is false)")
 end
 
 data.set("stage", "finished")

@@ -1,4 +1,6 @@
 import com.android.build.api.variant.BuildConfigField
+import java.io.FileInputStream
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
@@ -11,6 +13,26 @@ plugins {
     alias(libs.plugins.wire)
 }
 
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystoreProperties = Properties().apply {
+    if (keystorePropertiesFile.exists()) {
+        load(FileInputStream(keystorePropertiesFile))
+    }
+}
+
+val releaseKeystorePath = providers.environmentVariable("KEYSTORE_PATH").orNull
+    ?: keystoreProperties.getProperty("storeFile")
+val releaseKeystoreFile = releaseKeystorePath?.let { path ->
+    val f = file(path)
+    if (f.isAbsolute) f else rootProject.file(path)
+}
+val releaseKeystorePassword = providers.environmentVariable("KEYSTORE_PASSWORD").orNull
+    ?: keystoreProperties.getProperty("storePassword")
+val releaseKeyAlias = providers.environmentVariable("KEY_ALIAS").orNull
+    ?: keystoreProperties.getProperty("keyAlias")
+val releaseKeyPassword = providers.environmentVariable("KEY_PASSWORD").orNull
+    ?: keystoreProperties.getProperty("keyPassword")
+
 android {
     namespace = "com.xaxaxax.relc"
     compileSdk {
@@ -21,16 +43,40 @@ android {
         applicationId = "com.xaxaxax.relc"
         minSdk = libs.versions.minSdk.get().toInt()
         versionCode = 1
-        versionName = "1.0"
+        versionName = "0.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         targetSdk = libs.versions.targetSdk.get().toInt()
+    }
+
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "x86_64")
+            isUniversalApk = true
+        }
+    }
+
+    signingConfigs {
+        if (releaseKeystoreFile != null && releaseKeystoreFile.exists() && releaseKeystorePassword != null && releaseKeyAlias != null && releaseKeyPassword != null) {
+            create("release") {
+                storeFile = releaseKeystoreFile
+                storePassword = releaseKeystorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
     }
 
     buildTypes {
         release {
             optimization {
                 enable = false
+            }
+            val releaseSigning = signingConfigs.findByName("release")
+            if (releaseSigning != null) {
+                signingConfig = releaseSigning
             }
         }
     }
