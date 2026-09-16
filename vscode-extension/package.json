@@ -64,6 +64,10 @@
         "command": "relc.setupStubs",
         "title": "ReLC: Setup Lua Stubs",
         "icon": "$(lightbulb)"
+      },
+      {
+        "command": "relc.toggleMirror",
+        "title": "ReLC: Toggle Display Mirror"
       }
     ],
     "menus": {
