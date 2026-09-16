@@ -20,7 +20,7 @@ The native OpenGL component that reads a virtual display's surface and fans it o
 _Avoid_: Renderer, frame broadcaster.
 
 **Streaming Pipeline**:
-The path from a virtual display's GLES output through `H264EncoderSink` and a LocalSocket to a consumer (video player, frame grabber). Currently deprioritized — see [ADR-0004](docs/adr/0004-h264-streaming-deprioritized.md).
+The path from a virtual display's output through `H264EncoderSink` to a consumer (like `WorkbenchServer`). Re-prioritized to address MJPEG lag ([ADR-0016](docs/adr/0016-h264-streaming-reprioritized.md)). The pipeline utilizes a Java `MediaCodec` providing an `InputSurface` that is registered as a sink via `RelcV2Service` to achieve zero-copy fan-out while keeping the video encoding isolated in the `:engine` module.
 
 **InputController**:
 Injects touch/swipe/multi-touch events into a specific virtual display via `IRelcV2Service`.
