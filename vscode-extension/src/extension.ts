@@ -66,6 +66,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("relc.runRemote", runRemoteCommand),
     vscode.commands.registerCommand("relc.openMirror", openMirrorCommand),
     vscode.commands.registerCommand("relc.renameScript", renameScriptCommand),
+    vscode.commands.registerCommand("relc.setupStubs", setupStubsCommand),
   );
 }
 
@@ -287,6 +288,22 @@ async function renameScriptCommand(item?: LocalScriptItem): Promise<void> {
     workspaceProvider.refresh();
   } catch (err) {
     vscode.window.showErrorMessage(`ReLC: 重新命名失敗 - ${(err as Error).message}`);
+  }
+}
+
+async function setupStubsCommand(item?: LocalScriptItem): Promise<void> {
+  const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+  if (!workspaceFolder) {
+    vscode.window.showErrorMessage("ReLC: 請先開啟專案資料夾");
+    return;
+  }
+  
+  try {
+    const rootPath = workspaceFolder.uri.fsPath;
+    ensureLuarcConfigured(rootPath);
+    vscode.window.showInformationMessage(`ReLC: 已在工作區根目錄設定 Lua API 提示 (.luarc.json)`);
+  } catch (err) {
+    vscode.window.showErrorMessage(`ReLC: 設定 Lua 提示失敗 - ${(err as Error).message}`);
   }
 }
 

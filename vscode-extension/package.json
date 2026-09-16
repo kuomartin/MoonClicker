@@ -3,6 +3,11 @@
   "displayName": "ReLC Script Workbench",
   "description": "Connect VS Code to a ReLC device running Script Workbench.",
   "version": "0.0.1",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kuomartin/ReLC.git",
+    "directory": "vscode-extension"
+  },
   "private": true,
   "engines": {
     "vscode": "^1.90.0"
@@ -11,7 +16,7 @@
     "Other"
   ],
   "activationEvents": [],
-  "main": "./out/extension.js",
+  "main": "./dist/extension.js",
   "contributes": {
     "commands": [
       {
@@ -54,12 +59,22 @@
       {
         "command": "relc.renameScript",
         "title": "ReLC: Rename (Script + Folder)"
+      },
+      {
+        "command": "relc.setupStubs",
+        "title": "ReLC: Setup Lua Stubs",
+        "icon": "$(lightbulb)"
       }
     ],
     "menus": {
       "view/title": [
         {
           "command": "relc.connect",
+          "when": "view == relc.workspace",
+          "group": "navigation"
+        },
+        {
+          "command": "relc.setupStubs",
           "when": "view == relc.workspace",
           "group": "navigation"
         }
@@ -121,12 +136,15 @@
     }
   },
   "scripts": {
+    "vscode:prepublish": "npm run package-build",
+    "package-build": "npm run compile && esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify",
     "generate": "buf generate ../proto",
     "precompile": "npm run generate",
     "compile": "tsc -p .",
     "watch": "tsc -w -p .",
     "pretest": "npm run compile",
-    "test": "node --test out/test/**/*.test.js"
+    "test": "node --test out/test/**/*.test.js",
+    "package": "vsce package"
   },
   "devDependencies": {
     "@bufbuild/buf": "^1.73.0",
@@ -135,6 +153,8 @@
     "@types/node": "^22.0.0",
     "@types/vscode": "^1.90.0",
     "@types/ws": "^8.5.0",
+    "@vscode/vsce": "^4.0.0",
+    "esbuild": "^0.23.0",
     "typescript": "^5.6.0"
   },
   "dependencies": {
