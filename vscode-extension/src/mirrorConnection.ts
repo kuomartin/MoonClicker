@@ -73,6 +73,7 @@ export class MirrorConnection {
     }
   }
 
+
   private setState(state: MirrorConnectionState): void {
     this._state = state;
     for (const listener of this.stateListeners) listener(state);

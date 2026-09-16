@@ -3,6 +3,7 @@ import { MirrorConnection, type MirrorConnectionState } from "./mirrorConnection
 import { FrameStalenessTracker, type StalenessState } from "./frameStaleness";
 import { saveTemplate, type TemplateRoi } from "./templateSync";
 import { listScripts, type ScriptSummary } from "./scriptSync";
+import { listDisplays, toggleDisplayMirror } from "./displaySync";
 
 /**
  * 收幀間隔超過這個值就當作卡住（見 [FrameStalenessTracker]）。裝置端出幀間隔上限是
@@ -63,6 +64,7 @@ export function openMirrorPanel(extensionUri: vscode.Uri, address: string, displ
       roi?: TemplateRoi;
       pngBase64?: string;
       displayId?: number;
+      enable?: boolean;
     }) => {
       if (message?.type === "stop") {
         connection?.stop();
@@ -76,22 +78,14 @@ export function openMirrorPanel(extensionUri: vscode.Uri, address: string, displ
       } else if (message?.type === "saveTemplate") {
         const { scriptId, templateName, roi, pngBase64 } = message;
         if (!scriptId || !templateName || !roi || !pngBase64) {
-          safePostMessage({
-            type: "saveTemplateResult",
-            success: false,
-            error: "缺少必要的裁切參數",
-          });
+          vscode.window.showErrorMessage("ReLC: 裁切模板存檔參數不完整");
           return;
         }
         try {
-          const pngBytes = Buffer.from(pngBase64, "base64");
-          await saveTemplate(address, scriptId, templateName, roi, pngBytes);
-          safePostMessage({
-            type: "saveTemplateResult",
-            success: true,
-            templateName,
-          });
-          vscode.window.showInformationMessage(`ReLC: 模板「${templateName}」已成功存入腳本「${scriptId}」`);
+          const pngBuffer = Buffer.from(pngBase64, "base64");
+          await saveTemplate(address, scriptId, templateName, roi, pngBuffer);
+          safePostMessage({ type: "saveTemplateResult", success: true });
+          vscode.window.showInformationMessage(`ReLC: 模板「${templateName}」已成功存檔到 ${scriptId}`);
         } catch (err) {
           const errMsg = (err as Error).message;
           safePostMessage({
@@ -112,6 +106,19 @@ export function openMirrorPanel(extensionUri: vscode.Uri, address: string, displ
         mirrorOutputChannel.show(true);
       } else if (message?.type === "log") {
         mirrorOutputChannel.appendLine(`[Webview Log] ${(message as any).message}`);
+      } else if (message?.type === "toggleMirror") {
+        const targetDisplayId = message.displayId;
+        if (typeof targetDisplayId === "number") {
+          const enable = message.enable !== false;
+          toggleDisplayMirror(address, targetDisplayId, enable)
+            .then(() => {
+              vscode.window.showInformationMessage(`ReLC: 顯示器 ${targetDisplayId} 鏡像已${enable ? "開啟" : "關閉"}`);
+              openMirrorPanel(extensionUri, address, targetDisplayId);
+            })
+            .catch((err) => {
+              vscode.window.showErrorMessage(`ReLC: 切換鏡像失敗: ${(err as Error).message}`);
+            });
+        }
       }
     });
   }
@@ -119,6 +126,13 @@ export function openMirrorPanel(extensionUri: vscode.Uri, address: string, displ
   const mirror = new MirrorConnection();
   connection = mirror;
   const staleness = new FrameStalenessTracker(STALE_AFTER_MS, postStaleness);
+
+  const refreshDisplays = () => {
+    listDisplays(address)
+      .then((displays) => safePostMessage({ type: "displays", displays, currentDisplayId: displayId }))
+      .catch(() => {});
+  };
+  refreshDisplays();
 
   mirror.onDidChangeState((state) => {
     postState(state);
@@ -130,12 +144,7 @@ export function openMirrorPanel(extensionUri: vscode.Uri, address: string, displ
         .catch((err) => {
           mirrorOutputChannel.appendLine(`[ReLC Mirror] Failed to list scripts: ${(err as Error).message}`);
         });
-      fetch(`http://${address}/displays`)
-        .then(res => res.json())
-        .then(displays => safePostMessage({ type: "displays", displays, currentDisplayId: displayId }))
-        .catch((err) => {
-          mirrorOutputChannel.appendLine(`[ReLC Mirror] Failed to fetch displays: ${(err as Error).message}`);
-        });
+      refreshDisplays();
     } else if (state.status === "error") {
       mirrorOutputChannel.appendLine(`[ReLC Mirror Error] ${state.message}`);
       mirrorOutputChannel.show(true);
@@ -874,7 +883,11 @@ function renderHtml(jmuxerUri: string, cspSource: string): string {
         msg.displays.forEach(d => {
           const opt = document.createElement("option");
           opt.value = d.id;
-          opt.textContent = \`\${d.name} (\${d.width}x\${d.height})\`;
+          let label = d.name + " (" + d.width + "x" + d.height + ")";
+          if (d.isVirtual === false) {
+            label += d.isMirrorActive ? " [實體·鏡像中]" : " [實體·未開啟]";
+          }
+          opt.textContent = label;
           if (d.id === msg.currentDisplayId) opt.selected = true;
           displaySelect.appendChild(opt);
         });
