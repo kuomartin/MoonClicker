@@ -37,6 +37,17 @@
   let initialRect = null;
   const HANDLE_RADIUS = 8;
 
+  const jmuxer = typeof JMuxer !== "undefined" ? new JMuxer({
+    node: "frame",
+    mode: "video",
+    flushingTime: 0,
+    fps: 60,
+    debug: false,
+    onError: function (data) {
+      vscode?.postMessage({ type: "error", message: "JMuxer error: " + JSON.stringify(data) });
+    },
+  }) : null;
+
   stopButton.addEventListener("click", () => {
     vscode?.postMessage({ type: "stop" });
   });
@@ -188,8 +199,8 @@
 
   function getAspectFit() {
     const stageRect = stage.getBoundingClientRect();
-    const imgW = frameEl.naturalWidth || 1;
-    const imgH = frameEl.naturalHeight || 1;
+    const imgW = frameEl.videoWidth || frameEl.naturalWidth || 1;
+    const imgH = frameEl.videoHeight || frameEl.naturalHeight || 1;
     const containerW = stageRect.width;
     const containerH = stageRect.height;
 
@@ -299,8 +310,8 @@
     if (!cropRect) return null;
     const nr = norm(cropRect);
     const fit = getAspectFit();
-    const bmW = frameEl.naturalWidth || 1;
-    const bmH = frameEl.naturalHeight || 1;
+    const bmW = frameEl.videoWidth || frameEl.naturalWidth || 1;
+    const bmH = frameEl.videoHeight || frameEl.naturalHeight || 1;
 
     if (fit.scale <= 0) return null;
 
@@ -457,7 +468,27 @@
     if (msg.type === "state") {
       renderState(msg.state);
     } else if (msg.type === "frame") {
-      frameEl.src = msg.dataUri;
+      if (jmuxer && msg.data) {
+        let nalu = msg.data;
+        if (!(nalu instanceof Uint8Array)) {
+          nalu = new Uint8Array(nalu instanceof ArrayBuffer ? nalu : Object.values(nalu));
+        }
+        jmuxer.feed({ video: nalu });
+        // Dynamic playback rate catch-up
+        if (frameEl && frameEl.buffered && frameEl.buffered.length > 0) {
+          const end = frameEl.buffered.end(frameEl.buffered.length - 1);
+          const diff = end - frameEl.currentTime;
+          if (diff > 0.5) {
+            frameEl.currentTime = end - 0.05;
+          } else if (diff > 0.15) {
+            frameEl.playbackRate = 1.1;
+          } else {
+            frameEl.playbackRate = 1.0;
+          }
+        }
+      } else if (msg.dataUri) {
+        frameEl.src = msg.dataUri;
+      }
       hasReceivedFrame = true;
       receivedFramesCount++;
       if (!isCropping) {

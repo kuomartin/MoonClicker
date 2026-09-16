@@ -8,6 +8,7 @@
 
   let activeStreamAbort = null;
   let activeWs = null;
+  let activeMirrorWs = null;
   let frameCount = 0;
   let lastFrameTime = performance.now();
   let fps = 0;
@@ -136,7 +137,7 @@
     return `/proxy/${encodeURIComponent(currentTarget)}`;
   }
 
-  function getWsUrl() {
+  function getWsUrl(subPath = "") {
     if (currentMode === "mock") {
       const loc = window.location;
       const proto = loc.protocol === "https:" ? "wss:" : "ws:";
@@ -144,7 +145,8 @@
     }
     const loc = window.location;
     const proto = loc.protocol === "https:" ? "wss:" : "ws:";
-    return `${proto}//${loc.host}/proxy-ws?target=${encodeURIComponent(currentTarget)}`;
+    const pathParam = subPath ? `&path=${encodeURIComponent(subPath)}` : "";
+    return `${proto}//${loc.host}/proxy-ws?target=${encodeURIComponent(currentTarget)}${pathParam}`;
   }
 
   // 2. Mock VsCode API
@@ -211,6 +213,10 @@
   }
 
   function disconnectStream() {
+    if (activeMirrorWs) {
+      activeMirrorWs.close();
+      activeMirrorWs = null;
+    }
     if (activeStreamAbort) {
       activeStreamAbort.abort();
       activeStreamAbort = null;
@@ -221,98 +227,59 @@
     disconnectStream();
     window.postMessage({ type: "state", state: { status: "connecting", displayId } }, "*");
 
-    const abort = new AbortController();
-    activeStreamAbort = abort;
-
-    try {
-      const url = `${getApiBase()}/mirror/${displayId}`;
-      const res = await fetch(url, { signal: abort.signal });
-      if (!res.ok) {
-        window.postMessage(
-          {
-            type: "state",
-            state: {
-              status: "error",
-              displayId,
-              message: `HTTP ${res.status}${res.status === 404 ? "（該顯示器未開啟鏡像畫面；實體螢幕需先啟動鏡像）" : ""}`,
-            },
-          },
-          "*"
-        );
-        return;
-      }
-
+    if (currentMode === "mock") {
+      const abort = new AbortController();
+      activeStreamAbort = abort;
       window.postMessage({ type: "state", state: { status: "connected", displayId } }, "*");
-
-      // 讀取 MJPEG multipart stream
-      const reader = res.body.getReader();
-      let buffer = new Uint8Array(0);
-
-      while (!abort.signal.aborted) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const merged = new Uint8Array(buffer.length + value.length);
-        merged.set(buffer);
-        merged.set(value, buffer.length);
-        buffer = merged;
-
-        // 搜尋 JPEG SOI (0xFF, 0xD8) 與 EOI (0xFF, 0xD9)
-        let soi = -1;
-        for (let i = 0; i < buffer.length - 1; i++) {
-          if (buffer[i] === 0xff && buffer[i + 1] === 0xd8) {
-            soi = i;
-            break;
-          }
-        }
-
-        if (soi !== -1) {
-          let eoi = -1;
-          for (let i = soi + 2; i < buffer.length - 1; i++) {
-            if (buffer[i] === 0xff && buffer[i + 1] === 0xd9) {
-              eoi = i + 2;
-              break;
-            }
-          }
-
-          if (eoi !== -1) {
-            const frameBytes = buffer.subarray(soi, eoi);
-            buffer = buffer.subarray(eoi);
-
-            // 轉為 Base64 Data URI
-            let binary = "";
-            const len = frameBytes.byteLength;
-            for (let b = 0; b < len; b++) {
-              binary += String.fromCharCode(frameBytes[b]);
-            }
-            const base64 = btoa(binary);
-            const dataUri = "data:image/jpeg;base64," + base64;
-
-            frameCount++;
-            frameCountEl.textContent = frameCount;
-            const now = performance.now();
-            const delta = now - lastFrameTime;
-            if (delta >= 500) {
-              fps = Math.round((1000 / delta) * 10) / 10;
-              fpsEl.textContent = fps;
-              lastFrameTime = now;
-            }
-
-            window.postMessage({ type: "frame", dataUri }, "*");
-          }
-        }
-      }
-    } catch (err) {
-      if (!abort.signal.aborted) {
-        window.postMessage(
-          {
-            type: "state",
-            state: { status: "error", displayId, message: err.message },
-          },
-          "*"
-        );
-      }
+      return;
     }
+
+    // 真機模式：直接連線 WebSocket H.264 (/mirror/h264/{displayId})
+    const wsUrl = getWsUrl(`/mirror/h264/${displayId}`);
+    const ws = new WebSocket(wsUrl);
+    ws.binaryType = "arraybuffer";
+    activeMirrorWs = ws;
+
+    ws.onopen = () => {
+      if (activeMirrorWs !== ws) return;
+      window.postMessage({ type: "state", state: { status: "connected", displayId } }, "*");
+    };
+
+    ws.onmessage = (event) => {
+      if (activeMirrorWs !== ws) return;
+      const nalu = new Uint8Array(event.data);
+      window.postMessage({ type: "frame", data: nalu }, "*");
+
+      frameCount++;
+      if (frameCountEl) frameCountEl.textContent = frameCount;
+      const now = performance.now();
+      const delta = now - lastFrameTime;
+      if (delta >= 500) {
+        fps = Math.round((1000 / delta) * 10) / 10;
+        if (fpsEl) fpsEl.textContent = fps;
+        lastFrameTime = now;
+      }
+    };
+
+    ws.onerror = (e) => {
+      if (activeMirrorWs !== ws) return;
+      window.postMessage(
+        {
+          type: "state",
+          state: {
+            status: "error",
+            displayId,
+            message: "WebSocket 連線失敗（該顯示器未開啟鏡像畫面；實體螢幕需先啟動鏡像）",
+          },
+        },
+        "*"
+      );
+    };
+
+    ws.onclose = () => {
+      if (activeMirrorWs !== ws) return;
+      window.postMessage({ type: "state", state: { status: "disconnected", displayId } }, "*");
+    };
   }
 
   function connectWs() {
