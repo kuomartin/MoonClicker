@@ -1,4 +1,5 @@
 import AdmZip from "adm-zip";
+import { authHeaders } from "./authSync";
 
 export interface ScriptSummary {
   id: string;
@@ -9,8 +10,10 @@ export interface ScriptSummary {
  * 裝置端 Script Folder 同步的純邏輯（見 #58），不依賴 vscode API——單元測試對著一個
  * 本機起的假 HTTP server 跑，`extension.ts` 只負責接 UI（選腳本、選資料夾）。
  */
-export async function listScripts(address: string): Promise<ScriptSummary[]> {
-  const response = await fetch(`http://${address}/scripts`);
+export async function listScripts(address: string, token?: string): Promise<ScriptSummary[]> {
+  const response = await fetch(`http://${address}/scripts`, {
+    headers: authHeaders(token),
+  });
   if (!response.ok) {
     throw new Error(`列出裝置上的腳本失敗（HTTP ${response.status}）`);
   }
@@ -18,8 +21,10 @@ export async function listScripts(address: string): Promise<ScriptSummary[]> {
 }
 
 /** Pull：把裝置上 id 對應的 Script Folder 展開到本機的 [destDir]，整份覆蓋掉既有內容。 */
-export async function pullScript(address: string, id: string, destDir: string): Promise<void> {
-  const response = await fetch(`http://${address}/scripts/${encodeURIComponent(id)}/export`);
+export async function pullScript(address: string, id: string, destDir: string, token?: string): Promise<void> {
+  const response = await fetch(`http://${address}/scripts/${encodeURIComponent(id)}/export`, {
+    headers: authHeaders(token),
+  });
   if (!response.ok) {
     throw new Error(`Pull 失敗（HTTP ${response.status}）`);
   }
@@ -31,9 +36,10 @@ export async function pullScript(address: string, id: string, destDir: string): 
  * 觸發裝置上已同步的腳本執行（見 #61）——裝置端統一經過既有 ScriptSession，這裡只是
  * 多一個外部呼叫入口，不建立第二條執行路徑。
  */
-export async function runScript(address: string, id: string): Promise<void> {
+export async function runScript(address: string, id: string, token?: string): Promise<void> {
   const response = await fetch(`http://${address}/scripts/${encodeURIComponent(id)}/run`, {
     method: "POST",
+    headers: authHeaders(token),
   });
   if (!response.ok) {
     const reason = await response.text();
@@ -42,11 +48,12 @@ export async function runScript(address: string, id: string): Promise<void> {
 }
 
 /** Push：把本機 [sourceDir] 的內容整份推回裝置上 id 對應的 Script Folder，整份覆蓋掉。 */
-export async function pushScript(address: string, id: string, sourceDir: string): Promise<void> {
+export async function pushScript(address: string, id: string, sourceDir: string, token?: string): Promise<void> {
   const zip = new AdmZip();
   zip.addLocalFolder(sourceDir);
   const response = await fetch(`http://${address}/scripts/${encodeURIComponent(id)}/import`, {
     method: "PUT",
+    headers: authHeaders(token),
     body: new Uint8Array(zip.toBuffer()),
   });
   if (!response.ok) {

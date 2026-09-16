@@ -1,3 +1,5 @@
+import { authHeaders } from "./authSync";
+
 export interface DisplaySummary {
   id: number;
   name: string;
@@ -10,8 +12,10 @@ export interface DisplaySummary {
 /**
  * 列出裝置上的顯示器列表。
  */
-export async function listDisplays(address: string): Promise<DisplaySummary[]> {
-  const response = await fetch(`http://${address}/displays`);
+export async function listDisplays(address: string, token?: string): Promise<DisplaySummary[]> {
+  const response = await fetch(`http://${address}/displays`, {
+    headers: authHeaders(token),
+  });
   if (!response.ok) {
     throw new Error(`列出裝置上的顯示器失敗（HTTP ${response.status}）`);
   }
@@ -21,9 +25,10 @@ export async function listDisplays(address: string): Promise<DisplaySummary[]> {
 /**
  * 切換特定顯示器的鏡像管線（主要用於實體螢幕）。
  */
-export async function toggleDisplayMirror(address: string, displayId: number, enable: boolean): Promise<void> {
+export async function toggleDisplayMirror(address: string, displayId: number, enable: boolean, token?: string): Promise<void> {
   const response = await fetch(`http://${address}/displays/${displayId}/mirror?enable=${enable}`, {
     method: "POST",
+    headers: authHeaders(token),
   });
   if (!response.ok) {
     const reason = await response.text();

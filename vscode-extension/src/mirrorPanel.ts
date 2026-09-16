@@ -27,7 +27,7 @@ export function postStreamEventToMirror(event: any): void {
   safePostMessage({ type: "streamEvent", event });
 }
 
-export function openMirrorPanel(extensionUri: vscode.Uri, address: string, displayId: number): void {
+export function openMirrorPanel(extensionUri: vscode.Uri, address: string, displayId: number, token?: string): void {
   connection?.stop();
   connection = undefined;
 
@@ -72,7 +72,7 @@ export function openMirrorPanel(extensionUri: vscode.Uri, address: string, displ
         connection?.stop();
       } else if (message?.type === "requestScripts") {
         try {
-          const scripts = await listScripts(address);
+          const scripts = await listScripts(address, token);
           safePostMessage({ type: "scripts", scripts });
         } catch {
           safePostMessage({ type: "scripts", scripts: [] });
@@ -85,7 +85,7 @@ export function openMirrorPanel(extensionUri: vscode.Uri, address: string, displ
         }
         try {
           const pngBuffer = Buffer.from(pngBase64, "base64");
-          await saveTemplate(address, scriptId, templateName, roi, pngBuffer);
+          await saveTemplate(address, scriptId, templateName, roi, pngBuffer, token);
           safePostMessage({ type: "saveTemplateResult", success: true });
           vscode.window.showInformationMessage(`ReLC: 模板「${templateName}」已成功存檔到 ${scriptId}`);
         } catch (err) {
@@ -101,7 +101,7 @@ export function openMirrorPanel(extensionUri: vscode.Uri, address: string, displ
         }
       } else if (message?.type === "switchDisplay") {
         if (typeof message.displayId === "number") {
-          openMirrorPanel(extensionUri, address, message.displayId);
+          openMirrorPanel(extensionUri, address, message.displayId, token);
         }
       } else if (message?.type === "refreshDisplays") {
         refreshDisplays();
@@ -114,10 +114,10 @@ export function openMirrorPanel(extensionUri: vscode.Uri, address: string, displ
         const targetDisplayId = message.displayId;
         if (typeof targetDisplayId === "number") {
           const enable = message.enable !== false;
-          toggleDisplayMirror(address, targetDisplayId, enable)
+          toggleDisplayMirror(address, targetDisplayId, enable, token)
             .then(() => {
               vscode.window.showInformationMessage(`ReLC: 顯示器 ${targetDisplayId} 鏡像已${enable ? "開啟" : "關閉"}`);
-              openMirrorPanel(extensionUri, address, targetDisplayId);
+              openMirrorPanel(extensionUri, address, targetDisplayId, token);
             })
             .catch((err) => {
               vscode.window.showErrorMessage(`ReLC: 切換鏡像失敗: ${(err as Error).message}`);
@@ -132,7 +132,7 @@ export function openMirrorPanel(extensionUri: vscode.Uri, address: string, displ
   const staleness = new FrameStalenessTracker(STALE_AFTER_MS, postStaleness);
 
   const refreshDisplays = () => {
-    listDisplays(address)
+    listDisplays(address, token)
       .then((displays) => safePostMessage({ type: "displays", displays, currentDisplayId: displayId }))
       .catch(() => {});
   };
@@ -143,7 +143,7 @@ export function openMirrorPanel(extensionUri: vscode.Uri, address: string, displ
     if (state.status === "connected") {
       staleness.armFromConnect();
       // 連線成功時自動請求腳本清單以供裁切存檔選擇
-      listScripts(address)
+      listScripts(address, token)
         .then((scripts) => safePostMessage({ type: "scripts", scripts }))
         .catch((err) => {
           mirrorOutputChannel.appendLine(`[ReLC Mirror] Failed to list scripts: ${(err as Error).message}`);
@@ -161,7 +161,7 @@ export function openMirrorPanel(extensionUri: vscode.Uri, address: string, displ
     staleness.noteFrame();
     postFrame(frame);
   });
-  mirror.start(address, displayId);
+  mirror.start(address, displayId, token);
 }
 
 /** extension 停用時的收尾——面板還開著也要確實停止串流，不留給 VS Code 自己處理。 */
