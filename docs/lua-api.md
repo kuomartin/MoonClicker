@@ -44,8 +44,10 @@ log("done")
 腳本**不建立也不銷毀顯示器**——目標由 App 在啟動時決定（Scripts 頁的「在指定顯示器執行」，
 或 `script.json` 的 `display`）。腳本只會作用在那一個顯示器上，所以 `input.*` 不需要 displayId 參數。
 
-只有虛擬顯示拿得到影格。**跑在實體螢幕上時 `vision.*` 會直接拋出 Lua 錯誤**，
-不是靜默找不到——用 `screen.has_vision` 可以先問。
+- **虛擬顯示器**：天然具有捕獲 Surface，`input.*` 與 `vision.*` 隨時可用。
+- **實體螢幕**：跑在實體螢幕時，必須有作用中的鏡像管線（Mirror Pipeline）才能進行 `input.*` 與 `vision.*` 操作。若鏡像未啟動，呼叫將直接拋出錯誤。
+  腳本可在實體螢幕上呼叫 `screen.start_mirror()` 啟動鏡像（或由使用者在 App 顯示器頁面手動開啟），使用完畢可呼叫 `screen.stop_mirror()`；若腳本未主動停止，在腳本終止時引擎會自動釋放引用。
+  可用 `screen.is_mirror_active` 或 `screen.has_vision` 查詢目前是否就緒。
 
 ---
 
@@ -61,13 +63,16 @@ log("done")
 
 ## `screen`
 
-唯讀欄位，每次讀取都是即時值（旋轉會改變 width/height）。
+唯讀欄位與鏡像管線控制方法，每次讀取都是即時值（旋轉會改變 width/height）。
 
-| 欄位 | 說明 |
+| 欄位 / 函式 | 說明 |
 |---|---|
 | `screen.width` / `screen.height` | 目標顯示器的**邏輯**尺寸 |
 | `screen.rotation` | `0..3`，對應 `Surface.ROTATION_*` |
-| `screen.has_vision` | 這個目標是否有影格來源（虛擬顯示為 `true`） |
+| `screen.has_vision` | 這個目標是否有影格來源（虛擬顯示或已開啟鏡像之實體螢幕為 `true`） |
+| `screen.is_mirror_active` | 鏡像管線是否作用中（虛擬顯示一律為 `true`；實體螢幕依開啟狀態而定） |
+| `screen.start_mirror()` | (實體螢幕專用) 開啟鏡像管線並附加影格接收器。成功回傳 `true`，失敗拋出錯誤。已開啟時重複呼叫會安全返回 `true`。 |
+| `screen.stop_mirror()` | (實體螢幕專用) 釋放由本腳本開啟的鏡像管線引用。成功回傳 `true`。 |
 
 ---
 
