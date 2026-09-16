@@ -3,6 +3,10 @@ plugins {
     alias(libs.plugins.rikka.refine)
 }
 
+val userHome: String = System.getProperty("user.home") ?: ""
+val openCvSdkDir: String = providers.environmentVariable("OPENCV_ANDROID_SDK_DIR")
+    .getOrElse(file("$userHome/OpenCV-android-sdk").absolutePath)
+
 android {
     namespace = "com.xaxaxax.relc.engine"
     compileSdk {
@@ -14,13 +18,17 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
+        ndk {
+            abiFilters += listOf("arm64-v8a", "x86_64")
+        }
+
         externalNativeBuild {
             cmake {
                 cppFlags("-std=c++17")
                 arguments(
                     "-DANDROID_STL=c++_shared",
                     "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON",
-                    "-DOpenCV_DIR=~/OpenCV-android-sdk/sdk/native/jni",
+                    "-DOpenCV_DIR=$openCvSdkDir/sdk/native/jni",
                     "-DCMAKE_SHARED_LINKER_FLAGS=-Wl,-z,max-page-size=16384"
                 )
             }
@@ -29,7 +37,7 @@ android {
 
     sourceSets {
         getByName("main") {
-            jniLibs.directories += "~/OpenCV-android-sdk/sdk/native/libs"
+            jniLibs.directories += "$openCvSdkDir/sdk/native/libs"
         }
     }
 

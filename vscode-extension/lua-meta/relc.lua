@@ -1,9 +1,8 @@
 ---@meta
 
--- ReLC Lua API v3 的 LuaLS 型別提示 stub（見 #59）。手工對照 docs/lua-api.md（v3）與
--- engine/src/main/cpp/LuaBindings.cpp/.h 的實際 API 表面撰寫，不是機械生成——
--- docs/lua-api.md 不是凍結契約（見 ADR-0005），LuaBindings.cpp 的 binding 也沒有結構化
--- 到能自動抽出型別。這份檔案只給編輯器用，不會被裝置執行，也不會同步進 Script Folder。
+-- ReLC Lua API 的 LuaLS 型別提示 stub。對照 docs/lua-api.md 與
+-- engine/src/main/cpp/LuaBindings.cpp/.h 的實際 API 表面撰寫。
+-- 這份檔案只給編輯器提供語法提示與補全，不會被裝置執行，也不會同步進 Script Folder。
 
 --- 輸出到 Logcat（tag 為 `LuaScript`）。多個參數以 tab 分隔，非字串會自動 `tostring`。
 ---@param ... any

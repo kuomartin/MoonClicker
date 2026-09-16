@@ -2,7 +2,8 @@
   "name": "relc-script-workbench",
   "displayName": "ReLC Script Workbench",
   "description": "Connect VS Code to a ReLC device running Script Workbench.",
-  "version": "0.0.1",
+  "version": "0.1.0",
+  "publisher": "kuomartin",
   "repository": {
     "type": "git",
     "url": "https://github.com/kuomartin/ReLC.git",
