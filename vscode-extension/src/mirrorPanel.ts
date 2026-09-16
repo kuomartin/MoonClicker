@@ -23,7 +23,7 @@ export function postStreamEventToMirror(event: any): void {
   safePostMessage({ type: "streamEvent", event });
 }
 
-export function openMirrorPanel(address: string, displayId: number): void {
+export function openMirrorPanel(extensionUri: vscode.Uri, address: string, displayId: number): void {
   connection?.stop();
   connection = undefined;
 
@@ -44,7 +44,9 @@ export function openMirrorPanel(address: string, displayId: number): void {
       { enableScripts: true, retainContextWhenHidden: true },
     );
     panel = newPanel;
-    newPanel.webview.html = renderHtml();
+    const jmuxerPath = vscode.Uri.joinPath(extensionUri, "node_modules", "jmuxer", "dist", "jmuxer.min.js");
+    const jmuxerUri = newPanel.webview.asWebviewUri(jmuxerPath).toString();
+    newPanel.webview.html = renderHtml(jmuxerUri);
     // 面板關閉是「串流要確實停止」的兩個入口之一（另一個是下面的 stop 訊息）——
     // 兩者都導向同一個 connection.stop()，不留背景繼續拉流的路徑。
     newPanel.onDidDispose(() => {
@@ -100,7 +102,7 @@ export function openMirrorPanel(address: string, displayId: number): void {
         }
       } else if (message?.type === "switchDisplay") {
         if (typeof message.displayId === "number") {
-          openMirrorPanel(address, message.displayId);
+          openMirrorPanel(extensionUri, address, message.displayId);
         }
       }
     });
@@ -162,19 +164,19 @@ function postState(state: MirrorConnectionState): void {
 }
 
 function postFrame(frame: Buffer): void {
-  safePostMessage({ type: "frame", dataUri: `data:image/jpeg;base64,${frame.toString("base64")}` });
+  safePostMessage({ type: "frame", data: new Uint8Array(frame) });
 }
 
 function postStaleness(state: StalenessState): void {
   safePostMessage({ type: "staleness", stale: state === "stale" });
 }
 
-function renderHtml(): string {
+function renderHtml(jmuxerUri: string): string {
   return `<!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
 <meta charset="UTF-8" />
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline';" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; media-src blob:; img-src data: blob:; style-src 'unsafe-inline'; script-src 'unsafe-inline' vscode-webview-resource:;" />
 <style>
   body {
     margin: 0;
@@ -354,7 +356,7 @@ function renderHtml(): string {
     <button id="cancelCropBtn" type="button" class="secondary">取消</button>
   </div>
   <div id="stage">
-    <img id="frame" alt="裝置畫面" />
+    <video id="frame" autoplay muted playsinline></video>
     <canvas id="cropCanvas" hidden></canvas>
     <div id="overlay">尚未收到畫面</div>
   </div>
@@ -371,6 +373,7 @@ function renderHtml(): string {
   <div style="padding: 4px 8px; border-bottom: 1px solid var(--vscode-panel-border); font-size: 11px; background: var(--vscode-editor-background);">Data View</div>
   <div id="dataContainer"></div>
 </div>
+  <script src="${jmuxerUri}"></script>
   <script>
     const vscode = acquireVsCodeApi();
     const statusEl = document.getElementById("status");
@@ -402,6 +405,20 @@ function renderHtml(): string {
     let dragStart = { x: 0, y: 0 };
     let initialRect = null;
     const HANDLE_RADIUS = 8;
+
+    let jmuxer = null;
+
+    function initJmuxer() {
+      if (jmuxer) jmuxer.destroy();
+      jmuxer = new JMuxer({
+        node: "frame",
+        mode: "video",
+        flushingTime: 0,
+        fps: 30,
+        debug: false
+      });
+    }
+    initJmuxer();
 
     stopButton.addEventListener("click", () => {
       vscode.postMessage({ type: "stop" });
@@ -487,8 +504,8 @@ function renderHtml(): string {
 
     function getAspectFit() {
       const stageRect = stage.getBoundingClientRect();
-      const imgW = frameEl.naturalWidth || 1;
-      const imgH = frameEl.naturalHeight || 1;
+      const imgW = frameEl.videoWidth || 1;
+      const imgH = frameEl.videoHeight || 1;
       const containerW = stageRect.width;
       const containerH = stageRect.height;
       
@@ -598,8 +615,8 @@ function renderHtml(): string {
       if (!cropRect) return null;
       const nr = norm(cropRect);
       const fit = getAspectFit();
-      const bmW = frameEl.naturalWidth || 1;
-      const bmH = frameEl.naturalHeight || 1;
+      const bmW = frameEl.videoWidth || 1;
+      const bmH = frameEl.videoHeight || 1;
 
       if (fit.scale <= 0) return null;
 
@@ -757,7 +774,7 @@ function renderHtml(): string {
       if (msg.type === "state") {
         renderState(msg.state);
       } else if (msg.type === "frame") {
-        frameEl.src = msg.dataUri;
+        jmuxer.feed({ video: msg.data });
         hasReceivedFrame = true;
         if (!isCropping) {
           cropBtn.disabled = false;
