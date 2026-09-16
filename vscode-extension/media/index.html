@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ReLC Mirror Panel — Standalone Test Client</title>
+  <link rel="stylesheet" href="./mirror.css" />
+  <script src="./vscode-adapter.js"></script>
+</head>
+<body style="display: flex; flex-direction: column;">
+  <div style="flex: 1; display: flex; flex-direction: row; height: calc(100vh - 40px); overflow: hidden;">
+    <div id="leftPanel">
+      <div id="toolbar">
+        <select id="displaySelect"></select>
+        <span id="status">連線中…</span>
+        <button id="cropBtn" type="button" disabled>開始裁切</button>
+        <button id="stopButton" type="button">停止</button>
+      </div>
+      <div id="cropToolbar" hidden>
+        <span>腳本:</span>
+        <select id="scriptSelect"></select>
+        <span>模板名稱:</span>
+        <input id="templateNameInput" type="text" placeholder="例如: btn_confirm" />
+        <span id="roiInfo" style="color:var(--vscode-descriptionForeground);"></span>
+        <span id="cropStatus"></span>
+        <button id="saveCropBtn" type="button">儲存</button>
+        <button id="cancelCropBtn" type="button" class="secondary">取消</button>
+      </div>
+      <div id="stage">
+        <img id="frame" alt="裝置畫面" />
+        <canvas id="cropCanvas" hidden></canvas>
+        <div id="overlay">尚未收到畫面</div>
+      </div>
+    </div>
+    <div id="rightPanel">
+      <div id="logToolbar">
+        <span>Console</span>
+        <div>
+          <label><input type="checkbox" id="autoScroll" checked> Auto-scroll</label>
+          <button id="clearLogBtn" style="padding: 2px 6px; font-size: 10px;">Clear</button>
+        </div>
+      </div>
+      <div id="logContainer"></div>
+      <div style="padding: 4px 8px; border-bottom: 1px solid var(--vscode-panel-border); font-size: 11px; background: var(--vscode-editor-background);">Data View</div>
+      <div id="dataContainer"></div>
+    </div>
+  </div>
+  <script src="./mirror.js"></script>
+</body>
+</html>
