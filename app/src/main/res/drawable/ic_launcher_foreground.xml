@@ -1,3 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
@@ -5,190 +6,18 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Virtual Display Frame (Floating Window) -->
-    <path
-        android:pathData="M30,24 L78,24 A6,6 0 0,1 84,30 L84,78 A6,6 0 0,1 78,84 L30,84 A6,6 0 0,1 24,78 L24,30 A6,6 0 0,1 30,24 Z"
-        android:fillColor="#551E293B"
-        android:strokeWidth="1.2">
-        <aapt:attr name="android:strokeColor">
-            <gradient
-                android:startX="24"
-                android:startY="24"
-                android:endX="84"
-                android:endY="84"
-                android:type="linear">
-                <item android:color="#B338BDF8" android:offset="0.0" />
-                <item android:color="#666366F1" android:offset="0.5" />
-                <item android:color="#99A855F7" android:offset="1.0" />
-            </gradient>
-        </aapt:attr>
-    </path>
-
-    <!-- Window Header Divider -->
-    <path
-        android:pathData="M24,32 L84,32"
-        android:strokeColor="#3338BDF8"
-        android:strokeWidth="0.8" />
-
-    <!-- Window Header Dots -->
-    <path
-        android:pathData="M28,28a1,1 0 1,0 2,0a1,1 0 1,0 -2,0"
-        android:fillColor="#CCEF4444" />
-    <path
-        android:pathData="M32,28a1,1 0 1,0 2,0a1,1 0 1,0 -2,0"
-        android:fillColor="#CCF59E0B" />
-    <path
-        android:pathData="M36,28a1,1 0 1,0 2,0a1,1 0 1,0 -2,0"
-        android:fillColor="#CC10B981" />
-
-    <!-- Vision Matching Reticle Corners -->
-    <!-- Top-Left -->
-    <path
-        android:pathData="M29,40 L29,36.5 A1.5,1.5 0 0,1 30.5,35 L34,35"
-        android:strokeColor="#C038BDF8"
-        android:strokeWidth="1.2"
-        android:strokeLineCap="round" />
-    <!-- Top-Right -->
-    <path
-        android:pathData="M74,35 L77.5,35 A1.5,1.5 0 0,1 79,36.5 L79,40"
-        android:strokeColor="#C038BDF8"
-        android:strokeWidth="1.2"
-        android:strokeLineCap="round" />
-    <!-- Bottom-Left -->
-    <path
-        android:pathData="M29,68 L29,71.5 A1.5,1.5 0 0,0 30.5,73 L34,73"
-        android:strokeColor="#C038BDF8"
-        android:strokeWidth="1.2"
-        android:strokeLineCap="round" />
-    <!-- Bottom-Right -->
-    <path
-        android:pathData="M74,73 L77.5,73 A1.5,1.5 0 0,0 79,71.5 L79,68"
-        android:strokeColor="#C038BDF8"
-        android:strokeWidth="1.2"
-        android:strokeLineCap="round" />
-
-    <!-- Remote Signal Arcs (Top-Right) -->
-    <path
-        android:pathData="M74,27 A8,8 0 0,1 81,34"
-        android:strokeColor="#B338BDF8"
-        android:strokeWidth="1.2"
-        android:strokeLineCap="round" />
-    <path
-        android:pathData="M77,24 A12,12 0 0,1 84,31"
-        android:strokeColor="#66818CF8"
-        android:strokeWidth="1"
-        android:strokeLineCap="round" />
-
-    <!-- Lua Orbit Arc (Back Half) -->
-    <group
-        android:pivotX="51"
-        android:pivotY="55"
-        android:rotation="-28">
-        <path
-            android:pathData="M23,55 A28,14 0 0,1 79,55"
-            android:strokeColor="#4D38BDF8"
-            android:strokeWidth="1.2"
-            android:strokeLineCap="round" />
-    </group>
-
-    <!-- Lua Primary Planet (Moon Sphere) -->
-    <path
-        android:pathData="M51,39 A16,16 0 1,1 50.99,39 Z">
+    <!-- Lua crescent moon: the single motif -->
+    <path android:pathData="M81.45,56.41 A27.45,27.45 0 1,1 51.59,26.55 A21.35,21.35 0 0,0 81.45,56.41 Z">
         <aapt:attr name="android:fillColor">
             <gradient
-                android:startX="40"
-                android:startY="42"
-                android:endX="64"
-                android:endY="68"
+                android:startX="48"
+                android:startY="20"
+                android:endX="85"
+                android:endY="62"
                 android:type="linear">
-                <item android:color="#FF38BDF8" android:offset="0.0" />
-                <item android:color="#FF2563EB" android:offset="0.3" />
-                <item android:color="#FF1D4ED8" android:offset="0.7" />
-                <item android:color="#FF0F172A" android:offset="1.0" />
+                <item android:color="#FF93E4FF" android:offset="0.0" />
+                <item android:color="#FF2563EB" android:offset="1.0" />
             </gradient>
         </aapt:attr>
     </path>
-
-    <!-- Lua Crescent Highlight -->
-    <path
-        android:pathData="M51,39 A16,16 0 0,1 67,55 A16,16 0 0,1 59,69 C51,61 51,47 51,39 Z">
-        <aapt:attr name="android:fillColor">
-            <gradient
-                android:startX="51"
-                android:startY="39"
-                android:endX="67"
-                android:endY="55"
-                android:type="linear">
-                <item android:color="#F0FFFFFF" android:offset="0.0" />
-                <item android:color="#B393C5FD" android:offset="0.5" />
-                <item android:color="#003B82F6" android:offset="1.0" />
-            </gradient>
-        </aapt:attr>
-    </path>
-
-    <!-- Lua Inner Core Node -->
-    <path
-        android:pathData="M46.5,47 A5.5,5.5 0 1,1 46.49,47 Z"
-        android:fillColor="#D90B1329"
-        android:strokeColor="#9938BDF8"
-        android:strokeWidth="0.8" />
-
-    <!-- Terminal Code Glyph `>` -->
-    <path
-        android:pathData="M45,49.5 L48,52.5 L45,55.5"
-        android:strokeColor="#FF38BDF8"
-        android:strokeWidth="1.2"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round" />
-
-    <!-- Lua Orbit Arc (Front Half) -->
-    <group
-        android:pivotX="51"
-        android:pivotY="55"
-        android:rotation="-28">
-        <path
-            android:pathData="M79,55 A28,14 0 0,1 23,55"
-            android:strokeWidth="1.8"
-            android:strokeLineCap="round">
-            <aapt:attr name="android:strokeColor">
-                <gradient
-                    android:startX="23"
-                    android:startY="55"
-                    android:endX="79"
-                    android:endY="55"
-                    android:type="linear">
-                    <item android:color="#FF00F2FE" android:offset="0.0" />
-                    <item android:color="#FF38BDF8" android:offset="0.4" />
-                    <item android:color="#FF818CF8" android:offset="1.0" />
-                </gradient>
-            </aapt:attr>
-        </path>
-    </group>
-
-    <!-- Lua Orbiting Satellite -->
-    <path
-        android:pathData="M73,38 A4.5,4.5 0 1,1 72.99,38 Z"
-        android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="1">
-        <aapt:attr name="android:fillColor">
-            <gradient
-                android:centerX="72"
-                android:centerY="41"
-                android:gradientRadius="4.5"
-                android:type="radial">
-                <item android:color="#FFFFFFFF" android:offset="0.0" />
-                <item android:color="#FF00F2FE" android:offset="0.5" />
-                <item android:color="#FF0284C7" android:offset="1.0" />
-            </gradient>
-        </aapt:attr>
-    </path>
-
-    <!-- Touch / Coordinate Reticle Indicator (Bottom-Left) -->
-    <path
-        android:pathData="M37,67a2.5,2.5 0 1,0 5,0a2.5,2.5 0 1,0 -5,0"
-        android:strokeColor="#8038BDF8"
-        android:strokeWidth="0.8" />
-    <path
-        android:pathData="M38.5,67a1,1 0 1,0 2,0a1,1 0 1,0 -2,0"
-        android:fillColor="#FF38BDF8" />
 </vector>
