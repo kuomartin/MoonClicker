@@ -1,0 +1,201 @@
+<resources>
+    <string name="app_name">ReLC</string>
+
+    <!-- Navigation -->
+    <string name="nav_displays">顯示器</string>
+    <string name="nav_scripts">腳本</string>
+    <string name="nav_settings">設定</string>
+
+    <!-- Common Actions / Labels -->
+    <string name="common_cancel">取消</string>
+    <string name="common_create">建立</string>
+    <string name="common_save">儲存</string>
+    <string name="common_delete">刪除</string>
+    <string name="common_confirm">確定</string>
+    <string name="common_status">狀態</string>
+    <string name="common_select">請選擇</string>
+    <string name="common_back">返回</string>
+    <string name="common_stop">停止</string>
+    <string name="common_play_pause">播放/暫停</string>
+
+    <!-- Displays Screen -->
+    <string name="displays_title">顯示器</string>
+    <string name="displays_create">建立顯示器</string>
+    <string name="displays_empty">尚未建立任何顯示器</string>
+    <string name="displays_shizuku_required">建立顯示器需要 Shizuku 權限</string>
+    <string name="displays_card_physical">實體螢幕 #%1$d</string>
+    <string name="displays_card_virtual">虛擬顯示 #%1$d</string>
+    <string name="displays_card_mirror_not_active">鏡像未開啟</string>
+    <string name="displays_card_tag_physical_mirroring">實體螢幕 (鏡像運作中)</string>
+    <string name="displays_card_tag_physical">實體螢幕</string>
+    <string name="displays_card_tag_service">relcV2Service 管轄</string>
+    <string name="displays_action_start_mirror">開啟鏡像</string>
+    <string name="displays_action_stop_mirror">關閉鏡像</string>
+    <string name="displays_action_enter">進入</string>
+    <string name="displays_action_close">關閉</string>
+
+    <!-- Create Display Dialog -->
+    <string name="displays_create_dialog_title">建立顯示器</string>
+    <string name="displays_create_width">寬度 (px)</string>
+    <string name="displays_create_height">高度 (px)</string>
+    <string name="displays_create_density">密度 (dpi)</string>
+    <string name="displays_create_range_hint">%1$d–%2$d px, %3$d–%4$d dpi</string>
+    <string name="displays_preset_local">本機</string>
+    <string name="displays_preset_small">小</string>
+    <string name="displays_preset_medium">中</string>
+    <string name="displays_preset_tablet">平板</string>
+
+    <!-- Fullscreen &amp; Crop -->
+    <string name="fullscreen_screenshot">截圖</string>
+    <string name="fullscreen_exit">離開</string>
+    <string name="fullscreen_more_options">更多選項</string>
+    <string name="fullscreen_menu_start_app">啟動應用程式</string>
+    <string name="fullscreen_menu_enable_readonly">開啟唯讀模式</string>
+    <string name="fullscreen_menu_disable_readonly">關閉唯讀模式</string>
+    <string name="fullscreen_menu_close_display">關閉顯示器</string>
+    <string name="fullscreen_menu_return_app">返回 ReLC</string>
+    <string name="fullscreen_select_app_title">選擇要啟動的應用程式</string>
+    <string name="crop_capturing">擷取中…</string>
+    <string name="crop_save_template_title">儲存模板圖片</string>
+    <string name="crop_template_name">模板名稱</string>
+    <string name="crop_save_button">儲存裁切</string>
+
+    <!-- Script status notification -->
+    <string name="script_status_channel_label">腳本執行狀態</string>
+    <string name="script_status_channel_description">顯示目前正在執行的腳本</string>
+    <string name="script_status_title">執行中：%1$s</string>
+    <string name="script_status_action_stop">停止</string>
+    <string name="script_target_physical">本機螢幕</string>
+    <string name="script_target_virtual">虛擬顯示 %1$d</string>
+    <string name="script_message_channel_label">腳本訊息</string>
+    <string name="script_message_channel_description">腳本透過 device.notify 發出的訊息</string>
+    <string name="script_running_badge">執行中</string>
+
+    <!-- Scripts page -->
+    <string name="scripts_title">腳本</string>
+    <string name="scripts_empty_title">還沒有任何腳本</string>
+    <string name="scripts_empty_body">一份腳本就是一個資料夾，裡面要有 main.lua。把資料夾放進下面這個路徑，或用右下角匯入 .zip：</string>
+    <string name="scripts_copy_path">複製路徑</string>
+    <string name="scripts_path_copied">已複製路徑</string>
+    <string name="scripts_import">匯入腳本 (.zip)</string>
+    <string name="scripts_refresh">重新掃描</string>
+    <string name="scripts_target_summary_virtual">%1$d × %2$d · 虛擬顯示</string>
+    <string name="scripts_status_idle">尚未執行</string>
+    <string name="scripts_status_starting">啟動中 · %1$s</string>
+    <string name="scripts_status_running">執行中 · %1$s</string>
+    <string name="scripts_status_finished">已完成 · %1$s</string>
+    <string name="scripts_status_finished_short">已完成</string>
+    <string name="scripts_status_stopped">已停止 · %1$s</string>
+    <string name="scripts_status_stopped_short">已停止</string>
+    <string name="scripts_status_error">錯誤：%1$s</string>
+    <string name="scripts_delete_confirm_title">刪除腳本</string>
+    <string name="scripts_delete_confirm_message">要刪除「%1$s」嗎？資料夾會一併刪除。</string>
+    <string name="scripts_imported_success">已匯入 %1$s</string>
+    <string name="scripts_imported_failed">匯入失敗：%1$s</string>
+    <string name="scripts_exported_success">已匯出 %1$s</string>
+    <string name="scripts_exported_failed">匯出失敗：%1$s</string>
+    <string name="scripts_running_cannot_operate">腳本執行中，請先停止</string>
+    <string name="scripts_cannot_read_file">讀不到選取的檔案</string>
+    <string name="scripts_cannot_write_target">無法寫入選取的位置</string>
+
+    <!-- Script detail -->
+    <string name="script_detail_run">執行</string>
+    <string name="script_detail_run_on">在指定顯示器執行</string>
+    <string name="script_detail_stop">停止</string>
+    <string name="script_detail_export">匯出</string>
+    <string name="script_detail_delete">刪除</string>
+    <string name="script_detail_source">main.lua</string>
+    <string name="script_detail_templates">模板圖片</string>
+    <string name="script_detail_shared_data">腳本發佈的資料</string>
+    <string name="script_detail_no_templates">這份腳本沒有模板圖片</string>
+    <string name="script_detail_missing_source">讀不到 main.lua</string>
+    <string name="script_detail_no_editor">沒有內建編輯器：請從檔案管理員或電腦編輯這個資料夾。</string>
+
+    <!-- Target picker -->
+    <string name="target_picker_title">在哪裡執行？</string>
+    <string name="target_picker_new">＋ 建立新顯示器</string>
+    <string name="target_picker_physical">本機螢幕</string>
+    <string name="target_picker_physical_note">需在腳本中啟動鏡像（screen.start_mirror）方可辨識與輸入</string>
+    <string name="target_picker_virtual">虛擬顯示 %1$d</string>
+    <string name="target_picker_virtual_note">%1$d × %2$d</string>
+
+    <!-- Settings -->
+    <string name="settings_general">一般</string>
+    <string name="settings_auto_fullscreen">在虛擬顯示執行時自動開啟全螢幕</string>
+    <string name="settings_auto_fullscreen_note">關閉時腳本仍在背景執行，只是不會跳出鏡像畫面。</string>
+
+    <!-- Shizuku Connection Status -->
+    <string name="shizuku_status_not_available">Shizuku 未啟動</string>
+    <string name="shizuku_status_need_permission">需要授權</string>
+    <string name="shizuku_status_disconnected">服務未連線</string>
+    <string name="shizuku_status_connecting">連線中…</string>
+    <string name="shizuku_status_connected">服務已連線</string>
+    <string name="shizuku_action_grant">授權</string>
+    <string name="shizuku_action_connect">連線</string>
+
+    <!-- UserService Settings -->
+    <string name="settings_user_service">UserService</string>
+    <string name="settings_auto_start_user_service">自動啟動 UserService</string>
+    <string name="settings_auto_start_user_service_note">關閉時仍會自動接上已在執行的服務，只是不會主動把它啟動起來。</string>
+    <string name="settings_user_service_start">啟動</string>
+    <string name="settings_user_service_restart">重新啟動</string>
+    <string name="settings_user_service_stop">關閉</string>
+    <string name="settings_user_service_script_running">腳本執行中，先停止腳本才能關閉或重啟服務。</string>
+    <string name="settings_user_service_stop_title">關閉 UserService？</string>
+    <string name="settings_user_service_stop_message">服務結束前會釋放所有虛擬顯示，目前建立的 display 都會消失。</string>
+    <string name="settings_user_service_restart_title">重新啟動 UserService？</string>
+    <string name="settings_user_service_restart_message">服務會先結束再啟動，過程中所有虛擬顯示都會被釋放。</string>
+    <string name="settings_user_service_confirm">確定</string>
+    <string name="settings_user_service_cancel">取消</string>
+
+    <!-- Workbench Settings -->
+    <string name="settings_workbench">Script Workbench</string>
+    <string name="settings_workbench_note">開啟裝置端的內嵌 server，供電腦端的 Script Workbench 連線。</string>
+    <string name="settings_workbench_pending">Server 啟動中…</string>
+    <string name="settings_workbench_address">伺服器位址：%1$s</string>
+    <string name="workbench_notification_channel_label">Script Workbench</string>
+    <string name="workbench_notification_channel_description">Script Workbench server 開啟時的常駐通知。</string>
+    <string name="workbench_notification_title">Script Workbench 正在監聽</string>
+
+    <!-- Workbench Pairing / Security -->
+    <string name="settings_pairing_title">裝置配對 (PIN Pairing)</string>
+    <string name="settings_pairing_desc_active">配對模式開啟中 (PIN 碼 5 分鐘內有效)</string>
+    <string name="settings_pairing_desc_inactive">預設關閉，點擊開啟 5 分鐘配對視窗</string>
+    <string name="settings_pairing_action_stop">關閉配對</string>
+    <string name="settings_pairing_action_start">開啟配對模式</string>
+    <string name="settings_pairing_pin_prompt">請在 VS Code 連線視窗輸入 PIN 碼</string>
+    <string name="settings_pairing_brute_force_title">防爆破鎖定</string>
+    <string name="settings_pairing_brute_force_desc">連續錯 3 次 PIN 碼即鎖定 60 秒並自動關閉配對模式</string>
+    <string name="settings_pairing_tokens_count">已配對裝置憑證 (%1$d)</string>
+    <string name="settings_pairing_revoke_tokens">清除所有憑證</string>
+
+    <!-- Permissions Management -->
+    <string name="settings_permissions_title">權限與系統功能</string>
+    <string name="permission_granted">已允許</string>
+    <string name="permission_not_granted">未允許</string>
+    <string name="permission_action_grant">取得授權</string>
+    <string name="permission_action_settings">前往設定</string>
+    <string name="permission_action_open_shizuku">開啟 Shizuku</string>
+    <string name="permission_action_proceed">前往授權</string>
+    <string name="permission_action_cancel">稍後再說</string>
+
+    <string name="permission_shizuku_title">Shizuku 服務與授權</string>
+    <string name="permission_shizuku_desc">用於存取系統特權以建立虛擬螢幕與模擬觸控操作。</string>
+    <string name="permission_shizuku_rationale_title">Shizuku 授權說明</string>
+    <string name="permission_shizuku_rationale_desc">ReLC 需要透過 Shizuku 存取 Android 系統特權 API，用以建立獨立的虛擬螢幕並精準模擬觸控操作。這讓自動化腳本能夠在不干擾實體螢幕的情況下穩定運行。</string>
+
+    <string name="permission_notification_title">通知權限</string>
+    <string name="permission_notification_desc">在背景執行腳本或開啟 Workbench 時顯示即時狀態與控制通知。</string>
+    <string name="permission_notification_rationale_title">通知權限說明</string>
+    <string name="permission_notification_rationale_desc">ReLC 需要發送通知權限，以便在背景執行自動化腳本或開啟 Script Workbench 伺服器時，於通知列顯示即時執行狀態、日誌訊息與一鍵停止按鈕。未開啟通知可能導致您在切換至其他應用時無法即時掌握腳本運作。</string>
+
+    <string name="permission_overlay_title">懸浮窗權限</string>
+    <string name="permission_overlay_desc">在其他應用程式上方顯示浮動控制視窗與輔助介面。</string>
+    <string name="permission_overlay_rationale_title">懸浮窗權限說明</string>
+    <string name="permission_overlay_rationale_desc">ReLC 需要「顯示在其他應用程式上層」權限，以便在腳本執行或進行螢幕錄製與除錯時，在畫面上呈現便於操作的浮動控制器。</string>
+
+    <string name="permission_secondary_displays_title">次要顯示器支援</string>
+    <string name="permission_secondary_displays_desc">系統是否支援在次要/虛擬顯示器上啟動與執行應用程式。</string>
+    <string name="permission_secondary_displays_enabled">系統支援</string>
+    <string name="permission_secondary_displays_disabled">系統不支援或已被停用</string>
+</resources>

@@ -30,9 +30,11 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import com.xaxaxax.relc.R
 import kotlin.math.roundToInt
 
 /**
@@ -50,7 +52,7 @@ fun CropScreen(session: CropSession, scriptDir: String) {
         val bitmap = state.bitmap
         if (bitmap == null) {
             Text(
-                text = "Capturing...",
+                text = stringResource(R.string.crop_capturing),
                 color = Color.White,
                 modifier = Modifier.align(Alignment.Center)
             )
@@ -58,7 +60,7 @@ fun CropScreen(session: CropSession, scriptDir: String) {
                 onClick = { session.cancel() },
                 modifier = Modifier.align(Alignment.BottomCenter).padding(32.dp)
             ) {
-                Text("Cancel", color = Color.White)
+                Text(stringResource(R.string.common_cancel), color = Color.White)
             }
             return@Box
         }
@@ -103,22 +105,22 @@ fun CropScreen(session: CropSession, scriptDir: String) {
             var templateName by remember { mutableStateOf("") }
             AlertDialog(
                 onDismissRequest = { showSaveDialog = false },
-                title = { Text("Save Template") },
+                title = { Text(stringResource(R.string.crop_save_template_title)) },
                 text = {
                     OutlinedTextField(
                         value = templateName,
                         onValueChange = { templateName = it },
-                        label = { Text("Template Name") }
+                        label = { Text(stringResource(R.string.crop_template_name)) }
                     )
                 },
                 confirmButton = {
                     TextButton(onClick = {
                         session.confirmSave(scriptDir, templateName)
                         showSaveDialog = false
-                    }) { Text("Save") }
+                    }) { Text(stringResource(R.string.common_save)) }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showSaveDialog = false }) { Text("Cancel") }
+                    TextButton(onClick = { showSaveDialog = false }) { Text(stringResource(R.string.common_cancel)) }
                 }
             )
         }
@@ -133,11 +135,11 @@ fun CropScreen(session: CropSession, scriptDir: String) {
                 onClick = { session.cancel() },
                 colors = ButtonDefaults.textButtonColors(contentColor = Color.White)
             ) {
-                Text("Cancel")
+                Text(stringResource(R.string.common_cancel))
             }
             if (state.canSave) {
                 Button(onClick = { showSaveDialog = true }) {
-                    Text("Save Crop")
+                    Text(stringResource(R.string.crop_save_button))
                 }
             }
         }

@@ -222,7 +222,7 @@ private fun SettingsScreenContent(
         modifier = Modifier,
         topBar = {
             MediumTopAppBar(
-                title = { Text("Settings") },
+                title = { Text(stringResource(R.string.nav_settings)) },
                 scrollBehavior = scrollBehavior
             )
         }
@@ -577,20 +577,20 @@ private fun WorkbenchPairingSection(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(text = "裝置配對 (PIN Pairing)", style = MaterialTheme.typography.titleMedium)
+                Text(text = stringResource(R.string.settings_pairing_title), style = MaterialTheme.typography.titleMedium)
                 Text(
-                    text = if (uiState.isPairingActive) "配對模式開啟中 (PIN 碼 5 分鐘內有效)" else "預設關閉，點擊開啟 5 分鐘配對視窗",
+                    text = if (uiState.isPairingActive) stringResource(R.string.settings_pairing_desc_active) else stringResource(R.string.settings_pairing_desc_inactive),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             if (uiState.isPairingActive) {
                 OutlinedButton(onClick = onStopPairingMode) {
-                    Text("關閉配對")
+                    Text(stringResource(R.string.settings_pairing_action_stop))
                 }
             } else {
                 Button(onClick = onStartPairingMode) {
-                    Text("開啟配對模式")
+                    Text(stringResource(R.string.settings_pairing_action_start))
                 }
             }
         }
@@ -607,7 +607,7 @@ private fun WorkbenchPairingSection(
                         .padding(16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Text(text = "請在 VS Code 連線視窗輸入 PIN 碼", style = MaterialTheme.typography.labelMedium)
+                    Text(text = stringResource(R.string.settings_pairing_pin_prompt), style = MaterialTheme.typography.labelMedium)
                     Text(
                         text = uiState.pairingPin,
                         style = MaterialTheme.typography.displayMedium,
@@ -620,8 +620,8 @@ private fun WorkbenchPairingSection(
         }
 
         ToggleSettingItem(
-            name = "防爆破鎖定",
-            description = "連續錯 3 次 PIN 碼即鎖定 60 秒並自動關閉配對模式",
+            name = stringResource(R.string.settings_pairing_brute_force_title),
+            description = stringResource(R.string.settings_pairing_brute_force_desc),
             checked = uiState.bruteForceProtectionEnabled,
             onCheckedChange = onSetBruteForceProtection,
         )
@@ -634,7 +634,7 @@ private fun WorkbenchPairingSection(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = "已配對裝置憑證 (${uiState.authorizedTokensCount})",
+                text = stringResource(R.string.settings_pairing_tokens_count, uiState.authorizedTokensCount),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -642,7 +642,7 @@ private fun WorkbenchPairingSection(
                 onClick = onRevokeAllTokens,
                 enabled = uiState.authorizedTokensCount > 0,
             ) {
-                Text("清除所有憑證")
+                Text(stringResource(R.string.settings_pairing_revoke_tokens))
             }
         }
     }

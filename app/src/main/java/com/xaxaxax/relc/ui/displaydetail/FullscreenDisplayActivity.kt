@@ -56,12 +56,14 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.res.stringResource
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import com.xaxaxax.relc.R
 import com.xaxaxax.relc.ui.theme.ReLCTheme
 import dagger.hilt.android.AndroidEntryPoint
 import timber.log.Timber
@@ -218,7 +220,7 @@ fun FullscreenDisplayScreen(
                         IconButton(onClick = { viewModel.startCropping() }) {
                             Icon(
                                 imageVector = Icons.Default.Crop,
-                                contentDescription = "Screenshot",
+                                contentDescription = stringResource(R.string.fullscreen_screenshot),
                                 tint = Color.White
                             )
                         }
@@ -227,7 +229,7 @@ fun FullscreenDisplayScreen(
                         IconButton(onClick = { activity?.finish() }) {
                             Icon(
                                 imageVector = Icons.Default.ExitToApp,
-                                contentDescription = "Exit",
+                                contentDescription = stringResource(R.string.fullscreen_exit),
                                 tint = Color.White
                             )
                         }
@@ -237,7 +239,7 @@ fun FullscreenDisplayScreen(
                             IconButton(onClick = { viewModel.setMenuExpanded(true) }) {
                                 Icon(
                                     imageVector = Icons.Default.MoreVert,
-                                    contentDescription = "More Options",
+                                    contentDescription = stringResource(R.string.fullscreen_more_options),
                                     tint = Color.White
                                 )
                             }
@@ -246,14 +248,14 @@ fun FullscreenDisplayScreen(
                                 onDismissRequest = { viewModel.setMenuExpanded(false) }
                             ) {
                                 DropdownMenuItem(
-                                    text = { Text("Start App") },
+                                    text = { Text(stringResource(R.string.fullscreen_menu_start_app)) },
                                     onClick = {
                                         viewModel.setMenuExpanded(false)
                                         viewModel.openAppList()
                                     }
                                 )
                                 DropdownMenuItem(
-                                    text = { Text(if (uiState.isReadOnly) "Disable Read-Only" else "Enable Read-Only") },
+                                    text = { Text(if (uiState.isReadOnly) stringResource(R.string.fullscreen_menu_disable_readonly) else stringResource(R.string.fullscreen_menu_enable_readonly)) },
                                     onClick = {
                                         viewModel.toggleReadOnly()
                                         viewModel.setMenuExpanded(false)
@@ -261,7 +263,7 @@ fun FullscreenDisplayScreen(
                                 )
                                 if (targetDisplayId != 0) {
                                     DropdownMenuItem(
-                                        text = { Text("Close Display") },
+                                        text = { Text(stringResource(R.string.fullscreen_menu_close_display)) },
                                         onClick = {
                                             viewModel.setMenuExpanded(false)
                                             viewModel.destroyDisplay(targetDisplayId)
@@ -270,7 +272,7 @@ fun FullscreenDisplayScreen(
                                     )
                                 }
                                 DropdownMenuItem(
-                                    text = { Text("Return to ReLC") },
+                                    text = { Text(stringResource(R.string.fullscreen_menu_return_app)) },
                                     onClick = {
                                         activity?.finish()
                                         viewModel.setMenuExpanded(false)
@@ -286,7 +288,7 @@ fun FullscreenDisplayScreen(
         if (uiState.showAppList) {
             AlertDialog(
                 onDismissRequest = { viewModel.closeAppList() },
-                title = { Text("Select App to Start") },
+                title = { Text(stringResource(R.string.fullscreen_select_app_title)) },
                 text = {
                     LazyColumn(modifier = Modifier.heightIn(max = 400.dp)) {
                         items(uiState.apps) { app ->
@@ -303,7 +305,7 @@ fun FullscreenDisplayScreen(
                 },
                 confirmButton = {
                     TextButton(onClick = { viewModel.closeAppList() }) {
-                        Text("Cancel")
+                        Text(stringResource(R.string.common_cancel))
                     }
                 }
             )

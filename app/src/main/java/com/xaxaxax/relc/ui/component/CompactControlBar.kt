@@ -30,12 +30,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.xaxaxax.relc.R
 import com.xaxaxax.relc.ui.theme.ReLCTheme
 
 data class ControlUiState(
@@ -81,7 +83,7 @@ fun CompactControlBar(
             ) {
                 Icon(
                     imageVector = Icons.Default.Stop, // 填滿的方塊
-                    contentDescription = "Stop",
+                    contentDescription = stringResource(R.string.common_stop),
                     modifier = Modifier.size(28.dp),
                     tint = Color.DarkGray
                 )
@@ -100,7 +102,7 @@ fun CompactControlBar(
             ) {
                 Icon(
                     imageVector = if (uiState.isPaused) Icons.Default.PlayArrow else Icons.Default.Pause,
-                    contentDescription = "Play/Pause",
+                    contentDescription = stringResource(R.string.common_play_pause),
                     modifier = Modifier.size(32.dp),
                     tint = Color.DarkGray
                 )

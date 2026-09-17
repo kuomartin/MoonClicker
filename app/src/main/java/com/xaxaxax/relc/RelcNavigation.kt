@@ -1,5 +1,6 @@
 package com.xaxaxax.relc
 
+import androidx.annotation.StringRes
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Settings
@@ -10,11 +11,11 @@ import kotlinx.serialization.Serializable
 enum class TopLevelDestination(
     val route: Any,
     val icon: ImageVector,
-    val label: String
+    @param:StringRes val labelRes: Int,
 ) {
-    DISPLAYS(DisplaysRoute, Icons.Default.Tv, "Displays"),
-    SCRIPTS(ScriptsRoute, Icons.Default.Code, "Scripts"),
-    SETTINGS(SettingsRoute, Icons.Default.Settings, "Settings")
+    DISPLAYS(DisplaysRoute, Icons.Default.Tv, R.string.nav_displays),
+    SCRIPTS(ScriptsRoute, Icons.Default.Code, R.string.nav_scripts),
+    SETTINGS(SettingsRoute, Icons.Default.Settings, R.string.nav_settings),
 }
 
 

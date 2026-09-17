@@ -98,14 +98,14 @@ class ScriptSession @Inject constructor(
     fun start(script: Script, target: ScriptTarget = defaultTargetFor(script)) {
         scope.launch {
             if (state.value.isRunning) {
-                startFailure.value = "已經有腳本在執行中"
+                startFailure.value = "Another script is already running"
                 return@launch
             }
             startFailure.value = null
 
             val result = shizukuManager.withService { service ->
                 val displayId = resolveDisplay(service, target)
-                    ?: return@withService "無法取得目標顯示器"
+                    ?: return@withService "Target display not found"
 
                 runInfo.value = RunInfo(script, displayId)
                 val started = ScriptEngine.start(
@@ -120,12 +120,12 @@ class ScriptSession @Inject constructor(
                     onNotify = { title, text -> notifier.showScriptMessage(title, text) },
                     onOpenUri = ::openUri,
                 )
-                if (!started) return@withService "原生引擎拒絕啟動"
+                if (!started) return@withService "Native engine failed to start"
                 if (target.hasVision && settings.autoOpenFullscreen.value) openFullscreen(displayId)
                 null
             }
 
-            startFailure.value = result.getOrElse { "Shizuku 服務不可用" }
+            startFailure.value = result.getOrElse { "Shizuku service unavailable" }
         }
     }
 

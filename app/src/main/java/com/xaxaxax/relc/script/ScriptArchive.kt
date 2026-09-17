@@ -44,7 +44,7 @@ object ScriptArchive {
     private fun unpackInto(input: InputStream, root: File, id: String): ImportResult {
         val staging = File(root, ".import-$id")
         staging.deleteRecursively()
-        if (!staging.mkdirs()) return ImportResult.Failed("無法建立暫存目錄")
+        if (!staging.mkdirs()) return ImportResult.Failed("Failed to create staging directory")
 
         try {
             val stagingPath = staging.canonicalPath + File.separator
@@ -55,7 +55,7 @@ object ScriptArchive {
                 var entry: ZipEntry? = zip.nextEntry
                 while (entry != null) {
                     if (++entries > MAX_ENTRIES) {
-                        return fail(staging, "壓縮檔內容過多（超過 $MAX_ENTRIES 個項目）")
+                        return fail(staging, "Archive contains too many entries (exceeds $MAX_ENTRIES)")
                     }
 
                     val target = File(staging, entry.name)
@@ -63,7 +63,7 @@ object ScriptArchive {
                     if (!(target.canonicalPath + if (entry.isDirectory) File.separator else "")
                             .startsWith(stagingPath)
                     ) {
-                        return fail(staging, "壓縮檔含有不安全的路徑：${entry.name}")
+                        return fail(staging, "Archive contains insecure path: ${entry.name}")
                     }
 
                     if (entry.isDirectory) {
@@ -77,7 +77,7 @@ object ScriptArchive {
                                 if (read <= 0) break
                                 totalBytes += read
                                 if (totalBytes > MAX_TOTAL_BYTES) {
-                                    return fail(staging, "壓縮檔解開後過大")
+                                    return fail(staging, "Extracted archive size is too large")
                                 }
                                 out.write(buffer, 0, read)
                             }
@@ -89,7 +89,7 @@ object ScriptArchive {
             }
 
             val contentRoot = findContentRoot(staging)
-                ?: return fail(staging, "壓縮檔裡找不到 ${Script.MAIN_FILE}")
+                ?: return fail(staging, "Archive missing ${Script.MAIN_FILE}")
 
             val destination = File(root, id)
             destination.deleteRecursively()
@@ -100,7 +100,7 @@ object ScriptArchive {
             staging.deleteRecursively()
             return ImportResult.Imported(destination)
         } catch (e: IOException) {
-            return fail(staging, e.message ?: "讀取壓縮檔失敗")
+            return fail(staging, e.message ?: "Failed to read archive")
         }
     }
 

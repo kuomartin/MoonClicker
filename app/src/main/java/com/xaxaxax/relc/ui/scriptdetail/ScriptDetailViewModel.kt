@@ -6,6 +6,7 @@ import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.xaxaxax.relc.R
 import com.xaxaxax.relc.ScriptDetailRoute
 import com.xaxaxax.relc.core.DisplayConfig
 import com.xaxaxax.relc.core.DisplayInfo
@@ -117,10 +118,13 @@ class ScriptDetailViewModel @Inject constructor(
                 runCatching {
                     context.contentResolver.openOutputStream(uri)?.use {
                         ScriptArchive.export(script, it)
-                    } ?: error("無法寫入選取的位置")
+                    } ?: error(context.getString(R.string.scripts_cannot_write_target))
                 }
             }
-            _message.value = result.fold({ "已匯出 ${script.name}" }, { "匯出失敗：${it.message}" })
+            _message.value = result.fold(
+                { context.getString(R.string.scripts_exported_success, script.name) },
+                { context.getString(R.string.scripts_exported_failed, it.message ?: "") }
+            )
         }
     }
 
@@ -128,7 +132,7 @@ class ScriptDetailViewModel @Inject constructor(
     fun delete(): Boolean {
         val script = uiState.value.script ?: return false
         if (session.state.value.isRunning && session.state.value.script?.id == script.id) {
-            _message.value = "腳本執行中，請先停止"
+            _message.value = context.getString(R.string.scripts_running_cannot_operate)
             return false
         }
         return store.delete(script)
