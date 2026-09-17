@@ -7,31 +7,45 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 
 private val DarkColorScheme = darkColorScheme(
-    primary = AccentDark,
-    onPrimary = BackgroundDark,
-    secondary = AccentDark,
-    tertiary = AccentDark,
-    background = BackgroundDark,
-    onBackground = OnSurfaceDark,
-    surface = SurfaceDark,
-    onSurface = OnSurfaceDark,
-    surfaceVariant = SurfaceDark,
-    onSurfaceVariant = OnSurfaceDark,
-    outline = OutlineDark
+    primary = DarkPrimary,
+    onPrimary = DarkOnPrimary,
+    primaryContainer = DarkPrimaryContainer,
+    onPrimaryContainer = DarkOnPrimaryContainer,
+
+    secondary = DarkSecondary,
+    onSecondary = DarkOnSecondary,
+    secondaryContainer = DarkSecondaryContainer,
+    onSecondaryContainer = DarkOnSecondaryContainer,
+
+    tertiary = DarkSecondary, // 維持冷紫連貫感
+    background = DarkBackground,
+    onBackground = DarkOnSurface,
+    surface = DarkSurface,
+    onSurface = DarkOnSurface,
+    surfaceVariant = DarkSurfaceVariant,
+    onSurfaceVariant = DarkOnSurfaceVariant,
+    outline = DarkOutline
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = AccentLight,
-    onPrimary = SurfaceLight,
-    secondary = AccentLight,
-    tertiary = AccentLight,
-    background = BackgroundLight,
-    onBackground = OnSurfaceLight,
-    surface = SurfaceLight,
-    onSurface = OnSurfaceLight,
-    surfaceVariant = BackgroundLight,
-    onSurfaceVariant = OnSurfaceLight,
-    outline = OutlineLight
+    primary = LightPrimary,
+    onPrimary = LightOnPrimary,
+    primaryContainer = LightPrimaryContainer,
+    onPrimaryContainer = LightOnPrimaryContainer,
+
+    secondary = LightSecondary,
+    onSecondary = LightOnSecondary,
+    secondaryContainer = LightSecondaryContainer,
+    onSecondaryContainer = LightOnSecondaryContainer,
+
+    tertiary = LightTertiary,
+    background = LightBackground,
+    onBackground = LightOnSurface,
+    surface = LightSurface,
+    onSurface = LightOnSurface,
+    surfaceVariant = LightSurfaceVariant,
+    onSurfaceVariant = LightOnSurfaceVariant,
+    outline = LightOutline
 )
 
 @Composable

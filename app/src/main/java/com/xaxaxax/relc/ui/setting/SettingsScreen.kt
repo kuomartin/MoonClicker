@@ -1,6 +1,7 @@
 package com.xaxaxax.relc.ui.setting
 
 import android.Manifest
+import android.content.res.Configuration
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -728,7 +729,7 @@ private fun PermissionRow(
     }
 }
 
-@Preview
+@Preview(uiMode = Configuration.UI_MODE_NIGHT_YES or Configuration.UI_MODE_TYPE_NORMAL)
 @Composable
 private fun SettingsScreenPreview() {
     ReLCTheme {
