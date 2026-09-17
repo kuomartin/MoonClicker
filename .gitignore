@@ -16,3 +16,8 @@ local.properties
 *.keystore
 keystore.properties
 *.vsix
+
+# Agent and local configuration files
+.agents/
+CLAUDE.md
+docs/agents/

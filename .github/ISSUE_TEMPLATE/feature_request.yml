@@ -1,0 +1,43 @@
+name: Feature Request / 功能建議與許願
+description: Suggest an idea, enhancement, or new feature for ReLC / 建議新功能或體驗改善
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感謝您的寶貴建議！請向我們描述您希望增加的功能或改善的情境。
+        Thank you for suggesting an idea! Please describe the feature or enhancement you'd like to see.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Is your feature request related to a problem? / 此建議是否源自某個現有問題或痛點？
+      description: A clear and concise description of what the problem or limitation is / 描述您在何種情境下遇到了不便或限制
+      placeholder: I'm always frustrated when... / 當我嘗試做 ... 時總是覺得很不便
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution / 期望的解決方案
+      description: A clear and concise description of what you want to happen / 描述您希望 ReLC 具體如何支援或改變
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Considered Alternatives / 考慮過的替代方案
+      description: Any alternative solutions or features you've considered / 是否有其他替代做法或參考現有工具
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional_context
+    attributes:
+      label: Additional Context / 補充說明
+      description: Add any other context, mockups, or screenshots about the feature request here / 其他說明、示意圖或參考資料
+    validations:
+      required: false
