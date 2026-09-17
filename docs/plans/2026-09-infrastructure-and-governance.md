@@ -69,15 +69,20 @@ graph TD
 
 *來源報告：`/home/martin/Desktop/index.html`*
 
-* [ ] **3.1 Priority 1：安全性、潛在 Crash 與資源洩漏**
-  * 檢視未關閉的 IO Streams / Cursors / Closables。
-  * 檢查跨執行緒存取與潛在 Race Conditions。
-* [ ] **3.2 Priority 2：Compose 效能與最佳化**
-  * 修復不必要的 Recomposition、檢查 Lambda 與參數 Stability。
-  * 統一 Compose UI 命名與 Modifier 傳遞慣例。
-* [ ] **3.3 Priority 3：資源清理與 Deprecation 整理**
-  * 清理未使用的 XML 屬性、String resources、Drawable assets。
-  * 對不可避免的 Android 隱藏 API 棄用呼叫加上 `@Suppress("DEPRECATION")` 並附帶原理解釋。
+* [x] **3.1 Priority 1：安全性、潛在 Crash 與資源洩漏**
+  * 修正 `WorkbenchAuthStore` 之 `String.format` Locale 安全性問題與 type inference。
+  * 修正 `WorkbenchService` 之 `NsdManager.RegistrationListener` 命名與監聽器。
+  * C++ native 層優化（`NativeImageReader` 回呼 `std::move`、`VisionMatcher` 字串路徑傳遞優化、清理 `GlesDistributor` 未使用宣告）。
+  * 修正 Hidden API 註解與註解碼清理（`RunningTaskInfoHidden`、`PowerManagerHidden`）。
+* [x] **3.2 Priority 2：Compose 效能與最佳化**
+  * `VirtualDisplayMirror.kt`：改用 `mutableIntStateOf` 避免 boxing 開銷。
+  * `DisplaysViewModel.kt`：移除未使用的 `@ApplicationContext context` 依賴。
+  * 升級 `LocalLifecycleOwner` 至 `androidx.lifecycle.compose`。
+  * 修正 `ScriptsScreen` Preview 硬編碼路徑。
+* [x] **3.3 Priority 3：資源清理與 Deprecation 整理**
+  * 移除未使用的 XML 資源（`dimens.xml`、`integers.xml`、未使用的 `colors.xml` 項目）。
+  * 清理 17 個未使用的向量圖形 Drawables（Compose 已全面改用 Material Icons）。
+  * 清理 `strings.xml` 中未使用的舊版範本字串。
 
 ---
 

@@ -58,7 +58,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.text.font.FontWeight
@@ -114,6 +114,18 @@ fun DisplaysScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
+    var showShizukuRationale by remember { mutableStateOf(false) }
+
+    if (showShizukuRationale) {
+        com.xaxaxax.relc.ui.component.PermissionRationaleDialog(
+            title = androidx.compose.ui.res.stringResource(com.xaxaxax.relc.R.string.permission_shizuku_rationale_title),
+            description = androidx.compose.ui.res.stringResource(com.xaxaxax.relc.R.string.permission_shizuku_rationale_desc),
+            icon = androidx.compose.ui.res.painterResource(com.xaxaxax.relc.R.drawable.ic_shizuku_icon),
+            onConfirm = { viewModel.onShizukuAction() },
+            onDismiss = { showShizukuRationale = false },
+        )
+    }
+
     DisplaysScreenContent(
         uiState = uiState,
         defaultWidth = viewModel.defaultConfig.width,
@@ -121,7 +133,13 @@ fun DisplaysScreen(
         defaultDensityDpi = viewModel.defaultConfig.densityDpi,
         onNavigateToDetail = onNavigateToDetail,
         onPullRefresh = { viewModel.refreshDisplays(true) },
-        onShizukuAction = { viewModel.onShizukuAction() },
+        onShizukuAction = {
+            if (uiState.shizukuStatus == ShizukuConnectionStatus.NEED_PERMISSION) {
+                showShizukuRationale = true
+            } else {
+                viewModel.onShizukuAction()
+            }
+        },
         onDestroyDisplay = { viewModel.destroyDisplay(it) },
         onToggleMirror = { displayId, enable -> viewModel.toggleMirror(displayId, enable) },
         onCreateDisplay = { width, height, densityDpi ->

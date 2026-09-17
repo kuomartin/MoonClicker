@@ -38,7 +38,7 @@ ANativeWindow* NativeImageReader::getWindow() {
 
 void NativeImageReader::setCallback(std::function<void(const cv::Mat&)> callback) {
     std::lock_guard<std::mutex> lock(callbackMutex);
-    frameCallback = callback;
+    frameCallback = std::move(callback);
 }
 
 void NativeImageReader::onImageAvailable(void* context, AImageReader* reader) {

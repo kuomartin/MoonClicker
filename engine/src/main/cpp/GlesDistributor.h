@@ -62,12 +62,9 @@ private:
     std::atomic<bool> isRunning;
     std::mutex frameMutex;
     std::condition_variable frameCond;
-    std::atomic<bool> frameAvailable;
 
     JavaVM* javaVM;
     std::atomic<int> nextHandle;
-
-    static void onFrameAvailable(JNIEnv* env, jobject thiz, jobject surfaceTexture);
 };
 
 #endif // GLES_DISTRIBUTOR_H

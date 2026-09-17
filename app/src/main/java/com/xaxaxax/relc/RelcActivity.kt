@@ -1,14 +1,11 @@
 package com.xaxaxax.relc
 
-import android.Manifest
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.viewModels
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
 import androidx.compose.runtime.mutableStateOf
 import androidx.core.content.ContextCompat
 import com.xaxaxax.relc.core.AppSettings
@@ -41,7 +38,6 @@ class RelcActivity : ComponentActivity() {
         autoStarter.onAppOpened()
         reconcileWorkbenchState()
         consumeNavTarget(intent)
-        requestNotificationPermissionIfNeeded()
         enableEdgeToEdge()
         setContent {
             ReLCTheme {
@@ -74,23 +70,5 @@ class RelcActivity : ComponentActivity() {
             openScriptsPage.value = true
         }
         intent?.removeExtra(EXTRA_NAV_TARGET)
-    }
-
-    private val notificationPermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
-
-    /**
-     * The script status notification is the only place a run is visible while the user is in
-     * another app, so ask for POST_NOTIFICATIONS rather than silently dropping it.
-     */
-    private fun requestNotificationPermissionIfNeeded() {
-        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU) return
-        val granted = ContextCompat.checkSelfPermission(
-            this,
-            Manifest.permission.POST_NOTIFICATIONS,
-        ) == PackageManager.PERMISSION_GRANTED
-        if (!granted) {
-            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-        }
     }
 }

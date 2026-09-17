@@ -89,9 +89,9 @@ class WorkbenchService : Service() {
             port = WorkbenchServer.PORT
         }
         val listener = object : NsdManager.RegistrationListener {
-            override fun onServiceRegistered(NsdServiceInfo: NsdServiceInfo) {}
+            override fun onServiceRegistered(serviceInfo: NsdServiceInfo) {}
             override fun onRegistrationFailed(serviceInfo: NsdServiceInfo, errorCode: Int) {}
-            override fun onServiceUnregistered(arg0: NsdServiceInfo) {}
+            override fun onServiceUnregistered(serviceInfo: NsdServiceInfo) {}
             override fun onUnregistrationFailed(serviceInfo: NsdServiceInfo, errorCode: Int) {}
         }
         registrationListener = listener

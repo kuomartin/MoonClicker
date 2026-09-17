@@ -1,10 +1,6 @@
 <resources>
     <string name="app_name">ReLC</string>
-    <string name="virtual_display_title">Virtual Displays</string>
     <string name="scripts_title">Scripts</string>
-    <string name="settings_title">Settings</string>
-    <string name="tasks_header_image_content_description">Tasks header image</string>
-    <string name="navigation_view_header_title">ReLC</string>
 
     <!-- Script status notification -->
     <string name="script_status_channel_label">腳本執行狀態</string>
@@ -24,8 +20,6 @@
     <string name="scripts_path_copied">已複製路徑</string>
     <string name="scripts_import">匯入腳本 (.zip)</string>
     <string name="scripts_refresh">重新掃描</string>
-    <string name="scripts_import_failed">匯入失敗：%1$s</string>
-    <string name="scripts_import_succeeded">已匯入 %1$s</string>
 
     <!-- Script detail -->
     <string name="script_detail_run">執行</string>
@@ -81,4 +75,34 @@
     <string name="workbench_notification_channel_label">Script Workbench</string>
     <string name="workbench_notification_channel_description">Script Workbench server 開啟時的常駐通知。</string>
     <string name="workbench_notification_title">Script Workbench 正在監聽</string>
+
+    <!-- Permissions Management -->
+    <string name="settings_permissions_title">權限與系統功能</string>
+    <string name="permission_granted">已允許</string>
+    <string name="permission_not_granted">未允許</string>
+    <string name="permission_action_grant">取得授權</string>
+    <string name="permission_action_settings">前往設定</string>
+    <string name="permission_action_open_shizuku">開啟 Shizuku</string>
+    <string name="permission_action_proceed">前往授權</string>
+    <string name="permission_action_cancel">稍後再說</string>
+
+    <string name="permission_shizuku_title">Shizuku 服務與授權</string>
+    <string name="permission_shizuku_desc">用於存取系統特權以建立虛擬螢幕與模擬觸控操作。</string>
+    <string name="permission_shizuku_rationale_title">Shizuku 授權說明</string>
+    <string name="permission_shizuku_rationale_desc">ReLC 需要透過 Shizuku 存取 Android 系統特權 API，用以建立獨立的虛擬螢幕並精準模擬觸控操作。這讓自動化腳本能夠在不干擾實體螢幕的情況下穩定運行。</string>
+
+    <string name="permission_notification_title">通知權限</string>
+    <string name="permission_notification_desc">在背景執行腳本或開啟 Workbench 時顯示即時狀態與控制通知。</string>
+    <string name="permission_notification_rationale_title">通知權限說明</string>
+    <string name="permission_notification_rationale_desc">ReLC 需要發送通知權限，以便在背景執行自動化腳本或開啟 Script Workbench 伺服器時，於通知列顯示即時執行狀態、日誌訊息與一鍵停止按鈕。未開啟通知可能導致您在切換至其他應用時無法即時掌握腳本運作。</string>
+
+    <string name="permission_overlay_title">懸浮窗權限</string>
+    <string name="permission_overlay_desc">在其他應用程式上方顯示浮動控制視窗與輔助介面。</string>
+    <string name="permission_overlay_rationale_title">懸浮窗權限說明</string>
+    <string name="permission_overlay_rationale_desc">ReLC 需要「顯示在其他應用程式上層」權限，以便在腳本執行或進行螢幕錄製與除錯時，在畫面上呈現便於操作的浮動控制器。</string>
+
+    <string name="permission_secondary_displays_title">次要顯示器支援</string>
+    <string name="permission_secondary_displays_desc">系統是否支援在次要/虛擬顯示器上啟動與執行應用程式。</string>
+    <string name="permission_secondary_displays_enabled">系統支援</string>
+    <string name="permission_secondary_displays_disabled">系統不支援或已被停用</string>
 </resources>
