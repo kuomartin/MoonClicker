@@ -30,6 +30,8 @@ import kotlin.time.Duration.Companion.milliseconds
 
 data class SettingsUiState(
     val shizukuStatus: ShizukuConnectionStatus = ShizukuConnectionStatus.NOT_AVAILABLE,
+    val hasNotificationPermission: Boolean = false,
+    val hasOverlayPermission: Boolean = false,
     val osAllowSecondaryDisplays: Boolean = false,
     val isRefreshing: Boolean = false,
     val autoOpenFullscreen: Boolean = false,
@@ -67,7 +69,6 @@ class SettingsViewModel @Inject constructor(
     private val workbenchServer: WorkbenchServer,
     val authStore: WorkbenchAuthStore,
 ) : ViewModel() {
-    private val _osAllowSecondaryDisplays = MutableStateFlow(false)
     private val isRefreshing = MutableStateFlow(false)
 
     /** 先併成一份，是為了讓外層 combine 停在小於等於 5 個具名參數上。 */
@@ -75,6 +76,12 @@ class SettingsViewModel @Inject constructor(
         userServiceLifecycle.snapshot,
         scriptSession.state,
     ) { snapshot, session -> Triple(snapshot.connection, snapshot.autoStartEnabled, session.isRunning) }
+
+    private val permissionCombinedState = combine(
+        permissionManager.hasNotificationPermission,
+        permissionManager.hasOverlayPermission,
+        permissionManager.osAllowSecondaryDisplays,
+    ) { notification, overlay, secondary -> Triple(notification, overlay, secondary) }
 
     private val authState = combine(
         authStore.isPairingActive,
@@ -94,13 +101,15 @@ class SettingsViewModel @Inject constructor(
 
     val uiState: StateFlow<SettingsUiState> = combine(
         userServiceState,
-        permissionManager.osAllowSecondaryDisplaysFlow,
+        permissionCombinedState,
         isRefreshing,
         appSettings.autoOpenFullscreen,
         workbenchCombinedState,
-    ) { (status, autoStart, scriptRunning), allowSecondary, refreshing, autoOpenFullscreen, (workbenchEnabled, workbenchAddress, auth) ->
+    ) { (status, autoStart, scriptRunning), (hasNotification, hasOverlay, allowSecondary), refreshing, autoOpenFullscreen, (workbenchEnabled, workbenchAddress, auth) ->
         SettingsUiState(
             shizukuStatus = status,
+            hasNotificationPermission = hasNotification,
+            hasOverlayPermission = hasOverlay,
             osAllowSecondaryDisplays = allowSecondary,
             isRefreshing = refreshing,
             autoOpenFullscreen = autoOpenFullscreen,
@@ -130,12 +139,10 @@ class SettingsViewModel @Inject constructor(
                 if (fromPullToRefresh) {
                     Timber.d("fromPullToRefresh : $uiState")
                     isRefreshing.value = true
-                    // 下拉重整只該重新檢查狀態，不該彈授權對話框；要授權請按健康檢查卡片上的按鈕。
+                    // 下拉重整只該重新檢查狀態，不該彈授權對話框；要授權請按按鈕。
                     shizukuManager.refreshAccess()
                 }
-                _osAllowSecondaryDisplays.value = context.packageManager.hasSystemFeature(
-                    PackageManager.FEATURE_ACTIVITIES_ON_SECONDARY_DISPLAYS
-                )
+                permissionManager.refreshPermissions()
             } catch (t: Throwable) {
                 Timber.e(t, "refreshPermissions failed")
             } finally {
@@ -170,6 +177,9 @@ class SettingsViewModel @Inject constructor(
 
     fun getOpenShizukuIntent() = shizukuManager.getOpenShizukuIntent()
     fun requestShizukuPermission() = shizukuManager.requestPermission()
+    fun getNotificationSettingsIntent() = permissionManager.getNotificationSettingsIntent()
+    fun getOverlaySettingsIntent() = permissionManager.getOverlaySettingsIntent()
+    fun getAppSettingsIntent() = permissionManager.getAppSettingsIntent()
 
     fun startPairingMode() = authStore.startPairingMode()
     fun stopPairingMode() = authStore.stopPairingMode()

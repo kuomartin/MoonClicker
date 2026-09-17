@@ -42,7 +42,7 @@ struct VisionHit {
  */
 class VisionMatcher {
 public:
-    VisionMatcher(int frameWidth, int frameHeight, const std::string &scriptDir);
+    VisionMatcher(int frameWidth, int frameHeight, std::string scriptDir);
 
     /** 由 app 進程的 DisplayListener 推入（Surface.ROTATION_*, 0..3）。不會旋轉任何東西，只是記錄。 */
     void setRotation(int rotation);

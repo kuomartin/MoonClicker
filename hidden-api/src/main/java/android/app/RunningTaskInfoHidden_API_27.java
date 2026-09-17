@@ -10,14 +10,5 @@ import dev.rikka.tools.refine.RefineAs;
 @RefineAs(ActivityManager.RunningTaskInfo.class)
 public class RunningTaskInfoHidden_API_27 {
     public int id;
-    //    public int stackId;
     public ComponentName baseActivity;
-//    public ComponentName topActivity;
-//    public Bitmap thumbnail;
-//    public CharSequence description;
-//    public int numActivities;
-//    public int numRunning;
-//    public long lastActiveTime;
-//    public boolean supportsSplitScreenMultiWindow;
-//    public int resizeMode;
 }
