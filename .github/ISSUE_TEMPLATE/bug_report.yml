@@ -1,0 +1,85 @@
+name: Bug Report / 問題回報
+description: Report a reproducible bug or crash in ReLC / 回報 ReLC 的錯誤或異常崩潰
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感謝您協助回報問題！請盡可能提供詳細資訊，以利我們快速定位並修復。
+        Thank you for reporting an issue! Please provide as much detail as possible.
+
+  - type: input
+    id: version
+    attributes:
+      label: ReLC Version / ReLC 版本
+      description: e.g. v0.1.0, commit hash / 例如 v0.1.0 或 commit 雜湊值
+      placeholder: v0.1.0
+    validations:
+      required: true
+
+  - type: input
+    id: device
+    attributes:
+      label: Device & OS Version / 裝置型號與系統版本
+      description: e.g. Pixel 8 (Android 14), Samsung Galaxy S23 (Android 14)
+      placeholder: Pixel 8 / Android 14
+    validations:
+      required: true
+
+  - type: dropdown
+    id: shizuku_mode
+    attributes:
+      label: Shizuku / Root Mode / Shizuku 或 Root 狀態
+      description: How is Shizuku running on your device? / 您的 Shizuku 運行方式為何？
+      options:
+        - "Shizuku (Wireless ADB / 無線除錯)"
+        - "Shizuku (Rooted / Root 模式)"
+        - "Sui"
+        - "Not running / 未啟動"
+        - "Other / 其他"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description / 問題描述
+      description: Clear and concise description of what the bug is / 簡要清楚地描述發生的異常現象
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce / 重現步驟
+      description: Steps to reproduce the behavior / 重現問題的具體操作步驟
+      placeholder: |
+        1. Open '...' / 開啟 '...'
+        2. Click on '...' / 點擊 '...'
+        3. See error / 觀察到錯誤
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior / 預期行為
+      description: What did you expect to happen? / 您預期應該發生的正常行為為何？
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant Logs / Logcat / 相關記錄
+      description: Please paste relevant logcat or terminal output / 請附上相關的 logcat 或終端輸出訊息
+      render: shell
+
+  - type: checkboxes
+    id: checkboxes
+    attributes:
+      label: Confirmation / 確認事項
+      options:
+        - label: I have verified this is not a duplicate of an existing issue. / 我已確認這不是重複的 Issue。
+          required: true
