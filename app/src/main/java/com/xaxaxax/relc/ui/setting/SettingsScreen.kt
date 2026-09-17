@@ -48,7 +48,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -58,6 +57,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import com.xaxaxax.relc.ui.theme.SuccessColor
 import com.xaxaxax.relc.R
 import com.xaxaxax.relc.shizuku.ShizukuConnectionStatus
 import com.xaxaxax.relc.ui.component.PermissionRationaleDialog
@@ -285,7 +285,7 @@ private fun SettingsScreenContent(
                                     } else {
                                         stringResource(R.string.permission_not_granted)
                                     },
-                                    statusColor = if (uiState.hasNotificationPermission) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error,
+                                    statusColor = if (uiState.hasNotificationPermission) SuccessColor else MaterialTheme.colorScheme.error,
                                     isGranted = uiState.hasNotificationPermission,
                                     actionLabel = if (uiState.hasNotificationPermission) {
                                         stringResource(R.string.permission_action_settings)
@@ -307,7 +307,7 @@ private fun SettingsScreenContent(
                                     } else {
                                         stringResource(R.string.permission_not_granted)
                                     },
-                                    statusColor = if (uiState.hasOverlayPermission) Color(0xFF4CAF50) else MaterialTheme.colorScheme.outline,
+                                    statusColor = if (uiState.hasOverlayPermission) SuccessColor else MaterialTheme.colorScheme.outline,
                                     isGranted = uiState.hasOverlayPermission,
                                     actionLabel = stringResource(R.string.permission_action_settings),
                                     onAction = onRequestOverlayPermission,
@@ -325,7 +325,7 @@ private fun SettingsScreenContent(
                                     } else {
                                         stringResource(R.string.permission_secondary_displays_disabled)
                                     },
-                                    statusColor = if (uiState.osAllowSecondaryDisplays) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error,
+                                    statusColor = if (uiState.osAllowSecondaryDisplays) SuccessColor else MaterialTheme.colorScheme.error,
                                     isGranted = uiState.osAllowSecondaryDisplays,
                                     actionLabel = null,
                                     onAction = null,

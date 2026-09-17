@@ -2,10 +2,21 @@ package com.xaxaxax.relc.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-val Purple80 = Color(0xFFD0BCFF)
-val PurpleGrey80 = Color(0xFFCCC2DC)
-val Pink80 = Color(0xFFEFB8C8)
+// Accent — shared hue with the launcher icon's Lua crescent gradient.
+val AccentDark = Color(0xFF7DD3FC)
+val AccentLight = Color(0xFF2563EB)
 
-val Purple40 = Color(0xFF6650a4)
-val PurpleGrey40 = Color(0xFF625b71)
-val Pink40 = Color(0xFF7D5260)
+// Dark theme surfaces — same family as the icon background.
+val BackgroundDark = Color(0xFF0A0916)
+val SurfaceDark = Color(0xFF151229)
+val OnSurfaceDark = Color(0xFFE7E7EE)
+val OutlineDark = Color(0xFF2A2745)
+
+// Light theme surfaces.
+val BackgroundLight = Color(0xFFF4F4F7)
+val SurfaceLight = Color(0xFFFFFFFF)
+val OnSurfaceLight = Color(0xFF151229)
+val OutlineLight = Color(0xFFD8D8E0)
+
+// Semantic — permission/status "granted" state, shared by both themes.
+val SuccessColor = Color(0xFF4CAF50)
