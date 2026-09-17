@@ -7,13 +7,13 @@
     android:viewportHeight="108">
 
     <!-- Lua crescent moon: the single motif -->
-    <path android:pathData="M81.45,56.41 A27.45,27.45 0 1,1 51.59,26.55 A21.35,21.35 0 0,0 81.45,56.41 Z">
+    <path android:pathData="M78.75,56.17 A24.75,24.75 0 1,1 51.83,29.25 A19.25,19.25 0 0,0 78.75,56.17 Z">
         <aapt:attr name="android:fillColor">
             <gradient
-                android:startX="48"
-                android:startY="20"
-                android:endX="85"
-                android:endY="62"
+                android:startX="50"
+                android:startY="22"
+                android:endX="83"
+                android:endY="60"
                 android:type="linear">
                 <item android:color="#FF93E4FF" android:offset="0.0" />
                 <item android:color="#FF2563EB" android:offset="1.0" />
