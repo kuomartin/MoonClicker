@@ -35,12 +35,6 @@ android {
         }
     }
 
-    sourceSets {
-        getByName("main") {
-            jniLibs.directories += "$openCvSdkDir/sdk/native/libs"
-        }
-    }
-
     packaging {
         jniLibs {
             useLegacyPackaging = false
