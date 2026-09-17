@@ -260,7 +260,7 @@ class ShizukuManager(private val context: Context) {
         }
         block(svc)
     }.onFailure {
-        Timber.e(it, "呼叫 RelcV2Service 逾時或服務不可用")
+        Timber.e(it, "Call to RelcV2Service timed out or service unavailable")
     }
 
     // -------------------------------------------------------------

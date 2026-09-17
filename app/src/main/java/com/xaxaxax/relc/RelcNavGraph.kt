@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -70,10 +71,9 @@ fun RelcNavGraph(
                 val isSelected = currentDestination?.hierarchy?.any {
                     it.hasRoute(destination.route::class)
                 } == true
-
                 item(
-                    icon = { Icon(destination.icon, contentDescription = destination.label) },
-                    label = { Text(destination.label) },
+                    icon = { Icon(destination.icon, contentDescription = stringResource(destination.labelRes)) },
+                    label = { Text(stringResource(destination.labelRes)) },
                     selected = isSelected,
                     onClick = { navigateToTopLevel(destination.route) }
                 )

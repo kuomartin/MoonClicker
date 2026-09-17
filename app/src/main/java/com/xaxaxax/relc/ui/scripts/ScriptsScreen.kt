@@ -269,7 +269,7 @@ fun ScriptItem(
                 IconButton(onClick = onStop) {
                     Icon(
                         Icons.Default.Stop,
-                        contentDescription = "Stop",
+                        contentDescription = stringResource(R.string.script_detail_stop),
                         tint = MaterialTheme.colorScheme.error
                     )
                 }
@@ -277,7 +277,7 @@ fun ScriptItem(
                 IconButton(onClick = onPlay, enabled = !otherRunning) {
                     Icon(
                         Icons.Default.PlayArrow,
-                        contentDescription = "Play",
+                        contentDescription = stringResource(R.string.script_detail_run),
                         tint = MaterialTheme.colorScheme.primary
                     )
                 }
@@ -288,13 +288,14 @@ fun ScriptItem(
 
 @Composable
 private fun targetSummary(script: Script): String = script.display?.let {
-    "${it.width} × ${it.height} · 虛擬顯示"
+    stringResource(R.string.scripts_target_summary_virtual, it.width, it.height)
 } ?: stringResource(R.string.script_target_physical)
 
+@Composable
 private fun EngineRunState.summary(): String? = when (this) {
     is EngineRunState.Error -> message
-    is EngineRunState.Finished -> "已完成"
-    is EngineRunState.Stopped -> "已停止"
+    is EngineRunState.Finished -> stringResource(R.string.scripts_status_finished_short)
+    is EngineRunState.Stopped -> stringResource(R.string.scripts_status_stopped_short)
     else -> null
 }
 
@@ -334,9 +335,9 @@ fun ScriptsScreenPreview() {
         ScriptsScreenContent(
             uiState = ScriptsUiState(
                 scripts = listOf(
-                    Script("daily", File("/tmp/daily"), "自動簽到", "每天開 App 點簽到", null),
+                    Script("daily", File("/tmp/daily"), "Daily Check-in", "Open app daily for reward", null),
                 ),
-                scriptsPath = "/storage/emulated/0/Android/data/com.xaxaxax.relc/files/scripts",
+                scriptsPath = "/storage/emulated/0/Android/data/com.xaxaxax/files/scripts",
             )
         )
     }

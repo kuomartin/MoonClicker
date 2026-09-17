@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.xaxaxax.relc.R
 import com.xaxaxax.relc.script.Script
 import com.xaxaxax.relc.script.ScriptArchive
 import com.xaxaxax.relc.script.ScriptSession
@@ -79,16 +80,16 @@ class ScriptsViewModel @Inject constructor(
                 runCatching {
                     context.contentResolver.openInputStream(uri)?.use { input ->
                         ScriptArchive.import(input, store.root, displayName(uri))
-                    } ?: ScriptArchive.ImportResult.Failed("讀不到選取的檔案")
+                    } ?: ScriptArchive.ImportResult.Failed(context.getString(R.string.scripts_cannot_read_file))
                 }.getOrElse {
                     Timber.e(it, "import failed")
-                    ScriptArchive.ImportResult.Failed(it.message ?: "匯入失敗")
+                    ScriptArchive.ImportResult.Failed(it.message ?: context.getString(R.string.scripts_imported_failed, ""))
                 }
             }
             store.refresh()
             _message.value = when (result) {
-                is ScriptArchive.ImportResult.Imported -> "已匯入 ${result.dir.name}"
-                is ScriptArchive.ImportResult.Failed -> "匯入失敗：${result.reason}"
+                is ScriptArchive.ImportResult.Imported -> context.getString(R.string.scripts_imported_success, result.dir.name)
+                is ScriptArchive.ImportResult.Failed -> context.getString(R.string.scripts_imported_failed, result.reason)
             }
         }
     }
