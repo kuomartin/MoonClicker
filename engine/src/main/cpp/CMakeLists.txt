@@ -2,8 +2,8 @@ cmake_minimum_required(VERSION 3.22.1)
 
 project("relc_native")
 
-# OpenCV setup
-find_package(OpenCV REQUIRED)
+# OpenCV setup (Statically link only core, imgproc, imgcodecs to minimize APK size)
+find_package(OpenCV REQUIRED core imgproc imgcodecs)
 
 include_directories(${OpenCV_INCLUDE_DIRS})
 include_directories(lua/lua-5.5.0)
@@ -71,6 +71,7 @@ add_library(relc_native SHARED
 set_source_files_properties(${LUA_SRC} PROPERTIES COMPILE_FLAGS "-Wno-deprecated-declarations")
 set_source_files_properties(${LUA_CJSON_SRC} PROPERTIES COMPILE_FLAGS "-Wno-deprecated-declarations")
 
+find_library(android-lib android)
 find_library(log-lib log)
 find_library(media-lib mediandk)
 
@@ -79,6 +80,7 @@ target_link_libraries(relc_native
         jnigraphics
         EGL
         GLESv2
+        ${android-lib}
         ${log-lib}
         ${media-lib}
 )
