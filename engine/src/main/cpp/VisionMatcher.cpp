@@ -11,8 +11,8 @@
 #define VM_LOG_TAG "VisionMatcher"
 #define VMLOGE(...) __android_log_print(ANDROID_LOG_ERROR, VM_LOG_TAG, __VA_ARGS__)
 
-VisionMatcher::VisionMatcher(int frameWidth, int frameHeight, const std::string &scriptDir)
-        : frameWidth(frameWidth), frameHeight(frameHeight), scriptDir(scriptDir) {}
+VisionMatcher::VisionMatcher(int frameWidth, int frameHeight, std::string scriptDir)
+        : frameWidth(frameWidth), frameHeight(frameHeight), scriptDir(std::move(scriptDir)) {}
 
 void VisionMatcher::setRotation(int rotation) {
     displayRotation.store(rotation & 3);

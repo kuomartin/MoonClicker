@@ -55,6 +55,7 @@ import com.xaxaxax.relc.R
 import com.xaxaxax.relc.engine.state.EngineRunState
 import com.xaxaxax.relc.script.Script
 import com.xaxaxax.relc.script.ScriptSessionState
+import com.xaxaxax.relc.shizuku.ShizukuConnectionStatus
 import com.xaxaxax.relc.ui.component.ShizukuStatusBar
 import com.xaxaxax.relc.ui.theme.ReLCTheme
 import java.io.File
@@ -81,9 +82,27 @@ fun ScriptsScreen(
         ActivityResultContracts.OpenDocument()
     ) { uri -> uri?.let(viewModel::import) }
 
+    var showShizukuRationale by remember { mutableStateOf(false) }
+
+    if (showShizukuRationale) {
+        com.xaxaxax.relc.ui.component.PermissionRationaleDialog(
+            title = androidx.compose.ui.res.stringResource(com.xaxaxax.relc.R.string.permission_shizuku_rationale_title),
+            description = androidx.compose.ui.res.stringResource(com.xaxaxax.relc.R.string.permission_shizuku_rationale_desc),
+            icon = androidx.compose.ui.res.painterResource(com.xaxaxax.relc.R.drawable.ic_shizuku_icon),
+            onConfirm = { viewModel.onShizukuAction() },
+            onDismiss = { showShizukuRationale = false },
+        )
+    }
+
     ScriptsScreenContent(
         uiState = uiState,
-        onShizukuAction = viewModel::onShizukuAction,
+        onShizukuAction = {
+            if (uiState.shizukuStatus == ShizukuConnectionStatus.NEED_PERMISSION) {
+                showShizukuRationale = true
+            } else {
+                viewModel.onShizukuAction()
+            }
+        },
         onRefresh = viewModel::refresh,
         onImport = { importLauncher.launch(arrayOf("application/zip", "application/octet-stream")) },
         onPlay = { viewModel.run(it) },
@@ -317,7 +336,7 @@ fun ScriptsScreenPreview() {
                 scripts = listOf(
                     Script("daily", File("/tmp/daily"), "自動簽到", "每天開 App 點簽到", null),
                 ),
-                scriptsPath = "/sdcard/Android/data/com.xaxaxax.relc/files/scripts",
+                scriptsPath = "/storage/emulated/0/Android/data/com.xaxaxax.relc/files/scripts",
             )
         )
     }

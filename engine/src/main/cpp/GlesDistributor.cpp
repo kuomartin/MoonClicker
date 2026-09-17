@@ -42,7 +42,7 @@ GlesDistributor::GlesDistributor(int width, int height)
         : width(width), height(height), eglDisplay(EGL_NO_DISPLAY), eglContext(EGL_NO_CONTEXT),
           eglPbufferSurface(EGL_NO_SURFACE), eglConfig(nullptr), textureId(0), program(0),
           vPositionHandle(0), vTextureHandle(0),
-          jSurfaceTexture(nullptr), jSurface(nullptr), isRunning(false), frameAvailable(false),
+          jSurfaceTexture(nullptr), jSurface(nullptr), isRunning(false),
           javaVM(nullptr), nextHandle(1) {}
 
 GlesDistributor::~GlesDistributor() = default;

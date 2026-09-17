@@ -1,6 +1,5 @@
 package com.xaxaxax.relc.ui.displays
 
-import android.content.Context
 import android.content.res.Resources
 import android.hardware.display.DisplayManager
 import android.util.DisplayMetrics
@@ -13,7 +12,6 @@ import com.xaxaxax.relc.shizuku.ShizukuManager
 import com.xaxaxax.relc.shizuku.createVirtualDisplay
 import com.xaxaxax.relc.ui.displaydetail.DisplayThumbnailCache
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -52,7 +50,6 @@ private const val REFRESH_DELAY = 500
 
 @HiltViewModel
 class DisplaysViewModel @Inject constructor(
-    @ApplicationContext private val context: Context,
     private val shizukuManager: ShizukuManager,
     private val thumbnailCache: DisplayThumbnailCache,
 ) : ViewModel() {
