@@ -1,23 +1,24 @@
 package com.xaxaxax.relc.ui.setting
 
+import android.Manifest
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -43,12 +44,13 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -58,11 +60,19 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.xaxaxax.relc.R
 import com.xaxaxax.relc.shizuku.ShizukuConnectionStatus
+import com.xaxaxax.relc.ui.component.PermissionRationaleDialog
 import com.xaxaxax.relc.ui.component.Section
 import com.xaxaxax.relc.ui.component.shizukuStatusAppearance
 import com.xaxaxax.relc.ui.theme.ReLCTheme
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlin.time.Duration.Companion.milliseconds
 
-typealias HealthCheckActions = List<Pair<String, () -> Unit>>
+enum class RationaleDialogType {
+    NOTIFICATION,
+    SHIZUKU,
+    OVERLAY,
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -70,8 +80,13 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val launcher = rememberLauncherForActivityResult(
+    val activityResultLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
+    ) {
+        viewModel.refreshPermissions()
+    }
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
     ) {
         viewModel.refreshPermissions()
     }
@@ -82,10 +97,84 @@ fun SettingsScreen(
         contract = ActivityResultContracts.RequestPermission()
     ) {}
 
+    var activeRationale by remember { mutableStateOf<RationaleDialogType?>(null) }
+
+    when (activeRationale) {
+        RationaleDialogType.NOTIFICATION -> {
+            PermissionRationaleDialog(
+                title = stringResource(R.string.permission_notification_rationale_title),
+                description = stringResource(R.string.permission_notification_rationale_desc),
+                icon = painterResource(R.drawable.ic_launcher_foreground),
+                confirmText = stringResource(R.string.permission_action_proceed),
+                dismissText = stringResource(R.string.permission_action_cancel),
+                onConfirm = {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    } else {
+                        activityResultLauncher.launch(viewModel.getNotificationSettingsIntent())
+                    }
+                },
+                onDismiss = { activeRationale = null },
+            )
+        }
+        RationaleDialogType.SHIZUKU -> {
+            PermissionRationaleDialog(
+                title = stringResource(R.string.permission_shizuku_rationale_title),
+                description = stringResource(R.string.permission_shizuku_rationale_desc),
+                icon = painterResource(R.drawable.ic_shizuku_icon),
+                confirmText = stringResource(R.string.permission_action_proceed),
+                dismissText = stringResource(R.string.permission_action_cancel),
+                onConfirm = {
+                    if (uiState.shizukuStatus == ShizukuConnectionStatus.NOT_AVAILABLE) {
+                        activityResultLauncher.launch(viewModel.getOpenShizukuIntent())
+                    } else {
+                        viewModel.requestShizukuPermission()
+                    }
+                },
+                onDismiss = { activeRationale = null },
+            )
+        }
+        RationaleDialogType.OVERLAY -> {
+            PermissionRationaleDialog(
+                title = stringResource(R.string.permission_overlay_rationale_title),
+                description = stringResource(R.string.permission_overlay_rationale_desc),
+                icon = painterResource(R.drawable.ic_picture_in_picture_off),
+                confirmText = stringResource(R.string.permission_action_proceed),
+                dismissText = stringResource(R.string.permission_action_cancel),
+                onConfirm = {
+                    activityResultLauncher.launch(viewModel.getOverlaySettingsIntent())
+                },
+                onDismiss = { activeRationale = null },
+            )
+        }
+        null -> {}
+    }
+
     SettingsScreenContent(
         uiState = uiState,
-        onOpenShizuku = { launcher.launch(viewModel.getOpenShizukuIntent()) },
-        onRequestShizukuPermission = { viewModel.requestShizukuPermission() },
+        onRequestShizukuPermission = {
+            if (uiState.shizukuStatus == ShizukuConnectionStatus.NOT_AVAILABLE ||
+                uiState.shizukuStatus == ShizukuConnectionStatus.NEED_PERMISSION
+            ) {
+                activeRationale = RationaleDialogType.SHIZUKU
+            } else {
+                viewModel.requestShizukuPermission()
+            }
+        },
+        onRequestNotificationPermission = {
+            if (uiState.hasNotificationPermission) {
+                activityResultLauncher.launch(viewModel.getNotificationSettingsIntent())
+            } else {
+                activeRationale = RationaleDialogType.NOTIFICATION
+            }
+        },
+        onRequestOverlayPermission = {
+            if (uiState.hasOverlayPermission) {
+                activityResultLauncher.launch(viewModel.getOverlaySettingsIntent())
+            } else {
+                activeRationale = RationaleDialogType.OVERLAY
+            }
+        },
         onRefresh = { viewModel.refreshPermissions(true) },
         onAutoOpenFullscreenChange = viewModel::setAutoOpenFullscreen,
         onAutoStartUserServiceChange = viewModel::setAutoStartUserService,
@@ -109,8 +198,9 @@ fun SettingsScreen(
 @Composable
 private fun SettingsScreenContent(
     uiState: SettingsUiState,
-    onOpenShizuku: () -> Unit,
     onRequestShizukuPermission: () -> Unit,
+    onRequestNotificationPermission: () -> Unit,
+    onRequestOverlayPermission: () -> Unit,
     onRefresh: () -> Unit,
     onAutoOpenFullscreenChange: (Boolean) -> Unit,
     onAutoStartUserServiceChange: (Boolean) -> Unit = {},
@@ -158,59 +248,89 @@ private fun SettingsScreenContent(
                     .nestedScroll(scrollBehavior.nestedScrollConnection),
             ) {
                 item {
-                    Section("Health Check") {
-                        val hasAnyFailure = !uiState.shizukuStatus.isAuthorized ||
-                                !uiState.osAllowSecondaryDisplays
+                    Section(name = stringResource(R.string.settings_permissions_title)) {
+                        ElevatedCard(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            shape = MaterialTheme.shapes.extraLarge,
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                // 1. Shizuku
+                                val (shizukuLabel, shizukuTint) = shizukuStatusAppearance(uiState.shizukuStatus)
+                                PermissionRow(
+                                    painter = painterResource(R.drawable.ic_shizuku_icon),
+                                    title = stringResource(R.string.permission_shizuku_title),
+                                    description = stringResource(R.string.permission_shizuku_desc),
+                                    statusText = shizukuLabel,
+                                    statusColor = shizukuTint,
+                                    isGranted = uiState.shizukuStatus.isAuthorized,
+                                    actionLabel = when (uiState.shizukuStatus) {
+                                        ShizukuConnectionStatus.NOT_AVAILABLE -> stringResource(R.string.permission_action_open_shizuku)
+                                        ShizukuConnectionStatus.NEED_PERMISSION -> stringResource(R.string.permission_action_grant)
+                                        else -> null
+                                    },
+                                    onAction = onRequestShizukuPermission,
+                                )
 
-                        if (hasAnyFailure) {
-                            ElevatedCard(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(16.dp),
-                                shape = MaterialTheme.shapes.extraLarge
-                            ) {
-                                Column {
-                                    var first = true
-                                    if (uiState.shizukuStatus == ShizukuConnectionStatus.NOT_AVAILABLE) {
-                                        HealthCheckFailedItem(
-                                            painterResource(R.drawable.ic_shizuku_icon),
-                                            "Shizuku Not Running",
-                                            "Start the Shizuku service to enable advanced features.",
-                                            actions = listOf("Launch Shizuku" to onOpenShizuku)
-                                        )
-                                        first = false
-                                    } else if (uiState.shizukuStatus == ShizukuConnectionStatus.NEED_PERMISSION) {
-                                        HealthCheckFailedItem(
-                                            painterResource(R.drawable.ic_shizuku_icon),
-                                            "Shizuku Permission Required",
-                                            "Permission is required to interact with system services.",
-                                            actions = listOf("Grant Permission" to onRequestShizukuPermission)
-                                        )
-                                        first = false
-                                    }
+                                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
 
-                                    if (!uiState.osAllowSecondaryDisplays) {
-                                        if (!first) HorizontalDivider(
-                                            modifier = Modifier.padding(
-                                                horizontal = 16.dp
-                                            )
-                                        )
-                                        HealthCheckFailedItem(
-                                            painterResource(R.drawable.ic_picture_in_picture_off),
-                                            "Secondary Displays Disabled",
-                                            "The system disabled secondary displays, which is an important feature for this app.",
-                                            actions = listOf()
-                                        )
-                                    }
-                                }
+                                // 2. Notification
+                                PermissionRow(
+                                    painter = painterResource(R.drawable.ic_launcher_foreground),
+                                    title = stringResource(R.string.permission_notification_title),
+                                    description = stringResource(R.string.permission_notification_desc),
+                                    statusText = if (uiState.hasNotificationPermission) {
+                                        stringResource(R.string.permission_granted)
+                                    } else {
+                                        stringResource(R.string.permission_not_granted)
+                                    },
+                                    statusColor = if (uiState.hasNotificationPermission) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error,
+                                    isGranted = uiState.hasNotificationPermission,
+                                    actionLabel = if (uiState.hasNotificationPermission) {
+                                        stringResource(R.string.permission_action_settings)
+                                    } else {
+                                        stringResource(R.string.permission_action_grant)
+                                    },
+                                    onAction = onRequestNotificationPermission,
+                                )
+
+                                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+
+                                // 3. Overlay
+                                PermissionRow(
+                                    painter = painterResource(R.drawable.ic_picture_in_picture_off),
+                                    title = stringResource(R.string.permission_overlay_title),
+                                    description = stringResource(R.string.permission_overlay_desc),
+                                    statusText = if (uiState.hasOverlayPermission) {
+                                        stringResource(R.string.permission_granted)
+                                    } else {
+                                        stringResource(R.string.permission_not_granted)
+                                    },
+                                    statusColor = if (uiState.hasOverlayPermission) Color(0xFF4CAF50) else MaterialTheme.colorScheme.outline,
+                                    isGranted = uiState.hasOverlayPermission,
+                                    actionLabel = stringResource(R.string.permission_action_settings),
+                                    onAction = onRequestOverlayPermission,
+                                )
+
+                                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+
+                                // 4. Secondary Displays
+                                PermissionRow(
+                                    painter = painterResource(R.drawable.ic_picture_in_picture_off),
+                                    title = stringResource(R.string.permission_secondary_displays_title),
+                                    description = stringResource(R.string.permission_secondary_displays_desc),
+                                    statusText = if (uiState.osAllowSecondaryDisplays) {
+                                        stringResource(R.string.permission_secondary_displays_enabled)
+                                    } else {
+                                        stringResource(R.string.permission_secondary_displays_disabled)
+                                    },
+                                    statusColor = if (uiState.osAllowSecondaryDisplays) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error,
+                                    isGranted = uiState.osAllowSecondaryDisplays,
+                                    actionLabel = null,
+                                    onAction = null,
+                                )
                             }
-                        }
-                        if (uiState.shizukuStatus.isAuthorized) {
-                            HealthCheckGood(
-                                painter = painterResource(R.drawable.ic_shizuku_icon),
-                                title = "Shizuku Authorized",
-                                description = "Permission granted."
-                            )
                         }
                     }
                 }
@@ -529,74 +649,79 @@ private fun WorkbenchPairingSection(
 }
 
 @Composable
-private fun HealthCheckGood(
-    painter: Painter, title: String, description: String,
+private fun PermissionRow(
+    painter: Painter? = null,
+    imageVector: ImageVector? = null,
+    title: String,
+    description: String,
+    statusText: String,
+    statusColor: Color,
+    isGranted: Boolean,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null,
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(
-            painter = painter,
-            contentDescription = null,
-            modifier = Modifier.padding(end = 16.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Column(modifier = Modifier.weight(1f)) {
-            Text(text = title, style = MaterialTheme.typography.bodyLarge)
-            Text(
-                text = description,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        Icon(
-            imageVector = Icons.Default.Check,
-            contentDescription = null,
-            tint = Color(0xFF4CAF50)
-        )
-    }
-}
-
-@Composable
-private fun HealthCheckFailedItem(
-    painter: Painter, title: String, description: String, actions: HealthCheckActions
-) {
-    Column(
-        modifier = Modifier
-            .padding(16.dp)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        if (painter != null) {
             Icon(
                 painter = painter,
                 contentDescription = null,
-                modifier = Modifier.padding(end = 12.dp)
+                modifier = Modifier
+                    .padding(end = 16.dp)
+                    .size(24.dp),
+                tint = if (isGranted) statusColor else MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
+        } else if (imageVector != null) {
+            Icon(
+                imageVector = imageVector,
+                contentDescription = null,
+                modifier = Modifier
+                    .padding(end = 16.dp)
+                    .size(24.dp),
+                tint = if (isGranted) statusColor else MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        Spacer(modifier = Modifier.padding(4.dp))
-        Text(
-            text = description,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        if (actions.isNotEmpty()) {
-            Spacer(modifier = Modifier.padding(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                actions.forEach { (name, action) ->
-                    Button(
-                        onClick = action,
-                        shape = MaterialTheme.shapes.extraLarge
-                    ) {
-                        Text(text = name)
-                    }
+        Column(modifier = Modifier.weight(1f)) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Surface(
+                    shape = CircleShape,
+                    color = statusColor.copy(alpha = 0.12f),
+                ) {
+                    Text(
+                        text = statusText,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = statusColor,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                        maxLines = 1,
+                    )
                 }
+            }
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (actionLabel != null && onAction != null) {
+            Spacer(modifier = Modifier.width(8.dp))
+            Button(
+                onClick = onAction,
+                shape = MaterialTheme.shapes.extraLarge,
+            ) {
+                Text(text = actionLabel, style = MaterialTheme.typography.labelMedium)
             }
         }
     }
@@ -608,22 +733,36 @@ private fun SettingsScreenPreview() {
     ReLCTheme {
         Surface {
             var uiState by remember { mutableStateOf(SettingsUiState()) }
+            val coroutineScope = rememberCoroutineScope()
+
             SettingsScreenContent(
                 uiState = uiState,
-                onOpenShizuku = {
-                    uiState = uiState.copy(
-                        shizukuStatus = ShizukuConnectionStatus.NEED_PERMISSION
-                    )
-                },
                 onRequestShizukuPermission = {
-                    uiState = uiState.copy(
-                        shizukuStatus = ShizukuConnectionStatus.CONNECTED
-                    )
+                    when (uiState.shizukuStatus) {
+                        ShizukuConnectionStatus.NOT_AVAILABLE -> coroutineScope.launch{
+
+                            uiState = uiState.copy(shizukuStatus = ShizukuConnectionStatus.NEED_PERMISSION)
+                        }
+                        ShizukuConnectionStatus.NEED_PERMISSION ->
+                            uiState = uiState.copy(shizukuStatus = ShizukuConnectionStatus.DISCONNECTED)
+                        ShizukuConnectionStatus.DISCONNECTED -> coroutineScope.launch {
+                            uiState = uiState.copy(shizukuStatus = ShizukuConnectionStatus.CONNECTING)
+                            delay(5000.milliseconds)
+                            uiState = uiState.copy(shizukuStatus = ShizukuConnectionStatus.CONNECTED)
+                        }
+                        else -> {}
+                    }
+                },
+                onRequestNotificationPermission = {
+                    uiState = uiState.copy(hasNotificationPermission = true)
+                },
+                onRequestOverlayPermission = {
+                    uiState = uiState.copy(hasOverlayPermission = true)
                 },
                 onRefresh = { uiState = SettingsUiState() },
-                onAutoOpenFullscreenChange = {
-                    uiState = uiState.copy(autoOpenFullscreen = it)
-                },
+                onAutoOpenFullscreenChange = { isChecked ->
+                    uiState = uiState.copy(autoOpenFullscreen = isChecked)
+                }
             )
         }
     }

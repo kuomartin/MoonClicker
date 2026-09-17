@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -329,7 +330,7 @@ fun rememberHostDisplayRotation(): Int {
     val context = LocalContext.current
     val displayManager = remember(context) { context.getSystemService(DisplayManager::class.java) }
     var rotation by remember {
-        mutableStateOf(displayManager.getDisplay(Display.DEFAULT_DISPLAY)?.rotation ?: 0)
+        mutableIntStateOf(displayManager.getDisplay(Display.DEFAULT_DISPLAY)?.rotation ?: 0)
     }
 
     DisposableEffect(displayManager) {

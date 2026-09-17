@@ -6,6 +6,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.util.Locale
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -20,7 +21,7 @@ sealed interface PairResult {
 
 @Singleton
 class WorkbenchAuthStore @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
 ) {
     private val prefs: SharedPreferences =
         context.getSharedPreferences("workbench_auth", Context.MODE_PRIVATE)
@@ -39,14 +40,14 @@ class WorkbenchAuthStore @Inject constructor(
     )
     val bruteForceProtectionEnabled: StateFlow<Boolean> = _bruteForceProtectionEnabled.asStateFlow()
 
-    private val _authorizedTokens = MutableStateFlow<Set<String>>(loadTokens())
+    private val _authorizedTokens = MutableStateFlow(loadTokens())
     val authorizedTokens: StateFlow<Set<String>> = _authorizedTokens.asStateFlow()
 
     private var failedAttempts = 0
     private var lockoutUntilMs = 0L
 
     fun startPairingMode(): String {
-        val pin = String.format("%06d", Random.nextInt(1000000))
+        val pin = String.format(Locale.US, "%06d", Random.nextInt(1000000))
         val expiry = System.currentTimeMillis() + PAIRING_TIMEOUT_MS
         _pairingPin.value = pin
         _pairingExpiryMs.value = expiry
