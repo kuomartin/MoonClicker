@@ -21,6 +21,8 @@ import com.xaxaxax.relc.R
 import com.xaxaxax.relc.shizuku.ShizukuConnectionStatus
 import com.xaxaxax.relc.ui.theme.ReLCTheme
 
+import androidx.compose.ui.res.stringResource
+
 /**
  * 顯示在 Displays / Scripts 畫面最上方的一小條 Shizuku 狀態列：
  * 授權狀態 + UserService 連線狀態，並附一顆「取得授權 / 啟動 UserService」按鈕。
@@ -35,8 +37,8 @@ fun ShizukuStatusBar(
 ) {
     val (label, tint) = shizukuStatusAppearance(status)
     val actionLabel = when (status) {
-        ShizukuConnectionStatus.NEED_PERMISSION -> "授權"
-        ShizukuConnectionStatus.NOT_AVAILABLE, ShizukuConnectionStatus.DISCONNECTED -> "連線"
+        ShizukuConnectionStatus.NEED_PERMISSION -> stringResource(R.string.shizuku_action_grant)
+        ShizukuConnectionStatus.NOT_AVAILABLE, ShizukuConnectionStatus.DISCONNECTED -> stringResource(R.string.shizuku_action_connect)
         ShizukuConnectionStatus.CONNECTING, ShizukuConnectionStatus.CONNECTED -> null
     }
 

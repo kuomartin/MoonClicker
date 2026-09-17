@@ -20,6 +20,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import com.xaxaxax.relc.R
 import com.xaxaxax.relc.ui.theme.ReLCTheme
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -30,7 +32,7 @@ fun <T> DropdownBox(
     transform: (T) -> String,
     onChange: (T) -> Unit,
     modifier: Modifier = Modifier,
-    label: String = "請選擇",
+    label: String = stringResource(R.string.common_select),
     enabled: Boolean = true
 ) {
     var expanded by remember { mutableStateOf(false) }

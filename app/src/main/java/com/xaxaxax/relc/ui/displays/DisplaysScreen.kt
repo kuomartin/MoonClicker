@@ -66,7 +66,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import com.xaxaxax.relc.R
 import com.xaxaxax.relc.shizuku.ShizukuConnectionStatus
 import com.xaxaxax.relc.ui.component.ShizukuStatusBar
 import com.xaxaxax.relc.ui.theme.ReLCTheme
@@ -126,6 +128,8 @@ fun DisplaysScreen(
         )
     }
 
+    val shizukuRequiredMessage = stringResource(R.string.displays_shizuku_required)
+
     DisplaysScreenContent(
         uiState = uiState,
         defaultWidth = viewModel.defaultConfig.width,
@@ -151,7 +155,7 @@ fun DisplaysScreen(
             if (!uiState.shizukuStatus.isConnected) {
                 Toast.makeText(
                     context,
-                    "Shizuku permission required for create display",
+                    shizukuRequiredMessage,
                     Toast.LENGTH_SHORT
                 ).show()
             }
@@ -195,7 +199,7 @@ internal fun DisplaysScreenContent(
         modifier = Modifier,
         topBar = {
             MediumTopAppBar(
-                title = { Text("Displays") },
+                title = { Text(stringResource(R.string.displays_title)) },
                 scrollBehavior = scrollBehavior
             )
         },
@@ -208,7 +212,7 @@ internal fun DisplaysScreenContent(
                 containerColor = MaterialTheme.colorScheme.primaryContainer,
                 contentColor = MaterialTheme.colorScheme.onPrimaryContainer
             ) {
-                Icon(Icons.Default.Add, contentDescription = "Create Display")
+                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.displays_create))
             }
         }
     ) { innerPadding ->
@@ -253,7 +257,7 @@ internal fun DisplaysScreenContent(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = "No displays created",
+                                    text = stringResource(R.string.displays_empty),
                                     style = MaterialTheme.typography.bodyLarge,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -336,14 +340,14 @@ private fun DisplayCard(
                     )
                 } else if (info.isPhysical && !info.isMirrorActive) {
                     Text(
-                        text = "鏡像未開啟",
+                        text = stringResource(R.string.displays_card_mirror_not_active),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
             Text(
-                text = if (info.isPhysical) "Physical #${info.displayId}" else "Display #${info.displayId}",
+                text = if (info.isPhysical) stringResource(R.string.displays_card_physical, info.displayId) else stringResource(R.string.displays_card_virtual, info.displayId),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(top = 8.dp),
@@ -359,9 +363,9 @@ private fun DisplayCard(
                 label = {
                     Text(
                         if (info.isPhysical) {
-                            if (info.isMirrorActive) "實體螢幕 (鏡像運作中)" else "實體螢幕"
+                            if (info.isMirrorActive) stringResource(R.string.displays_card_tag_physical_mirroring) else stringResource(R.string.displays_card_tag_physical)
                         } else {
-                            "relcV2Service 管轄"
+                            stringResource(R.string.displays_card_tag_service)
                         }
                     )
                 },
@@ -379,7 +383,7 @@ private fun DisplayCard(
                                 ),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                Text("關閉鏡像")
+                                Text(stringResource(R.string.displays_action_stop_mirror))
                             }
                             Button(
                                 onClick = onEnter,
@@ -387,14 +391,14 @@ private fun DisplayCard(
                                     .fillMaxWidth()
                                     .padding(top = 8.dp)
                             ) {
-                                Text("Enter")
+                                Text(stringResource(R.string.displays_action_enter))
                             }
                         } else {
                             Button(
                                 onClick = { onToggleMirror(true) },
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                Text("開啟鏡像")
+                                Text(stringResource(R.string.displays_action_start_mirror))
                             }
                         }
                     } else {
@@ -405,7 +409,7 @@ private fun DisplayCard(
                             ),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("Close")
+                            Text(stringResource(R.string.displays_action_close))
                         }
                         Button(
                             onClick = onEnter,
@@ -413,7 +417,7 @@ private fun DisplayCard(
                                 .fillMaxWidth()
                                 .padding(top = 8.dp)
                         ) {
-                            Text("Enter")
+                            Text(stringResource(R.string.displays_action_enter))
                         }
                     }
                 }
@@ -430,12 +434,16 @@ private fun CreateDisplayDialog(
     onDismiss: () -> Unit,
     onConfirm: (width: Int, height: Int, densityDpi: Int) -> Unit,
 ) {
-    val presets = remember(defaultWidth, defaultHeight, defaultDensityDpi) {
+    val localLabel = stringResource(R.string.displays_preset_local)
+    val smallLabel = stringResource(R.string.displays_preset_small)
+    val mediumLabel = stringResource(R.string.displays_preset_medium)
+    val tabletLabel = stringResource(R.string.displays_preset_tablet)
+    val presets = remember(defaultWidth, defaultHeight, defaultDensityDpi, localLabel, smallLabel, mediumLabel, tabletLabel) {
         listOf(
-            DisplayPreset("Local", defaultWidth, defaultHeight, defaultDensityDpi),
-            DisplayPreset("Small", 720, 1280, 320),
-            DisplayPreset("Medium", 1080, 2400, 420),
-            DisplayPreset("Tablet", 2560, 1600, 320),
+            DisplayPreset(localLabel, defaultWidth, defaultHeight, defaultDensityDpi),
+            DisplayPreset(smallLabel, 720, 1280, 320),
+            DisplayPreset(mediumLabel, 1080, 2400, 420),
+            DisplayPreset(tabletLabel, 2560, 1600, 320),
         )
     }
     var widthText by rememberSaveable { mutableStateOf(defaultWidth.toString()) }
@@ -448,7 +456,7 @@ private fun CreateDisplayDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Create Display") },
+        title = { Text(stringResource(R.string.displays_create_dialog_title)) },
         text = {
             Column {
                 Row(
@@ -476,7 +484,7 @@ private fun CreateDisplayDialog(
                 OutlinedTextField(
                     value = widthText,
                     onValueChange = { widthText = it },
-                    label = { Text("Width (px)") },
+                    label = { Text(stringResource(R.string.displays_create_width)) },
                     isError = !widthValid,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
@@ -484,7 +492,7 @@ private fun CreateDisplayDialog(
                 OutlinedTextField(
                     value = heightText,
                     onValueChange = { heightText = it },
-                    label = { Text("Height (px)") },
+                    label = { Text(stringResource(R.string.displays_create_height)) },
                     isError = !heightValid,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
@@ -492,14 +500,19 @@ private fun CreateDisplayDialog(
                 OutlinedTextField(
                     value = dpiText,
                     onValueChange = { dpiText = it },
-                    label = { Text("Density (dpi)") },
+                    label = { Text(stringResource(R.string.displays_create_density)) },
                     isError = !dpiValid,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
                 )
                 Text(
-                    text = "$MIN_DISPLAY_DIMENSION_PX–$MAX_DISPLAY_DIMENSION_PX px, " +
-                        "$MIN_DISPLAY_DPI–$MAX_DISPLAY_DPI dpi",
+                    text = stringResource(
+                        R.string.displays_create_range_hint,
+                        MIN_DISPLAY_DIMENSION_PX,
+                        MAX_DISPLAY_DIMENSION_PX,
+                        MIN_DISPLAY_DPI,
+                        MAX_DISPLAY_DPI
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 4.dp)
@@ -511,12 +524,12 @@ private fun CreateDisplayDialog(
                 onClick = { onConfirm(widthText.toInt(), heightText.toInt(), dpiText.toInt()) },
                 enabled = widthValid && heightValid && dpiValid
             ) {
-                Text("Create")
+                Text(stringResource(R.string.common_create))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel")
+                Text(stringResource(R.string.common_cancel))
             }
         }
     )

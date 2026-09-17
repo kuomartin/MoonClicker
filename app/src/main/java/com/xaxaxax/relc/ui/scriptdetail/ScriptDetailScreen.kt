@@ -85,7 +85,7 @@ fun ScriptDetailScreen(
                 title = { Text(script?.name ?: "") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.common_back))
                     }
                 },
                 actions = {
@@ -146,7 +146,7 @@ fun ScriptDetailScreen(
             }
 
             item {
-                Section("狀態") {
+                Section(stringResource(R.string.common_status)) {
                     Text(
                         text = statusText(uiState),
                         style = MaterialTheme.typography.bodyMedium,
@@ -162,7 +162,7 @@ fun ScriptDetailScreen(
                                 Text(
                                     text = "$key = $value",
                                     style = MaterialTheme.typography.bodySmall,
-                                )
+                                    )
                             }
                         }
                     }
@@ -240,7 +240,7 @@ fun ScriptDetailScreen(
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
             title = { Text(stringResource(R.string.script_detail_delete)) },
-            text = { Text("要刪除「${script?.name}」嗎？資料夾會一併刪除。") },
+            text = { Text(stringResource(R.string.scripts_delete_confirm_message, script?.name.orEmpty())) },
             confirmButton = {
                 TextButton(onClick = {
                     showDeleteConfirm = false
@@ -248,7 +248,7 @@ fun ScriptDetailScreen(
                 }) { Text(stringResource(R.string.script_detail_delete)) }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteConfirm = false }) { Text("取消") }
+                TextButton(onClick = { showDeleteConfirm = false }) { Text(stringResource(R.string.common_cancel)) }
             },
         )
     }
@@ -257,17 +257,17 @@ fun ScriptDetailScreen(
 @Composable
 private fun statusText(uiState: ScriptDetailUiState): String {
     val isThisScript = uiState.session.script?.id == uiState.script?.id
-    if (!isThisScript) return "尚未執行"
+    if (!isThisScript) return stringResource(R.string.scripts_status_idle)
     val target = uiState.session.displayId?.let {
         if (it == 0) stringResource(R.string.script_target_physical)
         else stringResource(R.string.script_target_virtual, it)
     }.orEmpty()
     return when (val state = uiState.session.runState) {
-        is EngineRunState.Idle -> "尚未執行"
-        is EngineRunState.Starting -> "啟動中 · $target"
-        is EngineRunState.Running -> "執行中 · $target"
-        is EngineRunState.Finished -> "已完成 · $target"
-        is EngineRunState.Stopped -> "已停止 · $target"
-        is EngineRunState.Error -> "錯誤：${state.message}"
+        is EngineRunState.Idle -> stringResource(R.string.scripts_status_idle)
+        is EngineRunState.Starting -> stringResource(R.string.scripts_status_starting, target)
+        is EngineRunState.Running -> stringResource(R.string.scripts_status_running, target)
+        is EngineRunState.Finished -> stringResource(R.string.scripts_status_finished, target)
+        is EngineRunState.Stopped -> stringResource(R.string.scripts_status_stopped, target)
+        is EngineRunState.Error -> stringResource(R.string.scripts_status_error, state.message)
     }
 }
