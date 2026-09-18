@@ -1,6 +1,7 @@
 package com.xaxaxax.relc.ui.setting
 
 import android.Manifest
+import android.content.res.Configuration
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -64,6 +65,7 @@ import com.xaxaxax.relc.ui.component.PermissionRationaleDialog
 import com.xaxaxax.relc.ui.component.Section
 import com.xaxaxax.relc.ui.component.shizukuStatusAppearance
 import com.xaxaxax.relc.ui.theme.ReLCTheme
+import com.xaxaxax.relc.ui.theme.SuccessColor
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
@@ -285,7 +287,7 @@ private fun SettingsScreenContent(
                                     } else {
                                         stringResource(R.string.permission_not_granted)
                                     },
-                                    statusColor = if (uiState.hasNotificationPermission) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error,
+                                    statusColor = if (uiState.hasNotificationPermission) SuccessColor else MaterialTheme.colorScheme.error,
                                     isGranted = uiState.hasNotificationPermission,
                                     actionLabel = if (uiState.hasNotificationPermission) {
                                         stringResource(R.string.permission_action_settings)
@@ -307,7 +309,7 @@ private fun SettingsScreenContent(
                                     } else {
                                         stringResource(R.string.permission_not_granted)
                                     },
-                                    statusColor = if (uiState.hasOverlayPermission) Color(0xFF4CAF50) else MaterialTheme.colorScheme.outline,
+                                    statusColor = if (uiState.hasOverlayPermission) SuccessColor else MaterialTheme.colorScheme.outline,
                                     isGranted = uiState.hasOverlayPermission,
                                     actionLabel = stringResource(R.string.permission_action_settings),
                                     onAction = onRequestOverlayPermission,
@@ -325,7 +327,7 @@ private fun SettingsScreenContent(
                                     } else {
                                         stringResource(R.string.permission_secondary_displays_disabled)
                                     },
-                                    statusColor = if (uiState.osAllowSecondaryDisplays) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error,
+                                    statusColor = if (uiState.osAllowSecondaryDisplays) SuccessColor else MaterialTheme.colorScheme.error,
                                     isGranted = uiState.osAllowSecondaryDisplays,
                                     actionLabel = null,
                                     onAction = null,
@@ -727,7 +729,7 @@ private fun PermissionRow(
     }
 }
 
-@Preview
+@Preview(uiMode = Configuration.UI_MODE_NIGHT_YES or Configuration.UI_MODE_TYPE_NORMAL)
 @Composable
 private fun SettingsScreenPreview() {
     ReLCTheme {
