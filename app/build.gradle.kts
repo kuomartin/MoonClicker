@@ -1,4 +1,5 @@
 import com.android.build.api.variant.BuildConfigField
+import java.io.File
 import java.io.FileInputStream
 import java.util.Properties
 
@@ -23,8 +24,7 @@ val keystoreProperties = Properties().apply {
 val releaseKeystorePath = providers.environmentVariable("KEYSTORE_PATH").orNull
     ?: keystoreProperties.getProperty("storeFile")
 val releaseKeystoreFile = releaseKeystorePath?.let { path ->
-    val f = file(path)
-    if (f.isAbsolute) f else rootProject.file(path)
+    if (File(path).isAbsolute) File(path) else rootProject.file(path)
 }
 val releaseKeystorePassword = providers.environmentVariable("KEYSTORE_PASSWORD").orNull
     ?: keystoreProperties.getProperty("storePassword")
@@ -75,7 +75,7 @@ android {
         }
         release {
             optimization {
-                enable = false
+                enable = true
             }
             val releaseSigning = signingConfigs.findByName("release")
             if (releaseSigning != null) {
