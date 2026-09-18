@@ -47,6 +47,7 @@ import com.xaxaxax.relc.R
 import com.xaxaxax.relc.engine.state.EngineRunState
 import com.xaxaxax.relc.ui.component.Section
 import com.xaxaxax.relc.ui.scripts.TargetPicker
+import com.xaxaxax.relc.ui.theme.MonoFontFamily
 
 /**
  * 唯讀的腳本檢視 + 執行入口。
@@ -162,6 +163,7 @@ fun ScriptDetailScreen(
                                 Text(
                                     text = "$key = $value",
                                     style = MaterialTheme.typography.bodySmall,
+                                    fontFamily = MonoFontFamily,
                                     )
                             }
                         }
@@ -192,6 +194,7 @@ fun ScriptDetailScreen(
                                     Text(
                                         text = file.toRelativeString(script.dir),
                                         style = MaterialTheme.typography.bodySmall,
+                                        fontFamily = MonoFontFamily,
                                     )
                                 }
                             }
@@ -213,6 +216,7 @@ fun ScriptDetailScreen(
                                 text = uiState.source
                                     ?: stringResource(R.string.script_detail_missing_source),
                                 style = MaterialTheme.typography.bodySmall,
+                                fontFamily = MonoFontFamily,
                                 modifier = Modifier
                                     .horizontalScroll(rememberScrollState())
                                     .padding(12.dp),
