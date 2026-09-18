@@ -59,7 +59,7 @@ import timber.log.Timber
  * 這個獨立的、使用者手動控制的前景服務承載，與腳本執行狀態無關。
  *
  * 監聽所有網卡（不只 loopback）是刻意的：VS Code 端在開發者的電腦上，透過同一個區網連進來，
- * milestone 1 沒有配對驗證（見 #53 Out of Scope），這是已知、記錄在案的風險，不是這裡能修的漏洞。
+ * 以 PIN 配對換發 token（見 [WorkbenchAuthStore]），除 `/pair`、`/health` 外所有路由皆強制驗證。
  */
 /**
  * 觸發執行需要的最小介面（見 #61）。真正實作直接轉呼叫 [ScriptSession]；存在這一層是為了讓
