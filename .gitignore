@@ -21,7 +21,3 @@ keystore.properties
 .agents/
 CLAUDE.md
 docs/agents/
-
-# flakes
-/flake.*
-nix/

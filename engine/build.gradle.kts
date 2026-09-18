@@ -141,5 +141,4 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     // AndroidJUnitRunner 本身；androidx.test.ext:junit 不會帶進來。
     androidTestImplementation(libs.androidx.test.runner)
-    androidTestImplementation(libs.kotlinx.coroutines.android)
 }
