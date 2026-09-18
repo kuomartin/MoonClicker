@@ -1,0 +1,43 @@
+name: CI VS Code Extension
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  test-vscode-extension:
+    name: VS Code Extension Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: vscode-extension/package-lock.json
+
+      - name: Install dependencies
+        working-directory: vscode-extension
+        run: |
+          npm ci
+
+      - name: Generate Protobuf Code
+        working-directory: vscode-extension
+        run: |
+          npm run generate
+
+      - name: Run VS Code Extension Tests
+        working-directory: vscode-extension
+        run: |
+          npm test
