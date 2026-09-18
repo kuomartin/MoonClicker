@@ -1,0 +1,96 @@
+name: Release VS Code Extension
+
+on:
+  push:
+    tags:
+      - 'vscode-v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release Tag Name'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-vscode-extension:
+    name: Build VS Code Extension (.vsix)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Determine Version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.tag_name }}"
+          else
+            TAG="${{ github.ref_name }}"
+          fi
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "version=${TAG#vscode-v}" >> $GITHUB_OUTPUT
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: vscode-extension/package-lock.json
+
+      - name: Install dependencies and compile
+        working-directory: vscode-extension
+        run: |
+          npm version "${{ steps.version.outputs.version }}" --no-git-tag-version --allow-same-version
+          npm ci
+          npm test
+
+      - name: Package VSIX
+        working-directory: vscode-extension
+        run: |
+          mkdir -p ../dist
+          npx @vscode/vsce package --no-dependencies -o "../dist/relc-script-workbench-${{ steps.version.outputs.version }}.vsix"
+
+      - name: Upload VSIX Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: relc-vscode-extension
+          path: dist/*.vsix
+          retention-days: 7
+
+  create-draft-release:
+    name: Create Draft Release
+    needs: [build-vscode-extension]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Determine Tag
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.tag_name }}"
+          else
+            TAG="${{ github.ref_name }}"
+          fi
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+
+      - name: Download VSIX Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: relc-vscode-extension
+          path: release-assets
+
+      - name: Create GitHub Release Draft
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: ReLC VS Code Extension ${{ steps.version.outputs.tag }}
+          draft: true
+          prerelease: true
+          generate_release_notes: true
+          files: release-assets/*
