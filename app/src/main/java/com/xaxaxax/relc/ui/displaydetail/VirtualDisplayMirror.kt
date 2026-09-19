@@ -41,14 +41,13 @@ import kotlin.math.roundToInt
 /**
  * 把鏡像 view 的生命週期跟虛擬顯示串接起來，並攔截觸控事件轉發給虛擬顯示（[forwardMirrorTouch]）。
  *
- * **實驗性：暫時不釘面板**（見 ADR-0014／ADR-0017 的討論，尚未定案）。v 已經在 distributor
- * 端被消掉（見 [ADR-0017](../../../../../../docs/adr/0017-vd-rotation-is-cancelled-at-the-distributor.md)），
- * 這裡不再手動套 `-d·90` 抵銷系統的視窗旋轉——讓 `FullscreenDisplayActivity` 的視窗跟著 `d`
- * 自然轉（`configChanges` + `ROTATION_ANIMATION_SEAMLESS` 負責轉場不閃），letterbox 只需要
- * 知道內容轉正後的自然尺寸（`v` 決定要不要互換 `surfaceWidth`/`surfaceHeight`），不用再管 `d`。
- *
- * **範圍警告**：`TouchForwarder`／`touchTransform` 還是舊的雙旋轉版本，這次沒有跟著改
- * （本輪只做顯示，不碰輸入）——`d` 一旦真的旋轉，觸控映射會是錯的，這是已知、刻意留下的缺口。
+ * `v` 在 distributor 端被消掉（[ADR-0017](../../../../../../docs/adr/0017-vd-rotation-is-cancelled-at-the-distributor.md)），
+ * 鏡像也不再手動套 `-d·90` 抵銷系統的視窗旋轉——`FullscreenDisplayActivity` 的視窗跟著 `d`
+ * 自然轉（`configChanges` + `ROTATION_ANIMATION_SEAMLESS` 負責轉場不閃，真機驗證過沒有閃動，
+ * [ADR-0018](../../../../../../docs/adr/0018-mirror-follows-the-window-instead-of-pinning-to-it.md)）。
+ * letterbox 只需要知道內容轉正後的自然尺寸（`v` 決定要不要互換 `surfaceWidth`/`surfaceHeight`），
+ * 不用再管 `d`；[touchTransform] 因此也只剩縮放——view 沒有被旋轉過，內容矩形內的相對座標
+ * 已經直接是 `injectMotionEvent` 要的 VD 邏輯空間，不需要反轉任何旋轉。
  */
 @Composable
 fun VirtualDisplayMirror(
@@ -196,32 +195,32 @@ private fun TouchForwarder(
     isReadOnly: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    // 節點座標是 buffer 空間的相對座標（見容器的 -d·90），只有縮放不需要旋轉就能到 buffer
-    // 像素；buffer 像素 → VD 目前的邏輯空間還差一個 v 旋轉，見 touchTransform。
+    // view 沒有被旋轉過，節點座標已經直接是內容矩形的相對座標，touchTransform 只剩縮放。
     val currentGeometry by rememberUpdatedState(geometry)
 
-    // 一個手勢（DOWN..UP/CANCEL）中途 v 或 d 變了，代表手勢開始時算好的座標系已經不是
-    // 現在這個。這裡不試著「跳到新座標系」——那會讓使用者的手指瞬間對到另一個位置——
-    // 直接丟棄手勢剩餘的事件，讓使用者放開重按。
-    var gestureRotation by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    // 一個手勢（DOWN..UP/CANCEL）中途 v 變了、或視窗跟著 d 自然 resize，代表手勢開始時算好
+    // 的座標系已經不是現在這個。這裡不試著「跳到新座標系」——那會讓使用者的手指瞬間對到另
+    // 一個位置——直接丟棄手勢剩餘的事件，讓使用者放開重按。內容矩形尺寸本身就是兩者的
+    // 綜合結果，拿它當 key 比分別追蹤 v 跟視窗尺寸更省事、也不會漏掉純視窗 resize 的情況。
+    var gestureKey by remember { mutableStateOf<Triple<Int, Float, Float>?>(null) }
 
     Box(
         modifier.pointerInteropFilter { event ->
             if (isReadOnly || targetDisplayId == -1) return@pointerInteropFilter false
 
             val geom = currentGeometry
-            val rotation = geom.rotation to viewport.d
+            val key = Triple(geom.rotation, viewport.contentWidth, viewport.contentHeight)
             val isGestureStart = event.actionMasked == MotionEvent.ACTION_DOWN
-            if (isGestureStart) gestureRotation = rotation
-            val staleGesture = gestureRotation != null && gestureRotation != rotation
+            if (isGestureStart) gestureKey = key
+            val staleGesture = gestureKey != null && gestureKey != key
 
             if (!staleGesture) {
-                service.forwardMirrorTouch(event, targetDisplayId, touchTransform(viewport, geom))
+                service.forwardMirrorTouch(event, targetDisplayId, touchTransform(viewport))
             }
             if (event.actionMasked == MotionEvent.ACTION_UP ||
                 event.actionMasked == MotionEvent.ACTION_CANCEL
             ) {
-                gestureRotation = null
+                gestureKey = null
             }
             true
         }
@@ -229,40 +228,14 @@ private fun TouchForwarder(
 }
 
 /**
- * view 像素（內容矩形內的相對座標，未套用 [Viewport.viewRotationDegrees]）→ VD 目前的
- * 邏輯空間，即 `injectMotionEvent` 要的座標系。三段：
+ * view 像素（內容矩形內的相對座標）→ VD 目前的邏輯空間，即 `injectMotionEvent` 要的座標系。
  *
- * 1. [Viewport.displayPerViewPixel] 縮放到「d-space」像素（letterbox 用的那個、隨 d 互換
- *    長寬的邏輯尺寸）。
- * 2. 反轉 d 對應的旋轉，回到 buffer 的原始（不隨旋轉改變）像素——這步跟 [MirrorSurface] 套
- *    的 `viewRotationDegrees` 抵銷的是同一個旋轉，方向相反。
- * 3. 疊上 v（VD 自己的 rotation）對應的旋轉，跟舊版 `MirrorSurface` 曾經套用過的 `-v·90`
- *    是同一個角度，只是現在用來變換座標而不是視覺。
+ * 只剩縮放：`v` 已經在 distributor 消掉、`d` 已經不再手動反轉（ADR-0017、ADR-0018），
+ * `MirrorSurface` 顯示的就是轉正後的內容，content rect 內的相對座標經過
+ * [Viewport.displayPerViewPixel] 縮放就直接是邏輯座標，不需要再疊任何旋轉矩陣。
  */
-private fun touchTransform(viewport: Viewport, geometry: DisplayGeometry): Matrix {
-    val matrix = Matrix().apply {
-        setScale(viewport.displayPerViewPixel, viewport.displayPerViewPixel)
-    }
-
-    val dTurns = viewport.d and 3
-    if (dTurns != 0) {
-        // rotateQuarterTurn(dTurns) 的反函式：轉回 (4 - dTurns) % 4，長寬互換的規則跟著反過來。
-        val inverseTurns = (4 - dTurns) % 4
-        val (inverseWidth, inverseHeight) = if (isQuarterTurn(dTurns)) {
-            geometry.surfaceHeight.toFloat() to geometry.surfaceWidth.toFloat()
-        } else {
-            geometry.surfaceWidth.toFloat() to geometry.surfaceHeight.toFloat()
-        }
-        matrix.postConcat(quarterTurnMatrix(inverseTurns, inverseWidth, inverseHeight))
-    }
-
-    val vTurns = geometry.rotation and 3
-    if (vTurns != 0) {
-        matrix.postConcat(
-            quarterTurnMatrix(vTurns, geometry.surfaceWidth.toFloat(), geometry.surfaceHeight.toFloat())
-        )
-    }
-    return matrix
+private fun touchTransform(viewport: Viewport): Matrix = Matrix().apply {
+    setScale(viewport.displayPerViewPixel, viewport.displayPerViewPixel)
 }
 
 /**
