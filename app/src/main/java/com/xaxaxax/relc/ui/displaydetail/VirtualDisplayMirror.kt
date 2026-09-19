@@ -16,7 +16,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -30,7 +29,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -43,10 +41,14 @@ import kotlin.math.roundToInt
 /**
  * 把鏡像 view 的生命週期跟虛擬顯示串接起來，並攔截觸控事件轉發給虛擬顯示（[forwardMirrorTouch]）。
  *
- * 呈現的 letterbox 幾何全部來自單一的 [Viewport]（見地圖 #9 / #12），只看 d（MainDisplay
- * 的 rotation）。觸控多疊一層 [touchTransform]：先用 [Viewport.displayPerViewPixel] 縮放到
- * buffer 像素，再疊上 v（VD 自己的 rotation）對應的旋轉，才是 `injectMotionEvent` 要的
- * VD 邏輯空間（ADR-0014）。兩者的輸入都取自公開的 `Display` API，不需要任何 AIDL。
+ * **實驗性：暫時不釘面板**（見 ADR-0014／ADR-0017 的討論，尚未定案）。v 已經在 distributor
+ * 端被消掉（見 [ADR-0017](../../../../../../docs/adr/0017-vd-rotation-is-cancelled-at-the-distributor.md)），
+ * 這裡不再手動套 `-d·90` 抵銷系統的視窗旋轉——讓 `FullscreenDisplayActivity` 的視窗跟著 `d`
+ * 自然轉（`configChanges` + `ROTATION_ANIMATION_SEAMLESS` 負責轉場不閃），letterbox 只需要
+ * 知道內容轉正後的自然尺寸（`v` 決定要不要互換 `surfaceWidth`/`surfaceHeight`），不用再管 `d`。
+ *
+ * **範圍警告**：`TouchForwarder`／`touchTransform` 還是舊的雙旋轉版本，這次沒有跟著改
+ * （本輪只做顯示，不碰輸入）——`d` 一旦真的旋轉，觸控映射會是錯的，這是已知、刻意留下的缺口。
  */
 @Composable
 fun VirtualDisplayMirror(
@@ -61,13 +63,21 @@ fun VirtualDisplayMirror(
     onFrameAvailable: () -> Unit = {},
 ) {
     BoxWithConstraints(modifier.background(Color.Black)) {
-        // ADR-0014：letterbox 尺寸與反向旋轉都只看 d（MainDisplay 的 rotation），
-        // 跟 VD 自己的 rotation 無關——VD 的 buffer 尺寸不隨它自己的旋轉改變。
-        val hostRotation = rememberHostDisplayRotation()
+        // v 已經在 distributor 被消掉，這裡的「自然尺寸」只是把 v 造成的長寬互換算回來，
+        // 跟 d 無關——視窗本身已經是 d 轉正後的形狀（BoxWithConstraints 量到的就是它）。
+        val correctedWidth: Int
+        val correctedHeight: Int
+        if (isQuarterTurn(geometry.rotation)) {
+            correctedWidth = geometry.surfaceHeight
+            correctedHeight = geometry.surfaceWidth
+        } else {
+            correctedWidth = geometry.surfaceWidth
+            correctedHeight = geometry.surfaceHeight
+        }
         val viewport = viewportOf(
-            surfaceWidth = geometry.surfaceWidth,
-            surfaceHeight = geometry.surfaceHeight,
-            d = hostRotation,
+            surfaceWidth = correctedWidth,
+            surfaceHeight = correctedHeight,
+            d = 0,
             viewWidth = constraints.maxWidth,
             viewHeight = constraints.maxHeight,
         )
@@ -84,25 +94,19 @@ fun VirtualDisplayMirror(
                     with(density) { viewport.contentHeight.toDp() },
                 )
         ) {
-            // 反向旋轉只套在 MirrorSurface 自己身上（視覺）。TouchForwarder 刻意**不**放進
-            // 這個 graphicsLayer 底下：pointerInteropFilter 是給經典 View 用的 interop 橋，
-            // 疊在旋轉過的祖先節點下命中測試會整個收不到事件（真機驗證過，橫向沒反應）。
-            // TouchForwarder 改在 touchTransform 裡用純數學把同一個旋轉明算出來。
             MirrorSurface(
-                geometry = geometry,
+                bufferWidth = correctedWidth,
+                bufferHeight = correctedHeight,
                 addSurface = addSurface,
                 removeSurface = removeSurface,
                 onTextureViewCreated = onTextureViewCreated,
                 onFrameAvailable = onFrameAvailable,
                 modifier = Modifier
                     .align(Alignment.Center)
-                    // requiredSize 而非 size：旋轉前的佈局框比父層還長，size() 會被父層
-                    // constraints 夾住，requiredSize 才忽略父層。
-                    .requiredSize(
-                        with(density) { viewport.unrotatedWidth.toDp() },
-                        with(density) { viewport.unrotatedHeight.toDp() },
-                    )
-                    .graphicsLayer { rotationZ = viewport.viewRotationDegrees },
+                    .size(
+                        with(density) { viewport.contentWidth.toDp() },
+                        with(density) { viewport.contentHeight.toDp() },
+                    ),
             )
 
             // 未旋轉、尺寸正好等於內容矩形：黑邊上的觸控因此不會抵達，而手勢一旦在此開始、
@@ -121,40 +125,34 @@ fun VirtualDisplayMirror(
 
 @Composable
 private fun MirrorSurface(
-    geometry: DisplayGeometry,
+    bufferWidth: Int,
+    bufferHeight: Int,
     addSurface: (Surface) -> Unit,
     removeSurface: (Surface) -> Unit,
     onTextureViewCreated: (TextureView) -> Unit,
     onFrameAvailable: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // TextureView 而非 SurfaceView：SurfaceView 的 surface 是獨立硬體圖層，不吃 view 的
-    // 旋轉變換；TextureView 走一般繪製路徑，graphicsLayer 的旋轉才會真的套用。
-    val currentGeometry by rememberUpdatedState(geometry)
-    // rememberUpdatedState 而非把它放進 remember 的 key：listener 重建會連帶重建 Surface，
-    // 為了換一個 callback 而重接一次虛擬顯示不划算。
+    // rememberUpdatedState：listener 重建會連帶重建 Surface，為了換一個 callback 或换一次
+    // v 造成的尺寸交換而重接一次虛擬顯示不划算。
+    val currentBufferWidth by rememberUpdatedState(bufferWidth)
+    val currentBufferHeight by rememberUpdatedState(bufferHeight)
     val currentOnFrameAvailable by rememberUpdatedState(onFrameAvailable)
     val listener = remember(addSurface, removeSurface) {
         object : TextureView.SurfaceTextureListener {
             private var surface: Surface? = null
 
             override fun onSurfaceTextureAvailable(texture: SurfaceTexture, width: Int, height: Int) {
-                // buffer 尺寸恆為虛擬顯示建立時的大小，不隨旋轉改變；必須在包成 Surface
-                // 之前設定，否則 producer 拿到的是 view 尺寸的 buffer。
-                texture.setDefaultBufferSize(
-                    currentGeometry.surfaceWidth,
-                    currentGeometry.surfaceHeight,
-                )
+                // buffer 尺寸是 distributor 轉正後的自然尺寸（v 已消掉），不是 view 尺寸；
+                // 必須在包成 Surface 之前設定，否則 producer 拿到的是 view 尺寸的 buffer。
+                texture.setDefaultBufferSize(currentBufferWidth, currentBufferHeight)
                 runCatching {
                     Surface(texture).also { surface = it; addSurface(it) }
                 }.onFailure { Timber.e(it, "addSurface failed") }
             }
 
             override fun onSurfaceTextureSizeChanged(texture: SurfaceTexture, width: Int, height: Int) {
-                texture.setDefaultBufferSize(
-                    currentGeometry.surfaceWidth,
-                    currentGeometry.surfaceHeight,
-                )
+                texture.setDefaultBufferSize(currentBufferWidth, currentBufferHeight)
             }
 
             override fun onSurfaceTextureDestroyed(texture: SurfaceTexture): Boolean {
@@ -174,7 +172,6 @@ private fun MirrorSurface(
     }
 
     AndroidView(
-        // 反向旋轉套在共用的父容器（見呼叫端），這裡不用再轉一次。
         modifier = modifier,
         factory = { context ->
             TextureView(context).apply {
@@ -183,10 +180,7 @@ private fun MirrorSurface(
             }
         },
         update = { view ->
-            view.surfaceTexture?.setDefaultBufferSize(
-                geometry.surfaceWidth,
-                geometry.surfaceHeight,
-            )
+            view.surfaceTexture?.setDefaultBufferSize(currentBufferWidth, currentBufferHeight)
         },
     )
 }

@@ -49,6 +49,13 @@ Java_com_xaxaxax_relc_RelcV2Service_nativeRemoveSurface(JNIEnv *env, jobject thi
 }
 
 JNIEXPORT void JNICALL
+Java_com_xaxaxax_relc_RelcV2Service_nativeSetDistributorRotation(JNIEnv *env, jobject thiz,
+                                                                  jlong ptr, jint rotation) {
+    auto *distributor = reinterpret_cast<GlesDistributor *>(ptr);
+    distributor->setRotation(rotation);
+}
+
+JNIEXPORT void JNICALL
 Java_com_xaxaxax_relc_RelcV2Service_nativeDestroyDistributor(JNIEnv *env, jobject thiz, jlong ptr) {
     auto *distributor = reinterpret_cast<GlesDistributor *>(ptr);
     distributor->release(env);
