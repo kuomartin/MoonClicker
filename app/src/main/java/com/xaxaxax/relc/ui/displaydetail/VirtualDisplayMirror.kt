@@ -1,7 +1,6 @@
 package com.xaxaxax.relc.ui.displaydetail
 
 import android.annotation.SuppressLint
-import android.graphics.Bitmap
 import android.graphics.Matrix
 import android.graphics.Point
 import android.graphics.SurfaceTexture
@@ -16,7 +15,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -30,7 +28,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -43,10 +40,12 @@ import kotlin.math.roundToInt
 /**
  * 把鏡像 view 的生命週期跟虛擬顯示串接起來，並攔截觸控事件轉發給虛擬顯示（[forwardMirrorTouch]）。
  *
- * 呈現的 letterbox 幾何全部來自單一的 [Viewport]（見地圖 #9 / #12），只看 d（MainDisplay
- * 的 rotation）。觸控多疊一層 [touchTransform]：先用 [Viewport.displayPerViewPixel] 縮放到
- * buffer 像素，再疊上 v（VD 自己的 rotation）對應的旋轉，才是 `injectMotionEvent` 要的
- * VD 邏輯空間（ADR-0014）。兩者的輸入都取自公開的 `Display` API，不需要任何 AIDL。
+ * `v` 在 distributor 端被消掉，鏡像也不再手動套 `-d·90` 抵銷系統的視窗旋轉——
+ * `FullscreenDisplayActivity` 的視窗跟著 `d` 自然轉（`configChanges` + `ROTATION_ANIMATION_SEAMLESS`
+ * 負責轉場不閃，真機驗證過沒有閃動，見 [ADR-0017](../../../../../../docs/adr/0017-vd-rotation-is-cancelled-at-the-distributor.md)）。
+ * letterbox 只需要知道內容轉正後的自然尺寸（`v` 決定要不要互換 `surfaceWidth`/`surfaceHeight`），
+ * 不用再管 `d`；[touchTransform] 因此也只剩縮放——view 沒有被旋轉過，內容矩形內的相對座標
+ * 已經直接是 `injectMotionEvent` 要的 VD 邏輯空間，不需要反轉任何旋轉。
  */
 @Composable
 fun VirtualDisplayMirror(
@@ -61,13 +60,21 @@ fun VirtualDisplayMirror(
     onFrameAvailable: () -> Unit = {},
 ) {
     BoxWithConstraints(modifier.background(Color.Black)) {
-        // ADR-0014：letterbox 尺寸與反向旋轉都只看 d（MainDisplay 的 rotation），
-        // 跟 VD 自己的 rotation 無關——VD 的 buffer 尺寸不隨它自己的旋轉改變。
-        val hostRotation = rememberHostDisplayRotation()
+        // v 已經在 distributor 被消掉，這裡的「自然尺寸」只是把 v 造成的長寬互換算回來，
+        // 跟 d 無關——視窗本身已經是 d 轉正後的形狀（BoxWithConstraints 量到的就是它）。
+        val correctedWidth: Int
+        val correctedHeight: Int
+        if (isQuarterTurn(geometry.rotation)) {
+            correctedWidth = geometry.surfaceHeight
+            correctedHeight = geometry.surfaceWidth
+        } else {
+            correctedWidth = geometry.surfaceWidth
+            correctedHeight = geometry.surfaceHeight
+        }
         val viewport = viewportOf(
-            surfaceWidth = geometry.surfaceWidth,
-            surfaceHeight = geometry.surfaceHeight,
-            d = hostRotation,
+            surfaceWidth = correctedWidth,
+            surfaceHeight = correctedHeight,
+            d = 0,
             viewWidth = constraints.maxWidth,
             viewHeight = constraints.maxHeight,
         )
@@ -84,25 +91,19 @@ fun VirtualDisplayMirror(
                     with(density) { viewport.contentHeight.toDp() },
                 )
         ) {
-            // 反向旋轉只套在 MirrorSurface 自己身上（視覺）。TouchForwarder 刻意**不**放進
-            // 這個 graphicsLayer 底下：pointerInteropFilter 是給經典 View 用的 interop 橋，
-            // 疊在旋轉過的祖先節點下命中測試會整個收不到事件（真機驗證過，橫向沒反應）。
-            // TouchForwarder 改在 touchTransform 裡用純數學把同一個旋轉明算出來。
             MirrorSurface(
-                geometry = geometry,
+                bufferWidth = correctedWidth,
+                bufferHeight = correctedHeight,
                 addSurface = addSurface,
                 removeSurface = removeSurface,
                 onTextureViewCreated = onTextureViewCreated,
                 onFrameAvailable = onFrameAvailable,
                 modifier = Modifier
                     .align(Alignment.Center)
-                    // requiredSize 而非 size：旋轉前的佈局框比父層還長，size() 會被父層
-                    // constraints 夾住，requiredSize 才忽略父層。
-                    .requiredSize(
-                        with(density) { viewport.unrotatedWidth.toDp() },
-                        with(density) { viewport.unrotatedHeight.toDp() },
-                    )
-                    .graphicsLayer { rotationZ = viewport.viewRotationDegrees },
+                    .size(
+                        with(density) { viewport.contentWidth.toDp() },
+                        with(density) { viewport.contentHeight.toDp() },
+                    ),
             )
 
             // 未旋轉、尺寸正好等於內容矩形：黑邊上的觸控因此不會抵達，而手勢一旦在此開始、
@@ -121,40 +122,34 @@ fun VirtualDisplayMirror(
 
 @Composable
 private fun MirrorSurface(
-    geometry: DisplayGeometry,
+    bufferWidth: Int,
+    bufferHeight: Int,
     addSurface: (Surface) -> Unit,
     removeSurface: (Surface) -> Unit,
     onTextureViewCreated: (TextureView) -> Unit,
     onFrameAvailable: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // TextureView 而非 SurfaceView：SurfaceView 的 surface 是獨立硬體圖層，不吃 view 的
-    // 旋轉變換；TextureView 走一般繪製路徑，graphicsLayer 的旋轉才會真的套用。
-    val currentGeometry by rememberUpdatedState(geometry)
-    // rememberUpdatedState 而非把它放進 remember 的 key：listener 重建會連帶重建 Surface，
-    // 為了換一個 callback 而重接一次虛擬顯示不划算。
+    // rememberUpdatedState：listener 重建會連帶重建 Surface，為了換一個 callback 或换一次
+    // v 造成的尺寸交換而重接一次虛擬顯示不划算。
+    val currentBufferWidth by rememberUpdatedState(bufferWidth)
+    val currentBufferHeight by rememberUpdatedState(bufferHeight)
     val currentOnFrameAvailable by rememberUpdatedState(onFrameAvailable)
     val listener = remember(addSurface, removeSurface) {
         object : TextureView.SurfaceTextureListener {
             private var surface: Surface? = null
 
             override fun onSurfaceTextureAvailable(texture: SurfaceTexture, width: Int, height: Int) {
-                // buffer 尺寸恆為虛擬顯示建立時的大小，不隨旋轉改變；必須在包成 Surface
-                // 之前設定，否則 producer 拿到的是 view 尺寸的 buffer。
-                texture.setDefaultBufferSize(
-                    currentGeometry.surfaceWidth,
-                    currentGeometry.surfaceHeight,
-                )
+                // buffer 尺寸是 distributor 轉正後的自然尺寸（v 已消掉），不是 view 尺寸；
+                // 必須在包成 Surface 之前設定，否則 producer 拿到的是 view 尺寸的 buffer。
+                texture.setDefaultBufferSize(currentBufferWidth, currentBufferHeight)
                 runCatching {
                     Surface(texture).also { surface = it; addSurface(it) }
                 }.onFailure { Timber.e(it, "addSurface failed") }
             }
 
             override fun onSurfaceTextureSizeChanged(texture: SurfaceTexture, width: Int, height: Int) {
-                texture.setDefaultBufferSize(
-                    currentGeometry.surfaceWidth,
-                    currentGeometry.surfaceHeight,
-                )
+                texture.setDefaultBufferSize(currentBufferWidth, currentBufferHeight)
             }
 
             override fun onSurfaceTextureDestroyed(texture: SurfaceTexture): Boolean {
@@ -174,7 +169,6 @@ private fun MirrorSurface(
     }
 
     AndroidView(
-        // 反向旋轉套在共用的父容器（見呼叫端），這裡不用再轉一次。
         modifier = modifier,
         factory = { context ->
             TextureView(context).apply {
@@ -183,10 +177,7 @@ private fun MirrorSurface(
             }
         },
         update = { view ->
-            view.surfaceTexture?.setDefaultBufferSize(
-                geometry.surfaceWidth,
-                geometry.surfaceHeight,
-            )
+            view.surfaceTexture?.setDefaultBufferSize(currentBufferWidth, currentBufferHeight)
         },
     )
 }
@@ -202,32 +193,32 @@ private fun TouchForwarder(
     isReadOnly: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    // 節點座標是 buffer 空間的相對座標（見容器的 -d·90），只有縮放不需要旋轉就能到 buffer
-    // 像素；buffer 像素 → VD 目前的邏輯空間還差一個 v 旋轉，見 touchTransform。
+    // view 沒有被旋轉過，節點座標已經直接是內容矩形的相對座標，touchTransform 只剩縮放。
     val currentGeometry by rememberUpdatedState(geometry)
 
-    // 一個手勢（DOWN..UP/CANCEL）中途 v 或 d 變了，代表手勢開始時算好的座標系已經不是
-    // 現在這個。這裡不試著「跳到新座標系」——那會讓使用者的手指瞬間對到另一個位置——
-    // 直接丟棄手勢剩餘的事件，讓使用者放開重按。
-    var gestureRotation by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    // 一個手勢（DOWN..UP/CANCEL）中途 v 變了、或視窗跟著 d 自然 resize，代表手勢開始時算好
+    // 的座標系已經不是現在這個。這裡不試著「跳到新座標系」——那會讓使用者的手指瞬間對到另
+    // 一個位置——直接丟棄手勢剩餘的事件，讓使用者放開重按。內容矩形尺寸本身就是兩者的
+    // 綜合結果，拿它當 key 比分別追蹤 v 跟視窗尺寸更省事、也不會漏掉純視窗 resize 的情況。
+    var gestureKey by remember { mutableStateOf<Triple<Int, Float, Float>?>(null) }
 
     Box(
         modifier.pointerInteropFilter { event ->
             if (isReadOnly || targetDisplayId == -1) return@pointerInteropFilter false
 
             val geom = currentGeometry
-            val rotation = geom.rotation to viewport.d
+            val key = Triple(geom.rotation, viewport.contentWidth, viewport.contentHeight)
             val isGestureStart = event.actionMasked == MotionEvent.ACTION_DOWN
-            if (isGestureStart) gestureRotation = rotation
-            val staleGesture = gestureRotation != null && gestureRotation != rotation
+            if (isGestureStart) gestureKey = key
+            val staleGesture = gestureKey != null && gestureKey != key
 
             if (!staleGesture) {
-                service.forwardMirrorTouch(event, targetDisplayId, touchTransform(viewport, geom))
+                service.forwardMirrorTouch(event, targetDisplayId, touchTransform(viewport))
             }
             if (event.actionMasked == MotionEvent.ACTION_UP ||
                 event.actionMasked == MotionEvent.ACTION_CANCEL
             ) {
-                gestureRotation = null
+                gestureKey = null
             }
             true
         }
@@ -235,59 +226,14 @@ private fun TouchForwarder(
 }
 
 /**
- * view 像素（內容矩形內的相對座標，未套用 [Viewport.viewRotationDegrees]）→ VD 目前的
- * 邏輯空間，即 `injectMotionEvent` 要的座標系。三段：
+ * view 像素（內容矩形內的相對座標）→ VD 目前的邏輯空間，即 `injectMotionEvent` 要的座標系。
  *
- * 1. [Viewport.displayPerViewPixel] 縮放到「d-space」像素（letterbox 用的那個、隨 d 互換
- *    長寬的邏輯尺寸）。
- * 2. 反轉 d 對應的旋轉，回到 buffer 的原始（不隨旋轉改變）像素——這步跟 [MirrorSurface] 套
- *    的 `viewRotationDegrees` 抵銷的是同一個旋轉，方向相反。
- * 3. 疊上 v（VD 自己的 rotation）對應的旋轉，跟舊版 `MirrorSurface` 曾經套用過的 `-v·90`
- *    是同一個角度，只是現在用來變換座標而不是視覺。
+ * 只剩縮放：`v` 已經在 distributor 消掉、`d` 已經不再手動反轉（ADR-0017），
+ * `MirrorSurface` 顯示的就是轉正後的內容，content rect 內的相對座標經過
+ * [Viewport.displayPerViewPixel] 縮放就直接是邏輯座標，不需要再疊任何旋轉矩陣。
  */
-private fun touchTransform(viewport: Viewport, geometry: DisplayGeometry): Matrix {
-    val matrix = Matrix().apply {
-        setScale(viewport.displayPerViewPixel, viewport.displayPerViewPixel)
-    }
-
-    val dTurns = viewport.d and 3
-    if (dTurns != 0) {
-        // rotateQuarterTurn(dTurns) 的反函式：轉回 (4 - dTurns) % 4，長寬互換的規則跟著反過來。
-        val inverseTurns = (4 - dTurns) % 4
-        val (inverseWidth, inverseHeight) = if (isQuarterTurn(dTurns)) {
-            geometry.surfaceHeight.toFloat() to geometry.surfaceWidth.toFloat()
-        } else {
-            geometry.surfaceWidth.toFloat() to geometry.surfaceHeight.toFloat()
-        }
-        matrix.postConcat(quarterTurnMatrix(inverseTurns, inverseWidth, inverseHeight))
-    }
-
-    val vTurns = geometry.rotation and 3
-    if (vTurns != 0) {
-        matrix.postConcat(
-            quarterTurnMatrix(vTurns, geometry.surfaceWidth.toFloat(), geometry.surfaceHeight.toFloat())
-        )
-    }
-    return matrix
-}
-
-/**
- * [quarterTurnCoefficients] 的 `android.graphics.Matrix` adapter，供 `MotionEvent.transform()`
- * 與 bitmap 旋轉使用。
- */
-private fun quarterTurnMatrix(quarterTurns: Int, width: Float, height: Float): Matrix =
-    Matrix().apply { setValues(quarterTurnCoefficients(quarterTurns, width, height)) }
-
-/**
- * 把原始 buffer bitmap（[TextureView.getBitmap] 回傳的，未套用 view 旋轉）依 VD 自己的
- * rotation 轉正。跟 [touchTransform] 疊的 v 旋轉是同一個 [quarterTurnMatrix]，只是套用對象
- * 從座標換成 bitmap 內容——兩處共用同一份旋轉方向，不重新猜一次。
- */
-internal fun rotateBufferBitmap(bitmap: Bitmap, rotation: Int): Bitmap {
-    val quarterTurns = rotation and 3
-    if (quarterTurns == 0) return bitmap
-    val matrix = quarterTurnMatrix(quarterTurns, bitmap.width.toFloat(), bitmap.height.toFloat())
-    return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+private fun touchTransform(viewport: Viewport): Matrix = Matrix().apply {
+    setScale(viewport.displayPerViewPixel, viewport.displayPerViewPixel)
 }
 
 /** 虛擬顯示的 surface 尺寸與當前方向，全部取自公開的 `Display` API。 */

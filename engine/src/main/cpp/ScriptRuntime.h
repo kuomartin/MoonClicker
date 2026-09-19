@@ -67,8 +67,6 @@ public:
 
     bool isRunning() const { return running.load(); }
 
-    void setRotation(int rotation);
-
     // --- 以下給 LuaBindings 使用，全部只在 Lua 執行緒上呼叫 -----------------
 
     JNIEnv *env() const { return luaEnv; }

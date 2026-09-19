@@ -41,25 +41,11 @@ class DisplayThumbnailCache @Inject constructor(
             ?.also { cache[displayId] = it }
     }
 
-    fun put(displayId: Int, rawBitmap: Bitmap, rotation: Int) {
-        // 先縮到目標大小再轉正，而不是反過來：原始 buffer 可能是全解析度，轉正是全像素的
-        // 仿射運算，對只會顯示成縮圖的內容沒必要在轉正前吃這筆成本。
-        val quarterTurns = rotation and 3
-        val swapped = isQuarterTurn(quarterTurns)
-        val (finalWidth, finalHeight) = if (swapped) {
-            rawBitmap.height to rawBitmap.width
-        } else {
-            rawBitmap.width to rawBitmap.height
-        }
-        val (targetFinalWidth, targetFinalHeight) =
-            computeThumbnailTargetSize(finalWidth, finalHeight, THUMBNAIL_MAX_LONG_EDGE)
-        val (preRotateWidth, preRotateHeight) = if (swapped) {
-            targetFinalHeight to targetFinalWidth
-        } else {
-            targetFinalWidth to targetFinalHeight
-        }
-        val scaled = Bitmap.createScaledBitmap(rawBitmap, preRotateWidth, preRotateHeight, true)
-        val thumbnail = rotateBufferBitmap(scaled, rotation)
+    fun put(displayId: Int, rawBitmap: Bitmap) {
+        // distributor 已經把 v 轉正（ADR-0017），rawBitmap 就是邏輯空間，直接縮小即可。
+        val (targetWidth, targetHeight) =
+            computeThumbnailTargetSize(rawBitmap.width, rawBitmap.height, THUMBNAIL_MAX_LONG_EDGE)
+        val thumbnail = Bitmap.createScaledBitmap(rawBitmap, targetWidth, targetHeight, true)
         cache[displayId] = thumbnail.asImageBitmap()
         runCatching {
             FileOutputStream(File(thumbnailDir, "$displayId.png")).use { out ->

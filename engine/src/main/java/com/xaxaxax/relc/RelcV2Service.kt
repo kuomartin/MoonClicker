@@ -22,6 +22,8 @@ import android.hardware.display.VirtualDisplay
 import android.hardware.input.InputManager
 import android.hardware.input.InputManagerHidden
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.PowerManager
 import android.os.PowerManagerHidden
 import android.os.Process
@@ -164,6 +166,34 @@ class RelcV2Service @JvmOverloads constructor(
     private val distributorStore = mutableMapOf<Int, Long>() // displayId -> nativePtr
     private val mirrorRefCounts = mutableMapOf<Int, Int>() // physicalDisplayId -> refCount
     private val mirrorDisplayMap = mutableMapOf<Int, Int>() // physicalDisplayId -> mirrorVirtualDisplayId
+    private val rotationListeners = mutableMapOf<Int, DisplayManager.DisplayListener>()
+    private val plainDisplayManager by lazy { context.getSystemService(DisplayManager::class.java) }
+
+    /**
+     * v 在這裡（distributor）取消，consumer 不用知道它存在（ADR-0017）。這個 VD 帶
+     * `VIRTUAL_DISPLAY_FLAG_ROTATES_WITH_CONTENT`，所以自己的 rotation 就是 v；讀取方式是
+     * 公開的 `Display` API，跑在同一個 process，不需要跨 IPC。也被 [getDisplaySurfaceSize]
+     * 用來判斷目前的影格尺寸要不要互換長寬，同一個 `plainDisplayManager` 讀取。
+     */
+    private fun startRotationTracking(displayId: Int, nativePtr: Long) {
+        val manager = plainDisplayManager ?: return
+        nativeSetDistributorRotation(nativePtr, manager.getDisplay(displayId)?.rotation ?: 0)
+        val listener = object : DisplayManager.DisplayListener {
+            override fun onDisplayAdded(id: Int) = Unit
+            override fun onDisplayRemoved(id: Int) = Unit
+            override fun onDisplayChanged(id: Int) {
+                if (id != displayId) return
+                nativeSetDistributorRotation(nativePtr, manager.getDisplay(displayId)?.rotation ?: 0)
+            }
+        }
+        manager.registerDisplayListener(listener, Handler(Looper.getMainLooper()))
+        rotationListeners[displayId] = listener
+    }
+
+    private fun stopRotationTracking(displayId: Int) {
+        val listener = rotationListeners.remove(displayId) ?: return
+        plainDisplayManager?.unregisterDisplayListener(listener)
+    }
     private val fakeDisplayContext = object : ContextWrapper(context) {
         override fun getPackageName(): String = callerPackage
         override fun getOpPackageName(): String = callerPackage
@@ -531,6 +561,7 @@ class RelcV2Service @JvmOverloads constructor(
         }
         vdStore[displayId] = ManagedDisplay(vd, surfaceWidth = width, surfaceHeight = height)
         distributorStore[displayId] = nativePtr
+        startRotationTracking(displayId, nativePtr)
         Timber.d("VirtualDisplay created: id=$displayId name=$name ${width}x${height}@$densityDpi (Distributor Active)")
         return displayId
     }
@@ -647,6 +678,7 @@ class RelcV2Service @JvmOverloads constructor(
     }
 
     override fun destroyVirtualDisplay(displayId: Int): Boolean {
+        stopRotationTracking(displayId)
         vdStore.remove(displayId)?.display?.release()
         distributorStore.remove(displayId)?.let { ptr ->
             nativeDestroyDistributor(ptr)
@@ -659,6 +691,7 @@ class RelcV2Service @JvmOverloads constructor(
     private external fun nativeGetDistributorSurface(ptr: Long): Surface?
     private external fun nativeAddSurface(ptr: Long, surface: Surface): Int
     private external fun nativeRemoveSurface(ptr: Long, handle: Int)
+    private external fun nativeSetDistributorRotation(ptr: Long, rotation: Int)
     private external fun nativeDestroyDistributor(ptr: Long)
 
     override fun launchInDisplay(packageName: String, displayId: Int): Boolean {
@@ -846,15 +879,26 @@ class RelcV2Service @JvmOverloads constructor(
     }
 
     /**
-     * Surface 空間的尺寸（見 CONTEXT.md「Surface 空間 / 邏輯空間」）。
+     * consumer 目前該用的影格尺寸（見 CONTEXT.md「Surface 空間 / 邏輯空間」，ADR-0017）。
      *
-     * - 自己建立的虛擬顯示：回存下來的建立尺寸，不經推導。
+     * - 自己建立的虛擬顯示：distributor 已經把 v 轉正，這裡回的是轉正後的自然尺寸——
+     *   建立尺寸依該 VD**目前**的 rotation 決定要不要互換長寬，rotation 跟建立尺寸同一次
+     *   呼叫、同進程讀取，沒有時間差。呼叫端若在腳本執行期間再問一次，拿到的會是新值；
+     *   但既有 consumer（AImageReader、TextureView）都只在啟動當下讀一次，不會跟著重開，
+     *   這是已知限制，見 ADR-0017 的 Consequences。
      * - 實體螢幕：只能由邏輯尺寸與 rotation 推得，兩者同進程讀取，沒有時間差。
      * - 其他 id：回 [0, 0]，讓呼叫端當場失敗，好過帶著可能錯的尺寸跑完整個腳本。
      */
     override fun getDisplaySurfaceSize(displayId: Int): IntArray {
         val actualId = mirrorDisplayMap[displayId] ?: displayId
-        vdStore[actualId]?.let { return intArrayOf(it.surfaceWidth, it.surfaceHeight) }
+        vdStore[actualId]?.let { managed ->
+            val rotation = plainDisplayManager?.getDisplay(actualId)?.rotation ?: 0
+            return if (rotation and 1 != 0) {
+                intArrayOf(managed.surfaceHeight, managed.surfaceWidth)
+            } else {
+                intArrayOf(managed.surfaceWidth, managed.surfaceHeight)
+            }
+        }
 
         val dm = context.getSystemService(DisplayManager::class.java)
         val display = dm?.getDisplay(displayId) ?: run {

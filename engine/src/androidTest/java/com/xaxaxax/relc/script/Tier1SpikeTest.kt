@@ -215,8 +215,8 @@ class Tier1SpikeTest {
     /**
      * 旋轉後座標換算仍要成立（見 CONTEXT.md 的「Surface 空間 / 邏輯空間」）。
      *
-     * rotation 0 時 `VisionMatcher::frameToLogical` 是 identity，所以只有轉過的顯示器才驗得到
-     * 換算。方向寫反在維度上依然自洽，只有實際點下去、由 puppet 回報落點才分得出來。
+     * rotation 0 時 distributor 沒有任何東西要轉，所以只有轉過的顯示器才驗得到換算。
+     * 方向寫反在維度上依然自洽，只有實際點下去、由 puppet 回報落點才分得出來。
      */
     @Test
     fun step7_a_landscape_display_still_maps_vision_to_where_the_tap_lands() =
@@ -289,7 +289,8 @@ class Tier1SpikeTest {
                     data.set("cy", hit.cy)
                     data.set("confidence", hit.confidence)
 
-                    -- 不對稱圖樣：模板是直立時截的，旋轉下要引擎轉過模板才會中。
+                    -- 不對稱圖樣：模板是直立時截的。distributor 已經把影格轉正（ADR-0017），
+                    -- 轉不轉都該中；方向轉錯了才會漏。
                     local glyph = vision.wait("glyph.png", 5000)
                     data.set("glyph_found", glyph ~= nil)
                     if glyph ~= nil then
@@ -310,8 +311,8 @@ class Tier1SpikeTest {
 
         assertEquals(EngineRunState.Finished, outcome.runState)
 
-        // 腳本看到的尺寸要跟 puppet 實際被排版的尺寸一致：nativeStart 的 rotation 快照與
-        // DisplayRotationTracker 後續的更新兩段都到位，native 的 logicalSize 才會是對的。
+        // 腳本看到的尺寸要跟 puppet 實際被排版的尺寸一致：getDisplaySurfaceSize 在腳本啟動
+        // 當下依目前 rotation 互換長寬（ADR-0017 的 B），這裡驗的是那個值有沒有到位。
         assertEquals(
             "the script and the puppet disagree about the display size",
             PuppetRecorder.contentSize,
@@ -357,9 +358,9 @@ class Tier1SpikeTest {
         // 與對稱標記分開斷言：對稱的中了、不對稱的沒中，就是模板方向問題。
         assertEquals(
             "the rotation-symmetric marker matched but the asymmetric glyph did not, at display " +
-                    "rotation ${displayRotation(displayId)}. The frame is surface space, so a " +
-                    "rotated display rotates the content inside the buffer; an upright template " +
-                    "only matches once the engine turns it to the current rotation.\n" +
+                    "rotation ${displayRotation(displayId)}. distributor should have rotated the " +
+                    "buffer content upright before either template is matched against it (ADR-0017) " +
+                    "— a miss here means that correction is wrong, not that the template needs one.\n" +
                     "last match = ${EngineStateRepository.state.value.lastVisionResult}",
             true,
             outcome.data["glyph_found"],
@@ -384,9 +385,9 @@ class Tier1SpikeTest {
     }
 
     /**
-     * `logicalToFrame` 唯一的呼叫路徑：roi 由腳本以邏輯座標給，VisionMatcher 內部把它換回
-     * 影格空間再比對（見 VisionMatcher.cpp:191-193）。step6/7/8 釘住 frameToLogical 的方向，
-     * 這裡釘 logicalToFrame 的方向——兩者互為反函數，其中一個寫錯不會讓另一個的測試失敗。
+     * roi 由腳本以邏輯座標給，影格現在也是邏輯空間（ADR-0017），VisionMatcher 直接套用、
+     * 不再轉換。step6/7/8 釘的是 distributor 把影格轉正的方向，這裡釘的是 roi 有沒有真的
+     * 框住比對範圍——兩者是獨立的檢查，其中一個寫錯不會讓另一個的測試失敗。
      *
      * miss 用 glyph 的位置：PuppetActivity 特意把它擺在離標記很遠的另一個象限（見
      * MarkerView.onDraw 的註解），所以「roi 框住 glyph」保證排除掉 marker。只驗證命中的話，
@@ -490,8 +491,8 @@ class Tier1SpikeTest {
         assertEquals(
             "roi $missRoi frames the glyph at $glyph, which excludes the marker at $marker, but " +
                     "vision.wait matched anyway at display rotation ${displayRotation(displayId)} " +
-                    "— logicalToFrame is either ignoring the roi or converting it in the wrong " +
-                    "direction.\nlast match = ${EngineStateRepository.state.value.lastVisionResult}",
+                    "— the roi is either being ignored or applied at the wrong offset.\n" +
+                    "last match = ${EngineStateRepository.state.value.lastVisionResult}",
             false,
             outcome.data["miss_found"],
         )
@@ -500,9 +501,8 @@ class Tier1SpikeTest {
     /**
      * [rect] 加上邊界、裁進 [content]，再轉成一段 Lua 的 `roi` table literal。
      *
-     * 邊界蓋住模板的整個尺寸（見 [ROI_MARGIN]）：roi 剛好貼著模板邊緣時，
-     * `logicalToFrame` 的浮點數截斷可能把換算後的寬高削到比模板還小一像素，
-     * 讓比對失敗於截斷而不是於 roi 邏輯本身。
+     * 邊界蓋住模板的整個尺寸（見 [ROI_MARGIN]）：roi 剛好貼著模板邊緣時，縮放的浮點數截斷
+     * 可能把換算後的寬高削到比模板還小一像素，讓比對失敗於截斷而不是於 roi 邏輯本身。
      */
     private fun expandToRoi(rect: Rect, content: Pair<Int, Int>): String {
         val (contentWidth, contentHeight) = content

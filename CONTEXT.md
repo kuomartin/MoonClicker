@@ -32,12 +32,12 @@ _Avoid_: Touch injector, event sender.
 The two coordinate systems of a virtual display: Surface Space represents the fixed physical pixel dimensions at creation time (`AImageReader`), while Logical Space reflects WindowManager orientation used by input injection and vision matching ([ADR-0012](docs/adr/0012-surface-size-is-owned-not-derived.md)).
 _Avoid_: Frame coordinates, screen coordinates (when unspecified).
 
-**Orientation Chain (方向鏈)**:
-The one-way orientation propagation sequence (`Target App → VD → FullscreenDisplayActivity → Physical Display`) that aligns activity and physical screen rotation with the virtual display.
-_Avoid_: Rotation sync, two-way orientation.
+**Panel Rotation (d) / Display Rotation (v)**:
+Two independent rotations: `d` is the physical panel's rotation (display 0), `v` is a virtual display's own rotation, arbitrated solely by the orientation the app running on it declares. Nothing couples them. `v` is cancelled where it originates (the GLES distributor) rather than compensated for downstream; the mirror no longer compensates for `d` either — its window follows `d` naturally instead of being pinned against it ([ADR-0017](docs/adr/0017-vd-rotation-is-cancelled-at-the-distributor.md)).
+_Avoid_: Orientation chain (方向鏈), rotation sync, two-way orientation, sensor-driven rotation.
 
 **Viewport**:
-A pure geometry model that maps a virtual display's logical dimensions and orientation into a target view rectangle for frame rendering and reverse touch coordinate mapping.
+A pure geometry model that maps a virtual display's surface dimensions and the panel rotation `d` into a target view rectangle for frame rendering and reverse touch coordinate mapping. It does not know `v`.
 _Avoid_: Scale matrix, touch mapper.
 
 **Script Engine**:

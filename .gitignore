@@ -19,5 +19,6 @@ keystore.properties
 
 # Agent and local configuration files
 .agents/
+.claude/
 CLAUDE.md
 docs/agents/

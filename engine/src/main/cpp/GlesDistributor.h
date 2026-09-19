@@ -26,6 +26,14 @@ public:
     int addSurface(JNIEnv* env, jobject surface);
     void removeSurface(int handle);
 
+    /**
+     * VD 自己的 rotation（Surface.ROTATION_*，0..3）。WindowManager 在
+     * VIRTUAL_DISPLAY_FLAG_ROTATES_WITH_CONTENT 下把內容轉進這個固定尺寸的 surface 裡
+     * （ADR-0017），這裡收到的紋理因此已經帶著這個旋轉；drawFrame() 用它反著選 texcoord
+     * 把內容轉正，consumer 就不用知道 v 存在。方向已在 Pixel 7a 上真機驗證。
+     */
+    void setRotation(int quarterTurns);
+
 private:
     void renderLoop();
     void setupEGL();
@@ -65,6 +73,7 @@ private:
 
     JavaVM* javaVM;
     std::atomic<int> nextHandle;
+    std::atomic<int> rotation;
 };
 
 #endif // GLES_DISTRIBUTOR_H

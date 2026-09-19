@@ -4,7 +4,6 @@ import android.content.Context
 import com.xaxaxax.relc.IRelcV2Service
 import com.xaxaxax.relc.engine.state.EngineStateRepository
 import com.xaxaxax.relc.lua.LuaNative
-import com.xaxaxax.relc.script.DisplayRotationTracker
 import com.xaxaxax.relc.script.ScriptHost
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -50,7 +49,6 @@ object ScriptEngine {
     val logLines: SharedFlow<String> = _logLines.asSharedFlow()
 
     private var host: ScriptHost? = null
-    private var rotationTracker: DisplayRotationTracker? = null
 
     val isRunning: Boolean get() = LuaNative.nativeIsRunning()
 
@@ -72,8 +70,9 @@ object ScriptEngine {
             return false
         }
 
-        // AImageReader 必須以顯示器建立時的 surface 尺寸開，所以問服務要那個常數，不從
-        // （邏輯尺寸, rotation）回推——緩衝區一開就是整場執行，尺寸錯了不會自己好。
+        // AImageReader 開成 distributor 目前輸出的影格尺寸（ADR-0017：轉正後的自然尺寸，
+        // 已經隨 v 互換長寬）——問服務要這個值，不自己從（邏輯尺寸, rotation）回推。
+        // 緩衝區一開就是整場執行，中途 VD 再旋轉不會跟著變，見 ADR-0017 的 Consequences。
         val surface = try {
             service.getDisplaySurfaceSize(run.displayId)
         } catch (t: Throwable) {
@@ -123,9 +122,7 @@ object ScriptEngine {
             run.hasVision,
             surfaceWidth,
             surfaceHeight,
-            // 初始 rotation 隨啟動一起傳進去（兩段交接的第一段，第二段在
-            // DisplayRotationTracker.start）：nativeStart 一
-            // 回來 Lua 執行緒可能已經在跑，這是腳本讀 screen.width 之前的最後一個時機。
+            // 純粹給 Lua screen.rotation 讀的中繼資料，不影響任何座標換算，見 nativeStart 的文件。
             rotation,
             run.scriptDir.absolutePath,
         )
@@ -138,13 +135,10 @@ object ScriptEngine {
             return false
         }
 
-        rotationTracker = DisplayRotationTracker(context).also { it.start(run.displayId) }
         return true
     }
 
     fun stop() {
-        rotationTracker?.stop()
-        rotationTracker = null
         LuaNative.nativeStop()
         // native 已經停了，收尾放開任何還按著的觸控，別把目標 app 卡在按下狀態。
         host?.releaseAllPointers()
