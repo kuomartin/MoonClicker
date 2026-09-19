@@ -11,21 +11,13 @@
 #define VM_LOG_TAG "VisionMatcher"
 #define VMLOGE(...) __android_log_print(ANDROID_LOG_ERROR, VM_LOG_TAG, __VA_ARGS__)
 
-VisionMatcher::VisionMatcher(int frameWidth, int frameHeight, std::string scriptDir)
-        : frameWidth(frameWidth), frameHeight(frameHeight), scriptDir(std::move(scriptDir)) {}
-
-void VisionMatcher::setRotation(int rotation) {
-    displayRotation.store(rotation & 3);
-}
+VisionMatcher::VisionMatcher(int frameWidth, int frameHeight, int rotation, std::string scriptDir)
+        : frameWidth(frameWidth), frameHeight(frameHeight), displayRotation(rotation & 3),
+          scriptDir(std::move(scriptDir)) {}
 
 void VisionMatcher::logicalSize(int &width, int &height) const {
-    if ((displayRotation.load() & 1) != 0) {
-        width = frameHeight;
-        height = frameWidth;
-    } else {
-        width = frameWidth;
-        height = frameHeight;
-    }
+    width = frameWidth;
+    height = frameHeight;
 }
 
 void VisionMatcher::onFrame(const cv::Mat &frame) {
@@ -77,10 +69,9 @@ bool VisionMatcher::templateExists(const VisionRequest &request) {
 }
 
 cv::Mat VisionMatcher::templateFor(const VisionRequest &request) {
-    // 快取鍵要包含前處理參數——同一張圖用不同 gray/scale/rotation 是不同的模板。
-    const int quarterTurns = rotation();
+    // 快取鍵要包含前處理參數——同一張圖用不同 gray/scale 是不同的模板。
     std::string key = request.imagePath + "|" + (request.gray ? "g" : "c") + "|" +
-                      std::to_string(request.scale) + "|r" + std::to_string(quarterTurns);
+                      std::to_string(request.scale);
 
     std::lock_guard<std::mutex> lock(cacheMutex);
     auto cached = cache.find(key);
@@ -93,26 +84,8 @@ cv::Mat VisionMatcher::templateFor(const VisionRequest &request) {
         return {};
     }
 
-    // 模板是**邏輯空間**的產物——腳本作者截的是他在畫面上看到的樣子。影格卻在 surface
-    // 空間，顯示器轉 90/270 時內容是被轉「進」緩衝區的，而 matchTemplate 不是旋轉不變的。
-    // 所以比對前把模板轉到影格的方向。方向取自 frameToLogical 的逆：r=1 時它把影格右上角
-    // 映到邏輯左上角，也就是影格內容是邏輯內容順時針轉 90 度。
-    //
-    // 轉模板而不是轉影格：兩者數學上等價（命中位置一一對應），但模板小且這裡有跨呼叫的
-    // 快取，整場執行只轉一次；影格每次比對都是新的一張，快取不了。見 ADR-0013。
-    switch (quarterTurns) {
-        case 1:
-            cv::rotate(image, image, cv::ROTATE_90_CLOCKWISE);
-            break;
-        case 2:
-            cv::rotate(image, image, cv::ROTATE_180);
-            break;
-        case 3:
-            cv::rotate(image, image, cv::ROTATE_90_COUNTERCLOCKWISE);
-            break;
-        default:
-            break;
-    }
+    // 模板是邏輯空間的產物，影格現在也是（distributor 已經把 v 轉正，見 ADR-0017），
+    // 兩者同一個方向，不需要再轉模板去對齊。見 ADR-0013。
 
     if (image.channels() == 3) {
         cv::cvtColor(image, image, cv::COLOR_BGR2RGBA);
@@ -186,16 +159,11 @@ std::vector<VisionHit> VisionMatcher::match(const std::vector<VisionRequest> &re
         int offsetY = 0;
 
         if (request.hasRoi && request.roi.width > 0 && request.roi.height > 0) {
-            // ROI 由腳本以**邏輯**座標指定，先轉回影格空間再套用縮放。
-            double ax, ay, bx, by;
-            logicalToFrame(request.roi.x, request.roi.y, ax, ay);
-            logicalToFrame(request.roi.x + request.roi.width,
-                           request.roi.y + request.roi.height, bx, by);
-
-            int x = std::max(0, static_cast<int>(std::min(ax, bx) * request.scale));
-            int y = std::max(0, static_cast<int>(std::min(ay, by) * request.scale));
-            int w = std::min(static_cast<int>(std::abs(bx - ax) * request.scale), base.cols - x);
-            int h = std::min(static_cast<int>(std::abs(by - ay) * request.scale), base.rows - y);
+            // ROI 是邏輯座標，影格現在也是邏輯空間，直接套用縮放即可，不需要座標轉換。
+            int x = std::max(0, static_cast<int>(request.roi.x * request.scale));
+            int y = std::max(0, static_cast<int>(request.roi.y * request.scale));
+            int w = std::min(static_cast<int>(request.roi.width * request.scale), base.cols - x);
+            int h = std::min(static_cast<int>(request.roi.height * request.scale), base.rows - y);
 
             if (w < templateImage.cols || h < templateImage.rows) continue;
 
@@ -216,70 +184,17 @@ std::vector<VisionHit> VisionMatcher::match(const std::vector<VisionRequest> &re
         cv::minMaxLoc(result, &minVal, &maxVal, &minLoc, &maxLoc);
         if (maxVal < request.threshold) continue;
 
-        // 回到未縮放的影格空間，再一路換算成邏輯空間。
-        double frameX = (maxLoc.x + offsetX) / request.scale;
-        double frameY = (maxLoc.y + offsetY) / request.scale;
-        double frameW = templateImage.cols / request.scale;
-        double frameH = templateImage.rows / request.scale;
-
-        double ax, ay, bx, by;
-        frameToLogical(frameX, frameY, ax, ay);
-        frameToLogical(frameX + frameW, frameY + frameH, bx, by);
-
+        // 回到未縮放的影格空間——影格本身已經是邏輯空間，不需要再轉一次。
         VisionHit &hit = hits[i];
         hit.found = true;
-        hit.x = std::min(ax, bx);
-        hit.y = std::min(ay, by);
-        hit.w = std::abs(bx - ax);
-        hit.h = std::abs(by - ay);
+        hit.x = (maxLoc.x + offsetX) / request.scale;
+        hit.y = (maxLoc.y + offsetY) / request.scale;
+        hit.w = templateImage.cols / request.scale;
+        hit.h = templateImage.rows / request.scale;
         hit.cx = hit.x + hit.w / 2.0;
         hit.cy = hit.y + hit.h / 2.0;
         hit.confidence = maxVal;
     }
 
     return hits;
-}
-
-// 影格在 surface 空間、內容被旋轉「進」其中；邏輯空間才是 injectMotionEvent 的座標系。
-// 旋轉方向與畫面側套用的 -(rotation * 90) 反向旋轉一致（見 :app 的 Viewport）。
-void VisionMatcher::frameToLogical(double fx, double fy, double &lx, double &ly) const {
-    switch (displayRotation.load() & 3) {
-        case 1:
-            lx = fy;
-            ly = frameWidth - fx;
-            break;
-        case 2:
-            lx = frameWidth - fx;
-            ly = frameHeight - fy;
-            break;
-        case 3:
-            lx = frameHeight - fy;
-            ly = fx;
-            break;
-        default:
-            lx = fx;
-            ly = fy;
-            break;
-    }
-}
-
-void VisionMatcher::logicalToFrame(double lx, double ly, double &fx, double &fy) const {
-    switch (displayRotation.load() & 3) {
-        case 1:
-            fx = frameWidth - ly;
-            fy = lx;
-            break;
-        case 2:
-            fx = frameWidth - lx;
-            fy = frameHeight - ly;
-            break;
-        case 3:
-            fx = ly;
-            fy = frameHeight - lx;
-            break;
-        default:
-            fx = lx;
-            fy = ly;
-            break;
-    }
 }

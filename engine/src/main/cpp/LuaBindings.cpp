@@ -238,7 +238,11 @@ int lua_screen_stop_mirror(lua_State *L) {
     return 1;
 }
 
-/** `screen` 的欄位是即時算的（旋轉會改變 width/height），所以走 __index 而不是固定值。 */
+/**
+ * `screen` 走 __index 而不是固定值：`has_vision`／`is_mirror_active` 確實是即時算的。
+ * `width`／`height`／`rotation` 這三個其實整場執行都固定（見 VisionMatcher 的建構子），
+ * 用同一條路徑只是因為都是唯讀屬性，不是因為它們會變。
+ */
 int lua_screen_index(lua_State *L) {
     ScriptRuntime *runtime = self(L);
     const char *key = luaL_checkstring(L, 2);

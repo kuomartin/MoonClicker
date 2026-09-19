@@ -2,7 +2,6 @@
 #define RELC_VISION_MATCHER_H
 
 #include <opencv2/core.hpp>
-#include <atomic>
 #include <condition_variable>
 #include <mutex>
 #include <string>
@@ -37,19 +36,20 @@ struct VisionHit {
  * 比對不是每幀無條件執行：影格回呼只存下影格並喚醒等待者，OpenCV 只在腳本真的呼叫
  * `vision.find` / `vision.wait` 時才跑。
  *
- * 這裡同時是 surface 空間 ↔ 邏輯空間轉換的唯一所在（見 CONTEXT.md「Surface 空間 / 邏輯空間」）。
- * 影格是 surface 空間，對外的一切都是邏輯空間。
+ * 影格已經是邏輯空間（distributor 在源頭把 v 消掉，見 ADR-0017），這裡不再做任何座標轉換。
  */
 class VisionMatcher {
 public:
-    VisionMatcher(int frameWidth, int frameHeight, std::string scriptDir);
+    /**
+     * @param rotation 啟動當下的 VD rotation（Surface.ROTATION_*，純粹是給 Lua `screen.rotation`
+     *   讀的中繼資料）。frameWidth/frameHeight 是 distributor 轉正後的影格尺寸，兩者在整場執行
+     *   期間都固定不變——AImageReader 不會在 VD 中途旋轉時重開，見 ADR-0017 的 Consequences。
+     */
+    VisionMatcher(int frameWidth, int frameHeight, int rotation, std::string scriptDir);
 
-    /** 由 app 進程的 DisplayListener 推入（Surface.ROTATION_*, 0..3）。不會旋轉任何東西，只是記錄。 */
-    void setRotation(int rotation);
+    int rotation() const { return displayRotation; }
 
-    int rotation() const { return displayRotation.load() & 3; }
-
-    /** 目標顯示器的**邏輯**尺寸——旋轉 90/270 時長寬互換。 */
+    /** 目標顯示器的邏輯尺寸——就是建立時固定的 frameWidth/frameHeight，不再隨旋轉互換。 */
     void logicalSize(int &width, int &height) const;
 
     /** 影格送達（由 AImageReader 的執行緒呼叫）。只複製並喚醒等待者，不做比對。 */
@@ -80,17 +80,10 @@ private:
     /** 取得（必要時載入並快取）已套用 gray/scale 前處理的模板。失敗回傳空 Mat。 */
     cv::Mat templateFor(const VisionRequest &request);
 
-    /** surface(影格) 空間 → 邏輯空間。 */
-    void frameToLogical(double fx, double fy, double &lx, double &ly) const;
-
-    /** 邏輯空間 → surface(影格) 空間。ROI 由腳本以邏輯座標指定，需反向轉回影格。 */
-    void logicalToFrame(double lx, double ly, double &fx, double &fy) const;
-
     const int frameWidth;
     const int frameHeight;
+    const int displayRotation;
     const std::string scriptDir;
-
-    std::atomic<int> displayRotation{0};
 
     mutable std::mutex frameMutex;
     std::condition_variable frameCv;

@@ -110,11 +110,4 @@ Java_com_xaxaxax_relc_lua_LuaNative_nativeIsRunning(JNIEnv *env, jobject thiz) {
     return gRuntime && gRuntime->isRunning() ? JNI_TRUE : JNI_FALSE;
 }
 
-JNIEXPORT void JNICALL
-Java_com_xaxaxax_relc_lua_LuaNative_nativeSetDisplayRotation(JNIEnv *env, jobject thiz,
-                                                             jint rotation) {
-    std::lock_guard<std::mutex> lock(gRuntimeMutex);
-    if (gRuntime) gRuntime->setRotation(rotation);
-}
-
 }
