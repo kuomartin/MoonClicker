@@ -220,55 +220,11 @@ class ViewportTest {
 
     @Test
     fun `viewport geometry does not depend on v`() {
-        // ADR-0014 的核心不變量：letterbox 尺寸、view 旋轉只看 d。同一個 d，
+        // v 在 distributor 消掉（ADR-0017），letterbox 尺寸、view 旋轉只看 d。
         // viewportOf 沒有地方可以收到 v，這個測試釘住「沒有這個參數」本身就是保證。
         val a = viewportOf(1080, 2400, d = 1, viewWidth = 1080, viewHeight = 2400)
         val b = viewportOf(1080, 2400, d = 1, viewWidth = 1080, viewHeight = 2400)
         assertEquals(a, b)
-    }
-
-    @Test
-    fun `rotateQuarterTurn maps buffer points into VD's logical space at every v`() {
-        // buffer 1080x2400，四個角在每個 v 都要落在（互換後）邏輯矩形的四個角上。
-        val width = 1080f
-        val height = 2400f
-
-        assertEquals(DisplayPoint(0f, 0f), rotateQuarterTurn(0f, 0f, width, height, quarterTurns = 0))
-        assertEquals(DisplayPoint(width, height), rotateQuarterTurn(width, height, width, height, quarterTurns = 0))
-
-        // v=1：邏輯尺寸互換成 2400x1080，buffer 右上角 (width, 0) 轉到邏輯左上角。
-        assertEquals(DisplayPoint(0f, 0f), rotateQuarterTurn(width, 0f, width, height, quarterTurns = 1))
-        assertEquals(DisplayPoint(height, width), rotateQuarterTurn(0f, height, width, height, quarterTurns = 1))
-
-        // v=2：buffer 右下角轉到邏輯左上角。
-        assertEquals(DisplayPoint(0f, 0f), rotateQuarterTurn(width, height, width, height, quarterTurns = 2))
-        assertEquals(DisplayPoint(width, height), rotateQuarterTurn(0f, 0f, width, height, quarterTurns = 2))
-
-        // v=3：buffer 左下角轉到邏輯左上角。
-        assertEquals(DisplayPoint(0f, 0f), rotateQuarterTurn(0f, height, width, height, quarterTurns = 3))
-        assertEquals(DisplayPoint(height, width), rotateQuarterTurn(width, 0f, width, height, quarterTurns = 3))
-    }
-
-    @Test
-    fun `rotateQuarterTurn inverts cleanly at every quarter turn`() {
-        // touchTransform 用「(4-d) mod 4、長寬互換規則跟著反過來」反轉 d 那一段旋轉。
-        // 這裡不跑 Matrix（app 的 stub 會丟 not mocked），直接釘住這個反函式規則本身。
-        val width = 1080f
-        val height = 2400f
-        val points = listOf(0f to 0f, width to 0f, 0f to height, width to height, 300f to 777f)
-
-        for (quarterTurns in 0..3) {
-            val inverseTurns = (4 - quarterTurns) % 4
-            val (inverseWidth, inverseHeight) =
-                if (isQuarterTurn(quarterTurns)) height to width else width to height
-
-            for ((px, py) in points) {
-                val logical = rotateQuarterTurn(px, py, width, height, quarterTurns)
-                val back = rotateQuarterTurn(logical.x, logical.y, inverseWidth, inverseHeight, inverseTurns)
-                assertEquals("quarterTurns=$quarterTurns", px, back.x, TOLERANCE)
-                assertEquals("quarterTurns=$quarterTurns", py, back.y, TOLERANCE)
-            }
-        }
     }
 
     private data class Rotation(val degrees: Float, val contentW: Float, val contentH: Float)

@@ -21,9 +21,9 @@ data class Viewport(
     /**
      * MainDisplay（display 0）相對自然方向轉了幾個直角（`Surface.ROTATION_*`，0..3）。
      *
-     * ADR-0014：VD 自己的 rotation 不影響它的 buffer 尺寸（`DisplayGeometry.surfaceWidth`
-     * 建立後不隨旋轉改變），只影響畫進那個固定畫布裡的內容朝向；決定內容矩形的 letterbox
-     * 尺寸、以及套在鏡像 view 上的反向旋轉的，只有 d。
+     * `d` 是這個型別唯一認識的旋轉，用來決定 letterbox 尺寸與 [viewRotationDegrees]。
+     * 鏡像目前不用後者（見 [VirtualDisplayMirror]），但 `Viewport` 本身仍支援；
+     * `CropSession` 目前是另一個呼叫端。
      */
     val d: Int,
 ) {
@@ -125,30 +125,6 @@ fun viewportOf(
 internal fun isQuarterTurn(quarterTurns: Int): Boolean =
     quarterTurns == 1 || quarterTurns == 3
 
-/**
- * 一個 quarter-turn 仿射變換的係數，row-major、9 元素（`android.graphics.Matrix.setValues`
- * 的格式）：`x' = c[0]·x + c[1]·y + c[2]`，`y' = c[3]·x + c[4]·y + c[5]`。
- *
- * 觸控（[rotateQuarterTurn]）與畫面／bitmap（`VirtualDisplayMirror.kt` 的 `quarterTurnMatrix`）
- * 兩邊都只是這份係數的 adapter，不各自重新推導一次仿射變換。
- */
-internal fun quarterTurnCoefficients(quarterTurns: Int, width: Float, height: Float): FloatArray =
-    when (quarterTurns and 3) {
-        1 -> floatArrayOf(0f, 1f, 0f, -1f, 0f, width, 0f, 0f, 1f)
-        2 -> floatArrayOf(-1f, 0f, width, 0f, -1f, height, 0f, 0f, 1f)
-        3 -> floatArrayOf(0f, -1f, height, 1f, 0f, 0f, 0f, 0f, 1f)
-        else -> floatArrayOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f)
-    }
-
-/**
- * buffer 空間中的一點旋轉 [quarterTurns] 個直角（`Surface.ROTATION_*`，VD 自己的 rotation）
- * 到 VD 目前的邏輯空間，即 `injectMotionEvent` 要的座標系。[quarterTurnCoefficients] 的純
- * Kotlin adapter，供測試把四個方向的公式釘住（`Matrix` 在 `app/src/test` 會丟 `not mocked`）。
- */
-internal fun rotateQuarterTurn(px: Float, py: Float, width: Float, height: Float, quarterTurns: Int): DisplayPoint {
-    val c = quarterTurnCoefficients(quarterTurns, width, height)
-    return DisplayPoint(c[0] * px + c[1] * py + c[2], c[3] * px + c[4] * py + c[5])
-}
 
 private val EMPTY_VIEWPORT = Viewport(
     contentLeft = 0f,

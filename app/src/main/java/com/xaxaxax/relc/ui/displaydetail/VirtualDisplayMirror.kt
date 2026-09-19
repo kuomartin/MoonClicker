@@ -1,7 +1,6 @@
 package com.xaxaxax.relc.ui.displaydetail
 
 import android.annotation.SuppressLint
-import android.graphics.Bitmap
 import android.graphics.Matrix
 import android.graphics.Point
 import android.graphics.SurfaceTexture
@@ -41,10 +40,9 @@ import kotlin.math.roundToInt
 /**
  * 把鏡像 view 的生命週期跟虛擬顯示串接起來，並攔截觸控事件轉發給虛擬顯示（[forwardMirrorTouch]）。
  *
- * `v` 在 distributor 端被消掉（[ADR-0017](../../../../../../docs/adr/0017-vd-rotation-is-cancelled-at-the-distributor.md)），
- * 鏡像也不再手動套 `-d·90` 抵銷系統的視窗旋轉——`FullscreenDisplayActivity` 的視窗跟著 `d`
- * 自然轉（`configChanges` + `ROTATION_ANIMATION_SEAMLESS` 負責轉場不閃，真機驗證過沒有閃動，
- * [ADR-0018](../../../../../../docs/adr/0018-mirror-follows-the-window-instead-of-pinning-to-it.md)）。
+ * `v` 在 distributor 端被消掉，鏡像也不再手動套 `-d·90` 抵銷系統的視窗旋轉——
+ * `FullscreenDisplayActivity` 的視窗跟著 `d` 自然轉（`configChanges` + `ROTATION_ANIMATION_SEAMLESS`
+ * 負責轉場不閃，真機驗證過沒有閃動，見 [ADR-0017](../../../../../../docs/adr/0017-vd-rotation-is-cancelled-at-the-distributor.md)）。
  * letterbox 只需要知道內容轉正後的自然尺寸（`v` 決定要不要互換 `surfaceWidth`/`surfaceHeight`），
  * 不用再管 `d`；[touchTransform] 因此也只剩縮放——view 沒有被旋轉過，內容矩形內的相對座標
  * 已經直接是 `injectMotionEvent` 要的 VD 邏輯空間，不需要反轉任何旋轉。
@@ -230,31 +228,12 @@ private fun TouchForwarder(
 /**
  * view 像素（內容矩形內的相對座標）→ VD 目前的邏輯空間，即 `injectMotionEvent` 要的座標系。
  *
- * 只剩縮放：`v` 已經在 distributor 消掉、`d` 已經不再手動反轉（ADR-0017、ADR-0018），
+ * 只剩縮放：`v` 已經在 distributor 消掉、`d` 已經不再手動反轉（ADR-0017），
  * `MirrorSurface` 顯示的就是轉正後的內容，content rect 內的相對座標經過
  * [Viewport.displayPerViewPixel] 縮放就直接是邏輯座標，不需要再疊任何旋轉矩陣。
  */
 private fun touchTransform(viewport: Viewport): Matrix = Matrix().apply {
     setScale(viewport.displayPerViewPixel, viewport.displayPerViewPixel)
-}
-
-/**
- * [quarterTurnCoefficients] 的 `android.graphics.Matrix` adapter，供 `MotionEvent.transform()`
- * 與 bitmap 旋轉使用。
- */
-private fun quarterTurnMatrix(quarterTurns: Int, width: Float, height: Float): Matrix =
-    Matrix().apply { setValues(quarterTurnCoefficients(quarterTurns, width, height)) }
-
-/**
- * 把原始 buffer bitmap（[TextureView.getBitmap] 回傳的，未套用 view 旋轉）依 VD 自己的
- * rotation 轉正。跟 [touchTransform] 疊的 v 旋轉是同一個 [quarterTurnMatrix]，只是套用對象
- * 從座標換成 bitmap 內容——兩處共用同一份旋轉方向，不重新猜一次。
- */
-internal fun rotateBufferBitmap(bitmap: Bitmap, rotation: Int): Bitmap {
-    val quarterTurns = rotation and 3
-    if (quarterTurns == 0) return bitmap
-    val matrix = quarterTurnMatrix(quarterTurns, bitmap.width.toFloat(), bitmap.height.toFloat())
-    return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
 }
 
 /** 虛擬顯示的 surface 尺寸與當前方向，全部取自公開的 `Display` API。 */
