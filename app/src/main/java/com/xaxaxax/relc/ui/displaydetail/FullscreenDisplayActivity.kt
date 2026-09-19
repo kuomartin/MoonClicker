@@ -48,7 +48,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -84,7 +83,7 @@ class FullscreenDisplayActivity : ComponentActivity() {
 
         enableEdgeToEdge()
 
-        // ADR-0014：鏡像釘在面板座標，MainDisplay 自己轉不該讓畫面截圖做動畫。seamless 是
+        // ADR-0017：MainDisplay 自己轉不該讓畫面截圖做動畫。seamless 是
         // hint，系統仍會依八項前提自行退回 CROSSFADE/ROTATE，這裡不用寫 fallback。
         window.attributes = window.attributes.apply {
             rotationAnimation = WindowManager.LayoutParams.ROTATION_ANIMATION_SEAMLESS
@@ -121,13 +120,12 @@ fun FullscreenDisplayScreen(
 
     // issue #41：退出畫面（返回鍵、Home、或畫面上的 Exit 按鈕，onPause 一律涵蓋）時留一張
     // 縮圖給 Displays 列表用；只在真的有鏡像畫面時才有東西可擷取。
-    val currentGeometry by rememberUpdatedState(geometry)
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner, targetDisplayId) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_PAUSE) {
                 textureViewRef.value?.bitmap?.let { bitmap ->
-                    viewModel.captureThumbnail(targetDisplayId, bitmap, currentGeometry.rotation)
+                    viewModel.captureThumbnail(targetDisplayId, bitmap)
                 }
             }
         }
@@ -141,24 +139,22 @@ fun FullscreenDisplayScreen(
     DisposableEffect(targetDisplayId, mirrorTextureView) {
         if (mirrorTextureView != null) {
             viewModel.mirrorFrames.register(targetDisplayId) {
-                mirrorTextureView.bitmap?.let {
-                    MirrorFrameSource.Captured(it, currentGeometry.rotation)
-                }
+                mirrorTextureView.bitmap?.let { MirrorFrameSource.Captured(it) }
             }
         }
         onDispose { viewModel.mirrorFrames.unregister(targetDisplayId) }
     }
 
-    // ADR-0014：鏡像釘在 MainDisplay 的面板座標，不再跟 VD 的方向互相牽制——VD 怎麼轉
-    // 是它自己的事，這個 activity 也不再把 VD 的方向鎖進 requestedOrientation。
+    // ADR-0017：鏡像跟著這個 Activity 的視窗自然旋轉，不釘住面板；VD 怎麼轉是它自己的事，
+    // 兩者互不牽制，這個 activity 也不把 VD 的方向鎖進 requestedOrientation。
 
     LaunchedEffect(cropState.isActive) {
         if (cropState.isActive && cropState.bitmap == null) {
             // TextureView 取代 SurfaceView 之後，擷取畫面不需要 PixelCopy —— getBitmap()
-            // 直接同步回傳 texture 的內容，但那是 surface 空間（未套用 VD 自己的 rotation）。
-            // ADR-0013：模板圖是邏輯空間的產物，所以裁切前先用 rotateBufferBitmap 轉正——
-            // 跟 DisplayThumbnailCache.put 存縮圖用的是同一個轉換，理由也一樣。
-            val bitmap = textureViewRef.value?.bitmap?.let { rotateBufferBitmap(it, geometry.rotation) }
+            // 直接同步回傳 texture 的內容。distributor 已經把 v 轉正（ADR-0017），這裡拿到的
+            // 就是邏輯空間，不需要再轉一次——ADR-0013 的模板是邏輯空間產物這件事因此不用
+            // 任何額外處理就滿足了。
+            val bitmap = textureViewRef.value?.bitmap
             if (bitmap != null) {
                 viewModel.cropSession.setCapturedBitmap(bitmap)
             } else {

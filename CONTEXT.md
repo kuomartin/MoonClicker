@@ -33,7 +33,7 @@ The two coordinate systems of a virtual display: Surface Space represents the fi
 _Avoid_: Frame coordinates, screen coordinates (when unspecified).
 
 **Panel Rotation (d) / Display Rotation (v)**:
-Two independent rotations: `d` is the physical panel's rotation (display 0), `v` is a virtual display's own rotation, arbitrated solely by the orientation the app running on it declares. Nothing couples them. `v` is cancelled where it originates (the GLES distributor) rather than compensated for downstream ([ADR-0017](docs/adr/0017-vd-rotation-is-cancelled-at-the-distributor.md)); the mirror no longer compensates for `d` either — its window follows `d` naturally instead of being pinned against it ([ADR-0018](docs/adr/0018-mirror-follows-the-window-instead-of-pinning-to-it.md)).
+Two independent rotations: `d` is the physical panel's rotation (display 0), `v` is a virtual display's own rotation, arbitrated solely by the orientation the app running on it declares. Nothing couples them. `v` is cancelled where it originates (the GLES distributor) rather than compensated for downstream; the mirror no longer compensates for `d` either — its window follows `d` naturally instead of being pinned against it ([ADR-0017](docs/adr/0017-vd-rotation-is-cancelled-at-the-distributor.md)).
 _Avoid_: Orientation chain (方向鏈), rotation sync, two-way orientation, sensor-driven rotation.
 
 **Viewport**:
