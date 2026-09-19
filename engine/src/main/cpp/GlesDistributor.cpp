@@ -31,11 +31,20 @@ static const GLfloat VERTICES[] = {
         1.0f, -1.0f, 0.0f
 };
 
-static const GLfloat TEX_COORDS[] = {
-        0.0f, 0.0f,
-        0.0f, 1.0f,
-        1.0f, 0.0f,
-        1.0f, 1.0f
+/**
+ * 每個 quarter-turn 一組，slot 順序對應 VERTICES 的 [TL, BL, TR, BR]。
+ *
+ * index 0（v 恆為 0）是原本唯一的那組，維持原樣。1..3 把「螢幕上的哪個角落取哪個
+ * texel」轉著配，讓取樣出來的畫面相對 index 0 順時針轉 90°*index——用來抵銷
+ * WindowManager 在 VIRTUAL_DISPLAY_FLAG_ROTATES_WITH_CONTENT 下已經烤進紋理的那個
+ * v·90 旋轉（ADR-0017）。這裡的 index 是逆時針 index*90 的取樣結果，setRotation 會反過來
+ * 用 (4-v)%4 去查表，見那邊的註解。
+ */
+static const GLfloat TEX_COORDS_BY_ROTATION[4][8] = {
+        {0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, 1.0f},
+        {0.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f},
+        {1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f},
+        {1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f},
 };
 
 GlesDistributor::GlesDistributor(int width, int height)
@@ -43,7 +52,14 @@ GlesDistributor::GlesDistributor(int width, int height)
           eglPbufferSurface(EGL_NO_SURFACE), eglConfig(nullptr), textureId(0), program(0),
           vPositionHandle(0), vTextureHandle(0),
           jSurfaceTexture(nullptr), jSurface(nullptr), isRunning(false),
-          javaVM(nullptr), nextHandle(1) {}
+          javaVM(nullptr), nextHandle(1), rotation(0) {}
+
+void GlesDistributor::setRotation(int quarterTurns) {
+    // 真機驗證過：TEX_COORDS_BY_ROTATION[k] 產生的是逆時針 k*90 的取樣結果，
+    // 要抵銷的是順時針 v*90 烤進紋理的旋轉，方向相反，故取 (4-v)%4。
+    int v = quarterTurns & 3;
+    rotation.store((4 - v) & 3);
+}
 
 GlesDistributor::~GlesDistributor() = default;
 
@@ -341,6 +357,8 @@ void GlesDistributor::drawFrame() {
     std::lock_guard<std::mutex> lock(sinksMutex);
     if (sinks.empty()) return;
 
+    const GLfloat *texCoords = TEX_COORDS_BY_ROTATION[rotation.load()];
+
     for (auto it = sinks.begin(); it != sinks.end();) {
         if (!eglMakeCurrent(eglDisplay, it->eglSurface, it->eglSurface, eglContext)) {
             LOGE("eglMakeCurrent failed for sink handle %d: %x", it->handle, eglGetError());
@@ -359,7 +377,7 @@ void GlesDistributor::drawFrame() {
         glUseProgram(program);
         glVertexAttribPointer(vPositionHandle, 3, GL_FLOAT, GL_FALSE, 0, VERTICES);
         glEnableVertexAttribArray(vPositionHandle);
-        glVertexAttribPointer(vTextureHandle, 2, GL_FLOAT, GL_FALSE, 0, TEX_COORDS);
+        glVertexAttribPointer(vTextureHandle, 2, GL_FLOAT, GL_FALSE, 0, texCoords);
         glEnableVertexAttribArray(vTextureHandle);
 
         glActiveTexture(GL_TEXTURE0);

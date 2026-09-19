@@ -4,7 +4,7 @@
 
 修正不放在 consumer 的算式裡。`v` 由 `GlesDistributor` 在輸出時消除：它的 GL pass 本來就在每一條輸出路徑上（`addVirtualDisplaySurface` 掛上的 surface 一律是它的下游），而該 pass 目前是純 pass-through，加一個變換矩陣不新增 pass、也不新增 buffer copy。consumer（Fullscreen 鏡像、`H264EncoderSink`、frame capture、vision）因此一律收到已經擺正的影格，只需要知道影格尺寸，不需要知道「旋轉」這回事。
 
-ADR-0014 的決定本身保留：鏡像仍然釘在面板座標，view 層仍然只補償 `d`。差別在於它不再依賴任何「`v` 會等於 `d`」的假設——consumer 眼中的 `v` 恆為 0，由構造成立，而不是靠兩條路徑各自收斂湊出來。`d` 的補償留在 `:app`，因為只有面板需要它；H.264 那一側沒有面板，套用 `d` 沒有意義。
+本 ADR 當時保留 ADR-0014「鏡像釘在面板、view 層補償 `d`」的決定，只修正它的前提；那個決定後來被 [ADR-0018](0018-mirror-follows-the-window-instead-of-pinning-to-it.md) 推翻（真機驗證發現手動釘住面板是不必要的）。跟本 ADR 有關、且不受 ADR-0018 影響的部分不變：consumer 眼中的 `v` 恆為 0，是由 distributor 這一層構造成立，不是靠兩條路徑各自收斂湊出來；H.264 那一側沒有面板，從來就不需要知道 `d`。
 
 ## Consequences
 

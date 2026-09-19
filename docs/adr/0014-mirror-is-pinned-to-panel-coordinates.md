@@ -6,4 +6,4 @@
 
 ## Status
 
-Accepted。前提條件、AOSP 依據與 SurfaceView 為何不可行，見 [seamless rotation 與 SurfaceView 的旋轉限制](../research/seamless-rotation-and-surfaceview.md)。前提於 2026-09-19 由 [ADR-0017](0017-vd-rotation-is-cancelled-at-the-distributor.md) 修正。
+Superseded by [ADR-0018](0018-mirror-follows-the-window-instead-of-pinning-to-it.md) as of 2026-09-19：真機驗證後發現手動釘住面板是不必要的，`configChanges` + `ROTATION_ANIMATION_SEAMLESS` 本身就吃下了轉場成本。前提條件、AOSP 依據與 SurfaceView 為何不可行，仍見 [seamless rotation 與 SurfaceView 的旋轉限制](../research/seamless-rotation-and-surfaceview.md)；前提曾於同日由 [ADR-0017](0017-vd-rotation-is-cancelled-at-the-distributor.md) 修正過一次，決定本身隨後才被 ADR-0018 推翻。
