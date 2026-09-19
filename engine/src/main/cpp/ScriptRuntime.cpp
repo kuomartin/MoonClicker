@@ -71,9 +71,7 @@ bool ScriptRuntime::start(int displayId, bool isPhysical, bool withVision, int s
     this->surfaceHeight = surfaceHeight;
     this->heldMirrorRef = false;
 
-    visionMatcher = std::make_unique<VisionMatcher>(surfaceWidth, surfaceHeight, scriptDir);
-    // 一定要在腳本執行緒起跑前設好，否則第一行 screen.width 讀到的是未旋轉的值。
-    visionMatcher->setRotation(initialRotation);
+    visionMatcher = std::make_unique<VisionMatcher>(surfaceWidth, surfaceHeight, initialRotation, scriptDir);
 
     if (withVision) {
         if (!attachImageReader()) {
@@ -245,10 +243,6 @@ bool ScriptRuntime::stopMirror() {
     }
     heldMirrorRef = false;
     return true;
-}
-
-void ScriptRuntime::setRotation(int rotation) {
-    if (visionMatcher) visionMatcher->setRotation(rotation);
 }
 
 bool ScriptRuntime::interruptibleSleep(long ms) {

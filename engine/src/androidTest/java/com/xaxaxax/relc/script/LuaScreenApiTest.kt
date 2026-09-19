@@ -2,7 +2,6 @@ package com.xaxaxax.relc.script
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.xaxaxax.relc.engine.state.EngineRunState
-import com.xaxaxax.relc.lua.LuaNative
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -12,9 +11,9 @@ import org.junit.runner.RunWith
 /**
  * `screen.*` 與「這個目標有沒有影格」的分界。
  *
- * 旋轉那一段是這個 repo 反覆出錯的地方（見 CONTEXT.md 的「Surface 空間 / 邏輯空間」）：
- * 影格是 surface 空間、對外座標是邏輯空間，兩者差一個直角。這裡不需要真的
- * 顯示器就能驗——native 端的換算只吃「建立時的 surface 尺寸」與「當前 rotation」兩個數字。
+ * 影格已經是邏輯空間（distributor 在源頭把 v 轉正，見 ADR-0017），`screen.width`／
+ * `screen.height`／`screen.rotation` 是啟動當下的快照，整場執行固定不變——不像舊版
+ * 會隨顯示器中途旋轉即時更新，這裡不需要真的顯示器就能驗。
  */
 @RunWith(AndroidJUnit4::class)
 class LuaScreenApiTest {
@@ -34,36 +33,12 @@ class LuaScreenApiTest {
         }
     }
 
-    /**
-     * 轉 90 度時邏輯長寬互換，但 surface 尺寸不變。腳本只看得到邏輯空間。
-     *
-     * 腳本輪詢 `screen.rotation` 而不是睡固定時間，所以測試設定 rotation 的時機不影響結果。
-     */
-    @Test
-    fun screen_width_and_height_swap_when_the_display_rotates() {
-        LuaScriptRunner(RecordingRelcService(surfaceSize = intArrayOf(1080, 1920))).use { runner ->
-            runner.start(
-                """
-                local tries = 0
-                while screen.rotation == 0 and tries < 100 do
-                    sleep(50)
-                    tries = tries + 1
-                end
-                data.set("r", screen.rotation)
-                data.set("w", screen.width)
-                data.set("h", screen.height)
-                """.trimIndent()
-            )
-
-            LuaNative.nativeSetDisplayRotation(1)
-            val outcome = runner.await()
-
-            assertEquals(EngineRunState.Finished, outcome.runState)
-            assertEquals("the script never saw the rotation", 1.0, outcome.data["r"])
-            assertEquals(1920.0, outcome.data["w"])
-            assertEquals(1080.0, outcome.data["h"])
-        }
-    }
+    // screen.width/height 隨旋轉互換長寬的覆蓋率在 Tier 1（Tier1SpikeTest，真的顯示器、真的
+    // WindowManager 旋轉）——RecordingRelcService 是純 Kotlin 假服務，不實作
+    // RelcV2Service.getDisplaySurfaceSize 依目前 rotation 互換長寬那段邏輯（ADR-0017 的
+    // B），這裡量不出任何東西。screen.rotation 也不再能從腳本執行緒外中途改變（見
+    // VisionMatcher 的建構子：整場執行固定），舊版靠 nativeSetDisplayRotation 從外部注入
+    // 的測試手法已經沒有對應的生產路徑，一併移除。
 
     @Test
     fun has_vision_is_false_on_a_target_without_a_frame_source() = withRunner { runner ->

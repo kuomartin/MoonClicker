@@ -49,6 +49,13 @@ Java_com_xaxaxax_relc_RelcV2Service_nativeRemoveSurface(JNIEnv *env, jobject thi
 }
 
 JNIEXPORT void JNICALL
+Java_com_xaxaxax_relc_RelcV2Service_nativeSetDistributorRotation(JNIEnv *env, jobject thiz,
+                                                                  jlong ptr, jint rotation) {
+    auto *distributor = reinterpret_cast<GlesDistributor *>(ptr);
+    distributor->setRotation(rotation);
+}
+
+JNIEXPORT void JNICALL
 Java_com_xaxaxax_relc_RelcV2Service_nativeDestroyDistributor(JNIEnv *env, jobject thiz, jlong ptr) {
     auto *distributor = reinterpret_cast<GlesDistributor *>(ptr);
     distributor->release(env);
@@ -101,13 +108,6 @@ JNIEXPORT jboolean JNICALL
 Java_com_xaxaxax_relc_lua_LuaNative_nativeIsRunning(JNIEnv *env, jobject thiz) {
     std::lock_guard<std::mutex> lock(gRuntimeMutex);
     return gRuntime && gRuntime->isRunning() ? JNI_TRUE : JNI_FALSE;
-}
-
-JNIEXPORT void JNICALL
-Java_com_xaxaxax_relc_lua_LuaNative_nativeSetDisplayRotation(JNIEnv *env, jobject thiz,
-                                                             jint rotation) {
-    std::lock_guard<std::mutex> lock(gRuntimeMutex);
-    if (gRuntime) gRuntime->setRotation(rotation);
 }
 
 }

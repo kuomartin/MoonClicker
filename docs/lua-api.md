@@ -36,15 +36,15 @@ end
 
 ## `screen` 顯示器狀態與鏡像
 
-提供目標顯示器的即時屬性與鏡像管線控制。
+提供目標顯示器的狀態與鏡像管線控制。
 
 | 欄位 / 函式 | 型別 / 回傳 | 說明 |
 |---|---|---|
-| `screen.width` | `integer` | 目標顯示器目前的邏輯寬度 |
-| `screen.height` | `integer` | 目標顯示器目前的邏輯高度 |
-| `screen.rotation` | `integer` | 旋轉角度（`0`: 0°, `1`: 90°, `2`: 180°, `3`: 270°） |
-| `screen.has_vision` | `boolean` | 是否具備畫面辨識來源（虛擬顯示一律為 `true`；實體螢幕需啟動鏡像） |
-| `screen.is_mirror_active` | `boolean` | 鏡像管線是否運作中 |
+| `screen.width` | `integer` | 目標顯示器的邏輯寬度。腳本啟動當下的快照，整場執行固定不變 |
+| `screen.height` | `integer` | 目標顯示器的邏輯高度。腳本啟動當下的快照，整場執行固定不變 |
+| `screen.rotation` | `integer` | 旋轉角度（`0`: 0°, `1`: 90°, `2`: 180°, `3`: 270°）。腳本啟動當下的快照，整場執行固定不變 |
+| `screen.has_vision` | `boolean` | 是否具備畫面辨識來源（虛擬顯示一律為 `true`；實體螢幕需啟動鏡像）。即時值 |
+| `screen.is_mirror_active` | `boolean` | 鏡像管線是否運作中。即時值 |
 | `screen.start_mirror()` | `boolean` | （實體螢幕專用）啟動鏡像管線以啟用 `vision.*` 與 `input.*` |
 | `screen.stop_mirror()` | `boolean` | （實體螢幕專用）手動停止鏡像管線 |
 

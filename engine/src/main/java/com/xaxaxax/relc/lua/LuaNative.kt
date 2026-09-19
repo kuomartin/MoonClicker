@@ -22,8 +22,10 @@ internal object LuaNative {
 
     /**
      * @param withVision 是否掛 ImageReader 取影格。實體螢幕拿不到影格，必須傳 false。
-     * @param surfaceWidth 顯示器**建立時**的尺寸（surface 空間，不是 getDisplaySize 回的邏輯尺寸）。
-     * @param initialRotation 啟動當下的 rotation，讓腳本第一行讀 screen.width 就是對的。
+     * @param surfaceWidth 影格尺寸——distributor 轉正後的自然尺寸，整場執行固定不變
+     *   （AImageReader 不會在 VD 中途旋轉時重開，見 ADR-0017）。
+     * @param initialRotation 啟動當下的 rotation，純粹是給 Lua `screen.rotation` 讀的中繼資料，
+     *   不影響任何座標換算——影格已經是邏輯空間。
      * @param scriptDir 腳本資料夾，內含 main.lua。
      */
     external fun nativeStart(
@@ -41,7 +43,4 @@ internal object LuaNative {
     external fun nativeStop()
 
     external fun nativeIsRunning(): Boolean
-
-    /** 記錄虛擬顯示當前的 rotation，供座標轉換使用。**不會旋轉任何東西。** */
-    external fun nativeSetDisplayRotation(rotation: Int)
 }

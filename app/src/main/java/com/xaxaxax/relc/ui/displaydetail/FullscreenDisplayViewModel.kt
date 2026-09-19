@@ -65,9 +65,9 @@ class FullscreenDisplayViewModel @Inject constructor(
      * issue #41：退出 fullscreen（不論哪條離開路徑，見呼叫端掛在 `onPause`）時留一張縮圖。
      * 縮放/轉正/寫檔都不是可以卡在 onPause 上的工作，丟到 IO dispatcher 做。
      */
-    fun captureThumbnail(displayId: Int, bitmap: android.graphics.Bitmap, rotation: Int) {
+    fun captureThumbnail(displayId: Int, bitmap: android.graphics.Bitmap) {
         viewModelScope.launch(Dispatchers.IO) {
-            thumbnailCache.put(displayId, bitmap, rotation)
+            thumbnailCache.put(displayId, bitmap)
         }
     }
 

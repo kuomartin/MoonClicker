@@ -42,10 +42,10 @@ private const val MIN_FRAME_INTERVAL_MS = 100L
 class MirrorFrameSource @Inject constructor() : FrameSource {
 
     /**
-     * 一次擷取的結果：`TextureView` 的原始 buffer bitmap（未套用 VD 自己的 rotation）與當下的
-     * rotation。轉正留給 [MirrorFrameSource] 在背景做，不佔著 UI thread 跑全像素的仿射運算。
+     * 一次擷取的結果：`TextureView` 的 buffer bitmap，已經是邏輯空間（distributor 轉正過，
+     * ADR-0017），不需要額外處理，直接編碼。
      */
-    data class Captured(val bitmap: Bitmap, val rotation: Int)
+    data class Captured(val bitmap: Bitmap)
 
     /** 在 UI thread 上執行的一次擷取；畫面尚未就緒（[TextureView.getBitmap] 回 null）時回 null。 */
     fun interface Capture {
@@ -96,21 +96,17 @@ class MirrorFrameSource @Inject constructor() : FrameSource {
         }
     }
 
-    /** @return 轉正後的 JPEG bytes；來源已經解除登記或畫面尚未就緒時回 null。 */
+    /** @return JPEG bytes；來源已經解除登記或畫面尚未就緒時回 null。 */
     private suspend fun Slot.encodeFrame(): ByteArray? {
         val capture = capture ?: return null
         // getBitmap() 讀的是 view 的 texture，跟既有的縮圖/裁切擷取一樣走 UI thread。
         val captured = withContext(Dispatchers.Main) { capture.capture() } ?: return null
         return withContext(Dispatchers.Default) {
-            // ADR-0014：TextureView 的 buffer 未套用 VD 自己的 rotation，送出去之前先轉正成
-            // 邏輯空間——跟 DisplayThumbnailCache.put 與裁切擷取共用同一個轉換。
-            val rotated = rotateBufferBitmap(captured.bitmap, captured.rotation)
             val jpeg = ByteArrayOutputStream().use { out ->
-                rotated.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)
+                captured.bitmap.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)
                 out.toByteArray()
             }
             // 每幀都是新配置的全解析度 bitmap，用完立刻還回去，不留給 GC 追著跑。
-            if (rotated !== captured.bitmap) rotated.recycle()
             captured.bitmap.recycle()
             jpeg
         }

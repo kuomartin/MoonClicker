@@ -17,13 +17,14 @@ function sleep(ms) end
 function on_stop() end
 
 ---@class relc.Screen
----@field width integer 目標顯示器的邏輯寬度，旋轉時會跟著變
----@field height integer 目標顯示器的邏輯高度，旋轉時會跟著變
----@field rotation integer `0..3`，對應 `Surface.ROTATION_*`
+---@field width integer 目標顯示器的邏輯寬度。腳本啟動當下的快照，整場執行固定不變
+---@field height integer 目標顯示器的邏輯高度。腳本啟動當下的快照，整場執行固定不變
+---@field rotation integer `0..3`，對應 `Surface.ROTATION_*`。腳本啟動當下的快照，整場執行固定不變
 ---@field has_vision boolean 這個目標是否有影格來源（虛擬顯示或已開啟鏡像之實體螢幕為 `true`；實體螢幕未開鏡像呼叫 `vision.*` 會拋錯）
 ---@field is_mirror_active boolean 鏡像管線是否作用中（虛擬顯示一律為 `true`；實體螢幕依開啟狀態而定）
 
---- 唯讀欄位與鏡像管線控制方法，每次讀取都是即時值。
+--- 唯讀欄位與鏡像管線控制方法。`width`/`height`/`rotation` 是啟動當下的快照，不會隨顯示器
+--- 中途旋轉更新；`has_vision`/`is_mirror_active` 才是每次讀取都是即時值。
 ---@type relc.Screen
 screen = {}
 
