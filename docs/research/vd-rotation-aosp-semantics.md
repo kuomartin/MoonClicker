@@ -1,6 +1,6 @@
 # VirtualDisplay 旋轉：AOSP 語意與可用 API
 
-Research note for [#10](https://github.com/kuomartin/MoonClicker/issues/10)（地圖 [#9](https://github.com/kuomartin/MoonClicker/issues/9) 的子票）。
+Research note for [#10](https://github.com/kuomartin/ReLC/issues/10)（地圖 [#9](https://github.com/kuomartin/ReLC/issues/9) 的子票）。
 研究日期 2026-09-10。
 
 **方法**：全部讀 AOSP 原始碼（`aosp-mirror/platform_frameworks_base` 的

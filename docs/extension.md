@@ -2,7 +2,7 @@
 
 ## 安裝擴充套件
 
-1. 從 [Releases](https://github.com/kuomartin/MoonClicker/releases) 下載最新的 `moonclicker-script-workbench.vsix`。
+1. 從 [Releases](https://github.com/kuomartin/ReLC/releases) 下載最新的 `moonclicker-script-workbench.vsix`。
 2. 在 VS Code 執行 **Extensions: Install from VSIX...** 指令，選擇下載的檔案完成安裝。
 
 ## 連線裝置

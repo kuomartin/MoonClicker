@@ -16,10 +16,10 @@ const STALE_AFTER_MS = 3000;
 
 let panel: vscode.WebviewPanel | undefined;
 let connection: MirrorConnection | undefined;
-const mirrorOutputChannel = vscode.window.createOutputChannel("ReLC Mirror");
+const mirrorOutputChannel = vscode.window.createOutputChannel("MoonClicker Mirror");
 
 /**
- * `relc.openMirror` 的面板邏輯（見 #77、#78）。跟 `extension.ts` 的 [WorkbenchConnection] 是完全
+ * `moonclicker.openMirror` 的面板邏輯（見 #77、#78）。跟 `extension.ts` 的 [WorkbenchConnection] 是完全
  * 分開的一份連線與狀態——再次呼叫這個指令只會重啟 mirror 自己的連線，不影響 log/data.set
  * 那條 WebSocket，反之亦然。
  */
@@ -42,7 +42,7 @@ export function openMirrorPanel(extensionUri: vscode.Uri, address: string, displ
 
   if (!panel) {
     const newPanel = vscode.window.createWebviewPanel(
-      "relc.mirror",
+      "moonclicker.mirror",
       mirrorTitle(displayId),
       vscode.ViewColumn.Beside,
       { enableScripts: true, retainContextWhenHidden: true },
@@ -80,14 +80,14 @@ export function openMirrorPanel(extensionUri: vscode.Uri, address: string, displ
       } else if (message?.type === "saveTemplate") {
         const { scriptId, templateName, roi, pngBase64 } = message;
         if (!scriptId || !templateName || !roi || !pngBase64) {
-          vscode.window.showErrorMessage("ReLC: 裁切模板存檔參數不完整");
+          vscode.window.showErrorMessage("MoonClicker: 裁切模板存檔參數不完整");
           return;
         }
         try {
           const pngBuffer = Buffer.from(pngBase64, "base64");
           await saveTemplate(address, scriptId, templateName, roi, pngBuffer, token);
           safePostMessage({ type: "saveTemplateResult", success: true });
-          vscode.window.showInformationMessage(`ReLC: 模板「${templateName}」已成功存檔到 ${scriptId}`);
+          vscode.window.showInformationMessage(`MoonClicker: 模板「${templateName}」已成功存檔到 ${scriptId}`);
         } catch (err) {
           const errMsg = (err as Error).message;
           safePostMessage({
@@ -95,9 +95,9 @@ export function openMirrorPanel(extensionUri: vscode.Uri, address: string, displ
             success: false,
             error: errMsg,
           });
-          mirrorOutputChannel.appendLine(`[ReLC Save Template Error] ${errMsg}`);
+          mirrorOutputChannel.appendLine(`[MoonClicker Save Template Error] ${errMsg}`);
           mirrorOutputChannel.show(true);
-          vscode.window.showErrorMessage(`ReLC 儲存模板失敗: ${errMsg}`);
+          vscode.window.showErrorMessage(`MoonClicker 儲存模板失敗: ${errMsg}`);
         }
       } else if (message?.type === "switchDisplay") {
         if (typeof message.displayId === "number") {
@@ -116,11 +116,11 @@ export function openMirrorPanel(extensionUri: vscode.Uri, address: string, displ
           const enable = message.enable !== false;
           toggleDisplayMirror(address, targetDisplayId, enable, token)
             .then(() => {
-              vscode.window.showInformationMessage(`ReLC: 顯示器 ${targetDisplayId} 鏡像已${enable ? "開啟" : "關閉"}`);
+              vscode.window.showInformationMessage(`MoonClicker: 顯示器 ${targetDisplayId} 鏡像已${enable ? "開啟" : "關閉"}`);
               openMirrorPanel(extensionUri, address, targetDisplayId, token);
             })
             .catch((err) => {
-              vscode.window.showErrorMessage(`ReLC: 切換鏡像失敗: ${(err as Error).message}`);
+              vscode.window.showErrorMessage(`MoonClicker: 切換鏡像失敗: ${(err as Error).message}`);
             });
         }
       }
@@ -146,11 +146,11 @@ export function openMirrorPanel(extensionUri: vscode.Uri, address: string, displ
       listScripts(address, token)
         .then((scripts) => safePostMessage({ type: "scripts", scripts }))
         .catch((err) => {
-          mirrorOutputChannel.appendLine(`[ReLC Mirror] Failed to list scripts: ${(err as Error).message}`);
+          mirrorOutputChannel.appendLine(`[MoonClicker Mirror] Failed to list scripts: ${(err as Error).message}`);
         });
       refreshDisplays();
     } else if (state.status === "error") {
-      mirrorOutputChannel.appendLine(`[ReLC Mirror Error] ${state.message}`);
+      mirrorOutputChannel.appendLine(`[MoonClicker Mirror Error] ${state.message}`);
       mirrorOutputChannel.show(true);
       staleness.disarm();
     } else {
@@ -177,7 +177,7 @@ export function disposeMirrorPanel(): void {
 }
 
 function mirrorTitle(displayId: number): string {
-  return `ReLC Mirror — display ${displayId}`;
+  return `MoonClicker Mirror — display ${displayId}`;
 }
 
 function safePostMessage(message: unknown): void {

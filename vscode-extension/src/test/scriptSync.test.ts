@@ -70,7 +70,7 @@ test("listScripts returns the device's script summaries", async () => {
 });
 
 test("pullScript extracts the exported zip into the destination folder", async () => {
-  const destDir = mkdtempSync(join(tmpdir(), "relc-pull-"));
+  const destDir = mkdtempSync(join(tmpdir(), "moonclicker-pull-"));
   try {
     await pullScript(address, "hello", destDir);
     assert.equal(readFileSync(join(destDir, "main.lua"), "utf8"), "log('hi')");
@@ -80,7 +80,7 @@ test("pullScript extracts the exported zip into the destination folder", async (
 });
 
 test("pushScript sends a zip of the source folder", async () => {
-  const sourceDir = mkdtempSync(join(tmpdir(), "relc-push-"));
+  const sourceDir = mkdtempSync(join(tmpdir(), "moonclicker-push-"));
   try {
     writeFileSync(join(sourceDir, "main.lua"), "log('pushed')");
     await pushScript(address, "hello", sourceDir);
@@ -103,7 +103,7 @@ test("runScript throws with the server's reason when a script is already running
 });
 
 test("pushScript throws with the server's reason on failure", async () => {
-  const sourceDir = mkdtempSync(join(tmpdir(), "relc-push-fail-"));
+  const sourceDir = mkdtempSync(join(tmpdir(), "moonclicker-push-fail-"));
   try {
     await assert.rejects(
       () => pushScript(address, "broken", sourceDir),
