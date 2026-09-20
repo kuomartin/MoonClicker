@@ -34,7 +34,6 @@ import kotlin.time.Duration.Companion.milliseconds
 data class SettingsUiState(
     val shizukuStatus: ShizukuConnectionStatus = ShizukuConnectionStatus.NOT_AVAILABLE,
     val hasNotificationPermission: Boolean = false,
-    val hasOverlayPermission: Boolean = false,
     val osAllowSecondaryDisplays: Boolean = false,
     val hasLocalNetworkPermission: Boolean = false,
     val isRefreshing: Boolean = false,
@@ -92,11 +91,10 @@ class SettingsViewModel @Inject constructor(
 
     private val permissionCombinedState = combine(
         permissionManager.hasNotificationPermission,
-        permissionManager.hasOverlayPermission,
         permissionManager.osAllowSecondaryDisplays,
         permissionManager.hasLocalNetworkPermission,
-    ) { notification, overlay, secondary, localNetwork ->
-        PermissionsStateHolder(notification, overlay, secondary, localNetwork)
+    ) { notification, secondary, localNetwork ->
+        PermissionsStateHolder(notification, secondary, localNetwork)
     }
 
     private val authState = combine(
@@ -125,7 +123,6 @@ class SettingsViewModel @Inject constructor(
         SettingsUiState(
             shizukuStatus = status,
             hasNotificationPermission = permissions.hasNotification,
-            hasOverlayPermission = permissions.hasOverlay,
             osAllowSecondaryDisplays = permissions.allowSecondaryDisplays,
             hasLocalNetworkPermission = permissions.hasLocalNetwork,
             isRefreshing = refreshing,
@@ -214,7 +211,6 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun getNotificationSettingsIntent() = permissionManager.getNotificationSettingsIntent()
-    fun getOverlaySettingsIntent() = permissionManager.getOverlaySettingsIntent()
     fun getAppSettingsIntent() = permissionManager.getAppSettingsIntent()
 
     fun startPairingMode() = authStore.startPairingMode()
@@ -225,7 +221,6 @@ class SettingsViewModel @Inject constructor(
 
 private data class PermissionsStateHolder(
     val hasNotification: Boolean,
-    val hasOverlay: Boolean,
     val allowSecondaryDisplays: Boolean,
     val hasLocalNetwork: Boolean,
 )

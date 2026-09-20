@@ -193,10 +193,6 @@
     <string name="permission_notification_rationale_title">Notification Permission Rationale</string>
     <string name="permission_notification_rationale_desc">ReLC requires notification permission to display real-time execution status, logs, and a quick-stop action in the notification shade when scripts run in the background or when Script Workbench is active.</string>
 
-    <string name="permission_overlay_title">System Overlay Permission</string>
-    <string name="permission_overlay_desc">Display floating controls and overlay widgets above other applications.</string>
-    <string name="permission_overlay_rationale_title">System Overlay Permission Rationale</string>
-    <string name="permission_overlay_rationale_desc">ReLC requires \"Display over other apps\" permission to present handy floating controllers during script execution, recording, and debugging.</string>
 
     <string name="permission_local_network_title">Local Network Permission</string>
     <string name="permission_local_network_desc">Allow inbound connections from the local network so VS Code can reach Workbench.</string>

@@ -76,7 +76,6 @@ import kotlin.time.Duration.Companion.milliseconds
 enum class RationaleDialogType {
     NOTIFICATION,
     SHIZUKU,
-    OVERLAY,
     LOCAL_NETWORK,
 }
 
@@ -155,19 +154,6 @@ fun SettingsScreen(
                 onDismiss = { activeRationale = null },
             )
         }
-        RationaleDialogType.OVERLAY -> {
-            PermissionRationaleDialog(
-                title = stringResource(R.string.permission_overlay_rationale_title),
-                description = stringResource(R.string.permission_overlay_rationale_desc),
-                icon = painterResource(R.drawable.ic_picture_in_picture_off),
-                confirmText = stringResource(R.string.permission_action_proceed),
-                dismissText = stringResource(R.string.permission_action_cancel),
-                onConfirm = {
-                    activityResultLauncher.launch(viewModel.getOverlaySettingsIntent())
-                },
-                onDismiss = { activeRationale = null },
-            )
-        }
         RationaleDialogType.LOCAL_NETWORK -> {
             PermissionRationaleDialog(
                 title = stringResource(R.string.permission_local_network_rationale_title),
@@ -202,13 +188,6 @@ fun SettingsScreen(
                 activeRationale = RationaleDialogType.NOTIFICATION
             }
         },
-        onRequestOverlayPermission = {
-            if (uiState.hasOverlayPermission) {
-                activityResultLauncher.launch(viewModel.getOverlaySettingsIntent())
-            } else {
-                activeRationale = RationaleDialogType.OVERLAY
-            }
-        },
         onRequestLocalNetworkPermission = {
             if (!uiState.hasLocalNetworkPermission) {
                 activeRationale = RationaleDialogType.LOCAL_NETWORK
@@ -234,7 +213,6 @@ private fun SettingsScreenContent(
     uiState: SettingsUiState,
     onRequestShizukuPermission: () -> Unit,
     onRequestNotificationPermission: () -> Unit,
-    onRequestOverlayPermission: () -> Unit,
     onRequestLocalNetworkPermission: () -> Unit = {},
     onRefresh: () -> Unit,
     onAutoOpenFullscreenChange: (Boolean) -> Unit,
@@ -337,25 +315,7 @@ private fun SettingsScreenContent(
 
                                 HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
 
-                                // 3. Overlay
-                                PermissionRow(
-                                    painter = painterResource(R.drawable.ic_picture_in_picture_off),
-                                    title = stringResource(R.string.permission_overlay_title),
-                                    description = stringResource(R.string.permission_overlay_desc),
-                                    statusText = if (uiState.hasOverlayPermission) {
-                                        stringResource(R.string.permission_granted)
-                                    } else {
-                                        stringResource(R.string.permission_not_granted)
-                                    },
-                                    statusColor = if (uiState.hasOverlayPermission) SuccessColor else MaterialTheme.colorScheme.outline,
-                                    isGranted = uiState.hasOverlayPermission,
-                                    actionLabel = stringResource(R.string.permission_action_settings),
-                                    onAction = onRequestOverlayPermission,
-                                )
-
-                                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
-
-                                // 4. Local Network
+                                // 3. Local Network
                                 PermissionRow(
                                     painter = painterResource(R.drawable.ic_launcher_foreground),
                                     title = stringResource(R.string.permission_local_network_title),
@@ -377,7 +337,7 @@ private fun SettingsScreenContent(
 
                                 HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
 
-                                // 5. Secondary Displays
+                                // 4. Secondary Displays
                                 PermissionRow(
                                     painter = painterResource(R.drawable.ic_picture_in_picture_off),
                                     title = stringResource(R.string.permission_secondary_displays_title),
@@ -825,9 +785,6 @@ private fun SettingsScreenPreview() {
                 },
                 onRequestNotificationPermission = {
                     uiState = uiState.copy(hasNotificationPermission = true)
-                },
-                onRequestOverlayPermission = {
-                    uiState = uiState.copy(hasOverlayPermission = true)
                 },
                 onRefresh = { uiState = SettingsUiState() },
                 onAutoOpenFullscreenChange = { isChecked ->
