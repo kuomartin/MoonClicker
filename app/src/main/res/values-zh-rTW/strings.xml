@@ -131,6 +131,15 @@
     <string name="settings_language_english">English</string>
     <string name="settings_language_chinese_tw">繁體中文</string>
     <string name="settings_language_restart_required">已儲存，重新啟動 App 後套用新語言。</string>
+    <string name="settings_about">關於</string>
+
+    <!-- About page -->
+    <string name="about_title">關於</string>
+    <string name="about_version">版本 %1$s (%2$d)</string>
+    <string name="about_source_code">原始碼</string>
+    <string name="about_report_issue">回報問題</string>
+    <string name="about_license">授權條款</string>
+    <string name="about_license_value">MIT License</string>
 
     <!-- Shizuku Connection Status -->
     <string name="shizuku_status_not_available">Shizuku 未啟動</string>

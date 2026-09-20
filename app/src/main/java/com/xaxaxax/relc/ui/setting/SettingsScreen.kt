@@ -7,6 +7,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,6 +22,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -84,6 +87,7 @@ enum class RationaleDialogType {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
+    onNavigateToAbout: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -208,6 +212,7 @@ fun SettingsScreen(
         onStopPairingMode = viewModel::stopPairingMode,
         onSetBruteForceProtection = viewModel::setBruteForceProtectionEnabled,
         onRevokeAllTokens = viewModel::revokeAllTokens,
+        onNavigateToAbout = onNavigateToAbout,
     )
 }
 
@@ -231,6 +236,7 @@ private fun SettingsScreenContent(
     onStopPairingMode: () -> Unit = {},
     onSetBruteForceProtection: (Boolean) -> Unit = {},
     onRevokeAllTokens: () -> Unit = {},
+    onNavigateToAbout: () -> Unit = {},
 ) {
     // 關閉與重啟都會連帶銷毀虛擬顯示，值得先問一句。
     var pendingAction by remember { mutableStateOf<UserServiceAction?>(null) }
@@ -413,6 +419,22 @@ private fun SettingsScreenContent(
                             onRequestStop = { pendingAction = UserServiceAction.STOP },
                             onRequestRestart = { pendingAction = UserServiceAction.RESTART },
                         )
+                    }
+                }
+
+                item {
+                    Section(name = stringResource(R.string.settings_about)) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable(onClick = onNavigateToAbout)
+                                .padding(vertical = 12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(stringResource(R.string.settings_about), style = MaterialTheme.typography.bodyLarge)
+                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
+                        }
                     }
                 }
             }
