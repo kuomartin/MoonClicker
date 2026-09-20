@@ -92,6 +92,14 @@ android {
         compose = true
         aidl = true
     }
+
+    androidResources {
+        // 取代原有的 resourceConfigurations，指定要打包的語言清單
+        localeFilters += listOf("en", "zh-rTW")
+
+        // 自動生成 Android 13+ 所需的 localeConfig 並注入 Manifest
+        generateLocaleConfig = true
+    }
 }
 
 androidComponents {
