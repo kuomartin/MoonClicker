@@ -2,13 +2,13 @@
 
 ## 安裝擴充套件
 
-1. 從 [Releases](https://github.com/kuomartin/ReLC/releases) 下載最新的 `relc-script-workbench.vsix`。
+1. 從 [Releases](https://github.com/kuomartin/MoonClicker/releases) 下載最新的 `moonclicker-script-workbench.vsix`。
 2. 在 VS Code 執行 **Extensions: Install from VSIX...** 指令，選擇下載的檔案完成安裝。
 
 ## 連線裝置
 
 1. 在 App `設定` 頁面開啟 `Script Workbench`，並開啟配對模式。
-2. 點擊側邊欄 **ReLC Scripts** -> **Connect to Device**：VS Code 會透過 mDNS 自動搜尋同網段內的裝置，選取即可配對；找不到裝置時也可以手動輸入裝置 IP 與 PIN 碼。
+2. 點擊側邊欄 **MoonClicker Scripts** -> **Connect to Device**：VS Code 會透過 mDNS 自動搜尋同網段內的裝置，選取即可配對；找不到裝置時也可以手動輸入裝置 IP 與 PIN 碼。
 
 ## 連線後可以做什麼
 

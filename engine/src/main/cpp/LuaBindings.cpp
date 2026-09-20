@@ -578,7 +578,7 @@ const luaL_Reg kData[] = {
 
 }  // namespace
 
-namespace relc {
+namespace moonclicker {
 
 void registerApi(lua_State *L, ScriptRuntime *runtime) {
     lua_pushlightuserdata(L, runtime);
@@ -613,4 +613,4 @@ void registerApi(lua_State *L, ScriptRuntime *runtime) {
     registerModule(L, runtime, "data", kData);
 }
 
-}  // namespace relc
+}  // namespace moonclicker

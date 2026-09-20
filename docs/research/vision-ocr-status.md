@@ -3,7 +3,7 @@
 Researched 2026-09-09 against the repo at commit `f9f26eb` (worktree
 `agent-a03fde23f0d25cf7b`). Method: read `ARCHITECTURE.md`,
 `目前專案進度.md`, `docs/lua-api.md` in full, then read the native engine
-(`app/src/main/cpp/RelcEngine.cpp` / `.h`, `LuaEngine.cpp`), the Kotlin JNI
+(`app/src/main/cpp/MoonClickerEngine.cpp` / `.h`, `LuaEngine.cpp`), the Kotlin JNI
 bridge (`LuaNative.kt`), the two script-runner implementations, build
 config (`app/build.gradle.kts`, `app/src/main/cpp/CMakeLists.txt`,
 `gradle/libs.versions.toml`), and `git log` over vision/OCR-related paths.
@@ -13,7 +13,7 @@ config (`app/build.gradle.kts`, `app/src/main/cpp/CMakeLists.txt`,
 - **Vision (`match.*`) is real, not a stub.** The documented API
   (`match.templates`, `match.wait()`) is backed by genuine OpenCV
   (`cv::matchTemplate` with `TM_CCOEFF_NORMED`, ROI cropping, grayscale
-  conversion, scaling) running per-frame in `RelcEngine::processFrame`.
+  conversion, scaling) running per-frame in `MoonClickerEngine::processFrame`.
   This matches the docs' "框架完成，API 擴展中" (framework done, API
   expanding) characterization — the framework and the two documented
   entry points work; the "expanding" part shows in undocumented extra
@@ -27,7 +27,7 @@ config (`app/build.gradle.kts`, `app/src/main/cpp/CMakeLists.txt`,
   the `input.*` module, not in `match.*` itself: `docs/lua-api.md`
   documents `input.tap`, `input.swipePolyline(L1)`, and
   `input.script.down/move/up`, none of which exist in the native Lua
-  engine that actually executes `.lua` scripts (`RelcEngine.cpp` only
+  engine that actually executes `.lua` scripts (`MoonClickerEngine.cpp` only
   binds `input.swipe` and `input.click`). Conversely, the engine exposes
   `match.enable`, `match.disable`, `match.set_enabled`, and a top-level
   `screen.findImage(name)` that `docs/lua-api.md` never mentions.
@@ -44,16 +44,16 @@ config (`app/build.gradle.kts`, `app/src/main/cpp/CMakeLists.txt`,
 
 | Documented in `docs/lua-api.md`? | Function | Implemented (real) | Stub/TODO | Evidence |
 |---|---|---|---|---|
-| Yes | `match.templates` (table property) | Yes | — | Parsed and consumed in `RelcEngine::` template-refresh lambda, `app/src/main/cpp/RelcEngine.cpp:598-609` (falls back from `config.templates` at 569-596) and the per-entry field parsing (name/target/roi/threshold/grayscale/enabled) at `RelcEngine.cpp:460-561`. Each entry loads a real bitmap via `cv::imread` (line 528) and caches it. |
-| Yes | `match.wait()` | Yes | — | `RelcEngine::lua_match_wait`, `RelcEngine.cpp:864-897`. Yields the Lua coroutine (`lua_yield`) when no match is present yet, otherwise builds and returns a real results table populated from `latestResult.matches`, which is itself populated by `processFrame` running `cv::matchTemplate` (`RelcEngine.cpp:687-705`) every frame. Bound at `RelcEngine.cpp:128-132`. |
-| No (undocumented) | `match.enable(name)` | Yes | — | `RelcEngine::lua_match_enable`, `RelcEngine.cpp:914-918`, delegates to `lua_match_set_enabled`. Bound at `RelcEngine.cpp:134-136`. |
-| No (undocumented) | `match.disable(name)` | Yes | — | `RelcEngine::lua_match_disable`, `RelcEngine.cpp:920-924`. Bound at `RelcEngine.cpp:138-140`. |
-| No (undocumented) | `match.set_enabled(name, bool)` | Yes | — | `RelcEngine::lua_match_set_enabled`, `RelcEngine.cpp:899-912`, mutates the live `templates` vector under `resultMutex`. Bound at `RelcEngine.cpp:142-144`. |
-| No (undocumented, separate module) | `screen.findImage(name)` | Yes | — | `RelcEngine::lua_screen_findImage`, `RelcEngine.cpp:1190-1214`. Reads the same `latestResult.matches` cache built by the OpenCV template-matching pass; returns `{found=false}` if not present. Bound at `RelcEngine.cpp:122-126`, before the `match` table setup — it is registered as a top-level `screen` global, not part of `match`. |
+| Yes | `match.templates` (table property) | Yes | — | Parsed and consumed in `MoonClickerEngine::` template-refresh lambda, `app/src/main/cpp/MoonClickerEngine.cpp:598-609` (falls back from `config.templates` at 569-596) and the per-entry field parsing (name/target/roi/threshold/grayscale/enabled) at `MoonClickerEngine.cpp:460-561`. Each entry loads a real bitmap via `cv::imread` (line 528) and caches it. |
+| Yes | `match.wait()` | Yes | — | `MoonClickerEngine::lua_match_wait`, `MoonClickerEngine.cpp:864-897`. Yields the Lua coroutine (`lua_yield`) when no match is present yet, otherwise builds and returns a real results table populated from `latestResult.matches`, which is itself populated by `processFrame` running `cv::matchTemplate` (`MoonClickerEngine.cpp:687-705`) every frame. Bound at `MoonClickerEngine.cpp:128-132`. |
+| No (undocumented) | `match.enable(name)` | Yes | — | `MoonClickerEngine::lua_match_enable`, `MoonClickerEngine.cpp:914-918`, delegates to `lua_match_set_enabled`. Bound at `MoonClickerEngine.cpp:134-136`. |
+| No (undocumented) | `match.disable(name)` | Yes | — | `MoonClickerEngine::lua_match_disable`, `MoonClickerEngine.cpp:920-924`. Bound at `MoonClickerEngine.cpp:138-140`. |
+| No (undocumented) | `match.set_enabled(name, bool)` | Yes | — | `MoonClickerEngine::lua_match_set_enabled`, `MoonClickerEngine.cpp:899-912`, mutates the live `templates` vector under `resultMutex`. Bound at `MoonClickerEngine.cpp:142-144`. |
+| No (undocumented, separate module) | `screen.findImage(name)` | Yes | — | `MoonClickerEngine::lua_screen_findImage`, `MoonClickerEngine.cpp:1190-1214`. Reads the same `latestResult.matches` cache built by the OpenCV template-matching pass; returns `{found=false}` if not present. Bound at `MoonClickerEngine.cpp:122-126`, before the `match` table setup — it is registered as a top-level `screen` global, not part of `match`. |
 
 Supporting evidence that the matching is real OpenCV and not a placeholder:
-- Real includes: `#include <opencv2/imgproc.hpp>`, `#include <opencv2/imgcodecs.hpp>` — `RelcEngine.cpp:2-3`.
-- Real template matching call with normalized correlation coefficient method, ROI-aware and scale-aware: `RelcEngine.cpp:687-705`.
+- Real includes: `#include <opencv2/imgproc.hpp>`, `#include <opencv2/imgcodecs.hpp>` — `MoonClickerEngine.cpp:2-3`.
+- Real template matching call with normalized correlation coefficient method, ROI-aware and scale-aware: `MoonClickerEngine.cpp:687-705`.
 - Build wiring is real, not vestigial: `find_package(OpenCV REQUIRED)` and OpenCV include/link in `app/src/main/cpp/CMakeLists.txt:5-8,76`; `-DOpenCV_DIR=...` and `jniLibs.directories += "~/OpenCV-android-sdk/sdk/native/libs"` in `app/build.gradle.kts:32,41`.
 - Git history shows a dedicated, multi-step OpenCV integration effort: commit `f24b479` "Integrate OpenCV and implement native template matching for image recognition", followed by `d102648` "Remove CV test activity and perform minor code cleanup" and `83dc463` "Implement native-driven display management and blocking template matching for Lua scripts."
 
@@ -64,22 +64,22 @@ These are all in the `input` module, not `match` — worth flagging because
 they show the same "doc describes intended API, code lags" pattern the
 docs admit for vision/OCR, except undocumented here:
 - `input.tap(durationMs, x, y, displayId)` — no `lua_input_tap` in
-  `RelcEngine.h`/`.cpp`. Only `lua_input_click` exists
-  (`RelcEngine.h:117`, bound to Lua field `"click"` at `RelcEngine.cpp:97-98`).
+  `MoonClickerEngine.h`/`.cpp`. Only `lua_input_click` exists
+  (`MoonClickerEngine.h:117`, bound to Lua field `"click"` at `MoonClickerEngine.cpp:97-98`).
 - `input.swipePolyline` / `input.swipePolylineL1` — no such native
   bindings; the engine only exposes `input.swipe`
-  (`lua_swipe`, bound at `RelcEngine.cpp:90-94`). `swipePolyline`/`swipePolylineL1`
+  (`lua_swipe`, bound at `MoonClickerEngine.cpp:90-94`). `swipePolyline`/`swipePolylineL1`
   exist only in the **Kotlin** `InputController`
-  (`app/src/main/java/com/xaxaxax/relc/input/InputController.kt:37-51`)
+  (`app/src/main/java/com/xaxaxax/moonclicker/input/InputController.kt:37-51`)
   used by the separate, non-Lua `SimpleScriptRunner` DSL
-  (`app/src/main/java/com/xaxaxax/relc/script/runner/SimpleScriptRunner.kt`),
+  (`app/src/main/java/com/xaxaxax/moonclicker/script/runner/SimpleScriptRunner.kt`),
   not by the native Lua engine that `docs/lua-api.md` describes.
 - `input.script.down/move/up` (multi-touch helper) — no `script` sub-table
-  or corresponding native functions found anywhere in `RelcEngine.cpp`/`.h`
+  or corresponding native functions found anywhere in `MoonClickerEngine.cpp`/`.h`
   or `LuaEngine.cpp`.
 
 Note: `docs/lua-api.md` is explicitly about the Lua API surface, and the
-Lua engine that runs `.lua` scripts is `RelcEngine.cpp`, reached via
+Lua engine that runs `.lua` scripts is `MoonClickerEngine.cpp`, reached via
 `NativeLuaScriptRunner.kt:22` → `LuaNative.startEngineWithService`. The
 Kotlin `InputController.swipePolyline` is real code, but it backs a
 different, JSON-based "SIMPLE" script format
@@ -92,11 +92,11 @@ different, JSON-based "SIMPLE" script format
 - `screen.findImage(name)` — a synchronous, single-template lookup against
   the same match cache; a simpler alternative/precursor to `match.wait()`,
   entirely undocumented, registered as its own `screen` global
-  (`RelcEngine.cpp:121-126`).
+  (`MoonClickerEngine.cpp:121-126`).
 - `config.templates` / `config.fps` / `config.scale` — an alternate,
   undocumented way to supply templates and tune the matching loop's
   frame rate and downscale factor, checked *before* falling back to
-  `match.templates` (`RelcEngine.cpp:569-596`).
+  `match.templates` (`MoonClickerEngine.cpp:569-596`).
 
 ## 4. OCR status
 
@@ -149,9 +149,9 @@ or priority ranking. What exists instead:
   that vision was practically prioritized over OCR, even though no commit
   message or doc explicitly frames it as a deliberate sequencing decision.
 - **No TODO/FIXME comments** were found near the vision or OCR code paths
-  in `RelcEngine.cpp`/`.h` or `LuaEngine.cpp` referencing OCR or expressing
+  in `MoonClickerEngine.cpp`/`.h` or `LuaEngine.cpp` referencing OCR or expressing
   planned sequencing. The single `TODO` found in the broader search is
-  unrelated: `app/src/main/java/com/xaxaxax/relc/lua/LuaNative.kt:34`
+  unrelated: `app/src/main/java/com/xaxaxax/moonclicker/lua/LuaNative.kt:34`
   ("TODO: Implement actual notification using appContext"), about
   notifications, not vision/OCR.
 

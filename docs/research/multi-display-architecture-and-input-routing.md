@@ -1,7 +1,7 @@
 # Android 多顯示器架構研究：Android 9 與 10+ 演進、觸控注入切入點與系統特性
 
 > 研究來源：AOSP 官方文件 [Display support](https://source.android.com/docs/core/display/multi_display/displays) 及相關子頁面 [Input routing](https://source.android.com/docs/core/display/multi_display/input-routing)。  
-> 補充對照：AOSP 原始碼（`frameworks/base`、`InputDispatcher`、`InputShellCommand`）與 ReLC / scrcpy 實作經驗。
+> 補充對照：AOSP 原始碼（`frameworks/base`、`InputDispatcher`、`InputShellCommand`）與 MoonClicker / scrcpy 實作經驗。
 
 ---
 
@@ -38,7 +38,7 @@ Android 10（API 29）是 Android 多顯示器（Multi-Display）與多視窗系
 ### 1. Framework Java / Binder API 層（應用層與系統服務）
 * **`MotionEvent.setDisplayId(int)` + `InputManager.injectInputEvent(...)`**：
   - **機制**：Android 10（API 29）在 `InputEvent` / `MotionEvent` 新增了 `@hide` 方法 `setDisplayId(int displayId)`。呼叫端在建立 MotionEvent 後，將其標註為目標顯示器的 `displayId`，再透過 `InputManagerService` 的 `injectInputEvent` 注入。
-  - **應用**：ReLC（`RelcV2Service`）與 `scrcpy-server` 的標準實作路徑。
+  - **應用**：MoonClicker（`MoonClickerService`）與 `scrcpy-server` 的標準實作路徑。
 * **Shell 命令列工具 (`adb shell input -d <display_id>`)**：
   - **機制**：Android 10 的 `InputShellCommand.java` 擴充了 `-d <display_id>` 參數（例如 `adb shell input -d 2 tap x y`），底層直接為 MotionEvent 設定 displayId 後轉交 injection。
 * **測試框架 API (`UiAutomation` / `Instrumentation`)**：

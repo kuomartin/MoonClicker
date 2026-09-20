@@ -1,4 +1,4 @@
-# ReLC Lua API 參考手冊
+# MoonClicker Lua API 參考手冊
 
 本文件定義 `:engine` 原生 Lua 引擎（Lua 5.5）綁定的全域函式與模組介面。
 
@@ -130,7 +130,7 @@ end
 ## `data` 執行狀態共享
 
 * **`data.set(key, value)`**
-  發布鍵值資料至 ReLC 應用程式端（顯示於腳本詳情頁與 Workbench）。
+  發布鍵值資料至 MoonClicker 應用程式端（顯示於腳本詳情頁與 Workbench）。
   * `value` 支援 `number`, `string`, `boolean`, `table`（自動序列化為 JSON）。
   * 傳入 `nil` 可刪除該鍵。
 
