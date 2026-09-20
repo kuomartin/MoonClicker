@@ -1,12 +1,12 @@
-# ReLC 架構與實作指引 (Implementation Guide)
+# MoonClicker 架構與實作指引 (Implementation Guide)
 
-本文件定義 ReLC 專案的系統架構邊界、設計準則、依賴注入規範、狀態管理與測試縫隙（Testing Seams）設計，作為全體開發者與協作者的架構標準。
+本文件定義 MoonClicker 專案的系統架構邊界、設計準則、依賴注入規範、狀態管理與測試縫隙（Testing Seams）設計，作為全體開發者與協作者的架構標準。
 
 ---
 
 ## 🏗️ 1. 模組職責與依賴邊界 (Module Responsibilities & Boundaries)
 
-ReLC 採用多模組架構（Multi-Module Architecture），各模組職責清晰隔離，禁止反向依賴或跨越邊界的不當呼叫：
+MoonClicker 採用多模組架構（Multi-Module Architecture），各模組職責清晰隔離，禁止反向依賴或跨越邊界的不當呼叫：
 
 ```mermaid
 graph TD
@@ -41,14 +41,14 @@ graph TD
   - **原生層唯一出口**：專案中**唯一**包含 C++/JNI 原生代碼（`CMakeLists.txt`、`src/main/cpp/`）的模組。
   - **Lua 直譯與運行環境**：內嵌 Lua 5.5，提供腳本解析、協程排程、停止中斷旗標管理。
   - **視覺計算與比對**：整合 OpenCV 4.10 原生加速庫，負責 Template Matching、色彩空間轉換、ROI 裁切。
-  - **底層服務提供者**：`RelcV2Service`、虛擬顯示管理、GLES 畫面捕捉與 H.264 編碼管線。
+  - **底層服務提供者**：`MoonClickerService`、虛擬顯示管理、GLES 畫面捕捉與 H.264 編碼管線。
 - **限制**：
   - ❌ 禁止依賴 `:app` 或任何 UI 框架庫（Compose、Material）。
   - ❌ JNI 呼叫嚴格收斂在 `ScriptHost` 與 `LuaBindings`。
 
 ### 1.3 `:hidden-api` 與 `:hidden-api-contract` (系統反射與契約測試)
 - **`:hidden-api`**：提供 AOSP 隱藏 API 的編譯期 Stub（配合 `rikka.refine` 與 `hiddenapibypass` 使用），由 `:app` 與 `:engine` 以 `compileOnly` 引入。
-- **`:hidden-api-contract`**：**純契約測試宿主模組**（見 [ADR 0009](file:///home/martin/StudioProjects/ReLC/docs/adr/0009-hidden-api-contract-as-its-own-module.md)）。沒有 `main` source set，僅包含 `androidTest`，用於在 Gradle Managed Devices (API 27 ~ API 36 矩陣) 上驗證 `:hidden-api` Stub 對各 Android 版本底層反射的假設是否吻合。生產模組（`:app`、`:engine`）**絕不依賴**此模組。
+- **`:hidden-api-contract`**：**純契約測試宿主模組**（見 [ADR 0009](file:///home/martin/StudioProjects/MoonClicker/docs/adr/0009-hidden-api-contract-as-its-own-module.md)）。沒有 `main` source set，僅包含 `androidTest`，用於在 Gradle Managed Devices (API 27 ~ API 36 矩陣) 上驗證 `:hidden-api` Stub 對各 Android 版本底層反射的假設是否吻合。生產模組（`:app`、`:engine`）**絕不依賴**此模組。
 
 ### 1.4 `vscode-extension` (開發者遠端工具)
 - **職責**：TypeScript 開發之 VS Code 擴充套件，提供腳本建立、Push/Pull、F5 遠端執行、Webview H.264 即時鏡射與 LuaLS Stubs 自動配置。
@@ -124,9 +124,9 @@ UI 層與商業邏輯層嚴格遵循 **單向資料流 (Unidirectional Data Flow
 
 ### 4.2 測試替身（Fake vs Mock）
 - **優先使用 Fake 實作**：
-  - 專案提倡撰寫具有簡易記憶體狀態的 Fake 類別（例如 `RecordingRelcService`、`FakeScriptRepository`），而不是在每個測試中配置繁瑣且脆弱的 Mock 鏈。
+  - 專案提倡撰寫具有簡易記憶體狀態的 Fake 類別（例如 `RecordingMoonClickerService`、`FakeScriptRepository`），而不是在每個測試中配置繁瑣且脆弱的 Mock 鏈。
 - **Lua 與引擎測試邊界**：
-  - 核心邊界為 `IRelcV2Service`。從 `main.lua` -> `LuaBindings.cpp` -> `ScriptRuntime.cpp` -> `ScriptHost.kt` 的完整管線，可以在抽換 `IRelcV2Service` 為 `RecordingRelcService` 後，於無 Shizuku / 無虛擬顯示的環境下進行端到端（Tier 0）測試。
+  - 核心邊界為 `IMoonClickerService`。從 `main.lua` -> `LuaBindings.cpp` -> `ScriptRuntime.cpp` -> `ScriptHost.kt` 的完整管線，可以在抽換 `IMoonClickerService` 為 `RecordingMoonClickerService` 後，於無 Shizuku / 無虛擬顯示的環境下進行端到端（Tier 0）測試。
 
 ### 4.3 測試代碼存放規範
 - 單元測試置於各模組之 `src/test/java/`。

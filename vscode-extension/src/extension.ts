@@ -25,7 +25,7 @@ export function activate(context: vscode.ExtensionContext): void {
   renderStatusBar({ status: "disconnected" });
 
   workspaceProvider = new WorkspaceTreeProvider();
-  vscode.window.registerTreeDataProvider("relc.workspace", workspaceProvider);
+  vscode.window.registerTreeDataProvider("moonclicker.workspace", workspaceProvider);
 
   const watcher = vscode.workspace.createFileSystemWatcher("**/{main.lua,script.json}");
   context.subscriptions.push(
@@ -35,14 +35,14 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.workspace.onDidChangeWorkspaceFolders(() => workspaceProvider.refresh())
   );
 
-  const logChannel = vscode.window.createOutputChannel("ReLC Script Log");
-  const dataChannel = vscode.window.createOutputChannel("ReLC Script Data");
+  const logChannel = vscode.window.createOutputChannel("MoonClicker Script Log");
+  const dataChannel = vscode.window.createOutputChannel("MoonClicker Script Data");
 
   connection.onDidChangeState((state) => {
     renderStatusBar(state);
     workspaceProvider.updateState(state, activeToken);
     if (state.status === "error") {
-      vscode.window.showErrorMessage(`ReLC: 連線到 ${state.address} 失敗——${state.message}`);
+      vscode.window.showErrorMessage(`MoonClicker: 連線到 ${state.address} 失敗——${state.message}`);
     }
   });
 
@@ -61,18 +61,18 @@ export function activate(context: vscode.ExtensionContext): void {
     logChannel,
     dataChannel,
     watcher,
-    vscode.commands.registerCommand("relc.connect", connectCommand),
-    vscode.commands.registerCommand("relc.disconnect", () => connection?.disconnect()),
-    vscode.commands.registerCommand("relc.pull", pullCommand),
-    vscode.commands.registerCommand("relc.pullRemote", pullRemoteCommand),
-    vscode.commands.registerCommand("relc.push", pushCommand),
-    vscode.commands.registerCommand("relc.pushAndRun", pushAndRunCommand),
-    vscode.commands.registerCommand("relc.run", runCommand),
-    vscode.commands.registerCommand("relc.runRemote", runRemoteCommand),
-    vscode.commands.registerCommand("relc.openMirror", openMirrorCommand),
-    vscode.commands.registerCommand("relc.renameScript", renameScriptCommand),
-    vscode.commands.registerCommand("relc.setupStubs", setupStubsCommand),
-    vscode.commands.registerCommand("relc.toggleMirror", toggleMirrorCommand),
+    vscode.commands.registerCommand("moonclicker.connect", connectCommand),
+    vscode.commands.registerCommand("moonclicker.disconnect", () => connection?.disconnect()),
+    vscode.commands.registerCommand("moonclicker.pull", pullCommand),
+    vscode.commands.registerCommand("moonclicker.pullRemote", pullRemoteCommand),
+    vscode.commands.registerCommand("moonclicker.push", pushCommand),
+    vscode.commands.registerCommand("moonclicker.pushAndRun", pushAndRunCommand),
+    vscode.commands.registerCommand("moonclicker.run", runCommand),
+    vscode.commands.registerCommand("moonclicker.runRemote", runRemoteCommand),
+    vscode.commands.registerCommand("moonclicker.openMirror", openMirrorCommand),
+    vscode.commands.registerCommand("moonclicker.renameScript", renameScriptCommand),
+    vscode.commands.registerCommand("moonclicker.setupStubs", setupStubsCommand),
+    vscode.commands.registerCommand("moonclicker.toggleMirror", toggleMirrorCommand),
   );
 }
 
@@ -95,8 +95,8 @@ async function connectCommand(): Promise<void> {
   if (!extensionContext) return;
 
   const quickPick = vscode.window.createQuickPick<ConnectItem>();
-  quickPick.title = "ReLC: 搜尋區網內的裝置...";
-  quickPick.placeholder = "選擇要連線的 ReLC 裝置";
+  quickPick.title = "MoonClicker: 搜尋區網內的裝置...";
+  quickPick.placeholder = "選擇要連線的 MoonClicker 裝置";
   quickPick.busy = true;
 
   const baseItems: ConnectItem[] = [
@@ -168,7 +168,7 @@ async function connectCommand(): Promise<void> {
 
     if (!address) return;
 
-    const secretKey = `relc_token_${address}`;
+    const secretKey = `moonclicker_token_${address}`;
     let token = await extensionContext!.secrets.get(secretKey);
 
     let authenticated = false;
@@ -194,9 +194,9 @@ async function connectCommand(): Promise<void> {
       try {
         token = await pairWithPin(address, pin);
         await extensionContext!.secrets.store(secretKey, token);
-        vscode.window.showInformationMessage(`ReLC: 連線至 ${address} 配對成功！已儲存憑證。`);
+        vscode.window.showInformationMessage(`MoonClicker: 連線至 ${address} 配對成功！已儲存憑證。`);
       } catch (err) {
-        vscode.window.showErrorMessage(`ReLC 配對失敗: ${(err as Error).message}`);
+        vscode.window.showErrorMessage(`MoonClicker 配對失敗: ${(err as Error).message}`);
         return;
       }
     }
@@ -215,7 +215,7 @@ async function connectCommand(): Promise<void> {
 function connectedAddress(): string | undefined {
   const state = connection?.state;
   if (state?.status !== "connected") {
-    vscode.window.showErrorMessage("ReLC: 尚未連線到裝置");
+    vscode.window.showErrorMessage("MoonClicker: 尚未連線到裝置");
     return undefined;
   }
   return state.address;
@@ -224,7 +224,7 @@ function connectedAddress(): string | undefined {
 async function pickScript(address: string): Promise<string | undefined> {
   const scripts = await listScripts(address, activeToken);
   if (scripts.length === 0) {
-    vscode.window.showInformationMessage("ReLC: 裝置上還沒有任何腳本");
+    vscode.window.showInformationMessage("MoonClicker: 裝置上還沒有任何腳本");
     return undefined;
   }
   const picked = await vscode.window.showQuickPick(
@@ -249,9 +249,9 @@ async function pullCommand(): Promise<void> {
     if (!destDir) return;
     await pullScript(address, id, destDir, activeToken);
     ensureLuarcConfigured(destDir);
-    vscode.window.showInformationMessage(`ReLC: 已把「${id}」同步到 ${destDir}`);
+    vscode.window.showInformationMessage(`MoonClicker: 已把「${id}」同步到 ${destDir}`);
   } catch (err) {
-    vscode.window.showErrorMessage(`ReLC: ${(err as Error).message}`);
+    vscode.window.showErrorMessage(`MoonClicker: ${(err as Error).message}`);
   }
 }
 
@@ -270,9 +270,9 @@ async function pullRemoteCommand(item?: RemoteScriptItem): Promise<void> {
     if (!destDir) return;
     await pullScript(address, id, destDir, activeToken);
     ensureLuarcConfigured(destDir);
-    vscode.window.showInformationMessage(`ReLC: 已把「${id}」同步到 ${destDir}`);
+    vscode.window.showInformationMessage(`MoonClicker: 已把「${id}」同步到 ${destDir}`);
   } catch (err) {
-    vscode.window.showErrorMessage(`ReLC: ${(err as Error).message}`);
+    vscode.window.showErrorMessage(`MoonClicker: ${(err as Error).message}`);
   }
 }
 
@@ -283,7 +283,7 @@ async function getLocalScriptTarget(item?: LocalScriptItem): Promise<{ id: strin
   
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
   if (!workspaceFolder) {
-    vscode.window.showErrorMessage("ReLC: 請先開啟專案資料夾");
+    vscode.window.showErrorMessage("MoonClicker: 請先開啟專案資料夾");
     return;
   }
   const root = workspaceFolder.uri.fsPath;
@@ -299,7 +299,7 @@ async function getLocalScriptTarget(item?: LocalScriptItem): Promise<{ id: strin
     .map(c => ({ label: c.name, path: path.join(root, c.name) }));
     
   if (options.length === 0) {
-    vscode.window.showErrorMessage("ReLC: 在工作區找不到任何包含 main.lua 的資料夾");
+    vscode.window.showErrorMessage("MoonClicker: 在工作區找不到任何包含 main.lua 的資料夾");
     return;
   }
   
@@ -333,10 +333,10 @@ async function pushCommand(item?: LocalScriptItem): Promise<void> {
   try {
     const id = await ensureScriptJson(target.path, target.id);
     await pushScript(address, id, target.path, activeToken);
-    vscode.window.showInformationMessage(`ReLC: 已把目前專案推送到裝置的「${id}」`);
+    vscode.window.showInformationMessage(`MoonClicker: 已把目前專案推送到裝置的「${id}」`);
     workspaceProvider.refresh();
   } catch (err) {
-    vscode.window.showErrorMessage(`ReLC: ${(err as Error).message}`);
+    vscode.window.showErrorMessage(`MoonClicker: ${(err as Error).message}`);
   }
 }
 
@@ -351,10 +351,10 @@ async function pushAndRunCommand(item?: LocalScriptItem): Promise<void> {
     await pushScript(address, id, target.path, activeToken);
     insertRunDivider();
     await runScript(address, id, activeToken);
-    vscode.window.showInformationMessage(`ReLC: 已推送並執行「${id}」`);
+    vscode.window.showInformationMessage(`MoonClicker: 已推送並執行「${id}」`);
     workspaceProvider.refresh();
   } catch (err) {
-    vscode.window.showErrorMessage(`ReLC: ${(err as Error).message}`);
+    vscode.window.showErrorMessage(`MoonClicker: ${(err as Error).message}`);
   }
 }
 
@@ -367,9 +367,9 @@ async function runCommand(): Promise<void> {
   try {
     insertRunDivider();
     await runScript(address, target.id, activeToken);
-    vscode.window.showInformationMessage(`ReLC: 已在裝置上觸發「${target.id}」執行`);
+    vscode.window.showInformationMessage(`MoonClicker: 已在裝置上觸發「${target.id}」執行`);
   } catch (err) {
-    vscode.window.showErrorMessage(`ReLC: ${(err as Error).message}`);
+    vscode.window.showErrorMessage(`MoonClicker: ${(err as Error).message}`);
   }
 }
 
@@ -387,7 +387,7 @@ async function renameScriptCommand(item?: LocalScriptItem): Promise<void> {
   const newPath = path.join(parentDir, newName);
   
   if (fs.existsSync(newPath)) {
-    vscode.window.showErrorMessage(`ReLC: 已經存在名為「${newName}」的資料夾。`);
+    vscode.window.showErrorMessage(`MoonClicker: 已經存在名為「${newName}」的資料夾。`);
     return;
   }
   
@@ -403,26 +403,26 @@ async function renameScriptCommand(item?: LocalScriptItem): Promise<void> {
     }
     
     fs.renameSync(target.path, newPath);
-    vscode.window.showInformationMessage(`ReLC: 腳本已重新命名為「${newName}」`);
+    vscode.window.showInformationMessage(`MoonClicker: 腳本已重新命名為「${newName}」`);
     workspaceProvider.refresh();
   } catch (err) {
-    vscode.window.showErrorMessage(`ReLC: 重新命名失敗 - ${(err as Error).message}`);
+    vscode.window.showErrorMessage(`MoonClicker: 重新命名失敗 - ${(err as Error).message}`);
   }
 }
 
 async function setupStubsCommand(): Promise<void> {
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
   if (!workspaceFolder) {
-    vscode.window.showErrorMessage("ReLC: 請先開啟專案資料夾");
+    vscode.window.showErrorMessage("MoonClicker: 請先開啟專案資料夾");
     return;
   }
   
   try {
     const rootPath = workspaceFolder.uri.fsPath;
     ensureLuarcConfigured(rootPath);
-    vscode.window.showInformationMessage(`ReLC: 已在工作區根目錄設定 Lua API 提示 (.luarc.json)`);
+    vscode.window.showInformationMessage(`MoonClicker: 已在工作區根目錄設定 Lua API 提示 (.luarc.json)`);
   } catch (err) {
-    vscode.window.showErrorMessage(`ReLC: 設定 Lua 提示失敗 - ${(err as Error).message}`);
+    vscode.window.showErrorMessage(`MoonClicker: 設定 Lua 提示失敗 - ${(err as Error).message}`);
   }
 }
 
@@ -434,9 +434,9 @@ async function runRemoteCommand(item?: RemoteScriptItem): Promise<void> {
     if (!id) return;
     insertRunDivider();
     await runScript(address, id, activeToken);
-    vscode.window.showInformationMessage(`ReLC: 已在裝置上觸發「${id}」執行`);
+    vscode.window.showInformationMessage(`MoonClicker: 已在裝置上觸發「${id}」執行`);
   } catch (err) {
-    vscode.window.showErrorMessage(`ReLC: ${(err as Error).message}`);
+    vscode.window.showErrorMessage(`MoonClicker: ${(err as Error).message}`);
   }
 }
 
@@ -466,7 +466,7 @@ async function openMirrorCommand(): Promise<void> {
     const displays = await listDisplays(address, activeToken);
     
     if (displays.length === 0) {
-      vscode.window.showErrorMessage("ReLC: 裝置上沒有可用的 display");
+      vscode.window.showErrorMessage("MoonClicker: 裝置上沒有可用的 display");
       return;
     }
     
@@ -505,9 +505,9 @@ async function openMirrorCommand(): Promise<void> {
       if (choice === "啟動鏡像") {
         try {
           await toggleDisplayMirror(address, displayId, true, activeToken);
-          vscode.window.showInformationMessage(`ReLC: 實體螢幕 (Display ${displayId}) 鏡像管線已啟動`);
+          vscode.window.showInformationMessage(`MoonClicker: 實體螢幕 (Display ${displayId}) 鏡像管線已啟動`);
         } catch (e) {
-          vscode.window.showErrorMessage(`ReLC: 啟動鏡像失敗: ${(e as Error).message}`);
+          vscode.window.showErrorMessage(`MoonClicker: 啟動鏡像失敗: ${(e as Error).message}`);
         }
       }
     }
@@ -533,7 +533,7 @@ async function toggleMirrorCommand(): Promise<void> {
     const displays = await listDisplays(address, activeToken);
     const target = displays.find(d => !d.isVirtual) || displays[0];
     if (!target) {
-      vscode.window.showErrorMessage("ReLC: 裝置上沒有找到顯示器");
+      vscode.window.showErrorMessage("MoonClicker: 裝置上沒有找到顯示器");
       return;
     }
 
@@ -554,10 +554,10 @@ async function toggleMirrorCommand(): Promise<void> {
     const nextState = !targetDisplay.isMirrorActive;
     await toggleDisplayMirror(address, targetDisplay.id, nextState, activeToken);
     vscode.window.showInformationMessage(
-      `ReLC: 顯示器 ${targetDisplay.id} (${targetDisplay.name}) 鏡像已${nextState ? "開啟" : "關閉"}`
+      `MoonClicker: 顯示器 ${targetDisplay.id} (${targetDisplay.name}) 鏡像已${nextState ? "開啟" : "關閉"}`
     );
   } catch (err) {
-    vscode.window.showErrorMessage(`ReLC: 切換鏡像失敗 - ${(err as Error).message}`);
+    vscode.window.showErrorMessage(`MoonClicker: 切換鏡像失敗 - ${(err as Error).message}`);
   }
 }
 
@@ -565,20 +565,20 @@ function renderStatusBar(state: ConnectionState): void {
   if (!statusBarItem) return;
   switch (state.status) {
     case "disconnected":
-      statusBarItem.text = "$(circle-slash) ReLC: 未連線";
-      statusBarItem.command = "relc.connect";
+      statusBarItem.text = "$(circle-slash) MoonClicker: 未連線";
+      statusBarItem.command = "moonclicker.connect";
       break;
     case "connecting":
-      statusBarItem.text = `$(sync~spin) ReLC: 連線中 ${state.address}`;
+      statusBarItem.text = `$(sync~spin) MoonClicker: 連線中 ${state.address}`;
       statusBarItem.command = undefined;
       break;
     case "connected":
-      statusBarItem.text = `$(check) ReLC: 已連線 ${state.address}`;
+      statusBarItem.text = `$(check) MoonClicker: 已連線 ${state.address}`;
       statusBarItem.command = undefined;
       break;
     case "error":
-      statusBarItem.text = `$(error) ReLC: 連線失敗`;
-      statusBarItem.command = "relc.connect";
+      statusBarItem.text = `$(error) MoonClicker: 連線失敗`;
+      statusBarItem.command = "moonclicker.connect";
       break;
   }
 }

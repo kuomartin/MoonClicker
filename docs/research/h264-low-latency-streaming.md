@@ -1,7 +1,7 @@
 # H.264 Ultra-Low Latency Streaming Research
 
 ## Objective
-Investigate how high-performance screen mirroring tools (such as `scrcpy`) achieve sub-50ms latency using Android's `MediaCodec` and WebSocket/TCP streaming, and apply these findings to ReLC's `H264EncoderSink`.
+Investigate how high-performance screen mirroring tools (such as `scrcpy`) achieve sub-50ms latency using Android's `MediaCodec` and WebSocket/TCP streaming, and apply these findings to MoonClicker's `H264EncoderSink`.
 
 ## Findings: Sources of Latency in Android MediaCodec & Web
 

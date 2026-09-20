@@ -51,12 +51,12 @@ jobs:
         working-directory: vscode-extension
         run: |
           mkdir -p ../dist
-          npx @vscode/vsce package --no-dependencies -o "../dist/relc-script-workbench-${{ steps.version.outputs.version }}.vsix"
+          npx @vscode/vsce package --no-dependencies -o "../dist/moonclicker-script-workbench-${{ steps.version.outputs.version }}.vsix"
 
       - name: Upload VSIX Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: relc-vscode-extension
+          name: moonclicker-vscode-extension
           path: dist/*.vsix
           retention-days: 7
 
@@ -82,14 +82,14 @@ jobs:
       - name: Download VSIX Artifact
         uses: actions/download-artifact@v4
         with:
-          name: relc-vscode-extension
+          name: moonclicker-vscode-extension
           path: release-assets
 
       - name: Create GitHub Release Draft
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
-          name: ReLC VS Code Extension ${{ steps.version.outputs.tag }}
+          name: MoonClicker VS Code Extension ${{ steps.version.outputs.tag }}
           draft: true
           prerelease: true
           generate_release_notes: true

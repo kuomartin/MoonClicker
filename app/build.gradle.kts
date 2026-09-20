@@ -34,13 +34,13 @@ val releaseKeyPassword = providers.environmentVariable("KEY_PASSWORD").orNull
     ?: keystoreProperties.getProperty("keyPassword")
 
 android {
-    namespace = "com.xaxaxax.relc"
+    namespace = "com.xaxaxax.moonclicker"
     compileSdk {
         version = release(libs.versions.targetSdk.get().toInt())
     }
 
     defaultConfig {
-        applicationId = "com.xaxaxax.relc"
+        applicationId = "com.xaxaxax.moonclicker"
         minSdk = libs.versions.minSdk.get().toInt()
         versionCode = 1
         versionName = "0.1.0"

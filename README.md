@@ -1,6 +1,6 @@
-# ReLC (Remote Lua Control)
+# MoonClicker (Remote Lua Control)
 
-ReLC 是一款專為 Android 設計的遠端 Lua 控制與背景自動化工具：透過 [Shizuku](https://shizuku.rikka.app/) 建立獨立的虛擬顯示器（Virtual Display），在不佔用實體螢幕的情況下於背景執行目標應用程式、注入觸控/按鍵事件，並透過線性執行的 Lua 腳本驅動流程，支援基於 OpenCV 的本機端高效影像模板比對與 VS Code 遠端開發調試。
+MoonClicker 是一款專為 Android 設計的遠端 Lua 控制與背景自動化工具：透過 [Shizuku](https://shizuku.rikka.app/) 建立獨立的虛擬顯示器（Virtual Display），在不佔用實體螢幕的情況下於背景執行目標應用程式、注入觸控/按鍵事件，並透過線性執行的 Lua 腳本驅動流程，支援基於 OpenCV 的本機端高效影像模板比對與 VS Code 遠端開發調試。
 
 ## 🌟 核心特色
 
@@ -31,7 +31,7 @@ ReLC 是一款專為 Android 設計的遠端 Lua 控制與背景自動化工具�
   * 裝置需安裝並啟動 [Shizuku](https://shizuku.rikka.app/)。
 * **電腦端（可選，用於腳本開發）**：
   * VS Code 1.90.0+
-  * `relc-script-workbench` 擴充套件
+  * `moonclicker-script-workbench` 擴充套件
 
 ## 🚀 快速開始
 
@@ -39,9 +39,9 @@ ReLC 是一款專為 Android 設計的遠端 Lua 控制與背景自動化工具�
 
 ### 安裝與授權
 
-1. 至 [ReLC Releases](https://github.com/kuomartin/ReLC/releases) 下載並安裝 apk。
+1. 至 [MoonClicker Releases](https://github.com/kuomartin/MoonClicker/releases) 下載並安裝 apk。
 2. 確保 Shizuku 已在裝置上啟動。
-3. 開啟 ReLC，授予 Shizuku 權限。
+3. 開啟 MoonClicker，授予 Shizuku 權限。
 
 ### 背景執行APP
 
@@ -49,12 +49,12 @@ ReLC 是一款專為 Android 設計的遠端 Lua 控制與背景自動化工具�
 
 ### 撰寫第一份 Lua 腳本
 
-在 ReLC 中，一份腳本就是一個資料夾，包含 `main.lua` 與可選的 `script.json`，
+在 MoonClicker 中，一份腳本就是一個資料夾，包含 `main.lua` 與可選的 `script.json`，
 打包成 zip 檔後，從`腳本`頁面匯入。
 
 ```lua
 -- main.lua
-log("Hello, ReLC!")
+log("Hello, MoonClicker!")
 log("Screen size:", screen.width, screen.height)
 
 -- 啟動目標 App

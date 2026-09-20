@@ -1,4 +1,4 @@
-// ReLC VS Code Webview Adapter & Diagnostic Test Harness
+// MoonClicker VS Code Webview Adapter & Diagnostic Test Harness
 // Polyfills `acquireVsCodeApi()` for standalone browser environments.
 (function () {
   // Local UI state — synced from /__dev__/config on init
@@ -25,12 +25,12 @@
 
   // ── Harness toolbar ──────────────────────────────────────────────────────────
   function initHarnessToolbar() {
-    if (document.getElementById("reLCTestHarnessBar")) return;
+    if (document.getElementById("moonClickerTestHarnessBar")) return;
     const harnessBar = document.createElement("div");
-    harnessBar.id = "reLCTestHarnessBar";
+    harnessBar.id = "moonClickerTestHarnessBar";
     harnessBar.innerHTML = `
     <style>
-      #reLCTestHarnessBar {
+      #moonClickerTestHarnessBar {
         background: #181818;
         border-bottom: 2px solid #0e639c;
         padding: 6px 12px;
@@ -43,7 +43,7 @@
         z-index: 1000;
         flex-shrink: 0;
       }
-      #reLCTestHarnessBar .badge {
+      #moonClickerTestHarnessBar .badge {
         background: #0e639c;
         color: #fff;
         padding: 2px 6px;
@@ -51,14 +51,14 @@
         font-weight: bold;
         font-size: 11px;
       }
-      #reLCTestHarnessBar select, #reLCTestHarnessBar input {
+      #moonClickerTestHarnessBar select, #moonClickerTestHarnessBar input {
         background: #2d2d2d;
         color: #fff;
         border: 1px solid #444;
         padding: 3px 6px;
         border-radius: 3px;
       }
-      #reLCTestHarnessBar button {
+      #moonClickerTestHarnessBar button {
         background: #0e639c;
         color: #fff;
         border: none;
@@ -66,8 +66,8 @@
         border-radius: 3px;
         cursor: pointer;
       }
-      #reLCTestHarnessBar button:hover { background: #1177bb; }
-      #reLCTestHarnessBar .stats {
+      #moonClickerTestHarnessBar button:hover { background: #1177bb; }
+      #moonClickerTestHarnessBar .stats {
         margin-left: auto;
         display: flex;
         gap: 12px;
@@ -75,7 +75,7 @@
         color: #4ec9b0;
       }
     </style>
-    <span class="badge">ReLC LLM Test Harness</span>
+    <span class="badge">MoonClicker LLM Test Harness</span>
     <label>模式:
       <select id="thModeSelect">
         <option value="device">真機模式 (Real Device)</option>

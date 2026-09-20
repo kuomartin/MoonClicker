@@ -25,7 +25,7 @@ export function startMdnsDaemon() {
     return;
   }
 
-  const SERVICE = "_relc-workbench._tcp.local";
+  const SERVICE = "_moonclicker-workbench._tcp.local";
 
   mdnsInstance.on("response", (response: any) => {
     const ptrAnswers = response.answers.filter((a: any) => a.type === "PTR" && a.name === SERVICE);
@@ -43,7 +43,7 @@ export function startMdnsDaemon() {
         if (aRec) {
           const ip = aRec.data;
           const port = srv.data.port;
-          const name = instanceName.replace("._relc-workbench._tcp.local", "").trim();
+          const name = instanceName.replace("._moonclicker-workbench._tcp.local", "").trim();
           const address = `${ip}:${port}`;
           
           const isNew = !deviceCache.has(address);
@@ -64,7 +64,7 @@ export function startMdnsDaemon() {
 export function refreshMdns() {
   if (mdnsInstance) {
     try {
-      mdnsInstance.query({ questions: [{ name: "_relc-workbench._tcp.local", type: "PTR" }] });
+      mdnsInstance.query({ questions: [{ name: "_moonclicker-workbench._tcp.local", type: "PTR" }] });
     } catch {}
   }
 }

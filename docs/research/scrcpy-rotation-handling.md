@@ -1,6 +1,6 @@
 # scrcpy 怎麼處理旋轉
 
-研究問題：ReLC 目前用「感測器 → Shizuku → `freezeDisplayRotation(VD)` → `onDisplayChanged` →
+研究問題：MoonClicker 目前用「感測器 → Shizuku → `freezeDisplayRotation(VD)` → `onDisplayChanged` →
 `activity.requestedOrientation`」這條四環鏈做自動旋轉（`OrientationChain.kt`），
 轉場會卡。scrcpy 面對等價的問題是怎麼解的？哪些手法搬得過來、哪些搬不過來？
 「乾脆拿掉自動旋轉」這個選項，在 scrcpy 的設計裡有沒有對應？
@@ -16,8 +16,8 @@
 引用 commit 時用短 SHA。
 
 **沒有驗證的部分**：沒有跑過 scrcpy，沒有量過它的旋轉轉場延遲，
-也沒有在真機上比對 ReLC 與 scrcpy 的表現。本文只描述 scrcpy 的**設計**，
-不構成「照抄就會順」的證據。ReLC 卡頓的根因沒有在本文中被測量或證實。
+也沒有在真機上比對 MoonClicker 與 scrcpy 的表現。本文只描述 scrcpy 的**設計**，
+不構成「照抄就會順」的證據。MoonClicker 卡頓的根因沒有在本文中被測量或證實。
 
 ---
 
@@ -153,7 +153,7 @@ AffineMatrix displayRotationMatrix = displayFilter.getInverseTransform();
 displayTransform = AffineMatrix.multiplyAll(displayRotationMatrix, eventTransform);
 ```
 
-**這段註解是本文對 ReLC 最直接的一條情報。** 一個自己建立的 VD（帶
+**這段註解是本文對 MoonClicker 最直接的一條情報。** 一個自己建立的 VD（帶
 `VIRTUAL_DISPLAY_FLAG_ROTATES_WITH_CONTENT`，見 `:213-217`）旋轉之後，
 它的**輸出 surface 仍然維持建立時的尺寸與方向**，內容是被「轉進」那塊固定尺寸的
 surface 裡；要在畫面上看到正的，必須自己再轉一次。scrcpy 用一段
@@ -393,7 +393,7 @@ int flags = VIRTUAL_DISPLAY_FLAG_PUBLIC
 
 API 33+ 再加 `TRUSTED | OWN_DISPLAY_GROUP | ALWAYS_UNLOCKED | TOUCH_FEEDBACK_DISABLED`，
 API 34+ 再加 `OWN_FOCUS | DEVICE_DISPLAY_GROUP`（`:224-233`）。
-（與 ReLC 的 `RelcShizukuService.kt` 幾乎同一組。）
+（與 MoonClicker 的 `MoonClickerShizukuService.kt` 幾乎同一組。）
 
 帶了 `ROTATES_WITH_CONTENT`，所以 WindowManager 會為 app 宣告的方向旋轉這個 VD；
 `prepare()` 每次都重讀 `displayInfo.getRotation()`（`:157-160`）並據此算
@@ -471,7 +471,7 @@ return data.virtualDisplayId;
 >  - The OpenGL filter expects the matrix to transform the image _coordinates_, which is the inverse transform;
 >  - The click positions must be transformed back to the device positions, using the inverse transform too.
 
-**呈現與反解共用同一個 filter 物件、同一次計算。**（與 ReLC 的 `Viewport`
+**呈現與反解共用同一個 filter 物件、同一次計算。**（與 MoonClicker 的 `Viewport`
 「呈現與觸控讀同一個 instance」是同一個設計原則。）
 
 `PositionMapper.create(Size videoSize, AffineMatrix filterTransform, Size targetSize)`
@@ -585,7 +585,7 @@ Ln.v("Ignore positional event generated for size " + eventSize + " (current size
 
 ---
 
-## 對 ReLC 的意涵
+## 對 MoonClicker 的意涵
 
 ### 結構差異必須先講清楚
 
@@ -593,9 +593,9 @@ scrcpy 的「顯示端」是**桌面視窗**。旋轉發生時它做的事是：
 把視窗按新的長寬比縮放一下（`resize_for_content`，`app/src/screen.c:841-858`）。
 **沒有「宿主 Activity 也必須跟著轉」這一環，因為根本沒有宿主 Activity。**
 
-ReLC 的鏈是四環，scrcpy 的鏈是兩環（觀察 → 重建）。
-ReLC 多出來的第 4 環（`activity.requestedOrientation` → display 0 旋轉）
-是一次**由系統動畫的、ReLC 無法排程也無法與 VD 旋轉對齊的轉場**。
+MoonClicker 的鏈是四環，scrcpy 的鏈是兩環（觀察 → 重建）。
+MoonClicker 多出來的第 4 環（`activity.requestedOrientation` → display 0 旋轉）
+是一次**由系統動畫的、MoonClicker 無法排程也無法與 VD 旋轉對齊的轉場**。
 scrcpy 沒有這個問題，因此 scrcpy 的任何手法都**不可能**直接解決它。
 
 ### 可以搬過來的
@@ -604,54 +604,54 @@ scrcpy 沒有這個問題，因此 scrcpy 的任何手法都**不可能**直接�
    `DisplayMonitor.setSessionDisplayProperties()` 的做法是：在每次重建 pipeline 之前，
    先把「這一輪是照什麼狀態建的」寫進 monitor，於是自己造成的
    `onDisplayChanged` 比對相等就被吞掉（`DisplayMonitor.java:115-143`）。
-   ReLC 的鏈上有同樣的風險（我們設 VD rotation → `onDisplayChanged` → 我們改 Activity
+   MoonClicker 的鏈上有同樣的風險（我們設 VD rotation → `onDisplayChanged` → 我們改 Activity
    → 可能再引發事件），值得照抄這個「session 狀態先行寫入」的形狀，
    而不是加 timer 去等。
 2. **座標事件帶版本戳記，server 端不合就丟**（`PositionMapper.map`，`:34-47`）。
-   ReLC 目前 `forwardMirrorTouch(event, displayId, transform)`（`MirrorTouch.kt`）
+   MoonClicker 目前 `forwardMirrorTouch(event, displayId, transform)`（`MirrorTouch.kt`）
    只送轉換後的座標，服務端無從判斷這個 `Matrix` 是用哪一版幾何算的。
    在 `injectMotionEvent` 的 AIDL 上加一組「事件產生時的 VD 邏輯寬高（或 rotation）」，
    服務端比對不合就丟棄——這是低成本、單向、不影響轉場觀感的正確性補強。
    **但要學到 scrcpy 沒學到的那一課**：戳記應該帶 `rotation`，不能只帶尺寸，
    否則正方形（或長寬相等的裁切）就漏掉了。
 3. **旋轉不要 debounce。** scrcpy 一收到就動手，防抖靠狀態比對。
-   ReLC 現在的 `quantizeOrientation` 遲滯（`BOUNDARY_MARGIN_DEGREES = 30`）
+   MoonClicker 現在的 `quantizeOrientation` 遲滯（`BOUNDARY_MARGIN_DEGREES = 30`）
    是必要的，但它防的是**感測器雜訊**，不是顯示狀態抖動——這兩件事不要混為一談。
 4. **「顯示多轉的那一層不算進輸入座標反解」**（`NewDisplayCapture.java:192-208`，
-   `displayTransform` vs `eventTransform`）。ReLC 的 `Viewport` 已經是這個形狀
+   `displayTransform` vs `eventTransform`）。MoonClicker 的 `Viewport` 已經是這個形狀
    （`viewRotationDegrees` 給呈現、`displayPerViewPixel` 給反解），可以當作交叉驗證通過。
 
 ### 搬不過來的
 
-1. **「拆掉重建」在 scrcpy 幾乎免費，在 ReLC 不是同一回事。** scrcpy 重建的是
+1. **「拆掉重建」在 scrcpy 幾乎免費，在 MoonClicker 不是同一回事。** scrcpy 重建的是
    `MediaCodec` + input surface + VD；代價是一個 keyframe 與一次 client 視窗 resize。
-   ReLC 沒有 encoder，它的「重建」只是一次 recomposition，本來就便宜。
-   **ReLC 的卡頓不在這一段**，所以 scrcpy 的 reset 設計對 ReLC 沒有直接療效。
-2. **`--display-orientation` 那一層（client 端自由旋轉畫面）在 ReLC 是不可能的。**
+   MoonClicker 沒有 encoder，它的「重建」只是一次 recomposition，本來就便宜。
+   **MoonClicker 的卡頓不在這一段**，所以 scrcpy 的 reset 設計對 MoonClicker 沒有直接療效。
+2. **`--display-orientation` 那一層（client 端自由旋轉畫面）在 MoonClicker 是不可能的。**
    scrcpy 的視窗可以任意方向顯示，因為桌面視窗管理器不在乎。
-   ReLC 的宿主是 Activity，畫面方向由 display 0 的 rotation 決定，那是系統的。
+   MoonClicker 的宿主是 Activity，畫面方向由 display 0 的 rotation 決定，那是系統的。
 3. **`ScreenCapture` 的「重建鏡像 VD 就等於旋轉」手法不適用。** 那招成立是因為
-   scrcpy 鏡像的是**別人的**、已經轉好的 display 0；ReLC 的 VD 就是內容本身，
-   重建會把裡面的 app 弄掉。ReLC 的對應物是 `NewDisplayCapture`——
+   scrcpy 鏡像的是**別人的**、已經轉好的 display 0；MoonClicker 的 VD 就是內容本身，
+   重建會把裡面的 app 弄掉。MoonClicker 的對應物是 `NewDisplayCapture`——
    而 `NewDisplayCapture` 的做法正是**保持 VD 尺寸不變、自己在呈現層多轉一次**，
-   ReLC 的 `graphicsLayer` 旋轉（`VirtualDisplayMirror.kt` / `Viewport.viewRotationDegrees`）
+   MoonClicker 的 `graphicsLayer` 旋轉（`VirtualDisplayMirror.kt` / `Viewport.viewRotationDegrees`）
    已經是同一個答案。
 
 ### 「拿掉自動旋轉」這個選項
 
 **scrcpy 的預設設計，就是這個選項。** 這不是類比，是逐條對應：
 
-| ReLC 現在 | scrcpy |
+| MoonClicker 現在 | scrcpy |
 | --- | --- |
 | `OrientationEventListener` 讀感測器 | 完全沒有。全樹沒有任何 `SensorManager` / 角度量化 |
 | 跨進程 AIDL → `freezeDisplayRotation(VD)` | 只有 <kbd>MOD</kbd>+<kbd>r</kbd> 一條手動路徑，而且是 toggle 完就 `thawRotation` |
 | `onDisplayChanged` → 新幾何 | 一樣（`DisplayMonitor`），這一環 scrcpy 也有 |
 | `activity.requestedOrientation` 讓宿主跟著轉 | 沒有對應物 |
 
-也就是說，scrcpy 保留了 ReLC 四環中的**第 3 環**（觀察 VD 的實際 rotation 並跟著重算幾何），
+也就是說，scrcpy 保留了 MoonClicker 四環中的**第 3 環**（觀察 VD 的實際 rotation 並跟著重算幾何），
 把第 1、2 環換成一顆按鍵，第 4 環根本不存在。
 
-對 ReLC 而言，「拿掉自動旋轉」實際上要回答的是**第 4 環怎麼辦**——
+對 MoonClicker 而言，「拿掉自動旋轉」實際上要回答的是**第 4 環怎麼辦**——
 因為鏡像就在同一塊實體螢幕上，使用者轉動手機時，display 0 會不會轉是一個
 必須表態的問題，而 scrcpy 從來不需要表態。兩個各自自洽的落點：
 
@@ -665,11 +665,11 @@ scrcpy 沒有這個問題，因此 scrcpy 的任何手法都**不可能**直接�
 
 兩者都把跨進程 round trip 從轉場的關鍵路徑上移除；差別是 (a) 犧牲了
 「橫向 app 佔滿螢幕」，(b) 保留了使用者主動轉的能力但無法保證 Activity 與 VD 同步
-（因為兩者本來就由不同的驅動源決定，只是不再由 ReLC 串起來製造「應該同步」的期待）。
+（因為兩者本來就由不同的驅動源決定，只是不再由 MoonClicker 串起來製造「應該同步」的期待）。
 
-**誠實的但書**：本文沒有證實 ReLC 的卡頓來自兩端不同步。
+**誠實的但書**：本文沒有證實 MoonClicker 的卡頓來自兩端不同步。
 scrcpy 的設計只能說明「業界最成熟的同類專案不認為感測器驅動 VD 旋轉是必要功能」，
-不能說明「拿掉它 ReLC 就會順」。如果要保留自動旋轉，scrcpy 這份原始碼裡
+不能說明「拿掉它 MoonClicker 就會順」。如果要保留自動旋轉，scrcpy 這份原始碼裡
 沒有任何能讓兩次系統級旋轉轉場對齊的技術——它從頭到尾只有一次。
 
 ---

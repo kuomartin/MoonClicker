@@ -14,14 +14,14 @@
 
 SM-A217F 沒有，Pixel 7a（API 37）有。而 Shizuku 就跑在 shell 身分上。
 
-ReLC 原本從 API 31 起無條件加上 `VIRTUAL_DISPLAY_FLAG_TRUSTED`，於是在前者上每次
+MoonClicker 原本從 API 31 起無條件加上 `VIRTUAL_DISPLAY_FLAG_TRUSTED`，於是在前者上每次
 `createVirtualDisplay` 都是 `SecurityException: Requires ADD_TRUSTED_DISPLAY permission`
 ——整台裝置建不出任何虛擬顯示。
 
 界線改到 **API 33**（與 scrcpy 的 `NewDisplayCapture` 一致：shell 是從 Android 13 才被授予
 那個權限），並且改成**直接問** `checkSelfPermission` 而不是靠例外試錯。
 
-→ `RelcV2Service.ADD_FLAGS_33`、`RelcV2Service.privilegedFlags()`
+→ `MoonClickerService.ADD_FLAGS_33`、`MoonClickerService.privilegedFlags()`
 
 ### 那組旗標不是一包，是三條獨立檢查
 
@@ -40,7 +40,7 @@ ReLC 原本從 API 31 起無條件加上 `VIRTUAL_DISPLAY_FLAG_TRUSTED`，於是
 會為一個旗標賠掉整個 trusted 顯示器。而 `ALWAYS_UNLOCKED` 決定的是**鎖屏時虛擬顯示還收不
 收得到觸控**。
 
-→ `RelcV2Service.privilegedFlags()`、`Tier1SpikeTest.step2b`
+→ `MoonClickerService.privilegedFlags()`、`Tier1SpikeTest.step2b`
 
 ### 沒有 `ALWAYS_UNLOCKED` 的顯示器，在裝置休眠時不派送觸控
 
@@ -52,7 +52,7 @@ ReLC 原本從 API 31 起無條件加上 `VIRTUAL_DISPLAY_FLAG_TRUSTED`，於是
 ### API 27–28 注入不到虛擬顯示
 
 `MotionEvent.setDisplayId` 是 API 29 才有的隱藏 API，在那之前沒有辦法把事件標到某個顯示器
-上。`RelcV2Service.injectMotionEvent` 對非 0 的 displayId 直接回 false。**產品的能力邊界。**
+上。`MoonClickerService.injectMotionEvent` 對非 0 的 displayId 直接回 false。**產品的能力邊界。**
 
 Tier 1 觀察不到它：`UiAutomation.adoptShellPermissionIdentity` 也是 API 29（27/28 實測
 `NoSuchMethodError`），兩個下限剛好重合。曾經為此加過一個能力閘門，在可達範圍內恆為真，
@@ -123,7 +123,7 @@ native listener 還註冊著，回呼照樣進來、照樣呼叫 `AImage_delete`
 在 `fakeDisplayContext` 與 `Workaround.startActivity` 的三個分支裡。system_server 會拿它跟
 calling uid 對，所以只在 Shizuku 起的 shell 進程裡成立。
 
-→ `RelcV2Service(context, callerPackage = ...)`
+→ `MoonClickerService(context, callerPackage = ...)`
 
 ### 分發器閒置時仍以 100Hz 空轉
 

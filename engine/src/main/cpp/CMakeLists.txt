@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22.1)
 
-project("relc_native")
+project("moonclicker_native")
 
 # OpenCV setup (Statically link only core, imgproc, imgcodecs to minimize APK size)
 find_package(OpenCV REQUIRED core imgproc imgcodecs)
@@ -55,8 +55,8 @@ set(LUA_CJSON_SRC
 
 
 # Main native library
-add_library(relc_native SHARED
-        relc_native.cpp
+add_library(moonclicker_native SHARED
+        moonclicker_native.cpp
         LuaEngine.cpp
         NativeImageReader.cpp
         ScriptRuntime.cpp
@@ -75,7 +75,7 @@ find_library(android-lib android)
 find_library(log-lib log)
 find_library(media-lib mediandk)
 
-target_link_libraries(relc_native
+target_link_libraries(moonclicker_native
         ${OpenCV_LIBS}
         jnigraphics
         EGL

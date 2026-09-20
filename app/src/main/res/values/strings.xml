@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">ReLC</string>
+    <string name="app_name">MoonClicker</string>
 
     <!-- Navigation -->
     <string name="nav_displays">Displays</string>
@@ -53,7 +53,7 @@
     <string name="fullscreen_menu_enable_readonly">Enable Read-Only</string>
     <string name="fullscreen_menu_disable_readonly">Disable Read-Only</string>
     <string name="fullscreen_menu_close_display">Close Display</string>
-    <string name="fullscreen_menu_return_app">Return to ReLC</string>
+    <string name="fullscreen_menu_return_app">Return to MoonClicker</string>
     <string name="fullscreen_select_app_title">Select App to Start</string>
     <string name="crop_capturing">Capturing…</string>
     <string name="crop_save_template_title">Save Template</string>
@@ -207,20 +207,20 @@
     <string name="permission_shizuku_title">Shizuku Service &amp; Permission</string>
     <string name="permission_shizuku_desc">Used to access system privileged APIs to create virtual displays and inject touch events.</string>
     <string name="permission_shizuku_rationale_title">Shizuku Permission Rationale</string>
-    <string name="permission_shizuku_rationale_desc">ReLC requires access to Android system privileged APIs via Shizuku to create isolated virtual displays and accurately simulate touch actions. This enables automation scripts to run smoothly without occupying your physical screen.</string>
+    <string name="permission_shizuku_rationale_desc">MoonClicker requires access to Android system privileged APIs via Shizuku to create isolated virtual displays and accurately simulate touch actions. This enables automation scripts to run smoothly without occupying your physical screen.</string>
     <string name="permission_shizuku_uid_warning">Shizuku is running as root. Running it as adb shell is recommended instead.</string>
     <string name="shizuku_grant_permission_failed">Failed to grant permission via Shizuku, please use system settings instead.</string>
 
     <string name="permission_notification_title">Notification Permission</string>
     <string name="permission_notification_desc">Show real-time execution status and controls when running scripts in background or running Workbench.</string>
     <string name="permission_notification_rationale_title">Notification Permission Rationale</string>
-    <string name="permission_notification_rationale_desc">ReLC requires notification permission to display real-time execution status, logs, and a quick-stop action in the notification shade when scripts run in the background or when Script Workbench is active.</string>
+    <string name="permission_notification_rationale_desc">MoonClicker requires notification permission to display real-time execution status, logs, and a quick-stop action in the notification shade when scripts run in the background or when Script Workbench is active.</string>
 
 
     <string name="permission_local_network_title">Local Network Permission</string>
     <string name="permission_local_network_desc">Allow inbound connections from the local network so VS Code can reach Workbench.</string>
     <string name="permission_local_network_rationale_title">Local Network Permission Rationale</string>
-    <string name="permission_local_network_rationale_desc">Starting from Android 17, accepting inbound TCP connections from the local network requires this runtime permission. ReLC needs it so the VS Code extension can connect to Script Workbench over Wi-Fi. Denying it does not disable Workbench — local diagnostics still work, only external connections are blocked.</string>
+    <string name="permission_local_network_rationale_desc">Starting from Android 17, accepting inbound TCP connections from the local network requires this runtime permission. MoonClicker needs it so the VS Code extension can connect to Script Workbench over Wi-Fi. Denying it does not disable Workbench — local diagnostics still work, only external connections are blocked.</string>
 
     <string name="permission_secondary_displays_title">Secondary Display Support</string>
     <string name="permission_secondary_displays_desc">Whether the system supports launching and running activities on secondary/virtual displays.</string>

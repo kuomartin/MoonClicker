@@ -1,12 +1,12 @@
 {
-  "name": "relc-script-workbench",
-  "displayName": "ReLC Script Workbench",
-  "description": "Connect VS Code to a ReLC device running Script Workbench.",
+  "name": "moonclicker-script-workbench",
+  "displayName": "MoonClicker Script Workbench",
+  "description": "Connect VS Code to a MoonClicker device running Script Workbench.",
   "version": "0.1.0",
   "publisher": "kuomartin",
   "repository": {
     "type": "git",
-    "url": "https://github.com/kuomartin/ReLC.git",
+    "url": "https://github.com/kuomartin/MoonClicker.git",
     "directory": "vscode-extension"
   },
   "private": true,
@@ -21,103 +21,103 @@
   "contributes": {
     "commands": [
       {
-        "command": "relc.connect",
-        "title": "ReLC: Connect to Device",
+        "command": "moonclicker.connect",
+        "title": "MoonClicker: Connect to Device",
         "icon": "$(plug)"
       },
       {
-        "command": "relc.disconnect",
-        "title": "ReLC: Disconnect from Device"
+        "command": "moonclicker.disconnect",
+        "title": "MoonClicker: Disconnect from Device"
       },
       {
-        "command": "relc.pull",
-        "title": "ReLC: Pull Script Folder from Device"
+        "command": "moonclicker.pull",
+        "title": "MoonClicker: Pull Script Folder from Device"
       },
       {
-        "command": "relc.push",
-        "title": "ReLC: Push Script Folder to Device"
+        "command": "moonclicker.push",
+        "title": "MoonClicker: Push Script Folder to Device"
       },
       {
-        "command": "relc.run",
-        "title": "ReLC: Run Current Script on Device"
+        "command": "moonclicker.run",
+        "title": "MoonClicker: Run Current Script on Device"
       },
       {
-        "command": "relc.openMirror",
-        "title": "ReLC: Open Realtime Mirror"
+        "command": "moonclicker.openMirror",
+        "title": "MoonClicker: Open Realtime Mirror"
       },
       {
-        "command": "relc.pushAndRun",
-        "title": "ReLC: Push & Run"
+        "command": "moonclicker.pushAndRun",
+        "title": "MoonClicker: Push & Run"
       },
       {
-        "command": "relc.runRemote",
-        "title": "ReLC: Run Remote Script"
+        "command": "moonclicker.runRemote",
+        "title": "MoonClicker: Run Remote Script"
       },
       {
-        "command": "relc.pullRemote",
-        "title": "ReLC: Pull Remote Script"
+        "command": "moonclicker.pullRemote",
+        "title": "MoonClicker: Pull Remote Script"
       },
       {
-        "command": "relc.renameScript",
-        "title": "ReLC: Rename (Script + Folder)"
+        "command": "moonclicker.renameScript",
+        "title": "MoonClicker: Rename (Script + Folder)"
       },
       {
-        "command": "relc.setupStubs",
-        "title": "ReLC: Setup Lua Stubs",
+        "command": "moonclicker.setupStubs",
+        "title": "MoonClicker: Setup Lua Stubs",
         "icon": "$(lightbulb)"
       },
       {
-        "command": "relc.toggleMirror",
-        "title": "ReLC: Toggle Display Mirror"
+        "command": "moonclicker.toggleMirror",
+        "title": "MoonClicker: Toggle Display Mirror"
       }
     ],
     "menus": {
       "view/title": [
         {
-          "command": "relc.connect",
-          "when": "view == relc.workspace",
+          "command": "moonclicker.connect",
+          "when": "view == moonclicker.workspace",
           "group": "navigation"
         },
         {
-          "command": "relc.setupStubs",
-          "when": "view == relc.workspace",
+          "command": "moonclicker.setupStubs",
+          "when": "view == moonclicker.workspace",
           "group": "navigation"
         }
       ],
       "view/item/context": [
         {
-          "command": "relc.renameScript",
+          "command": "moonclicker.renameScript",
           "when": "viewItem == localScript"
         },
         {
-          "command": "relc.push",
+          "command": "moonclicker.push",
           "when": "viewItem == localScript"
         },
         {
-          "command": "relc.pushAndRun",
+          "command": "moonclicker.pushAndRun",
           "when": "viewItem == localScript"
         },
         {
-          "command": "relc.runRemote",
+          "command": "moonclicker.runRemote",
           "when": "viewItem == remoteScript"
         },
         {
-          "command": "relc.pullRemote",
+          "command": "moonclicker.pullRemote",
           "when": "viewItem == remoteScript"
         },
         {
-          "command": "relc.openMirror",
+          "command": "moonclicker.openMirror",
           "when": "viewItem == remoteRoot"
         },
         {
-          "command": "relc.disconnect",
+          "command": "moonclicker.disconnect",
           "when": "viewItem == remoteRoot"
         }
       ]
     },
     "keybindings": [
       {
-        "command": "relc.pushAndRun",
+        "command": "moonclicker.pushAndRun",
         "key": "F5",
         "when": "editorFocus && resourceLangId == lua && resourceFilename == main.lua"
       }
@@ -125,16 +125,16 @@
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "relc-scripts",
-          "title": "ReLC Scripts",
+          "id": "moonclicker-scripts",
+          "title": "MoonClicker Scripts",
           "icon": "$(device-mobile)"
         }
       ]
     },
     "views": {
-      "relc-scripts": [
+      "moonclicker-scripts": [
         {
-          "id": "relc.workspace",
+          "id": "moonclicker.workspace",
           "name": "Workspace"
         }
       ]

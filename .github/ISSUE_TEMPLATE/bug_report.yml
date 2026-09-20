@@ -1,5 +1,5 @@
 name: Bug Report / 問題回報
-description: Report a reproducible bug or crash in ReLC / 回報 ReLC 的錯誤或異常崩潰
+description: Report a reproducible bug or crash in MoonClicker / 回報 MoonClicker 的錯誤或異常崩潰
 title: "[Bug]: "
 labels: ["bug"]
 body:
@@ -12,7 +12,7 @@ body:
   - type: input
     id: version
     attributes:
-      label: ReLC Version / ReLC 版本
+      label: MoonClicker Version / MoonClicker 版本
       description: e.g. v0.1.0, commit hash / 例如 v0.1.0 或 commit 雜湊值
       placeholder: v0.1.0
     validations:

@@ -2,16 +2,16 @@
 
 `docs/lua-api.md` 是對腳本作者的承諾。這份講那些承諾怎麼變成會失敗的測試。
 
-## 支點是 `IRelcV2Service`
+## 支點是 `IMoonClickerService`
 
 Lua API 看起來很難測——它要 Shizuku、要虛擬顯示、要注入權限。但這些東西**全部**都在
-`IRelcV2Service` 後面。從 `main.lua` 到那個介面之間的每一段：
+`IMoonClickerService` 後面。從 `main.lua` 到那個介面之間的每一段：
 
 ```
 main.lua → LuaBindings.cpp（參數解析、座標攤平）
          → ScriptRuntime.cpp（執行緒、停止旗標、值裝箱）
          → ScriptHost.kt（pointer 狀態機、KeyEvent 組裝）
-         → IRelcV2Service   ← 這裡是邊界
+         → IMoonClickerService   ← 這裡是邊界
 ```
 
 換掉那一個介面，上面三層就能在**沒有 Shizuku、沒有虛擬顯示、沒有特殊權限**的乾淨模擬器上
@@ -24,7 +24,7 @@ main.lua → LuaBindings.cpp（參數解析、座標攤平）
 ./gradlew :engine:connectedDebugAndroidTest  # 已連線的裝置
 ```
 
-`RecordingRelcService` 是一個把呼叫記下來、而不是真的執行的 `IRelcV2Service.Stub()`。
+`RecordingMoonClickerService` 是一個把呼叫記下來、而不是真的執行的 `IMoonClickerService.Stub()`。
 `LuaScriptRunner` 把一段 Lua 原始碼寫成 [Script Folder]、跑到終態、回傳結果。
 
 斷言有三個管道，要驗什麼就挑哪個：
@@ -45,7 +45,7 @@ main.lua → LuaBindings.cpp（參數解析、座標攤平）
 
 ### 這一層驗不到的
 
-`RecordingRelcService` 立刻返回，真實服務的 `multiTouchSwipe` 是 `oneway` 而且會依
+`RecordingMoonClickerService` 立刻返回，真實服務的 `multiTouchSwipe` 是 `oneway` 而且會依
 duration 插值。所以 Tier 0 能說「引擎送出了什麼」，不能說「螢幕上發生了什麼」。
 `vision.*` 的比對本身（OpenCV、surface→邏輯座標的實際換算）也不在這裡。
 
@@ -56,21 +56,21 @@ duration 插值。所以 Tier 0 能說「引擎送出了什麼」，不能說「
 
 ```bash
 ANDROID_SERIAL=<serial> ./gradlew :engine:connectedDebugAndroidTest \
-    -Pandroid.testInstrumentationRunnerArguments.class=com.xaxaxax.relc.script.Tier1SpikeTest
+    -Pandroid.testInstrumentationRunnerArguments.class=com.xaxaxax.moonclicker.script.Tier1SpikeTest
 ```
 
 ### 沒有 Shizuku 也拿得到 shell 身分
 
 `UiAutomation.adoptShellPermissionIdentity()` 讓權限檢查以 shell 身分進行——而 Shizuku
-給 ReLC 的正是 shell 身分。所以測試在自己的進程裡直接 `RelcV2Service(context)`，用的是
-**真的服務**，不是替身；`RelcV2Service` 也因此第一次有了覆蓋。
+給 MoonClicker 的正是 shell 身分。所以測試在自己的進程裡直接 `MoonClickerService(context)`，用的是
+**真的服務**，不是替身；`MoonClickerService` 也因此第一次有了覆蓋。
 
 換宿主進程要自己補兩件事，都是 shell 進程「免費」拿到的：
 
 | | 為什麼 | 怎麼補 |
 |---|---|---|
 | 隱藏 API 豁免 | shell uid 整個免受名單約束，app uid 不是 | `Tier1Env.exemptHiddenApis()` |
-| 呼叫者套件名 | system_server 拿它跟 calling uid 對 | `RelcV2Service(context, callerPackage = ...)` |
+| 呼叫者套件名 | system_server 拿它跟 calling uid 對 | `MoonClickerService(context, callerPackage = ...)` |
 
 第二項是這個 spike 逼出來的 production 改動：`com.android.shell` 原本寫死在
 `fakeDisplayContext` 與 `Workaround.startActivity` 三個分支裡。現在是建構子參數，
@@ -80,7 +80,7 @@ ANDROID_SERIAL=<serial> ./gradlew :engine:connectedDebugAndroidTest \
 
 library 的 androidTest APK 是自我 instrument 的，所以 `PuppetActivity` 與測試程式碼
 **在同一個進程**——測試直接讀 `PuppetRecorder`，不需要 IPC、不需要第二個 APK 的安裝流程。
-`app.launch("com.xaxaxax.relc.engine.test")` 就能把它拉上虛擬顯示。
+`app.launch("com.xaxaxax.moonclicker.engine.test")` 就能把它拉上虛擬顯示。
 
 斷言是**自洽**的：vision 說標記在哪、input 就打去哪、puppet 回報打到哪。中間任何一段座標
 換算錯了都會露出來，而且不依賴 letterbox、density、insets 的任何假設。
@@ -182,7 +182,7 @@ production 在舊版上跑在 Shizuku 真正的 shell 進程裡，本來就不�
 
 - `:hidden-api-contract` 驗**平台**是否符合 `:hidden-api` 那些 stub 編碼的假設，測試 APK
   裡刻意不放 stub，讓平台成為唯一被載入的東西。
-- 這裡驗 **ReLC 自己**在各版本上的行為：顯示器建不建得出來、旗標拿不拿得到、觸控派不派送、
+- 這裡驗 **MoonClicker 自己**在各版本上的行為：顯示器建不建得出來、旗標拿不拿得到、觸控派不派送、
   比對準不準。跨版本會變的是這些，不是 Lua 綁定本身（那是 Tier 0，一個 API level 就夠）。
 
 [Script Folder]: ../CONTEXT.md

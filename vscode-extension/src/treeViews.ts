@@ -4,7 +4,7 @@ import * as path from "node:path";
 import { listScripts, type ScriptSummary } from "./scriptSync";
 import type { ConnectionState } from "./workbenchConnection";
 
-export class ReLCTreeItem extends vscode.TreeItem {
+export class MoonClickerTreeItem extends vscode.TreeItem {
   constructor(
     public readonly label: string,
     public readonly collapsibleState: vscode.TreeItemCollapsibleState,
@@ -17,7 +17,7 @@ export class ReLCTreeItem extends vscode.TreeItem {
   }
 }
 
-export class LocalScriptItem extends ReLCTreeItem {
+export class LocalScriptItem extends MoonClickerTreeItem {
   constructor(
     label: string,
     public readonly scriptId: string,
@@ -31,7 +31,7 @@ export class LocalScriptItem extends ReLCTreeItem {
   }
 }
 
-export class LocalFileItem extends ReLCTreeItem {
+export class LocalFileItem extends MoonClickerTreeItem {
   constructor(public readonly filePath: string, isDirectory: boolean) {
     super(
       path.basename(filePath),
@@ -49,7 +49,7 @@ export class LocalFileItem extends ReLCTreeItem {
   }
 }
 
-export class RemoteScriptItem extends ReLCTreeItem {
+export class RemoteScriptItem extends MoonClickerTreeItem {
   constructor(public readonly summary: ScriptSummary) {
     super(summary.name || summary.id, vscode.TreeItemCollapsibleState.None, "remoteScript");
     this.iconPath = new vscode.ThemeIcon("cloud");
@@ -57,8 +57,8 @@ export class RemoteScriptItem extends ReLCTreeItem {
   }
 }
 
-export class WorkspaceTreeProvider implements vscode.TreeDataProvider<ReLCTreeItem> {
-  private _onDidChangeTreeData = new vscode.EventEmitter<ReLCTreeItem | undefined | void>();
+export class WorkspaceTreeProvider implements vscode.TreeDataProvider<MoonClickerTreeItem> {
+  private _onDidChangeTreeData = new vscode.EventEmitter<MoonClickerTreeItem | undefined | void>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
   
   private state: ConnectionState = { status: "disconnected" };
@@ -74,25 +74,25 @@ export class WorkspaceTreeProvider implements vscode.TreeDataProvider<ReLCTreeIt
     this._onDidChangeTreeData.fire();
   }
 
-  getTreeItem(element: ReLCTreeItem): vscode.TreeItem {
+  getTreeItem(element: MoonClickerTreeItem): vscode.TreeItem {
     return element;
   }
 
-  async getChildren(element?: ReLCTreeItem): Promise<ReLCTreeItem[]> {
+  async getChildren(element?: MoonClickerTreeItem): Promise<MoonClickerTreeItem[]> {
     if (!element) {
       // Root level: Local and Remote categories
-      const items: ReLCTreeItem[] = [];
+      const items: MoonClickerTreeItem[] = [];
       
-      const localRoot = new ReLCTreeItem("Local Scripts", vscode.TreeItemCollapsibleState.Expanded, "localRoot");
+      const localRoot = new MoonClickerTreeItem("Local Scripts", vscode.TreeItemCollapsibleState.Expanded, "localRoot");
       localRoot.iconPath = new vscode.ThemeIcon("folder-library");
       items.push(localRoot);
 
       if (this.state.status === "connected") {
-        const remoteRoot = new ReLCTreeItem(`Remote Scripts (${this.state.address})`, vscode.TreeItemCollapsibleState.Expanded, "remoteRoot");
+        const remoteRoot = new MoonClickerTreeItem(`Remote Scripts (${this.state.address})`, vscode.TreeItemCollapsibleState.Expanded, "remoteRoot");
         remoteRoot.iconPath = new vscode.ThemeIcon("server");
         items.push(remoteRoot);
       } else {
-        const remoteRoot = new ReLCTreeItem("Remote Scripts (Disconnected)", vscode.TreeItemCollapsibleState.None, "remoteRootDisconnected");
+        const remoteRoot = new MoonClickerTreeItem("Remote Scripts (Disconnected)", vscode.TreeItemCollapsibleState.None, "remoteRootDisconnected");
         remoteRoot.iconPath = new vscode.ThemeIcon("server");
         items.push(remoteRoot);
       }
