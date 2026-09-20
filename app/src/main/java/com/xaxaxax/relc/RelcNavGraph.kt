@@ -20,6 +20,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
+import com.xaxaxax.relc.ui.about.AboutScreen
+import com.xaxaxax.relc.ui.developer.DeveloperOptionsScreen
 import com.xaxaxax.relc.ui.displaydetail.FullscreenDisplayActivity
 import com.xaxaxax.relc.ui.displays.DisplaysScreen
 import com.xaxaxax.relc.ui.scriptdetail.ScriptDetailScreen
@@ -28,6 +30,7 @@ import com.xaxaxax.relc.ui.setting.SettingsScreen
 
 @Composable
 fun RelcNavGraph(
+    startDestination: Any = ScriptsRoute,
     openScriptsPage: Boolean = false,
     onScriptsPageOpened: () -> Unit = {},
 ) {
@@ -83,7 +86,7 @@ fun RelcNavGraph(
 
         NavHost(
             navController = navController,
-            startDestination = ScriptsRoute
+            startDestination = startDestination
         ) {
             // --- DISPLAYS 群組 ---
             composable<DisplaysRoute> {
@@ -121,7 +124,16 @@ fun RelcNavGraph(
 
             // --- SETTINGS 群組 ---
             composable<SettingsRoute> {
-                SettingsScreen()
+                SettingsScreen(
+                    onNavigateToAbout = { navController.navigate(AboutRoute) },
+                    onNavigateToDeveloperOptions = { navController.navigate(DeveloperOptionsRoute) },
+                )
+            }
+            composable<AboutRoute> {
+                AboutScreen(onNavigateBack = { navController.popBackStack() })
+            }
+            composable<DeveloperOptionsRoute> {
+                DeveloperOptionsScreen(onNavigateBack = { navController.popBackStack() })
             }
         }
     }

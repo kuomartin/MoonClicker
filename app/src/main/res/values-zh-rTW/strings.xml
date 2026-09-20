@@ -28,7 +28,7 @@
     <string name="displays_card_mirror_not_active">鏡像未開啟</string>
     <string name="displays_card_tag_physical_mirroring">實體螢幕 (鏡像運作中)</string>
     <string name="displays_card_tag_physical">實體螢幕</string>
-    <string name="displays_card_tag_service">relcV2Service 管轄</string>
+    <string name="displays_card_tag_service">虛擬顯示</string>
     <string name="displays_action_start_mirror">開啟鏡像</string>
     <string name="displays_action_stop_mirror">關閉鏡像</string>
     <string name="displays_action_enter">進入</string>
@@ -123,6 +123,29 @@
     <string name="settings_general">一般</string>
     <string name="settings_auto_fullscreen">在虛擬顯示執行時自動開啟全螢幕</string>
     <string name="settings_auto_fullscreen_note">關閉時腳本仍在背景執行，只是不會跳出鏡像畫面。</string>
+    <string name="settings_default_start_page">預設啟動頁面</string>
+    <string name="settings_language">語言</string>
+    <string name="settings_language_system_default">跟隨系統</string>
+    <string name="settings_language_english">English</string>
+    <string name="settings_language_chinese_tw">繁體中文</string>
+    <string name="settings_language_restart_required">已儲存，重新啟動 App 後套用新語言。</string>
+    <string name="settings_about">關於</string>
+
+    <!-- About page -->
+    <string name="about_title">關於</string>
+    <string name="about_version">版本 %1$s (%2$d)</string>
+    <string name="about_source_code">原始碼</string>
+    <string name="about_report_issue">回報問題</string>
+    <string name="about_license">授權條款</string>
+    <string name="about_license_value">MIT License</string>
+    <string name="about_developer_options">開發人員選項</string>
+    <string name="about_developer_taps_remaining">再按 %1$d 下即可開啟開發人員選項</string>
+    <string name="about_developer_unlocked">您現在是開發人員了！</string>
+    <string name="about_developer_already_unlocked">不需要，您已經是開發人員了。</string>
+
+    <!-- Developer options page -->
+    <string name="developer_options_title">開發人員選項</string>
+    <string name="developer_options_disable">停用開發人員選項</string>
 
     <!-- Shizuku Connection Status -->
     <string name="shizuku_status_not_available">Shizuku 未啟動</string>
@@ -136,7 +159,7 @@
     <!-- UserService Settings -->
     <string name="settings_user_service">UserService</string>
     <string name="settings_auto_start_user_service">自動啟動 UserService</string>
-    <string name="settings_auto_start_user_service_note">關閉時仍會自動接上已在執行的服務，只是不會主動把它啟動起來。</string>
+    <string name="settings_auto_start_user_service_note">只影響是否自動啟動服務；已在執行中的服務不會因此被停用。</string>
     <string name="settings_user_service_start">啟動</string>
     <string name="settings_user_service_restart">重新啟動</string>
     <string name="settings_user_service_stop">關閉</string>
@@ -156,6 +179,7 @@
     <string name="workbench_notification_channel_label">Script Workbench</string>
     <string name="workbench_notification_channel_description">Script Workbench server 開啟時的常駐通知。</string>
     <string name="workbench_notification_title">Script Workbench 正在監聽</string>
+    <string name="workbench_notification_action_stop">關閉</string>
 
     <!-- Workbench Pairing / Security -->
     <string name="settings_pairing_title">裝置配對 (PIN Pairing)</string>
@@ -192,10 +216,6 @@
     <string name="permission_notification_rationale_title">通知權限說明</string>
     <string name="permission_notification_rationale_desc">ReLC 需要發送通知權限，以便在背景執行自動化腳本或開啟 Script Workbench 伺服器時，於通知列顯示即時執行狀態、日誌訊息與一鍵停止按鈕。未開啟通知可能導致您在切換至其他應用時無法即時掌握腳本運作。</string>
 
-    <string name="permission_overlay_title">懸浮窗權限</string>
-    <string name="permission_overlay_desc">在其他應用程式上方顯示浮動控制視窗與輔助介面。</string>
-    <string name="permission_overlay_rationale_title">懸浮窗權限說明</string>
-    <string name="permission_overlay_rationale_desc">ReLC 需要「顯示在其他應用程式上層」權限，以便在腳本執行或進行螢幕錄製與除錯時，在畫面上呈現便於操作的浮動控制器。</string>
 
     <string name="permission_local_network_title">區域網路權限</string>
     <string name="permission_local_network_desc">允許接受來自區域網路的連線，讓 VS Code 能連上 Workbench。</string>

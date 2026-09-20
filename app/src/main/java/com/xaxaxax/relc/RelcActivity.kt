@@ -1,6 +1,8 @@
 package com.xaxaxax.relc
 
+import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -8,6 +10,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.runtime.mutableStateOf
 import androidx.core.content.ContextCompat
+import com.xaxaxax.relc.core.AppLocale
 import com.xaxaxax.relc.core.AppSettings
 import com.xaxaxax.relc.ui.theme.ReLCTheme
 import com.xaxaxax.relc.workbench.WorkbenchService
@@ -33,6 +36,18 @@ class RelcActivity : ComponentActivity() {
     @Inject
     lateinit var appSettings: AppSettings
 
+    /**
+     * Android 13+ 的語言偏好是系統的 LocaleManager 在管，OS 自己會處理 Activity 重建；
+     * 13 以下沒有這套機制，且我們沒有 AppCompatActivity 可以借，只能自己包一層 Context。
+     */
+    override fun attachBaseContext(newBase: Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            super.attachBaseContext(newBase)
+        } else {
+            super.attachBaseContext(AppLocale.wrap(newBase, AppSettings.readAppLanguageTag(newBase)))
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         autoStarter.onAppOpened()
@@ -42,6 +57,7 @@ class RelcActivity : ComponentActivity() {
         setContent {
             ReLCTheme {
                 RelcNavGraph(
+                    startDestination = appSettings.defaultStartPage.value.route,
                     openScriptsPage = openScriptsPage.value,
                     onScriptsPageOpened = { openScriptsPage.value = false },
                 )
