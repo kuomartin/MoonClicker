@@ -36,6 +36,7 @@ data class SettingsUiState(
     val hasNotificationPermission: Boolean = false,
     val hasOverlayPermission: Boolean = false,
     val osAllowSecondaryDisplays: Boolean = false,
+    val hasLocalNetworkPermission: Boolean = false,
     val isRefreshing: Boolean = false,
     val autoOpenFullscreen: Boolean = false,
     val autoStartUserService: Boolean = true,
@@ -93,7 +94,10 @@ class SettingsViewModel @Inject constructor(
         permissionManager.hasNotificationPermission,
         permissionManager.hasOverlayPermission,
         permissionManager.osAllowSecondaryDisplays,
-    ) { notification, overlay, secondary -> Triple(notification, overlay, secondary) }
+        permissionManager.hasLocalNetworkPermission,
+    ) { notification, overlay, secondary, localNetwork ->
+        PermissionsStateHolder(notification, overlay, secondary, localNetwork)
+    }
 
     private val authState = combine(
         authStore.isPairingActive,
@@ -117,12 +121,13 @@ class SettingsViewModel @Inject constructor(
         isRefreshing,
         appSettings.autoOpenFullscreen,
         workbenchCombinedState,
-    ) { (status, autoStart, scriptRunning), (hasNotification, hasOverlay, allowSecondary), refreshing, autoOpenFullscreen, (workbenchEnabled, workbenchAddress, auth) ->
+    ) { (status, autoStart, scriptRunning), permissions, refreshing, autoOpenFullscreen, (workbenchEnabled, workbenchAddress, auth) ->
         SettingsUiState(
             shizukuStatus = status,
-            hasNotificationPermission = hasNotification,
-            hasOverlayPermission = hasOverlay,
-            osAllowSecondaryDisplays = allowSecondary,
+            hasNotificationPermission = permissions.hasNotification,
+            hasOverlayPermission = permissions.hasOverlay,
+            osAllowSecondaryDisplays = permissions.allowSecondaryDisplays,
+            hasLocalNetworkPermission = permissions.hasLocalNetwork,
             isRefreshing = refreshing,
             autoOpenFullscreen = autoOpenFullscreen,
             autoStartUserService = autoStart,
@@ -217,6 +222,13 @@ class SettingsViewModel @Inject constructor(
     fun setBruteForceProtectionEnabled(enabled: Boolean) = authStore.setBruteForceProtectionEnabled(enabled)
     fun revokeAllTokens() = authStore.revokeAllTokens()
 }
+
+private data class PermissionsStateHolder(
+    val hasNotification: Boolean,
+    val hasOverlay: Boolean,
+    val allowSecondaryDisplays: Boolean,
+    val hasLocalNetwork: Boolean,
+)
 
 private data class PairingStateHolder(
     val active: Boolean,
