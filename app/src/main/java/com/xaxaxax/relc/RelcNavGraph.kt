@@ -21,6 +21,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import com.xaxaxax.relc.ui.about.AboutScreen
+import com.xaxaxax.relc.ui.developer.DeveloperOptionsScreen
 import com.xaxaxax.relc.ui.displaydetail.FullscreenDisplayActivity
 import com.xaxaxax.relc.ui.displays.DisplaysScreen
 import com.xaxaxax.relc.ui.scriptdetail.ScriptDetailScreen
@@ -128,7 +129,13 @@ fun RelcNavGraph(
                 )
             }
             composable<AboutRoute> {
-                AboutScreen(onNavigateBack = { navController.popBackStack() })
+                AboutScreen(
+                    onNavigateBack = { navController.popBackStack() },
+                    onNavigateToDeveloperOptions = { navController.navigate(DeveloperOptionsRoute) },
+                )
+            }
+            composable<DeveloperOptionsRoute> {
+                DeveloperOptionsScreen(onNavigateBack = { navController.popBackStack() })
             }
         }
     }
