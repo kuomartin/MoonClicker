@@ -3,6 +3,7 @@ package com.xaxaxax.relc.ui.setting
 import android.Manifest
 import android.content.res.Configuration
 import android.os.Build
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -41,6 +42,7 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -53,6 +55,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -82,6 +85,15 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val message by viewModel.message.collectAsState()
+    val context = LocalContext.current
+
+    LaunchedEffect(message) {
+        val text = message ?: return@LaunchedEffect
+        Toast.makeText(context, text, Toast.LENGTH_LONG).show()
+        viewModel.consumeMessage()
+    }
+
     val activityResultLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) {
@@ -109,6 +121,10 @@ fun SettingsScreen(
                 icon = painterResource(R.drawable.ic_launcher_foreground),
                 confirmText = stringResource(R.string.permission_action_proceed),
                 dismissText = stringResource(R.string.permission_action_cancel),
+                shizukuActionLabel = stringResource(R.string.permission_action_via_shizuku)
+                    .takeIf { uiState.shizukuStatus == ShizukuConnectionStatus.CONNECTED },
+                onShizukuAction = viewModel::grantNotificationPermissionViaShizuku
+                    .takeIf { uiState.shizukuStatus == ShizukuConnectionStatus.CONNECTED },
                 onConfirm = {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                         notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
@@ -273,6 +289,11 @@ private fun SettingsScreenContent(
                                         else -> null
                                     },
                                     onAction = onRequestShizukuPermission,
+                                    warningText = if (uiState.isShizukuUidWarning) {
+                                        stringResource(R.string.permission_shizuku_uid_warning)
+                                    } else {
+                                        null
+                                    },
                                 )
 
                                 HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
@@ -661,6 +682,7 @@ private fun PermissionRow(
     isGranted: Boolean,
     actionLabel: String? = null,
     onAction: (() -> Unit)? = null,
+    warningText: String? = null,
 ) {
     Row(
         modifier = Modifier
@@ -716,6 +738,13 @@ private fun PermissionRow(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            if (warningText != null) {
+                Text(
+                    text = warningText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
         }
         if (actionLabel != null && onAction != null) {
             Spacer(modifier = Modifier.width(8.dp))

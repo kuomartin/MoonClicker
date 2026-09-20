@@ -273,6 +273,23 @@ class ShizukuManager(private val context: Context) {
         ShizukuAccess.GRANTED -> Timber.d("Already has permission")
     }
 
+    /**
+     * 透過已連線的 UserService 靜默授予一個 runtime permission，取代跳系統設定頁的流程。
+     * 呼叫失敗（逾時、服務不存在、hidden API 在該 ROM 不支援）回傳 false，交由呼叫端提示使用者改走系統設定。
+     */
+    suspend fun grantRuntimePermission(permissionName: String): Boolean =
+        withService { it.grantRuntimePermission(context.packageName, permissionName) }
+            .getOrDefault(false)
+
+    /**
+     * Shizuku 遠端服務目前的執行身分 uid，binder 未連上或呼叫失敗時回傳 null。
+     * 用來提醒使用者：Shizuku 建議跑在 uid=2000（adb shell），跑在 uid=0（root）雖然多數功能仍可用，但不是官方建議的執行方式。
+     */
+    fun currentUid(): Int? {
+        if (!Shizuku.pingBinder()) return null
+        return runCatching { Shizuku.getUid() }.getOrNull()?.takeIf { it >= 0 }
+    }
+
     fun getOpenShizukuIntent(): Intent {
         val intent =
             context.packageManager.getLaunchIntentForPackage("moe.shizuku.privileged.api")
