@@ -138,7 +138,7 @@
     <!-- UserService Settings -->
     <string name="settings_user_service">UserService</string>
     <string name="settings_auto_start_user_service">Auto-start UserService</string>
-    <string name="settings_auto_start_user_service_note">Only affects whether a new service is started automatically; a service that's already running won't be stopped.</string>
+    <string name="settings_auto_start_user_service_note">Only affects whether a new service is started automatically; a service that\'s already running won\'t be stopped.</string>
     <string name="settings_user_service_start">Start</string>
     <string name="settings_user_service_restart">Restart</string>
     <string name="settings_user_service_stop">Stop</string>
