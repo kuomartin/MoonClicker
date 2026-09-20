@@ -4,4 +4,4 @@
 
 ## Status
 
-Accepted，2026-09-11。相關：[issue #18](https://github.com/kuomartin/ReLC/issues/18)。
+Accepted，2026-09-11。相關：[issue #18](https://github.com/kuomartin/MoonClicker/issues/18)。

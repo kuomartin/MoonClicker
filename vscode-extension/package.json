@@ -6,7 +6,7 @@
   "publisher": "kuomartin",
   "repository": {
     "type": "git",
-    "url": "https://github.com/kuomartin/ReLC.git",
+    "url": "https://github.com/kuomartin/MoonClicker.git",
     "directory": "vscode-extension"
   },
   "private": true,

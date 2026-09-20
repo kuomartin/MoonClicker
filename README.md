@@ -39,7 +39,7 @@ MoonClicker 是一款專為 Android 設計的遠端 Lua 控制與背景自動化
 
 ### 安裝與授權
 
-1. 至 [MoonClicker Releases](https://github.com/kuomartin/ReLC/releases) 下載並安裝 apk。
+1. 至 [MoonClicker Releases](https://github.com/kuomartin/MoonClicker/releases) 下載並安裝 apk。
 2. 確保 Shizuku 已在裝置上啟動。
 3. 開啟 MoonClicker，授予 Shizuku 權限。
 
