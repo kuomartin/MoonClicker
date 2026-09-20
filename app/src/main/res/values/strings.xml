@@ -28,7 +28,7 @@
     <string name="displays_card_mirror_not_active">Mirror not active</string>
     <string name="displays_card_tag_physical_mirroring">Physical Screen (Mirroring)</string>
     <string name="displays_card_tag_physical">Physical Screen</string>
-    <string name="displays_card_tag_service">Managed by relcV2Service</string>
+    <string name="displays_card_tag_service">Virtual Display</string>
     <string name="displays_action_start_mirror">Start Mirror</string>
     <string name="displays_action_stop_mirror">Stop Mirror</string>
     <string name="displays_action_enter">Enter</string>
@@ -138,7 +138,7 @@
     <!-- UserService Settings -->
     <string name="settings_user_service">UserService</string>
     <string name="settings_auto_start_user_service">Auto-start UserService</string>
-    <string name="settings_auto_start_user_service_note">When disabled, the app still connects to already running services, but will not start the service automatically.</string>
+    <string name="settings_auto_start_user_service_note">Only affects whether a new service is started automatically; a service that's already running won't be stopped.</string>
     <string name="settings_user_service_start">Start</string>
     <string name="settings_user_service_restart">Restart</string>
     <string name="settings_user_service_stop">Stop</string>

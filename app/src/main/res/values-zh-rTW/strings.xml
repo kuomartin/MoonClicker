@@ -28,7 +28,7 @@
     <string name="displays_card_mirror_not_active">鏡像未開啟</string>
     <string name="displays_card_tag_physical_mirroring">實體螢幕 (鏡像運作中)</string>
     <string name="displays_card_tag_physical">實體螢幕</string>
-    <string name="displays_card_tag_service">relcV2Service 管轄</string>
+    <string name="displays_card_tag_service">虛擬顯示</string>
     <string name="displays_action_start_mirror">開啟鏡像</string>
     <string name="displays_action_stop_mirror">關閉鏡像</string>
     <string name="displays_action_enter">進入</string>
@@ -138,7 +138,7 @@
     <!-- UserService Settings -->
     <string name="settings_user_service">UserService</string>
     <string name="settings_auto_start_user_service">自動啟動 UserService</string>
-    <string name="settings_auto_start_user_service_note">關閉時仍會自動接上已在執行的服務，只是不會主動把它啟動起來。</string>
+    <string name="settings_auto_start_user_service_note">只影響是否自動啟動服務；已在執行中的服務不會因此被停用。</string>
     <string name="settings_user_service_start">啟動</string>
     <string name="settings_user_service_restart">重新啟動</string>
     <string name="settings_user_service_stop">關閉</string>
