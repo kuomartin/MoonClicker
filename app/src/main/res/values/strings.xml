@@ -178,11 +178,14 @@
     <string name="permission_action_open_shizuku">Open Shizuku</string>
     <string name="permission_action_proceed">Proceed</string>
     <string name="permission_action_cancel">Not Now</string>
+    <string name="permission_action_via_shizuku">Grant via Shizuku</string>
 
     <string name="permission_shizuku_title">Shizuku Service &amp; Permission</string>
     <string name="permission_shizuku_desc">Used to access system privileged APIs to create virtual displays and inject touch events.</string>
     <string name="permission_shizuku_rationale_title">Shizuku Permission Rationale</string>
     <string name="permission_shizuku_rationale_desc">ReLC requires access to Android system privileged APIs via Shizuku to create isolated virtual displays and accurately simulate touch actions. This enables automation scripts to run smoothly without occupying your physical screen.</string>
+    <string name="permission_shizuku_uid_warning">Shizuku is running as root. Running it as adb shell is recommended instead.</string>
+    <string name="shizuku_grant_permission_failed">Failed to grant permission via Shizuku, please use system settings instead.</string>
 
     <string name="permission_notification_title">Notification Permission</string>
     <string name="permission_notification_desc">Show real-time execution status and controls when running scripts in background or running Workbench.</string>
