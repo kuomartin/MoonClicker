@@ -140,6 +140,14 @@
     <string name="about_report_issue">Report an issue</string>
     <string name="about_license">License</string>
     <string name="about_license_value">MIT License</string>
+    <string name="about_developer_options">Developer options</string>
+    <string name="about_developer_taps_remaining">%1$d more taps to enable developer options</string>
+    <string name="about_developer_unlocked">You are now a developer!</string>
+    <string name="about_developer_already_unlocked">No need, you are already a developer.</string>
+
+    <!-- Developer options page -->
+    <string name="developer_options_title">Developer options</string>
+    <string name="developer_options_disable">Disable developer options</string>
 
     <!-- Shizuku Connection Status -->
     <string name="shizuku_status_not_available">Shizuku Not Running</string>

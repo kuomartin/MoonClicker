@@ -86,6 +86,17 @@ class AppSettings @Inject constructor(
         _appLanguage.value = tag
     }
 
+    private val _developerOptionsUnlocked =
+        MutableStateFlow(prefs.getBoolean(KEY_DEVELOPER_OPTIONS_UNLOCKED, false))
+
+    /** 解鎖後才會在「關於」頁面顯示開發人員選項的入口；比照 Android 系統的連點版本號解鎖。 */
+    val developerOptionsUnlocked: StateFlow<Boolean> = _developerOptionsUnlocked.asStateFlow()
+
+    fun setDeveloperOptionsUnlocked(unlocked: Boolean) {
+        prefs.edit { putBoolean(KEY_DEVELOPER_OPTIONS_UNLOCKED, unlocked) }
+        _developerOptionsUnlocked.value = unlocked
+    }
+
     companion object {
         private const val PREFS_NAME = "relc_settings"
         private const val KEY_AUTO_FULLSCREEN = "auto_open_fullscreen"
@@ -93,6 +104,7 @@ class AppSettings @Inject constructor(
         private const val KEY_WORKBENCH_ENABLED = "workbench_enabled"
         private const val KEY_DEFAULT_START_PAGE = "default_start_page"
         private const val KEY_APP_LANGUAGE = "app_language"
+        private const val KEY_DEVELOPER_OPTIONS_UNLOCKED = "developer_options_unlocked"
 
         /**
          * [Activity.attachBaseContext] 跑在 Hilt 欄位注入完成之前，讀不到 [AppSettings] 實例，

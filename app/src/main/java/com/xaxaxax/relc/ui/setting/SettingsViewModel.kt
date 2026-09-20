@@ -263,6 +263,8 @@ class SettingsViewModel @Inject constructor(
     fun stopPairingMode() = authStore.stopPairingMode()
     fun setBruteForceProtectionEnabled(enabled: Boolean) = authStore.setBruteForceProtectionEnabled(enabled)
     fun revokeAllTokens() = authStore.revokeAllTokens()
+
+    fun disableDeveloperOptions() = appSettings.setDeveloperOptionsUnlocked(false)
 }
 
 private data class PermissionsStateHolder(

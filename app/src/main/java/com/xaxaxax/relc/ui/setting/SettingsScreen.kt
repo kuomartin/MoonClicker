@@ -11,7 +11,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -37,7 +36,6 @@ import androidx.compose.material3.MediumTopAppBar
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
@@ -54,14 +52,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.painter.Painter
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -70,7 +64,9 @@ import com.xaxaxax.relc.TopLevelDestination
 import com.xaxaxax.relc.shizuku.ShizukuConnectionStatus
 import com.xaxaxax.relc.ui.component.DropdownBox
 import com.xaxaxax.relc.ui.component.PermissionRationaleDialog
+import com.xaxaxax.relc.ui.component.PermissionRow
 import com.xaxaxax.relc.ui.component.Section
+import com.xaxaxax.relc.ui.component.ToggleSettingItem
 import com.xaxaxax.relc.ui.component.shizukuStatusAppearance
 import com.xaxaxax.relc.ui.theme.ReLCTheme
 import com.xaxaxax.relc.ui.theme.SuccessColor
@@ -81,7 +77,6 @@ import kotlin.time.Duration.Companion.milliseconds
 enum class RationaleDialogType {
     NOTIFICATION,
     SHIZUKU,
-    LOCAL_NETWORK,
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -106,14 +101,6 @@ fun SettingsScreen(
         viewModel.refreshPermissions()
     }
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) {
-        viewModel.refreshPermissions()
-    }
-    // targetSdk 37（Android 17）起，接受區網的 inbound TCP 連線需要這個 runtime permission，
-    // 不然 VS Code 端連得上 TCP 卻永遠讀不到回應。拒絕不影響 Workbench 開關本身——本機診斷用途
-    // 還是能動，只是外部連不進來，不因為這個權限擋住整個功能。
-    val localNetworkPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) {
         viewModel.refreshPermissions()
@@ -160,19 +147,6 @@ fun SettingsScreen(
                 onDismiss = { activeRationale = null },
             )
         }
-        RationaleDialogType.LOCAL_NETWORK -> {
-            PermissionRationaleDialog(
-                title = stringResource(R.string.permission_local_network_rationale_title),
-                description = stringResource(R.string.permission_local_network_rationale_desc),
-                icon = painterResource(R.drawable.ic_launcher_foreground),
-                confirmText = stringResource(R.string.permission_action_proceed),
-                dismissText = stringResource(R.string.permission_action_cancel),
-                onConfirm = {
-                    localNetworkPermissionLauncher.launch("android.permission.ACCESS_LOCAL_NETWORK")
-                },
-                onDismiss = { activeRationale = null },
-            )
-        }
         null -> {}
     }
 
@@ -194,24 +168,14 @@ fun SettingsScreen(
                 activeRationale = RationaleDialogType.NOTIFICATION
             }
         },
-        onRequestLocalNetworkPermission = {
-            if (!uiState.hasLocalNetworkPermission) {
-                activeRationale = RationaleDialogType.LOCAL_NETWORK
-            }
-        },
         onRefresh = { viewModel.refreshPermissions(true) },
         onAutoOpenFullscreenChange = viewModel::setAutoOpenFullscreen,
         onDefaultStartPageChange = viewModel::setDefaultStartPage,
         onAppLanguageChange = viewModel::setAppLanguage,
         onAutoStartUserServiceChange = viewModel::setAutoStartUserService,
-        onWorkbenchEnabledChange = viewModel::setWorkbenchEnabled,
         onStartUserService = viewModel::startUserService,
         onStopUserService = viewModel::stopUserService,
         onRestartUserService = viewModel::restartUserService,
-        onStartPairingMode = viewModel::startPairingMode,
-        onStopPairingMode = viewModel::stopPairingMode,
-        onSetBruteForceProtection = viewModel::setBruteForceProtectionEnabled,
-        onRevokeAllTokens = viewModel::revokeAllTokens,
         onNavigateToAbout = onNavigateToAbout,
     )
 }
@@ -222,20 +186,14 @@ private fun SettingsScreenContent(
     uiState: SettingsUiState,
     onRequestShizukuPermission: () -> Unit,
     onRequestNotificationPermission: () -> Unit,
-    onRequestLocalNetworkPermission: () -> Unit = {},
     onRefresh: () -> Unit,
     onAutoOpenFullscreenChange: (Boolean) -> Unit,
     onDefaultStartPageChange: (TopLevelDestination) -> Unit = {},
     onAppLanguageChange: (String) -> Unit = {},
     onAutoStartUserServiceChange: (Boolean) -> Unit = {},
-    onWorkbenchEnabledChange: (Boolean) -> Unit = {},
     onStartUserService: () -> Unit = {},
     onStopUserService: () -> Unit = {},
     onRestartUserService: () -> Unit = {},
-    onStartPairingMode: () -> Unit = {},
-    onStopPairingMode: () -> Unit = {},
-    onSetBruteForceProtection: (Boolean) -> Unit = {},
-    onRevokeAllTokens: () -> Unit = {},
     onNavigateToAbout: () -> Unit = {},
 ) {
     // 關閉與重啟都會連帶銷毀虛擬顯示，值得先問一句。
@@ -327,29 +285,7 @@ private fun SettingsScreenContent(
 
                                 HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
 
-                                // 3. Local Network
-                                PermissionRow(
-                                    painter = painterResource(R.drawable.ic_launcher_foreground),
-                                    title = stringResource(R.string.permission_local_network_title),
-                                    description = stringResource(R.string.permission_local_network_desc),
-                                    statusText = if (uiState.hasLocalNetworkPermission) {
-                                        stringResource(R.string.permission_granted)
-                                    } else {
-                                        stringResource(R.string.permission_not_granted)
-                                    },
-                                    statusColor = if (uiState.hasLocalNetworkPermission) SuccessColor else MaterialTheme.colorScheme.error,
-                                    isGranted = uiState.hasLocalNetworkPermission,
-                                    actionLabel = if (uiState.hasLocalNetworkPermission) {
-                                        null
-                                    } else {
-                                        stringResource(R.string.permission_action_grant)
-                                    },
-                                    onAction = onRequestLocalNetworkPermission,
-                                )
-
-                                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
-
-                                // 4. Secondary Displays
+                                // 3. Secondary Displays
                                 PermissionRow(
                                     painter = painterResource(R.drawable.ic_picture_in_picture_off),
                                     title = stringResource(R.string.permission_secondary_displays_title),
@@ -385,22 +321,6 @@ private fun SettingsScreenContent(
                             value = uiState.appLanguage,
                             onChange = onAppLanguageChange,
                         )
-                        ToggleSettingItem(
-                            name = stringResource(R.string.settings_workbench),
-                            description = stringResource(R.string.settings_workbench_note),
-                            checked = uiState.workbenchEnabled,
-                            onCheckedChange = onWorkbenchEnabledChange,
-                        )
-                        if (uiState.workbenchEnabled) {
-                            WorkbenchAddressInfo(address = uiState.workbenchAddress)
-                            WorkbenchPairingSection(
-                                uiState = uiState,
-                                onStartPairingMode = onStartPairingMode,
-                                onStopPairingMode = onStopPairingMode,
-                                onSetBruteForceProtection = onSetBruteForceProtection,
-                                onRevokeAllTokens = onRevokeAllTokens,
-                            )
-                        }
                     }
                 }
 
@@ -568,31 +488,6 @@ private fun UserServiceActions(
 }
 
 @Composable
-private fun ToggleSettingItem(
-    name: String,
-    description: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(text = name, style = MaterialTheme.typography.bodyLarge)
-            Text(
-                text = description,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
-    }
-}
-
-@Composable
 private fun DefaultStartPageSettingItem(
     value: TopLevelDestination,
     onChange: (TopLevelDestination) -> Unit,
@@ -641,207 +536,6 @@ private fun AppLanguageSettingItem(
             transform = { labels.getValue(it) },
             onChange = onChange,
         )
-    }
-}
-
-@Composable
-private fun WorkbenchAddressInfo(address: String?) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-    ) {
-        if (address != null) {
-            Text(
-                text = stringResource(R.string.settings_workbench_address, address),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        } else {
-            Text(
-                text = stringResource(R.string.settings_workbench_pending),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
-
-@Composable
-private fun WorkbenchPairingSection(
-    uiState: SettingsUiState,
-    onStartPairingMode: () -> Unit,
-    onStopPairingMode: () -> Unit,
-    onSetBruteForceProtection: (Boolean) -> Unit,
-    onRevokeAllTokens: () -> Unit,
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp),
-    ) {
-        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(text = stringResource(R.string.settings_pairing_title), style = MaterialTheme.typography.titleMedium)
-                Text(
-                    text = if (uiState.isPairingActive) stringResource(R.string.settings_pairing_desc_active) else stringResource(R.string.settings_pairing_desc_inactive),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            if (uiState.isPairingActive) {
-                OutlinedButton(onClick = onStopPairingMode) {
-                    Text(stringResource(R.string.settings_pairing_action_stop))
-                }
-            } else {
-                Button(onClick = onStartPairingMode) {
-                    Text(stringResource(R.string.settings_pairing_action_start))
-                }
-            }
-        }
-
-        if (uiState.isPairingActive && uiState.pairingPin != null) {
-            ElevatedCard(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp),
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Text(text = stringResource(R.string.settings_pairing_pin_prompt), style = MaterialTheme.typography.labelMedium)
-                    Text(
-                        text = uiState.pairingPin,
-                        style = MaterialTheme.typography.displayMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(vertical = 4.dp),
-                    )
-                }
-            }
-        }
-
-        ToggleSettingItem(
-            name = stringResource(R.string.settings_pairing_brute_force_title),
-            description = stringResource(R.string.settings_pairing_brute_force_desc),
-            checked = uiState.bruteForceProtectionEnabled,
-            onCheckedChange = onSetBruteForceProtection,
-        )
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = stringResource(R.string.settings_pairing_tokens_count, uiState.authorizedTokensCount),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            TextButton(
-                onClick = onRevokeAllTokens,
-                enabled = uiState.authorizedTokensCount > 0,
-            ) {
-                Text(stringResource(R.string.settings_pairing_revoke_tokens))
-            }
-        }
-    }
-}
-
-@Composable
-private fun PermissionRow(
-    painter: Painter? = null,
-    imageVector: ImageVector? = null,
-    title: String,
-    description: String,
-    statusText: String,
-    statusColor: Color,
-    isGranted: Boolean,
-    actionLabel: String? = null,
-    onAction: (() -> Unit)? = null,
-    warningText: String? = null,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (painter != null) {
-            Icon(
-                painter = painter,
-                contentDescription = null,
-                modifier = Modifier
-                    .padding(end = 16.dp)
-                    .size(24.dp),
-                tint = if (isGranted) statusColor else MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        } else if (imageVector != null) {
-            Icon(
-                imageVector = imageVector,
-                contentDescription = null,
-                modifier = Modifier
-                    .padding(end = 16.dp)
-                    .size(24.dp),
-                tint = if (isGranted) statusColor else MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        Column(modifier = Modifier.weight(1f)) {
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.Center,
-            ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Surface(
-                    shape = CircleShape,
-                    color = statusColor.copy(alpha = 0.12f),
-                ) {
-                    Text(
-                        text = statusText,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = statusColor,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                        maxLines = 1,
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = description,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            if (warningText != null) {
-                Text(
-                    text = warningText,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
-        }
-        if (actionLabel != null && onAction != null) {
-            Spacer(modifier = Modifier.width(8.dp))
-            Button(
-                onClick = onAction,
-                shape = MaterialTheme.shapes.extraLarge,
-            ) {
-                Text(text = actionLabel, style = MaterialTheme.typography.labelMedium)
-            }
-        }
     }
 }
 
