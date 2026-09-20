@@ -26,9 +26,6 @@ class PermissionManager @Inject constructor(
     private val _hasNotificationPermission = MutableStateFlow(getHasNotificationPermission())
     val hasNotificationPermission: StateFlow<Boolean> = _hasNotificationPermission.asStateFlow()
 
-    private val _hasOverlayPermission = MutableStateFlow(getHasOverlayPermission())
-    val hasOverlayPermission: StateFlow<Boolean> = _hasOverlayPermission.asStateFlow()
-
     private val _osAllowSecondaryDisplays = MutableStateFlow(getOsAllowSecondaryDisplays())
     val osAllowSecondaryDisplays: StateFlow<Boolean> = _osAllowSecondaryDisplays.asStateFlow()
 
@@ -37,7 +34,6 @@ class PermissionManager @Inject constructor(
 
     fun refreshPermissions() {
         _hasNotificationPermission.value = getHasNotificationPermission()
-        _hasOverlayPermission.value = getHasOverlayPermission()
         _osAllowSecondaryDisplays.value = getOsAllowSecondaryDisplays()
         _hasLocalNetworkPermission.value = getHasLocalNetworkPermission()
     }
@@ -51,10 +47,6 @@ class PermissionManager @Inject constructor(
         } else {
             NotificationManagerCompat.from(context).areNotificationsEnabled()
         }
-    }
-
-    fun getHasOverlayPermission(): Boolean {
-        return Settings.canDrawOverlays(context)
     }
 
     fun getHasLocalNetworkPermission(): Boolean {
@@ -78,15 +70,6 @@ class PermissionManager @Inject constructor(
             }
         } else {
             getAppSettingsIntent()
-        }
-    }
-
-    fun getOverlaySettingsIntent(): Intent {
-        return Intent(
-            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-            Uri.parse("package:${context.packageName}"),
-        ).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
     }
 

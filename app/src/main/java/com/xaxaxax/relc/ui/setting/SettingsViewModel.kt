@@ -1,13 +1,17 @@
 package com.xaxaxax.relc.ui.setting
 
 import android.Manifest
+import android.app.LocaleManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Build
+import android.os.LocaleList
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.xaxaxax.relc.R
+import com.xaxaxax.relc.TopLevelDestination
 import com.xaxaxax.relc.core.AppSettings
 import com.xaxaxax.relc.permission.PermissionManager
 import com.xaxaxax.relc.script.ScriptSession
@@ -34,11 +38,13 @@ import kotlin.time.Duration.Companion.milliseconds
 data class SettingsUiState(
     val shizukuStatus: ShizukuConnectionStatus = ShizukuConnectionStatus.NOT_AVAILABLE,
     val hasNotificationPermission: Boolean = false,
-    val hasOverlayPermission: Boolean = false,
     val osAllowSecondaryDisplays: Boolean = false,
     val hasLocalNetworkPermission: Boolean = false,
     val isRefreshing: Boolean = false,
     val autoOpenFullscreen: Boolean = false,
+    val defaultStartPage: TopLevelDestination = TopLevelDestination.SCRIPTS,
+    /** 空字串代表跟隨系統語言。 */
+    val appLanguage: String = "",
     val autoStartUserService: Boolean = true,
     val workbenchEnabled: Boolean = false,
     /** Server 目前監聽的 "ip:port"，供 QR code 配對顯示；未啟動或還沒 bind 完成時是 null。 */
@@ -52,6 +58,7 @@ data class SettingsUiState(
     val authorizedTokensCount: Int = 0,
     /** Shizuku 遠端服務跑在非 uid=2000（adb shell）身分，多半代表使用者用 root 啟動了它。 */
     val isShizukuUidWarning: Boolean = false,
+    val isDeveloperOptionsUnlocked: Boolean = false,
 ) {
     val canStartUserService: Boolean
         get() = shizukuStatus == ShizukuConnectionStatus.DISCONNECTED
@@ -80,6 +87,13 @@ class SettingsViewModel @Inject constructor(
 ) : ViewModel() {
     private val isRefreshing = MutableStateFlow(false)
 
+    /**
+     * "" 代表跟隨系統語言。Android 13+ 直接讀寫系統的 LocaleManager；13 以下沒有這套機制，
+     * 存進 [AppSettings]，靠 Activity 的 attachBaseContext 在下次啟動時套用（見
+     * [com.xaxaxax.relc.core.AppLocale]），選完當下不會立即生效。
+     */
+    private val _appLanguage = MutableStateFlow(currentAppLanguageTag())
+
     /** 一次性提示（例如透過 Shizuku 取得權限失敗），畫面消費後呼叫 [consumeMessage] 清空。 */
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
@@ -92,11 +106,10 @@ class SettingsViewModel @Inject constructor(
 
     private val permissionCombinedState = combine(
         permissionManager.hasNotificationPermission,
-        permissionManager.hasOverlayPermission,
         permissionManager.osAllowSecondaryDisplays,
         permissionManager.hasLocalNetworkPermission,
-    ) { notification, overlay, secondary, localNetwork ->
-        PermissionsStateHolder(notification, overlay, secondary, localNetwork)
+    ) { notification, secondary, localNetwork ->
+        PermissionsStateHolder(notification, secondary, localNetwork)
     }
 
     private val authState = combine(
@@ -115,21 +128,32 @@ class SettingsViewModel @Inject constructor(
         authState,
     ) { enabled, address, auth -> Triple(enabled, address, auth) }
 
+    private val generalSettingsState = combine(
+        appSettings.autoOpenFullscreen,
+        appSettings.defaultStartPage,
+        _appLanguage,
+        appSettings.developerOptionsUnlocked,
+    ) { autoOpenFullscreen, defaultStartPage, appLanguage, developerOptionsUnlocked ->
+        GeneralSettingsStateHolder(autoOpenFullscreen, defaultStartPage, appLanguage, developerOptionsUnlocked)
+    }
+
     val uiState: StateFlow<SettingsUiState> = combine(
         userServiceState,
         permissionCombinedState,
         isRefreshing,
-        appSettings.autoOpenFullscreen,
+        generalSettingsState,
         workbenchCombinedState,
-    ) { (status, autoStart, scriptRunning), permissions, refreshing, autoOpenFullscreen, (workbenchEnabled, workbenchAddress, auth) ->
+    ) { (status, autoStart, scriptRunning), permissions, refreshing, general, (workbenchEnabled, workbenchAddress, auth) ->
         SettingsUiState(
             shizukuStatus = status,
             hasNotificationPermission = permissions.hasNotification,
-            hasOverlayPermission = permissions.hasOverlay,
             osAllowSecondaryDisplays = permissions.allowSecondaryDisplays,
             hasLocalNetworkPermission = permissions.hasLocalNetwork,
             isRefreshing = refreshing,
-            autoOpenFullscreen = autoOpenFullscreen,
+            autoOpenFullscreen = general.autoOpenFullscreen,
+            defaultStartPage = general.defaultStartPage,
+            appLanguage = general.appLanguage,
+            isDeveloperOptionsUnlocked = general.developerOptionsUnlocked,
             autoStartUserService = autoStart,
             isScriptRunning = scriptRunning,
             workbenchEnabled = workbenchEnabled,
@@ -176,6 +200,28 @@ class SettingsViewModel @Inject constructor(
 
     fun setAutoOpenFullscreen(enabled: Boolean) = appSettings.setAutoOpenFullscreen(enabled)
 
+    fun setDefaultStartPage(destination: TopLevelDestination) = appSettings.setDefaultStartPage(destination)
+
+    /** tag 為空字串代表跟隨系統語言；Android 13 以下要重開 App 才會套用，畫面上已經有提示文字。 */
+    fun setAppLanguage(tag: String) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val locales = if (tag.isEmpty()) LocaleList.getEmptyLocaleList() else LocaleList.forLanguageTags(tag)
+            context.getSystemService(LocaleManager::class.java)?.applicationLocales = locales
+        } else {
+            appSettings.setAppLanguage(tag)
+            _message.value = context.getString(R.string.settings_language_restart_required)
+        }
+        _appLanguage.value = tag
+    }
+
+    private fun currentAppLanguageTag(): String {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            context.getSystemService(LocaleManager::class.java)?.applicationLocales?.toLanguageTags().orEmpty()
+        } else {
+            appSettings.appLanguage.value
+        }
+    }
+
     fun setAutoStartUserService(enabled: Boolean) = appSettings.setAutoStartUserService(enabled)
 
     fun setWorkbenchEnabled(enabled: Boolean) {
@@ -214,20 +260,27 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun getNotificationSettingsIntent() = permissionManager.getNotificationSettingsIntent()
-    fun getOverlaySettingsIntent() = permissionManager.getOverlaySettingsIntent()
     fun getAppSettingsIntent() = permissionManager.getAppSettingsIntent()
 
     fun startPairingMode() = authStore.startPairingMode()
     fun stopPairingMode() = authStore.stopPairingMode()
     fun setBruteForceProtectionEnabled(enabled: Boolean) = authStore.setBruteForceProtectionEnabled(enabled)
     fun revokeAllTokens() = authStore.revokeAllTokens()
+
+    fun disableDeveloperOptions() = appSettings.setDeveloperOptionsUnlocked(false)
 }
 
 private data class PermissionsStateHolder(
     val hasNotification: Boolean,
-    val hasOverlay: Boolean,
     val allowSecondaryDisplays: Boolean,
     val hasLocalNetwork: Boolean,
+)
+
+private data class GeneralSettingsStateHolder(
+    val autoOpenFullscreen: Boolean,
+    val defaultStartPage: TopLevelDestination,
+    val appLanguage: String,
+    val developerOptionsUnlocked: Boolean,
 )
 
 private data class PairingStateHolder(

@@ -1,5 +1,7 @@
 package com.xaxaxax.relc.ui.displaydetail
 
+import android.content.Context
+import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
@@ -63,6 +65,8 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.xaxaxax.relc.R
+import com.xaxaxax.relc.core.AppLocale
+import com.xaxaxax.relc.core.AppSettings
 import com.xaxaxax.relc.ui.theme.ReLCTheme
 import dagger.hilt.android.AndroidEntryPoint
 import timber.log.Timber
@@ -70,6 +74,14 @@ import kotlin.math.roundToInt
 
 @AndroidEntryPoint
 class FullscreenDisplayActivity : ComponentActivity() {
+    override fun attachBaseContext(newBase: Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            super.attachBaseContext(newBase)
+        } else {
+            super.attachBaseContext(AppLocale.wrap(newBase, AppSettings.readAppLanguageTag(newBase)))
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 

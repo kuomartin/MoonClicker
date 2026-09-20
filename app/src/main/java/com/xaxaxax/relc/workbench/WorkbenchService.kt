@@ -3,6 +3,7 @@ package com.xaxaxax.relc.workbench
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
@@ -16,6 +17,8 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import androidx.core.content.getSystemService
 import com.xaxaxax.relc.R
+import com.xaxaxax.relc.RelcActivity
+import com.xaxaxax.relc.core.AppSettings
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
@@ -28,6 +31,9 @@ import javax.inject.Inject
 class WorkbenchService : Service() {
     @Inject
     lateinit var workbenchServer: WorkbenchServer
+
+    @Inject
+    lateinit var appSettings: AppSettings
 
     private val connectivityManager by lazy { getSystemService<ConnectivityManager>() }
     private val nsdManager by lazy { getSystemService<NsdManager>() }
@@ -44,6 +50,12 @@ class WorkbenchService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_STOP) {
+            appSettings.setWorkbenchEnabled(false)
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
         createChannel()
 
         // bind 失敗（例如 port 被佔用）就乾脆別把這個 process 帶進前景服務——
@@ -61,6 +73,12 @@ class WorkbenchService : Service() {
             .setContentTitle(getString(R.string.workbench_notification_title))
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setContentIntent(openAppIntent())
+            .addAction(
+                android.R.drawable.ic_menu_close_clear_cancel,
+                getString(R.string.workbench_notification_action_stop),
+                stopIntent(),
+            )
             .build()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
@@ -107,6 +125,23 @@ class WorkbenchService : Service() {
         }
     }
 
+    private fun openAppIntent(): PendingIntent {
+        val intent = Intent(this, RelcActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        return PendingIntent.getActivity(
+            this, 0, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
+
+    private fun stopIntent(): PendingIntent {
+        val intent = Intent(this, WorkbenchService::class.java).setAction(ACTION_STOP)
+        return PendingIntent.getService(
+            this, 0, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
+
     private fun createChannel() {
         val manager = getSystemService(NotificationManager::class.java) ?: return
         manager.createNotificationChannel(
@@ -124,5 +159,6 @@ class WorkbenchService : Service() {
     companion object {
         private const val CHANNEL_ID = "workbench_status"
         private const val NOTIFICATION_ID = 3001
+        private const val ACTION_STOP = "com.xaxaxax.relc.action.STOP_WORKBENCH"
     }
 }
