@@ -8,7 +8,7 @@ val openCvSdkDir: String = providers.environmentVariable("OPENCV_ANDROID_SDK_DIR
     .getOrElse(file("$userHome/OpenCV-android-sdk").absolutePath)
 
 android {
-    namespace = "com.xaxaxax.relc.engine"
+    namespace = "com.xaxaxax.moonclicker.engine"
     compileSdk {
         version = release(libs.versions.targetSdk.get().toInt())
     }
@@ -56,8 +56,8 @@ android {
         aidl = true
     }
 
-    // Lua API 的測試受測的是 relc_native.so，所以必須真的跑在裝置上。它們不需要 Shizuku
-    // 也不需要虛擬顯示——`IRelcV2Service` 由 RecordingRelcService 頂替——所以一台乾淨的
+    // Lua API 的測試受測的是 moonclicker_native.so，所以必須真的跑在裝置上。它們不需要 Shizuku
+    // 也不需要虛擬顯示——`IMoonClickerService` 由 RecordingMoonClickerService 頂替——所以一台乾淨的
     // 模擬器就夠了。
     //
     //   ./gradlew :engine:api36DebugAndroidTest      # 快的那台，跳過比對
@@ -137,7 +137,7 @@ dependencies {
     testImplementation(libs.junit)
 
     // Lua API 的 instrumentation 測試（engine/src/androidTest）。它們必須跑在裝置上——
-    // 受測的是 relc_native.so 裡的 C++ 綁定，不是 Kotlin。
+    // 受測的是 moonclicker_native.so 裡的 C++ 綁定，不是 Kotlin。
     androidTestImplementation(libs.androidx.junit)
     // AndroidJUnitRunner 本身；androidx.test.ext:junit 不會帶進來。
     androidTestImplementation(libs.androidx.test.runner)

@@ -1,6 +1,6 @@
 # VirtualDisplay 旋轉：AOSP 語意與可用 API
 
-Research note for [#10](https://github.com/kuomartin/ReLC/issues/10)（地圖 [#9](https://github.com/kuomartin/ReLC/issues/9) 的子票）。
+Research note for [#10](https://github.com/kuomartin/MoonClicker/issues/10)（地圖 [#9](https://github.com/kuomartin/MoonClicker/issues/9) 的子票）。
 研究日期 2026-09-10。
 
 **方法**：全部讀 AOSP 原始碼（`aosp-mirror/platform_frameworks_base` 的
@@ -19,7 +19,7 @@ Research note for [#10](https://github.com/kuomartin/ReLC/issues/10)（地圖 [#
 1. `VIRTUAL_DISPLAY_FLAG_ROTATES_WITH_CONTENT` **不是旋轉的來源**，但在
    **Android 15+ 它是旋轉的必要條件**（沒有它，WindowManager 會把該 VD
    預設為 fixed-to-user-rotation，不再為內容旋轉）。在 Android 11–14 它
-   純粹是「結果的通道」。ReLC 有設這個旗標，所以兩個世代都站得住。
+   純粹是「結果的通道」。MoonClicker 有設這個旗標，所以兩個世代都站得住。
 2. 一個 `screenOrientation="landscape"` 的 app 放進 VD，WindowManager
    **會**旋轉該 VD，而且邏輯尺寸是**交換長寬**（`logicalWidth`/`logicalHeight`
    互換），不是維持不變後 letterbox。
@@ -138,7 +138,7 @@ Android 16 又把 `forceDesktopMode()` 換成
 > 但在 Android 15+ 它**同時是**「WindowManager 願不願意為內容旋轉這個 display」
 > 的前置條件。所以「只是結果的通道」這個說法在 API 35+ 是不完整的。
 
-ReLC 有設這個旗標（`app/src/main/java/com/xaxaxax/relc/RelcShizukuService.kt:50`），
+MoonClicker 有設這個旗標（`app/src/main/java/com/xaxaxax/moonclicker/MoonClickerShizukuService.kt:50`），
 所以在兩個世代都在正確的一邊。**不要拿掉它。**
 
 ---
@@ -270,7 +270,7 @@ if (!checkCallingPermission(android.Manifest.permission.SET_ORIENTATION, "freeze
 （`android15-release:core/res/AndroidManifest.xml:5706-5707`），
 而 **`com.android.shell` 有宣告 `<uses-permission android:name="android.permission.SET_ORIENTATION" />`**
 （`android15-release:packages/Shell/AndroidManifest.xml:178`）。
-Shizuku 的 user service 跑在 shell UID（2000），因此**這條路對 ReLC 是通的**。
+Shizuku 的 user service 跑在 shell UID（2000），因此**這條路對 MoonClicker 是通的**。
 
 **語意**：`freezeDisplayRotation` → `DisplayRotation.freezeRotation(rotation, caller)`
 → `setUserRotation(USER_ROTATION_LOCKED, rotation, caller)`（`DisplayRotation.java:986-993`）。
@@ -329,11 +329,11 @@ shell：`wm set-ignore-orientation-request -d <id> true|false`。
 
 - **`VirtualDisplay.resize(int width, int height, int densityDpi)`** —— public API，
   API 21 起簽章不變（`core/java/android/hardware/display/VirtualDisplay.java:95`）。
-  只有 VD 的**擁有者**能呼叫（要拿得到 `VirtualDisplay` 物件，即 ReLC 的 Shizuku 進程），
+  只有 VD 的**擁有者**能呼叫（要拿得到 `VirtualDisplay` 物件，即 MoonClicker 的 Shizuku 進程），
   DMS 端 `resizeVirtualDisplay` 用 `callback.asBinder()` 認身分，不做權限檢查
   （`android15-release:DisplayManagerService.java:4130-4142`）。
   **這改的是 base display size，不是 rotation。** 若地圖裡「主動 resize VD」那條要走，
-  這就是 API；ReLC 的 `IRelcV2Service` 目前沒有對應方法，需要新增。
+  這就是 API；MoonClicker 的 `IMoonClickerService` 目前沒有對應方法，需要新增。
 - `IWindowManager.setForcedDisplaySize(int displayId, int w, int h)` /
   `clearForcedDisplaySize(int displayId)` —— 簽章 API 30–36 不變，但
   **Android 15 起加了 `@EnforcePermission("WRITE_SECURE_SETTINGS")` 註解**
@@ -351,14 +351,14 @@ Shizuku 場景下再包一層 `ShizukuBinderWrapper`。
 
 Hidden API 限制：`freezeDisplayRotation` / `setFixedToUserRotation` /
 `setIgnoreOrientationRequest` 都沒有 `@UnsupportedAppUsage`，對一般 app 進程是
-blocklist。ReLC 的 Shizuku user service 跑在 shell 起的 `app_process` 裡，
-且 `RelcShizukuService.init` 已經在呼叫 `LSPass.addHiddenApiExemptions(...)`
-（`RelcShizukuService.kt:65-75`）—— 若新增這條路，記得把
+blocklist。MoonClicker 的 Shizuku user service 跑在 shell 起的 `app_process` 裡，
+且 `MoonClickerShizukuService.init` 已經在呼叫 `LSPass.addHiddenApiExemptions(...)`
+（`MoonClickerShizukuService.kt:65-75`）—— 若新增這條路，記得把
 `Landroid/view/IWindowManager` 也加進豁免清單。**待 #11 實測確認**。
 
 ### 3.7 AIDL 建議
 
-`IRelcV2Service` 需要新增大致如下的三個方法（實作在 Shizuku 側按 `SDK_INT` 分岔）：
+`IMoonClickerService` 需要新增大致如下的三個方法（實作在 Shizuku 側按 `SDK_INT` 分岔）：
 
 ```
 boolean setDisplayRotation(int displayId, int rotation) = 302;   // freezeDisplayRotation
@@ -424,7 +424,7 @@ return (flags & Display.FLAG_PRIVATE) == 0
 而 `VIRTUAL_DISPLAY_FLAG_PUBLIC` 的作用正是**不要**設 `FLAG_PRIVATE`
 （`android15-release:VirtualDisplayAdapter.java:477-478`：
 `if ((mFlags & VIRTUAL_DISPLAY_FLAG_PUBLIC) == 0) { mInfo.flags |= DisplayDeviceInfo.FLAG_PRIVATE ... }`）。
-ReLC 一律加上 `VIRTUAL_DISPLAY_FLAG_PUBLIC`（`RelcShizukuService.kt:46`），
+MoonClicker 一律加上 `VIRTUAL_DISPLAY_FLAG_PUBLIC`（`MoonClickerShizukuService.kt:46`），
 所以 `hasAccess` 對任何 UID 都回 true，`info` 永遠非 null。
 （順帶一提：即使是 private VD，只要 app 進程有 Activity 跑在上面，
 `isUidPresentOnDisplay` 也會回 true。）
@@ -498,7 +498,7 @@ Shizuku 進程建立的 public VD 的 `onDisplayChanged`。
   不是旋轉的來源」**：**部分推翻**。
   「不是旋轉的來源」正確；「只是結果的通道」在 **Android 15 (API 35) 以後不成立** ——
   它同時是 `mDefaultFixedToUserRotation` 的一項，沒有它 WindowManager 就**不會**
-  為 app 宣告的方向旋轉這個 VD。實務結論不變（ReLC 本來就有設），
+  為 app 宣告的方向旋轉這個 VD。實務結論不變（MoonClicker 本來就有設），
   但地圖的措辭應改成「結果的通道，**且在 API 35+ 是被動旋轉的必要條件**」。
 - **地圖「Not yet specified」裡的「主動 resize VD —— 若只改 rotation 導致內容在 VD 內被
   letterbox 成細條」**：**這個顧慮基於錯誤的模型，可以劃掉**。
@@ -516,7 +516,7 @@ Shizuku 進程建立的 public VD 的 `onDisplayChanged`。
    以及與 WM 實際完成旋轉之間的延遲。
 4. Shizuku 進程呼叫 `IWindowManager.freezeDisplayRotation` 是否會被 hidden API
    限制擋下（`LSPass.addHiddenApiExemptions` 是否需要加 `Landroid/view/IWindowManager`）。
-5. ReLC 的 VD 在 API 33+ 帶著 `VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP`，
+5. MoonClicker 的 VD 在 API 33+ 帶著 `VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP`，
    是否影響上述任何一條（原始碼上看不出關聯，但沒有排除）。
 6. 目標裝置若開了開發者選項「強制外部顯示器使用桌面模式」
    （`mForceDesktopModeOnExternalDisplays`），VD 會被強制 fixed-to-user-rotation

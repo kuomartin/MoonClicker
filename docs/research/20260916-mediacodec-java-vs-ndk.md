@@ -1,4 +1,4 @@
-# Research: MediaCodec Java vs NDK (AMediaCodec) in ReLC
+# Research: MediaCodec Java vs NDK (AMediaCodec) in MoonClicker
 
 ## Question
 Does implementing `MediaCodec` in C++ (`AMediaCodec`) provide any tangible benefits over using the Java `MediaCodec` API, given that `GlesDistributor` can already accept a Java `Surface` natively?
@@ -10,7 +10,7 @@ Does implementing `MediaCodec` in C++ (`AMediaCodec`) provide any tangible benef
    **Conclusion**: There is no performance penalty or frame copying when passing a Java `MediaCodec.createInputSurface()` down to `GlesDistributor`.
 
 2. **The Output Routing Problem**:
-   The encoded H.264 NALU (Network Abstraction Layer Unit) buffers must ultimately be sent over the network. ReLC's networking stack (`WorkbenchServer`) is built in Kotlin using Ktor WebSockets.
+   The encoded H.264 NALU (Network Abstraction Layer Unit) buffers must ultimately be sent over the network. MoonClicker's networking stack (`WorkbenchServer`) is built in Kotlin using Ktor WebSockets.
    - **Java MediaCodec**: Kotlin dequeues the `ByteBuffer` directly from the Codec and writes it to Ktor. No JNI boundary is crossed during output.
    - **NDK AMediaCodec**: C++ dequeues the buffer, but must invoke a JNI callback to pass the byte array up to Kotlin for Ktor to send. This *adds* a JNI crossing for every single frame.
 

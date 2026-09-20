@@ -8,7 +8,7 @@
 
 ## 為什麼 distributor 是消 v 的位置，不是 consumer 各自處理
 
-`RelcV2Service.kt` 的 `addVirtualDisplaySurface` 掛上的 surface 一律是 `GlesDistributor` 的下游——鏡像 `TextureView`、`H264EncoderSink`、`NativeImageReader`（vision）全部是它的 sink。盤點 `GlesDistributor.cpp` 發現它的 GL pass 原本是純 pass-through（`VERTEX_SHADER`／`FRAGMENT_SHADER` 沒有任何變換矩陣，`TEX_COORDS` 是寫死的一組），代表在這裡加一個依 `v` 選紋理座標的旋轉，不新增 pass、不新增 buffer copy——這是選它而不是選某個 consumer 的直接理由。
+`MoonClickerService.kt` 的 `addVirtualDisplaySurface` 掛上的 surface 一律是 `GlesDistributor` 的下游——鏡像 `TextureView`、`H264EncoderSink`、`NativeImageReader`（vision）全部是它的 sink。盤點 `GlesDistributor.cpp` 發現它的 GL pass 原本是純 pass-through（`VERTEX_SHADER`／`FRAGMENT_SHADER` 沒有任何變換矩陣，`TEX_COORDS` 是寫死的一組），代表在這裡加一個依 `v` 選紋理座標的旋轉，不新增 pass、不新增 buffer copy——這是選它而不是選某個 consumer 的直接理由。
 
 ## GL 旋轉方向：真機測出來的，不是推出來的
 

@@ -24,7 +24,7 @@ if (sdkPath.exists()) {
     project.extra["android.sdk.path"] = sdkPath.absolutePath
 }
 android {
-    namespace = "com.xaxaxax.relc.hiddenapi.contract"
+    namespace = "com.xaxaxax.moonclicker.hiddenapi.contract"
     compileSdk {
         version = release(libs.versions.targetSdk.get().toInt())
     }

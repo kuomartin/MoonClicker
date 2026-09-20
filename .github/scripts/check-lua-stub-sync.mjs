@@ -6,7 +6,7 @@ const BINDING_PATHS = new Set([
   "engine/src/main/cpp/LuaBindings.cpp",
 ]);
 
-const STUB_PATHS = new Set(["vscode-extension/lua-meta/relc.lua"]);
+const STUB_PATHS = new Set(["vscode-extension/lua-meta/moonclicker.lua"]);
 
 /** @param {string[]} changedFiles */
 export function checkLuaStubSync(changedFiles) {
@@ -17,7 +17,7 @@ export function checkLuaStubSync(changedFiles) {
     return {
       ok: false,
       message:
-        "LuaBindings.h/.cpp 有變動，但 vscode-extension/lua-meta/relc.lua（LuaLS stub，見 #59）沒有變動。" +
+        "LuaBindings.h/.cpp 有變動，但 vscode-extension/lua-meta/moonclicker.lua（LuaLS stub，見 #59）沒有變動。" +
         "如果這次改動改變了 Lua API 表面，請同步更新 stub；如果沒有，仍需要碰一下 stub 檔案讓這個 check 通過。",
     };
   }

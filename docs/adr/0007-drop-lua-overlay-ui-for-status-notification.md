@@ -1,6 +1,6 @@
 # Drop the Lua-driven Overlay UI platform in favour of a status Notification
 
-ReLC is not a platform for scripts that define their own UI. The overlay-window mechanism, the engine-side `ui` Lua table and the `on_event` callback are removed, and run status lives in a plain system Notification that needs no window permission at all. The overlay was never core to what ReLC does — run scripts against a virtual display — and it cost a bespoke JSON UI schema plus a second Compose rendering path.
+MoonClicker is not a platform for scripts that define their own UI. The overlay-window mechanism, the engine-side `ui` Lua table and the `on_event` callback are removed, and run status lives in a plain system Notification that needs no window permission at all. The overlay was never core to what MoonClicker does — run scripts against a virtual display — and it cost a bespoke JSON UI schema plus a second Compose rendering path.
 
 ## Consequences
 

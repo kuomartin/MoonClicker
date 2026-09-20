@@ -1,6 +1,6 @@
-# Contributing to ReLC / 貢獻指南
+# Contributing to MoonClicker / 貢獻指南
 
-感謝您對 ReLC 的關注與支持！本專案歡迎所有 Bug 回報、新功能建議與 Pull Request。
+感謝您對 MoonClicker 的關注與支持！本專案歡迎所有 Bug 回報、新功能建議與 Pull Request。
 為了確保程式碼品質與專案穩定性，請在貢獻前閱讀以下開發與協作規範。
 
 ---
@@ -70,5 +70,5 @@ npm test
 
 ## 💬 交流與討論
 
-- 若有使用問題或想法交流，歡迎前往 [GitHub Discussions](https://github.com/kuomartin/ReLC/discussions) 發帖。
-- 若發現特定錯誤，請使用 [Bug Report Template](https://github.com/kuomartin/ReLC/issues/new/choose) 提出 Issue。
+- 若有使用問題或想法交流，歡迎前往 [GitHub Discussions](https://github.com/kuomartin/MoonClicker/discussions) 發帖。
+- 若發現特定錯誤，請使用 [Bug Report Template](https://github.com/kuomartin/MoonClicker/issues/new/choose) 提出 Issue。

@@ -1,5 +1,5 @@
-#ifndef RELC_VISION_MATCHER_H
-#define RELC_VISION_MATCHER_H
+#ifndef MOONCLICKER_VISION_MATCHER_H
+#define MOONCLICKER_VISION_MATCHER_H
 
 #include <opencv2/core.hpp>
 #include <condition_variable>
@@ -95,4 +95,4 @@ private:
     std::unordered_map<std::string, cv::Mat> cache;
 };
 
-#endif // RELC_VISION_MATCHER_H
+#endif // MOONCLICKER_VISION_MATCHER_H

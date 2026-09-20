@@ -309,7 +309,7 @@ jobject ScriptRuntime::boxLuaValue(lua_State *L, int index) {
 }
 
 void ScriptRuntime::stopHook(lua_State *L, lua_Debug *ar) {
-    lua_getfield(L, LUA_REGISTRYINDEX, relc::kRuntimeRegistryKey);
+    lua_getfield(L, LUA_REGISTRYINDEX, moonclicker::kRuntimeRegistryKey);
     auto *self = static_cast<ScriptRuntime *>(lua_touserdata(L, -1));
     lua_pop(L, 1);
 
@@ -343,9 +343,9 @@ void ScriptRuntime::runScript() {
     lua_State *L = luaEngine->state();
 
     lua_pushlightuserdata(L, this);
-    lua_setfield(L, LUA_REGISTRYINDEX, relc::kRuntimeRegistryKey);
+    lua_setfield(L, LUA_REGISTRYINDEX, moonclicker::kRuntimeRegistryKey);
 
-    relc::registerApi(L, this);
+    moonclicker::registerApi(L, this);
 
     // require 以腳本資料夾為根，讓多檔腳本可以 require("helpers")。
     lua_getglobal(L, "package");
