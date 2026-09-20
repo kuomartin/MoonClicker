@@ -1,7 +1,5 @@
 package com.xaxaxax.relc.ui.developer
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -25,24 +23,17 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.xaxaxax.relc.R
-import com.xaxaxax.relc.ui.component.PermissionRationaleDialog
-import com.xaxaxax.relc.ui.component.PermissionRow
 import com.xaxaxax.relc.ui.component.Section
 import com.xaxaxax.relc.ui.component.ToggleSettingItem
 import com.xaxaxax.relc.ui.setting.SettingsUiState
 import com.xaxaxax.relc.ui.setting.SettingsViewModel
-import com.xaxaxax.relc.ui.theme.SuccessColor
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -51,28 +42,6 @@ fun DeveloperOptionsScreen(
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    var showLocalNetworkRationale by remember { mutableStateOf(false) }
-
-    val localNetworkPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) {
-        viewModel.refreshPermissions()
-    }
-
-    // targetSdk 37（Android 17）起，接受區網的 inbound TCP 連線需要這個 runtime permission，
-    // 不然 VS Code 端連得上 TCP 卻永遠讀不到回應。拒絕不影響 Workbench 開關本身——本機診斷用途
-    // 還是能動，只是外部連不進來，不因為這個權限擋住整個功能。
-    if (showLocalNetworkRationale) {
-        PermissionRationaleDialog(
-            title = stringResource(R.string.permission_local_network_rationale_title),
-            description = stringResource(R.string.permission_local_network_rationale_desc),
-            icon = painterResource(R.drawable.ic_launcher_foreground),
-            confirmText = stringResource(R.string.permission_action_proceed),
-            dismissText = stringResource(R.string.permission_action_cancel),
-            onConfirm = { localNetworkPermissionLauncher.launch("android.permission.ACCESS_LOCAL_NETWORK") },
-            onDismiss = { showLocalNetworkRationale = false },
-        )
-    }
 
     Scaffold(
         topBar = {
@@ -88,25 +57,6 @@ fun DeveloperOptionsScreen(
     ) { innerPadding ->
         LazyColumn(modifier = Modifier.padding(innerPadding).fillMaxWidth()) {
             item {
-                Section(name = stringResource(R.string.settings_permissions_title)) {
-                    PermissionRow(
-                        painter = painterResource(R.drawable.ic_launcher_foreground),
-                        title = stringResource(R.string.permission_local_network_title),
-                        description = stringResource(R.string.permission_local_network_desc),
-                        statusText = if (uiState.hasLocalNetworkPermission) {
-                            stringResource(R.string.permission_granted)
-                        } else {
-                            stringResource(R.string.permission_not_granted)
-                        },
-                        statusColor = if (uiState.hasLocalNetworkPermission) SuccessColor else MaterialTheme.colorScheme.error,
-                        isGranted = uiState.hasLocalNetworkPermission,
-                        actionLabel = if (uiState.hasLocalNetworkPermission) null else stringResource(R.string.permission_action_grant),
-                        onAction = { showLocalNetworkRationale = true },
-                    )
-                }
-            }
-
-            item {
                 Section(name = stringResource(R.string.settings_workbench)) {
                     ToggleSettingItem(
                         name = stringResource(R.string.settings_workbench),
@@ -116,14 +66,20 @@ fun DeveloperOptionsScreen(
                     )
                     if (uiState.workbenchEnabled) {
                         WorkbenchAddressInfo(address = uiState.workbenchAddress)
-                        WorkbenchPairingSection(
+                        WorkbenchPairingModeSection(
                             uiState = uiState,
                             onStartPairingMode = viewModel::startPairingMode,
                             onStopPairingMode = viewModel::stopPairingMode,
                             onSetBruteForceProtection = viewModel::setBruteForceProtectionEnabled,
-                            onRevokeAllTokens = viewModel::revokeAllTokens,
                         )
                     }
+                    // 配對憑證是持久資料，跟 server 現在有沒有在跑無關；關掉 Workbench 使用者
+                    // 還是要能看到、能清除已配對過的裝置。
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                    WorkbenchTokensRow(
+                        authorizedTokensCount = uiState.authorizedTokensCount,
+                        onRevokeAllTokens = viewModel::revokeAllTokens,
+                    )
                 }
             }
 
@@ -167,13 +123,13 @@ private fun WorkbenchAddressInfo(address: String?) {
     }
 }
 
+/** PIN 配對需要 server 在跑才有意義，只在 Workbench 開啟時顯示。 */
 @Composable
-private fun WorkbenchPairingSection(
+private fun WorkbenchPairingModeSection(
     uiState: SettingsUiState,
     onStartPairingMode: () -> Unit,
     onStopPairingMode: () -> Unit,
     onSetBruteForceProtection: (Boolean) -> Unit,
-    onRevokeAllTokens: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -235,25 +191,32 @@ private fun WorkbenchPairingSection(
             checked = uiState.bruteForceProtectionEnabled,
             onCheckedChange = onSetBruteForceProtection,
         )
+    }
+}
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
+/** 已配對憑證是持久資料，跟 Workbench 現在有沒有開都無關，所以獨立於上面那塊，隨時都顯示。 */
+@Composable
+private fun WorkbenchTokensRow(
+    authorizedTokensCount: Int,
+    onRevokeAllTokens: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = stringResource(R.string.settings_pairing_tokens_count, authorizedTokensCount),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        TextButton(
+            onClick = onRevokeAllTokens,
+            enabled = authorizedTokensCount > 0,
         ) {
-            Text(
-                text = stringResource(R.string.settings_pairing_tokens_count, uiState.authorizedTokensCount),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            TextButton(
-                onClick = onRevokeAllTokens,
-                enabled = uiState.authorizedTokensCount > 0,
-            ) {
-                Text(stringResource(R.string.settings_pairing_revoke_tokens))
-            }
+            Text(stringResource(R.string.settings_pairing_revoke_tokens))
         }
     }
 }

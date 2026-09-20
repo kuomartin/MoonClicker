@@ -6,10 +6,8 @@ import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,16 +15,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.HorizontalDivider
@@ -77,12 +71,14 @@ import kotlin.time.Duration.Companion.milliseconds
 enum class RationaleDialogType {
     NOTIFICATION,
     SHIZUKU,
+    LOCAL_NETWORK,
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     onNavigateToAbout: () -> Unit = {},
+    onNavigateToDeveloperOptions: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -101,6 +97,14 @@ fun SettingsScreen(
         viewModel.refreshPermissions()
     }
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) {
+        viewModel.refreshPermissions()
+    }
+    // targetSdk 37（Android 17）起，接受區網的 inbound TCP 連線需要這個 runtime permission，
+    // 不然 VS Code 端連得上 TCP 卻永遠讀不到回應。拒絕不影響 Workbench 開關本身——本機診斷用途
+    // 還是能動，只是外部連不進來，不因為這個權限擋住整個功能。
+    val localNetworkPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) {
         viewModel.refreshPermissions()
@@ -147,6 +151,19 @@ fun SettingsScreen(
                 onDismiss = { activeRationale = null },
             )
         }
+        RationaleDialogType.LOCAL_NETWORK -> {
+            PermissionRationaleDialog(
+                title = stringResource(R.string.permission_local_network_rationale_title),
+                description = stringResource(R.string.permission_local_network_rationale_desc),
+                icon = painterResource(R.drawable.ic_launcher_foreground),
+                confirmText = stringResource(R.string.permission_action_proceed),
+                dismissText = stringResource(R.string.permission_action_cancel),
+                onConfirm = {
+                    localNetworkPermissionLauncher.launch("android.permission.ACCESS_LOCAL_NETWORK")
+                },
+                onDismiss = { activeRationale = null },
+            )
+        }
         null -> {}
     }
 
@@ -168,6 +185,11 @@ fun SettingsScreen(
                 activeRationale = RationaleDialogType.NOTIFICATION
             }
         },
+        onRequestLocalNetworkPermission = {
+            if (!uiState.hasLocalNetworkPermission) {
+                activeRationale = RationaleDialogType.LOCAL_NETWORK
+            }
+        },
         onRefresh = { viewModel.refreshPermissions(true) },
         onAutoOpenFullscreenChange = viewModel::setAutoOpenFullscreen,
         onDefaultStartPageChange = viewModel::setDefaultStartPage,
@@ -177,6 +199,7 @@ fun SettingsScreen(
         onStopUserService = viewModel::stopUserService,
         onRestartUserService = viewModel::restartUserService,
         onNavigateToAbout = onNavigateToAbout,
+        onNavigateToDeveloperOptions = onNavigateToDeveloperOptions,
     )
 }
 
@@ -186,6 +209,7 @@ private fun SettingsScreenContent(
     uiState: SettingsUiState,
     onRequestShizukuPermission: () -> Unit,
     onRequestNotificationPermission: () -> Unit,
+    onRequestLocalNetworkPermission: () -> Unit = {},
     onRefresh: () -> Unit,
     onAutoOpenFullscreenChange: (Boolean) -> Unit,
     onDefaultStartPageChange: (TopLevelDestination) -> Unit = {},
@@ -195,6 +219,7 @@ private fun SettingsScreenContent(
     onStopUserService: () -> Unit = {},
     onRestartUserService: () -> Unit = {},
     onNavigateToAbout: () -> Unit = {},
+    onNavigateToDeveloperOptions: () -> Unit = {},
 ) {
     // 關閉與重啟都會連帶銷毀虛擬顯示，值得先問一句。
     var pendingAction by remember { mutableStateOf<UserServiceAction?>(null) }
@@ -231,76 +256,106 @@ private fun SettingsScreenContent(
                     .nestedScroll(scrollBehavior.nestedScrollConnection),
             ) {
                 item {
+                    // Shizuku 授權跟 UserService 本來分兩個區塊各講一次同一個
+                    // ShizukuConnectionStatus，使用者要對照兩處才搞得清楚狀況；併成一個。
+                    // 這是整個 App 能不能動的前提，排最前面。
+                    Section(name = stringResource(R.string.settings_user_service)) {
+                        val (shizukuLabel, shizukuTint) = shizukuStatusAppearance(uiState.shizukuStatus)
+                        PermissionRow(
+                            painter = painterResource(R.drawable.ic_shizuku_icon),
+                            title = stringResource(R.string.permission_shizuku_title),
+                            description = stringResource(R.string.permission_shizuku_desc),
+                            statusText = shizukuLabel,
+                            statusColor = shizukuTint,
+                            isGranted = uiState.shizukuStatus.isAuthorized,
+                            actionLabel = when (uiState.shizukuStatus) {
+                                ShizukuConnectionStatus.NOT_AVAILABLE -> stringResource(R.string.permission_action_open_shizuku)
+                                ShizukuConnectionStatus.NEED_PERMISSION -> stringResource(R.string.permission_action_grant)
+                                else -> null
+                            },
+                            onAction = onRequestShizukuPermission,
+                            warningText = if (uiState.isShizukuUidWarning) {
+                                stringResource(R.string.permission_shizuku_uid_warning)
+                            } else {
+                                null
+                            },
+                        )
+                        ToggleSettingItem(
+                            name = stringResource(R.string.settings_auto_start_user_service),
+                            description = stringResource(R.string.settings_auto_start_user_service_note),
+                            checked = uiState.autoStartUserService,
+                            onCheckedChange = onAutoStartUserServiceChange,
+                        )
+                        UserServiceActions(
+                            uiState = uiState,
+                            onStart = onStartUserService,
+                            onRequestStop = { pendingAction = UserServiceAction.STOP },
+                            onRequestRestart = { pendingAction = UserServiceAction.RESTART },
+                        )
+                    }
+                }
+
+                item {
                     Section(name = stringResource(R.string.settings_permissions_title)) {
-                        ElevatedCard(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            shape = MaterialTheme.shapes.extraLarge,
-                        ) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                // 1. Shizuku
-                                val (shizukuLabel, shizukuTint) = shizukuStatusAppearance(uiState.shizukuStatus)
-                                PermissionRow(
-                                    painter = painterResource(R.drawable.ic_shizuku_icon),
-                                    title = stringResource(R.string.permission_shizuku_title),
-                                    description = stringResource(R.string.permission_shizuku_desc),
-                                    statusText = shizukuLabel,
-                                    statusColor = shizukuTint,
-                                    isGranted = uiState.shizukuStatus.isAuthorized,
-                                    actionLabel = when (uiState.shizukuStatus) {
-                                        ShizukuConnectionStatus.NOT_AVAILABLE -> stringResource(R.string.permission_action_open_shizuku)
-                                        ShizukuConnectionStatus.NEED_PERMISSION -> stringResource(R.string.permission_action_grant)
-                                        else -> null
-                                    },
-                                    onAction = onRequestShizukuPermission,
-                                    warningText = if (uiState.isShizukuUidWarning) {
-                                        stringResource(R.string.permission_shizuku_uid_warning)
-                                    } else {
-                                        null
-                                    },
-                                )
+                        PermissionRow(
+                            painter = painterResource(R.drawable.ic_launcher_foreground),
+                            title = stringResource(R.string.permission_notification_title),
+                            description = stringResource(R.string.permission_notification_desc),
+                            statusText = if (uiState.hasNotificationPermission) {
+                                stringResource(R.string.permission_granted)
+                            } else {
+                                stringResource(R.string.permission_not_granted)
+                            },
+                            statusColor = if (uiState.hasNotificationPermission) SuccessColor else MaterialTheme.colorScheme.error,
+                            isGranted = uiState.hasNotificationPermission,
+                            actionLabel = if (uiState.hasNotificationPermission) {
+                                stringResource(R.string.permission_action_settings)
+                            } else {
+                                stringResource(R.string.permission_action_grant)
+                            },
+                            onAction = onRequestNotificationPermission,
+                        )
 
-                                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
 
-                                // 2. Notification
-                                PermissionRow(
-                                    painter = painterResource(R.drawable.ic_launcher_foreground),
-                                    title = stringResource(R.string.permission_notification_title),
-                                    description = stringResource(R.string.permission_notification_desc),
-                                    statusText = if (uiState.hasNotificationPermission) {
-                                        stringResource(R.string.permission_granted)
-                                    } else {
-                                        stringResource(R.string.permission_not_granted)
-                                    },
-                                    statusColor = if (uiState.hasNotificationPermission) SuccessColor else MaterialTheme.colorScheme.error,
-                                    isGranted = uiState.hasNotificationPermission,
-                                    actionLabel = if (uiState.hasNotificationPermission) {
-                                        stringResource(R.string.permission_action_settings)
-                                    } else {
-                                        stringResource(R.string.permission_action_grant)
-                                    },
-                                    onAction = onRequestNotificationPermission,
-                                )
+                        PermissionRow(
+                            painter = painterResource(R.drawable.ic_picture_in_picture_off),
+                            title = stringResource(R.string.permission_secondary_displays_title),
+                            description = stringResource(R.string.permission_secondary_displays_desc),
+                            statusText = if (uiState.osAllowSecondaryDisplays) {
+                                stringResource(R.string.permission_secondary_displays_enabled)
+                            } else {
+                                stringResource(R.string.permission_secondary_displays_disabled)
+                            },
+                            statusColor = if (uiState.osAllowSecondaryDisplays) SuccessColor else MaterialTheme.colorScheme.error,
+                            isGranted = uiState.osAllowSecondaryDisplays,
+                            actionLabel = null,
+                            onAction = null,
+                        )
 
-                                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+                        // 只有開發人員選項解鎖時才顯示：這個權限只跟 Workbench（開發人員選項
+                        // 裡的功能）對外連線有沒有用有關，一般使用者用不到 Workbench 也就不用看到它。
+                        if (uiState.isDeveloperOptionsUnlocked) {
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
 
-                                // 3. Secondary Displays
-                                PermissionRow(
-                                    painter = painterResource(R.drawable.ic_picture_in_picture_off),
-                                    title = stringResource(R.string.permission_secondary_displays_title),
-                                    description = stringResource(R.string.permission_secondary_displays_desc),
-                                    statusText = if (uiState.osAllowSecondaryDisplays) {
-                                        stringResource(R.string.permission_secondary_displays_enabled)
-                                    } else {
-                                        stringResource(R.string.permission_secondary_displays_disabled)
-                                    },
-                                    statusColor = if (uiState.osAllowSecondaryDisplays) SuccessColor else MaterialTheme.colorScheme.error,
-                                    isGranted = uiState.osAllowSecondaryDisplays,
-                                    actionLabel = null,
-                                    onAction = null,
-                                )
-                            }
+                            PermissionRow(
+                                painter = painterResource(R.drawable.ic_launcher_foreground),
+                                title = stringResource(R.string.permission_local_network_title),
+                                description = stringResource(R.string.permission_local_network_desc),
+                                statusText = if (uiState.hasLocalNetworkPermission) {
+                                    stringResource(R.string.permission_granted)
+                                } else {
+                                    stringResource(R.string.permission_not_granted)
+                                },
+                                statusColor = if (uiState.hasLocalNetworkPermission) SuccessColor else MaterialTheme.colorScheme.error,
+                                isGranted = uiState.hasLocalNetworkPermission,
+                                actionLabel = if (uiState.hasLocalNetworkPermission) {
+                                    null
+                                } else {
+                                    stringResource(R.string.permission_action_grant)
+                                },
+                                onAction = onRequestLocalNetworkPermission,
+                            )
                         }
                     }
                 }
@@ -325,34 +380,30 @@ private fun SettingsScreenContent(
                 }
 
                 item {
-                    Section(name = stringResource(R.string.settings_user_service)) {
-                        UserServiceStatusRow(uiState.shizukuStatus)
-                        ToggleSettingItem(
-                            name = stringResource(R.string.settings_auto_start_user_service),
-                            description = stringResource(R.string.settings_auto_start_user_service_note),
-                            checked = uiState.autoStartUserService,
-                            onCheckedChange = onAutoStartUserServiceChange,
-                        )
-                        UserServiceActions(
-                            uiState = uiState,
-                            onStart = onStartUserService,
-                            onRequestStop = { pendingAction = UserServiceAction.STOP },
-                            onRequestRestart = { pendingAction = UserServiceAction.RESTART },
-                        )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(onClick = onNavigateToAbout)
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(stringResource(R.string.settings_about), style = MaterialTheme.typography.bodyLarge)
+                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
                     }
                 }
 
-                item {
-                    Section(name = stringResource(R.string.settings_about)) {
+                if (uiState.isDeveloperOptionsUnlocked) {
+                    item {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable(onClick = onNavigateToAbout)
-                                .padding(vertical = 12.dp),
+                                .clickable(onClick = onNavigateToDeveloperOptions)
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text(stringResource(R.string.settings_about), style = MaterialTheme.typography.bodyLarge)
+                            Text(stringResource(R.string.about_developer_options), style = MaterialTheme.typography.bodyLarge)
                             Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
                         }
                     }
@@ -409,40 +460,6 @@ private fun UserServiceConfirmDialog(
             }
         },
     )
-}
-
-/** 這個區塊在講的那個服務現在是什麼狀態。詞彙與狀態列共用，兩邊不會各說各話。 */
-@Composable
-private fun UserServiceStatusRow(status: ShizukuConnectionStatus) {
-    val (label, tint) = shizukuStatusAppearance(status)
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        // 固定寬度的槽位，圓點與轉圈換手時文字才不會跟著左右跳。
-        Box(
-            modifier = Modifier.size(12.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (status == ShizukuConnectionStatus.CONNECTING) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(12.dp),
-                    strokeWidth = 1.5.dp,
-                    color = tint,
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .size(10.dp)
-                        .background(tint, CircleShape)
-                )
-            }
-        }
-        Spacer(modifier = Modifier.width(12.dp))
-        Text(text = label, style = MaterialTheme.typography.bodyLarge, color = tint)
-    }
 }
 
 @Composable
