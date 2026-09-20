@@ -198,6 +198,7 @@ fun SettingsScreen(
         onRefresh = { viewModel.refreshPermissions(true) },
         onAutoOpenFullscreenChange = viewModel::setAutoOpenFullscreen,
         onDefaultStartPageChange = viewModel::setDefaultStartPage,
+        onAppLanguageChange = viewModel::setAppLanguage,
         onAutoStartUserServiceChange = viewModel::setAutoStartUserService,
         onWorkbenchEnabledChange = viewModel::setWorkbenchEnabled,
         onStartUserService = viewModel::startUserService,
@@ -220,6 +221,7 @@ private fun SettingsScreenContent(
     onRefresh: () -> Unit,
     onAutoOpenFullscreenChange: (Boolean) -> Unit,
     onDefaultStartPageChange: (TopLevelDestination) -> Unit = {},
+    onAppLanguageChange: (String) -> Unit = {},
     onAutoStartUserServiceChange: (Boolean) -> Unit = {},
     onWorkbenchEnabledChange: (Boolean) -> Unit = {},
     onStartUserService: () -> Unit = {},
@@ -372,6 +374,10 @@ private fun SettingsScreenContent(
                         DefaultStartPageSettingItem(
                             value = uiState.defaultStartPage,
                             onChange = onDefaultStartPageChange,
+                        )
+                        AppLanguageSettingItem(
+                            value = uiState.appLanguage,
+                            onChange = onAppLanguageChange,
                         )
                         ToggleSettingItem(
                             name = stringResource(R.string.settings_workbench),
@@ -580,6 +586,35 @@ private fun DefaultStartPageSettingItem(
         Spacer(modifier = Modifier.height(8.dp))
         DropdownBox(
             values = TopLevelDestination.entries,
+            value = value,
+            transform = { labels.getValue(it) },
+            onChange = onChange,
+        )
+    }
+}
+
+/** 空字串代表跟隨系統語言；目前只提供 en / zh-TW 兩個選項，對應 app 現有的 values / values-zh-rTW。 */
+@Composable
+private fun AppLanguageSettingItem(
+    value: String,
+    onChange: (String) -> Unit,
+) {
+    val options = listOf(
+        "" to stringResource(R.string.settings_language_system_default),
+        "en" to stringResource(R.string.settings_language_english),
+        "zh-TW" to stringResource(R.string.settings_language_chinese_tw),
+    )
+    val labels = options.toMap()
+    Column(modifier = Modifier.padding(vertical = 12.dp)) {
+        Text(text = stringResource(R.string.settings_language), style = MaterialTheme.typography.bodyLarge)
+        Text(
+            text = stringResource(R.string.settings_language_note),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        DropdownBox(
+            values = options.map { it.first },
             value = value,
             transform = { labels.getValue(it) },
             onChange = onChange,

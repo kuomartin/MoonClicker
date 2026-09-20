@@ -15,7 +15,7 @@ import javax.inject.Singleton
 class AppSettings @Inject constructor(
     @param:ApplicationContext private val context: Context,
 ) {
-    private val prefs = context.getSharedPreferences("relc_settings", Context.MODE_PRIVATE)
+    private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
     private val _autoOpenFullscreen =
         MutableStateFlow(prefs.getBoolean(KEY_AUTO_FULLSCREEN, false))
@@ -73,10 +73,34 @@ class AppSettings @Inject constructor(
         _workbenchEnabled.value = enabled
     }
 
-    private companion object {
-        const val KEY_AUTO_FULLSCREEN = "auto_open_fullscreen"
-        const val KEY_AUTO_START_USER_SERVICE = "auto_start_user_service"
-        const val KEY_WORKBENCH_ENABLED = "workbench_enabled"
-        const val KEY_DEFAULT_START_PAGE = "default_start_page"
+    private val _appLanguage = MutableStateFlow(prefs.getString(KEY_APP_LANGUAGE, "") ?: "")
+
+    /**
+     * Android 13 以下的語言偏好；空字串代表跟隨系統。Android 13+ 直接問系統的 LocaleManager，
+     * 不經過這裡（見 [com.xaxaxax.relc.ui.setting.SettingsViewModel]）。
+     */
+    val appLanguage: StateFlow<String> = _appLanguage.asStateFlow()
+
+    fun setAppLanguage(tag: String) {
+        prefs.edit { putString(KEY_APP_LANGUAGE, tag) }
+        _appLanguage.value = tag
+    }
+
+    companion object {
+        private const val PREFS_NAME = "relc_settings"
+        private const val KEY_AUTO_FULLSCREEN = "auto_open_fullscreen"
+        private const val KEY_AUTO_START_USER_SERVICE = "auto_start_user_service"
+        private const val KEY_WORKBENCH_ENABLED = "workbench_enabled"
+        private const val KEY_DEFAULT_START_PAGE = "default_start_page"
+        private const val KEY_APP_LANGUAGE = "app_language"
+
+        /**
+         * [Activity.attachBaseContext] 跑在 Hilt 欄位注入完成之前，讀不到 [AppSettings] 實例，
+         * 只能直接開同一份 SharedPreferences 讀。
+         */
+        fun readAppLanguageTag(context: Context): String {
+            return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .getString(KEY_APP_LANGUAGE, "") ?: ""
+        }
     }
 }
