@@ -1,7 +1,6 @@
 package com.xaxaxax.relc.ui.about
 
 import android.content.Intent
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -22,10 +21,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
+import coil3.compose.AsyncImage
 import com.xaxaxax.relc.BuildConfig
 import com.xaxaxax.relc.R
 
@@ -61,8 +60,10 @@ fun AboutScreen(onNavigateBack: () -> Unit) {
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Image(
-                painter = painterResource(R.mipmap.ic_launcher),
+            // painterResource() 不支援 adaptive-icon XML（mipmap-anydpi/ic_launcher.xml），
+            // 用 Coil 的 AsyncImage 走 Drawable 載入才吃得下這個格式。
+            AsyncImage(
+                model = R.mipmap.ic_launcher,
                 contentDescription = null,
                 modifier = Modifier.size(72.dp),
             )
