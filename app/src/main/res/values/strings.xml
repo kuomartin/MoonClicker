@@ -197,6 +197,11 @@
     <string name="permission_overlay_rationale_title">System Overlay Permission Rationale</string>
     <string name="permission_overlay_rationale_desc">ReLC requires \"Display over other apps\" permission to present handy floating controllers during script execution, recording, and debugging.</string>
 
+    <string name="permission_local_network_title">Local Network Permission</string>
+    <string name="permission_local_network_desc">Allow inbound connections from the local network so VS Code can reach Workbench.</string>
+    <string name="permission_local_network_rationale_title">Local Network Permission Rationale</string>
+    <string name="permission_local_network_rationale_desc">Starting from Android 17, accepting inbound TCP connections from the local network requires this runtime permission. ReLC needs it so the VS Code extension can connect to Script Workbench over Wi-Fi. Denying it does not disable Workbench — local diagnostics still work, only external connections are blocked.</string>
+
     <string name="permission_secondary_displays_title">Secondary Display Support</string>
     <string name="permission_secondary_displays_desc">Whether the system supports launching and running activities on secondary/virtual displays.</string>
     <string name="permission_secondary_displays_enabled">Supported</string>

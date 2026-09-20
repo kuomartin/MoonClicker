@@ -16,6 +16,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/** compileSdk 的 android.jar 還沒有這個常數（targetSdk 37 才新增），先用字面值宣告。 */
+private const val PERMISSION_ACCESS_LOCAL_NETWORK = "android.permission.ACCESS_LOCAL_NETWORK"
+
 @Singleton
 class PermissionManager @Inject constructor(
     @param:ApplicationContext private val context: Context,
@@ -29,10 +32,14 @@ class PermissionManager @Inject constructor(
     private val _osAllowSecondaryDisplays = MutableStateFlow(getOsAllowSecondaryDisplays())
     val osAllowSecondaryDisplays: StateFlow<Boolean> = _osAllowSecondaryDisplays.asStateFlow()
 
+    private val _hasLocalNetworkPermission = MutableStateFlow(getHasLocalNetworkPermission())
+    val hasLocalNetworkPermission: StateFlow<Boolean> = _hasLocalNetworkPermission.asStateFlow()
+
     fun refreshPermissions() {
         _hasNotificationPermission.value = getHasNotificationPermission()
         _hasOverlayPermission.value = getHasOverlayPermission()
         _osAllowSecondaryDisplays.value = getOsAllowSecondaryDisplays()
+        _hasLocalNetworkPermission.value = getHasLocalNetworkPermission()
     }
 
     fun getHasNotificationPermission(): Boolean {
@@ -48,6 +55,13 @@ class PermissionManager @Inject constructor(
 
     fun getHasOverlayPermission(): Boolean {
         return Settings.canDrawOverlays(context)
+    }
+
+    fun getHasLocalNetworkPermission(): Boolean {
+        return ContextCompat.checkSelfPermission(
+            context,
+            PERMISSION_ACCESS_LOCAL_NETWORK,
+        ) == PackageManager.PERMISSION_GRANTED
     }
 
     private fun getOsAllowSecondaryDisplays(): Boolean {

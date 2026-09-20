@@ -77,6 +77,7 @@ enum class RationaleDialogType {
     NOTIFICATION,
     SHIZUKU,
     OVERLAY,
+    LOCAL_NETWORK,
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -105,11 +106,13 @@ fun SettingsScreen(
         viewModel.refreshPermissions()
     }
     // targetSdk 37（Android 17）起，接受區網的 inbound TCP 連線需要這個 runtime permission，
-    // 不然 VS Code 端連得上 TCP 卻永遠讀不到回應。拒絕也讓開關照常打開——本機診斷用途
+    // 不然 VS Code 端連得上 TCP 卻永遠讀不到回應。拒絕不影響 Workbench 開關本身——本機診斷用途
     // 還是能動，只是外部連不進來，不因為這個權限擋住整個功能。
     val localNetworkPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
-    ) {}
+    ) {
+        viewModel.refreshPermissions()
+    }
 
     var activeRationale by remember { mutableStateOf<RationaleDialogType?>(null) }
 
@@ -165,6 +168,19 @@ fun SettingsScreen(
                 onDismiss = { activeRationale = null },
             )
         }
+        RationaleDialogType.LOCAL_NETWORK -> {
+            PermissionRationaleDialog(
+                title = stringResource(R.string.permission_local_network_rationale_title),
+                description = stringResource(R.string.permission_local_network_rationale_desc),
+                icon = painterResource(R.drawable.ic_launcher_foreground),
+                confirmText = stringResource(R.string.permission_action_proceed),
+                dismissText = stringResource(R.string.permission_action_cancel),
+                onConfirm = {
+                    localNetworkPermissionLauncher.launch("android.permission.ACCESS_LOCAL_NETWORK")
+                },
+                onDismiss = { activeRationale = null },
+            )
+        }
         null -> {}
     }
 
@@ -193,15 +209,15 @@ fun SettingsScreen(
                 activeRationale = RationaleDialogType.OVERLAY
             }
         },
+        onRequestLocalNetworkPermission = {
+            if (!uiState.hasLocalNetworkPermission) {
+                activeRationale = RationaleDialogType.LOCAL_NETWORK
+            }
+        },
         onRefresh = { viewModel.refreshPermissions(true) },
         onAutoOpenFullscreenChange = viewModel::setAutoOpenFullscreen,
         onAutoStartUserServiceChange = viewModel::setAutoStartUserService,
-        onWorkbenchEnabledChange = { enabled ->
-            if (enabled) {
-                localNetworkPermissionLauncher.launch("android.permission.ACCESS_LOCAL_NETWORK")
-            }
-            viewModel.setWorkbenchEnabled(enabled)
-        },
+        onWorkbenchEnabledChange = viewModel::setWorkbenchEnabled,
         onStartUserService = viewModel::startUserService,
         onStopUserService = viewModel::stopUserService,
         onRestartUserService = viewModel::restartUserService,
@@ -219,6 +235,7 @@ private fun SettingsScreenContent(
     onRequestShizukuPermission: () -> Unit,
     onRequestNotificationPermission: () -> Unit,
     onRequestOverlayPermission: () -> Unit,
+    onRequestLocalNetworkPermission: () -> Unit = {},
     onRefresh: () -> Unit,
     onAutoOpenFullscreenChange: (Boolean) -> Unit,
     onAutoStartUserServiceChange: (Boolean) -> Unit = {},
@@ -338,7 +355,29 @@ private fun SettingsScreenContent(
 
                                 HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
 
-                                // 4. Secondary Displays
+                                // 4. Local Network
+                                PermissionRow(
+                                    painter = painterResource(R.drawable.ic_launcher_foreground),
+                                    title = stringResource(R.string.permission_local_network_title),
+                                    description = stringResource(R.string.permission_local_network_desc),
+                                    statusText = if (uiState.hasLocalNetworkPermission) {
+                                        stringResource(R.string.permission_granted)
+                                    } else {
+                                        stringResource(R.string.permission_not_granted)
+                                    },
+                                    statusColor = if (uiState.hasLocalNetworkPermission) SuccessColor else MaterialTheme.colorScheme.error,
+                                    isGranted = uiState.hasLocalNetworkPermission,
+                                    actionLabel = if (uiState.hasLocalNetworkPermission) {
+                                        null
+                                    } else {
+                                        stringResource(R.string.permission_action_grant)
+                                    },
+                                    onAction = onRequestLocalNetworkPermission,
+                                )
+
+                                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+
+                                // 5. Secondary Displays
                                 PermissionRow(
                                     painter = painterResource(R.drawable.ic_picture_in_picture_off),
                                     title = stringResource(R.string.permission_secondary_displays_title),
