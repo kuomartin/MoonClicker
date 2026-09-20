@@ -21,7 +21,9 @@ class AppSettingsTest {
             store[keySlot.captured] = valueSlot.captured
             editor
         }
-        return mockk {
+        // relaxed：AppSettings 建構時還會呼叫 getString（語言、預設啟動頁偏好），這幾個測試
+        // 不關心那些欄位，用預設值（null）打發掉就好，不用逐一 stub。
+        return mockk(relaxed = true) {
             every { edit() } returns editor
             every { getBoolean(any(), any()) } answers {
                 store.getOrDefault(firstArg(), secondArg())
