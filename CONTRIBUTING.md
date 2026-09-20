@@ -70,5 +70,5 @@ npm test
 
 ## 💬 交流與討論
 
-- 若有使用問題或想法交流，歡迎前往 [GitHub Discussions](https://github.com/kuomartin/MoonClicker/discussions) 發帖。
-- 若發現特定錯誤，請使用 [Bug Report Template](https://github.com/kuomartin/MoonClicker/issues/new/choose) 提出 Issue。
+- 若有使用問題或想法交流，歡迎前往 [GitHub Discussions](https://github.com/kuomartin/ReLC/discussions) 發帖。
+- 若發現特定錯誤，請使用 [Bug Report Template](https://github.com/kuomartin/ReLC/issues/new/choose) 提出 Issue。
