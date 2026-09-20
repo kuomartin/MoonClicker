@@ -10,12 +10,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -56,10 +53,10 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.xaxaxax.relc.R
 import com.xaxaxax.relc.TopLevelDestination
 import com.xaxaxax.relc.shizuku.ShizukuConnectionStatus
-import com.xaxaxax.relc.ui.component.DropdownBox
 import com.xaxaxax.relc.ui.component.PermissionRationaleDialog
 import com.xaxaxax.relc.ui.component.PermissionRow
 import com.xaxaxax.relc.ui.component.Section
+import com.xaxaxax.relc.ui.component.SingleChoiceDialog
 import com.xaxaxax.relc.ui.component.ToggleSettingItem
 import com.xaxaxax.relc.ui.component.shizukuStatusAppearance
 import com.xaxaxax.relc.ui.theme.ReLCTheme
@@ -510,19 +507,31 @@ private fun DefaultStartPageSettingItem(
     onChange: (TopLevelDestination) -> Unit,
 ) {
     val labels = TopLevelDestination.entries.associateWith { stringResource(it.labelRes) }
-    Column(modifier = Modifier.padding(vertical = 12.dp)) {
-        Text(text = stringResource(R.string.settings_default_start_page), style = MaterialTheme.typography.bodyLarge)
+    var showDialog by remember { mutableStateOf(false) }
+    val title = stringResource(R.string.settings_default_start_page)
+
+    if (showDialog) {
+        SingleChoiceDialog(
+            title = title,
+            values = TopLevelDestination.entries,
+            selected = value,
+            transform = { labels.getValue(it) },
+            onSelect = onChange,
+            onDismiss = { showDialog = false },
+        )
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { showDialog = true }
+            .padding(vertical = 12.dp),
+    ) {
+        Text(text = title, style = MaterialTheme.typography.bodyLarge)
         Text(
-            text = stringResource(R.string.settings_default_start_page_note),
+            text = labels.getValue(value),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        DropdownBox(
-            values = TopLevelDestination.entries,
-            value = value,
-            transform = { labels.getValue(it) },
-            onChange = onChange,
         )
     }
 }
@@ -539,19 +548,31 @@ private fun AppLanguageSettingItem(
         "zh-TW" to stringResource(R.string.settings_language_chinese_tw),
     )
     val labels = options.toMap()
-    Column(modifier = Modifier.padding(vertical = 12.dp)) {
-        Text(text = stringResource(R.string.settings_language), style = MaterialTheme.typography.bodyLarge)
+    var showDialog by remember { mutableStateOf(false) }
+    val title = stringResource(R.string.settings_language)
+
+    if (showDialog) {
+        SingleChoiceDialog(
+            title = title,
+            values = options.map { it.first },
+            selected = value,
+            transform = { labels.getValue(it) },
+            onSelect = onChange,
+            onDismiss = { showDialog = false },
+        )
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { showDialog = true }
+            .padding(vertical = 12.dp),
+    ) {
+        Text(text = title, style = MaterialTheme.typography.bodyLarge)
         Text(
-            text = stringResource(R.string.settings_language_note),
+            text = labels.getValue(value),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        DropdownBox(
-            values = options.map { it.first },
-            value = value,
-            transform = { labels.getValue(it) },
-            onChange = onChange,
         )
     }
 }
