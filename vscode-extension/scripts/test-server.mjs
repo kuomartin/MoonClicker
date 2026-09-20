@@ -43,7 +43,7 @@ const MOCK_SCRIPTS = [
 ];
 
 const MOCK_MDNS_DEVICES = [
-  { name: "ReLC-Mock-Device", host: "192.168.0.1", port: 8787 }
+  { name: "MoonClicker-Mock-Device", host: "192.168.0.1", port: 8787 }
 ];
 
 const MIME_TYPES = {
@@ -212,7 +212,7 @@ function handleMockApi(req, res, pathname, url) {
       res.end("Mirror inactive on physical display");
       return;
     }
-    const BOUNDARY = "relc-mirror-frame";
+    const BOUNDARY = "moonclicker-mirror-frame";
     res.writeHead(200, {
       "Content-Type": `multipart/x-mixed-replace; boundary=${BOUNDARY}`,
       "Cache-Control": "no-cache",
@@ -280,7 +280,7 @@ function scanMdns() {
   }
   return new Promise((resolve) => {
     const mdnsInstance = mDNS();
-    const SERVICE = "_relc-workbench._tcp.local";
+    const SERVICE = "_moonclicker-workbench._tcp.local";
     const found = [];
     const seen = new Set();
 
@@ -305,7 +305,7 @@ function scanMdns() {
           if (aRec) {
             const ip = aRec.data;
             const port = srv.data.port;
-            const name = instanceName.replace("._relc-workbench._tcp.local", "").trim();
+            const name = instanceName.replace("._moonclicker-workbench._tcp.local", "").trim();
             const key = `${ip}:${port}`;
             if (!seen.has(key)) {
               seen.add(key);
@@ -371,7 +371,7 @@ server.on("upgrade", (req, socket, head) => {
 // ── Start ─────────────────────────────────────────────────────────────────────
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`\n======================================================`);
-  console.log(`🚀 ReLC Webview Test Server  (mode: ${serverConfig.mode})`);
+  console.log(`🚀 MoonClicker Webview Test Server  (mode: ${serverConfig.mode})`);
   console.log(`   👉 http://127.0.0.1:${PORT}/__dev__          (Mirror Harness)`);
   console.log(`   👉 http://127.0.0.1:${PORT}/__dev__/mdns     (mDNS Discovery)`);
   console.log(`   👉 http://127.0.0.1:${PORT}/__dev__/config   (Server Config API)`);

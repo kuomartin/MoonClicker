@@ -1,5 +1,5 @@
-#ifndef RELC_LUA_ENGINE_H
-#define RELC_LUA_ENGINE_H
+#ifndef MOONCLICKER_LUA_ENGINE_H
+#define MOONCLICKER_LUA_ENGINE_H
 
 #include <string>
 
@@ -37,4 +37,4 @@ private:
     lua_State *L = nullptr;
 };
 
-#endif // RELC_LUA_ENGINE_H
+#endif // MOONCLICKER_LUA_ENGINE_H

@@ -15,17 +15,17 @@ test("fails when LuaBindings.h changed but the stub did not", () => {
 test("passes when both the bindings and the stub changed", () => {
   const result = checkLuaStubSync([
     "engine/src/main/cpp/LuaBindings.cpp",
-    "vscode-extension/lua-meta/relc.lua",
+    "vscode-extension/lua-meta/moonclicker.lua",
   ]);
   assert.equal(result.ok, true);
 });
 
 test("passes when neither changed", () => {
-  const result = checkLuaStubSync(["app/src/main/java/com/xaxaxax/relc/RelcActivity.kt"]);
+  const result = checkLuaStubSync(["app/src/main/java/com/xaxaxax/moonclicker/MoonClickerActivity.kt"]);
   assert.equal(result.ok, true);
 });
 
 test("passes when only the stub changed", () => {
-  const result = checkLuaStubSync(["vscode-extension/lua-meta/relc.lua"]);
+  const result = checkLuaStubSync(["vscode-extension/lua-meta/moonclicker.lua"]);
   assert.equal(result.ok, true);
 });

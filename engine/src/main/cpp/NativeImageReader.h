@@ -1,5 +1,5 @@
-#ifndef RELC_NATIVE_IMAGE_READER_H
-#define RELC_NATIVE_IMAGE_READER_H
+#ifndef MOONCLICKER_NATIVE_IMAGE_READER_H
+#define MOONCLICKER_NATIVE_IMAGE_READER_H
 
 #include <media/NdkImageReader.h>
 #include <android/native_window.h>
@@ -38,4 +38,4 @@ private:
     std::atomic<bool> closing{false};
 };
 
-#endif // RELC_NATIVE_IMAGE_READER_H
+#endif // MOONCLICKER_NATIVE_IMAGE_READER_H

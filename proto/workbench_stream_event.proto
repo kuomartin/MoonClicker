@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package relc.workbench;
+package moonclicker.workbench;
 
 import "google/protobuf/struct.proto";
 

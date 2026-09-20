@@ -117,7 +117,7 @@ GL pass → SurfaceView。scrcpy 正是這樣做（`AffineOpenGLFilter`/`OpenGLR
 [scrcpy 的旋轉處理](scrcpy-rotation-handling.md)），但它的下游是編碼器、根本沒有 view
 可以轉。多一個 GPU pass 加一次 buffer copy 去換掉 TextureView 隱含的那次 copy，划不來。
 
-## 對 ReLC 的意涵
+## 對 MoonClicker 的意涵
 
 反轉依據改用 `d` 之後：
 

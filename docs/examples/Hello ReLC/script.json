@@ -1,5 +1,0 @@
-{
-  "name": "Hello ReLC",
-  "description": "最簡單的 Hello World 範例：展示 log 輸出與基本 API 使用",
-  "display": { "width": 1080, "height": 2400, "densityDpi": 440 }
-}

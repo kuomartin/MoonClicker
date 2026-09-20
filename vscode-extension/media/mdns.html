@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ReLC — mDNS Device Discovery</title>
+  <title>MoonClicker — mDNS Device Discovery</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -160,7 +160,7 @@
 </head>
 <body>
   <header>
-    <span class="badge">ReLC LLM Test Harness</span>
+    <span class="badge">MoonClicker LLM Test Harness</span>
     <h1>🔍 mDNS Device Discovery</h1>
     <a href="/__dev__">← 返回 Mirror Harness</a>
   </header>
@@ -174,12 +174,12 @@
       <span id="scanStatus">尚未掃描</span>
     </div>
 
-    <div class="service-label">Service: _relc-workbench._tcp.local. &nbsp;|&nbsp; Timeout: 2 s</div>
+    <div class="service-label">Service: _moonclicker-workbench._tcp.local. &nbsp;|&nbsp; Timeout: 2 s</div>
 
     <div id="deviceList">
       <div class="empty-state">
         <div class="icon">📱</div>
-        <p>點擊「開始掃描」搜尋區網上的 ReLC 裝置<br/>
+        <p>點擊「開始掃描」搜尋區網上的 MoonClicker 裝置<br/>
         （需要裝置已開啟 Workbench Server）</p>
       </div>
     </div>
@@ -197,7 +197,7 @@
         deviceList.innerHTML = `
           <div class="empty-state">
             <div class="icon">🔇</div>
-            <p>未發現任何 ReLC 裝置<br/>
+            <p>未發現任何 MoonClicker 裝置<br/>
             請確認裝置已開啟 Workbench Server 且在同一區網</p>
           </div>`;
         return;

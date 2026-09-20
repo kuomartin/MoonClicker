@@ -1,6 +1,6 @@
-# ReLC
+# MoonClicker
 
-ReLC is an Android remote Lua-control and automation tool: it runs a target app inside a virtual display, injects input into it, and drives it with a Lua script, optionally guided by on-device template matching.
+MoonClicker is an Android remote Lua-control and automation tool: it runs a target app inside a virtual display, injects input into it, and drives it with a Lua script, optionally guided by on-device template matching.
 
 ## Language
 
@@ -25,7 +25,7 @@ The zero-copy H.264 video streaming path connecting `H264EncoderSink` via `Media
 _Avoid_: Video stream, screen recorder, MJPEG stream.
 
 **InputController**:
-Injects touch, swipe, and multi-touch events into a specific virtual display via `IRelcV2Service`.
+Injects touch, swipe, and multi-touch events into a specific virtual display via `IMoonClickerService`.
 _Avoid_: Touch injector, event sender.
 
 **Surface Space / Logical Space (Surface 空間 / 邏輯空間)**:
@@ -45,11 +45,11 @@ The embedded Lua runtime that drives automation as a linear program executing fr
 _Avoid_: Automation engine, macro engine, tick loop.
 
 **Script Workbench**:
-The embedded HTTP and WebSocket development server inside the ReLC app (`WorkbenchServer`, `WorkbenchService`) paired with the VS Code extension (`relc-script-workbench`) for script synchronization, remote control, display mirroring, and telemetry. Protected by [[Pairing Mode]] and [[Workbench Auth Token]].
+The embedded HTTP and WebSocket development server inside the MoonClicker app (`WorkbenchServer`, `WorkbenchService`) paired with the VS Code extension (`moonclicker-script-workbench`) for script synchronization, remote control, display mirroring, and telemetry. Protected by [[Pairing Mode]] and [[Workbench Auth Token]].
 _Avoid_: Dev server, debugger backend, sync service.
 
 **Pairing Mode**:
-A temporary 5-minute security window on [[Script Workbench]] during which a randomized 6-digit PIN is displayed in the ReLC app to authenticate new development clients.
+A temporary 5-minute security window on [[Script Workbench]] during which a randomized 6-digit PIN is displayed in the MoonClicker app to authenticate new development clients.
 _Avoid_: Open server, permanent PIN, discovery mode.
 
 **Workbench Auth Token**:
@@ -57,7 +57,7 @@ A cryptographically secure random token issued by [[Script Workbench]] upon succ
 _Avoid_: API key, session password.
 
 **Script Folder**:
-A directory under external private storage (`Android/data/com.xaxaxax.relc/files/scripts/<id>/`) containing `main.lua`, optional `script.json`, and template images.
+A directory under external private storage (`Android/data/com.xaxaxax.moonclicker/files/scripts/<id>/`) containing `main.lua`, optional `script.json`, and template images.
 _Avoid_: Script file, script record, script database entry.
 
 **ScriptSession**:
@@ -69,7 +69,7 @@ The designated execution target for a script: the physical screen (input only), 
 _Avoid_: Display id, target screen.
 
 **Engine Module**:
-The `:engine` Gradle module — the sole boundary allowed to touch native internals (Script Engine, VisionMatcher, RelcV2Service).
+The `:engine` Gradle module — the sole boundary allowed to touch native internals (Script Engine, VisionMatcher, MoonClickerService).
 _Avoid_: Native layer, backend module.
 
 **EngineStateRepository**:
@@ -81,15 +81,15 @@ The public Kotlin facade over native `LuaNative` bindings in `:engine`, used to 
 _Avoid_: LuaEngineControl, JNI bridge, LuaNative (when referencing public caller API).
 
 **ScriptHost**:
-The Engine Module's single JNI upcall target implementing non-native Lua APIs (`input.*`, `app.launch`, `device.*`, `data.set`) on top of `IRelcV2Service`.
+The Engine Module's single JNI upcall target implementing non-native Lua APIs (`input.*`, `app.launch`, `device.*`, `data.set`) on top of `IMoonClickerService`.
 _Avoid_: JNI callbacks, native bridge.
 
 **VisionMatcher**:
 The native OpenCV-backed component that performs on-demand template matching on virtual display frames in logical coordinates ([ADR-0003](docs/adr/0003-opencv-for-vision-matching.md), [ADR-0013](docs/adr/0013-templates-are-logical-space.md)).
 _Avoid_: VisionEngine, image recognizer, matcher.
 
-**RelcV2Service**:
-The Shizuku-hosted AIDL service (`IRelcV2Service`) providing virtual display management, native input injection, and app launching ([ADR-0001](docs/adr/0001-v2-service-supersedes-v1.md)).
+**MoonClickerService**:
+The Shizuku-hosted AIDL service (`IMoonClickerService`) providing virtual display management, native input injection, and app launching ([ADR-0001](docs/adr/0001-v2-service-supersedes-v1.md)).
 _Avoid_: Shizuku service, backend service.
 
 **Script Status Notification**:

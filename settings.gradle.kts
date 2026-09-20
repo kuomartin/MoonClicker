@@ -22,7 +22,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "ReLC"
+rootProject.name = "MoonClicker"
 include(":app")
 include(":hidden-api")
 include(":engine")

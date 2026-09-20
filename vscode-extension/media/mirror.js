@@ -1,4 +1,4 @@
-// ReLC Webview Mirror Panel Client Script
+// MoonClicker Webview Mirror Panel Client Script
 (function () {
   const vscode = window.vscode || (typeof acquireVsCodeApi === "function" ? acquireVsCodeApi() : null);
   const statusEl = document.getElementById("status");
@@ -636,7 +636,7 @@
   }
 
   // 自動化與 LLM DevTools 測試掛載
-  window.__RELC_TEST__ = {
+  window.__MOONCLICKER_TEST__ = {
     getState: () => ({
       hasReceivedFrame,
       receivedFramesCount,

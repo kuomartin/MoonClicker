@@ -1,5 +1,5 @@
-#ifndef RELC_SCRIPT_RUNTIME_H
-#define RELC_SCRIPT_RUNTIME_H
+#ifndef MOONCLICKER_SCRIPT_RUNTIME_H
+#define MOONCLICKER_SCRIPT_RUNTIME_H
 
 #include "LuaEngine.h"
 #include "NativeImageReader.h"
@@ -15,7 +15,7 @@
 #include <string>
 #include <thread>
 
-/** 必須與 com.xaxaxax.relc.engine.state.EngineEventType 一致。 */
+/** 必須與 com.xaxaxax.moonclicker.engine.state.EngineEventType 一致。 */
 namespace EngineEventType {
     constexpr int RUNNING = 0;
     constexpr int FINISHED = 1;
@@ -121,12 +121,12 @@ private:
     jclass booleanClass = nullptr;
     jmethodID booleanConstructor = nullptr;
 
-    jmethodID addSurfaceMethodId = nullptr;     // IRelcV2Service.addVirtualDisplaySurface
-    jmethodID removeSurfaceMethodId = nullptr;  // IRelcV2Service.removeVirtualDisplaySurface
+    jmethodID addSurfaceMethodId = nullptr;     // IMoonClickerService.addVirtualDisplaySurface
+    jmethodID removeSurfaceMethodId = nullptr;  // IMoonClickerService.removeVirtualDisplaySurface
     jmethodID surfaceReleaseMethodId = nullptr; // android.view.Surface.release
-    jmethodID acquireMirrorMethodId = nullptr;  // IRelcV2Service.acquireDisplayMirror
-    jmethodID releaseMirrorMethodId = nullptr;  // IRelcV2Service.releaseDisplayMirror
-    jmethodID isMirrorActiveMethodId = nullptr; // IRelcV2Service.isDisplayMirrorActive
+    jmethodID acquireMirrorMethodId = nullptr;  // IMoonClickerService.acquireDisplayMirror
+    jmethodID releaseMirrorMethodId = nullptr;  // IMoonClickerService.releaseDisplayMirror
+    jmethodID isMirrorActiveMethodId = nullptr; // IMoonClickerService.isDisplayMirrorActive
 
     /**
      * ANativeWindow_toSurface 產生的 Java Surface。必須留著到收尾時明確 release()——
@@ -153,4 +153,4 @@ private:
     std::condition_variable sleepCv;
 };
 
-#endif // RELC_SCRIPT_RUNTIME_H
+#endif // MOONCLICKER_SCRIPT_RUNTIME_H

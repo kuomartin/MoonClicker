@@ -1,8 +1,6 @@
 -- 範例腳本：啟動遊戲並比對畫面按鈕
--- 推上裝置：
--- adb push "docs/examples/Alto's Adventure" /sdcard/Android/data/com.xaxaxax.relc/files/scripts/
 
-log("hello from ReLC", screen.width .. "x" .. screen.height, "rotation", screen.rotation)
+log("hello from MoonClicker", screen.width .. "x" .. screen.height, "rotation", screen.rotation)
 data.set("stage", "started")
 
 local appSuccess = app.launch("com.noodlecake.altosadventure")
@@ -13,51 +11,60 @@ if appSuccess then
     data.set("app_success", tostring(appSuccess))
 end
 
-local delta_px = 5
-
-if screen.has_vision then
-    data.set("vision", "available")
-    local stoneReq = {
-        image = "stone.png",
-        roi = {
-            x = 829 - delta_px,
-            y = 809 - delta_px,
-            w = 124 + delta_px * 2,
-            h = 164 + delta_px * 2
-        }
+---add padding
+---@param image string
+---@param roi moonclicker.VisionRoiRect
+---@param delta_px integer
+---@return moonclicker.VisionRequest
+local function template(image, roi, delta_px)
+    local r = {
+        x = roi.x - delta_px,
+        y = roi.y - delta_px,
+        w = roi.w + delta_px * 2,
+        h = roi.h + delta_px * 2
     }
-
-    local stone = vision.wait(stoneReq, 20000)
-    data.set("stone_found", tostring(stone ~= nil))
-    data.set("stone_result", tostring(stone))
-
-    log("stone_found", tostring(stone ~= nil))
-    log("stone_result", tostring(stone))
-
-    local pictureModReq = {
-        image = "pictureMod.png",
-        roi = {
-            x = 39 - delta_px,
-            y = 608 - delta_px,
-            w = 317 + delta_px * 2,
-            h = 98 + delta_px * 2
-        }
+    return {
+        image = image,
+        -- roi = r
     }
+end
 
-    local pictureMod = vision.wait(pictureModReq, 20000)
-    data.set("pictureMod_found", tostring(pictureMod ~= nil))
-    data.set("pictureMod_result", tostring(pictureMod))
+log("rotation", screen.rotation, "w", screen.width, "h", screen.height)
+local stone_roi = { x = 829, y = 809, w = 124, h = 164 }
+local continue_roi = { x = 500, y = 913, w = 129, h = 579 }
+local retry_roi = { x = 16, y = 2047, w = 111, h = 310 }
 
-    log("pictureMod_found", tostring(pictureMod ~= nil))
-    log("pictureMod_result", tostring(pictureMod))
+local reqs = {
+    template("continue.png", continue_roi, 5),
+    template("retry.png", retry_roi, 5)
+}
 
-    if pictureMod ~= nil then
-        log("pictureMod_center", pictureMod.cx .. ", " .. pictureMod.cy)
-        input.tap(pictureMod.cx, pictureMod.cy)
-        sleep(2000)
-    end
+local stone_req = template("stone.png", stone_roi, 5)
+
+data.set("vision", tostring(screen.has_vision))
+local hit_stone = vision.wait(stone_req, 20000)
+
+if hit_stone then
+    input.tap(hit_stone.cx, hit_stone.cy)
+    data.set("status", "tapped_stone")
 else
-    data.set("vision", "unavailable (screen.has_vision is false)")
+    log("stone not found.")
+end
+
+while screen.has_vision do
+    log("rotation", screen.rotation, "w", screen.width, "h", screen.height)
+    local idx,hit = vision.wait_any(reqs, 5000)
+
+    if hit then
+        log("matched", idx, "at", hit.cx, hit.cy)
+        sleep(1000)
+        input.tap(hit.cx, hit.cy)
+        data.set("status", "tapped_" .. idx)
+    else
+        log("timeout, nothing matched")
+        data.set("status", "timeout")
+        input.tap(screen.width // 2, screen.height // 2, 50)
+    end
 end
 
 data.set("stage", "finished")
