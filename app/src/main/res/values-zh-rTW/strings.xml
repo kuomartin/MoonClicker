@@ -193,10 +193,6 @@
     <string name="permission_notification_rationale_title">通知權限說明</string>
     <string name="permission_notification_rationale_desc">ReLC 需要發送通知權限，以便在背景執行自動化腳本或開啟 Script Workbench 伺服器時，於通知列顯示即時執行狀態、日誌訊息與一鍵停止按鈕。未開啟通知可能導致您在切換至其他應用時無法即時掌握腳本運作。</string>
 
-    <string name="permission_overlay_title">懸浮窗權限</string>
-    <string name="permission_overlay_desc">在其他應用程式上方顯示浮動控制視窗與輔助介面。</string>
-    <string name="permission_overlay_rationale_title">懸浮窗權限說明</string>
-    <string name="permission_overlay_rationale_desc">ReLC 需要「顯示在其他應用程式上層」權限，以便在腳本執行或進行螢幕錄製與除錯時，在畫面上呈現便於操作的浮動控制器。</string>
 
     <string name="permission_local_network_title">區域網路權限</string>
     <string name="permission_local_network_desc">允許接受來自區域網路的連線，讓 VS Code 能連上 Workbench。</string>
