@@ -1,11 +1,13 @@
 package com.xaxaxax.relc.ui.setting
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.xaxaxax.relc.R
 import com.xaxaxax.relc.core.AppSettings
 import com.xaxaxax.relc.permission.PermissionManager
 import com.xaxaxax.relc.script.ScriptSession
@@ -22,6 +24,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -46,6 +49,8 @@ data class SettingsUiState(
     val pairingExpiryMs: Long = 0L,
     val bruteForceProtectionEnabled: Boolean = true,
     val authorizedTokensCount: Int = 0,
+    /** Shizuku 遠端服務跑在非 uid=2000（adb shell）身分，多半代表使用者用 root 啟動了它。 */
+    val isShizukuUidWarning: Boolean = false,
 ) {
     val canStartUserService: Boolean
         get() = shizukuStatus == ShizukuConnectionStatus.DISCONNECTED
@@ -56,6 +61,9 @@ data class SettingsUiState(
 }
 
 private const val REFRESH_DELAY = 500
+
+/** adb shell 的 uid，Shizuku 官方建議的執行身分；跑在別的 uid（多半是 0=root）值得提醒使用者。 */
+private const val SHIZUKU_EXPECTED_UID = 2000
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
@@ -70,6 +78,10 @@ class SettingsViewModel @Inject constructor(
     val authStore: WorkbenchAuthStore,
 ) : ViewModel() {
     private val isRefreshing = MutableStateFlow(false)
+
+    /** 一次性提示（例如透過 Shizuku 取得權限失敗），畫面消費後呼叫 [consumeMessage] 清空。 */
+    private val _message = MutableStateFlow<String?>(null)
+    val message: StateFlow<String?> = _message.asStateFlow()
 
     /** 先併成一份，是為了讓外層 combine 停在小於等於 5 個具名參數上。 */
     private val userServiceState = combine(
@@ -122,6 +134,8 @@ class SettingsViewModel @Inject constructor(
             pairingExpiryMs = auth.expiry,
             bruteForceProtectionEnabled = auth.bruteForce,
             authorizedTokensCount = auth.tokensCount,
+            isShizukuUidWarning = status == ShizukuConnectionStatus.CONNECTED &&
+                shizukuManager.currentUid()?.let { it != SHIZUKU_EXPECTED_UID } == true,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -177,6 +191,23 @@ class SettingsViewModel @Inject constructor(
 
     fun getOpenShizukuIntent() = shizukuManager.getOpenShizukuIntent()
     fun requestShizukuPermission() = shizukuManager.requestPermission()
+
+    /** 通知權限說明畫面的「透過 Shizuku 取得權限」動作，失敗時提示改走系統設定。 */
+    fun grantNotificationPermissionViaShizuku() {
+        viewModelScope.launch {
+            val granted = shizukuManager.grantRuntimePermission(Manifest.permission.POST_NOTIFICATIONS)
+            if (granted) {
+                permissionManager.refreshPermissions()
+            } else {
+                _message.value = context.getString(R.string.shizuku_grant_permission_failed)
+            }
+        }
+    }
+
+    fun consumeMessage() {
+        _message.value = null
+    }
+
     fun getNotificationSettingsIntent() = permissionManager.getNotificationSettingsIntent()
     fun getOverlaySettingsIntent() = permissionManager.getOverlaySettingsIntent()
     fun getAppSettingsIntent() = permissionManager.getAppSettingsIntent()

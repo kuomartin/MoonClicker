@@ -178,11 +178,14 @@
     <string name="permission_action_open_shizuku">開啟 Shizuku</string>
     <string name="permission_action_proceed">前往授權</string>
     <string name="permission_action_cancel">稍後再說</string>
+    <string name="permission_action_via_shizuku">透過 Shizuku 取得權限</string>
 
     <string name="permission_shizuku_title">Shizuku 服務與授權</string>
     <string name="permission_shizuku_desc">用於存取系統特權以建立虛擬螢幕與模擬觸控操作。</string>
     <string name="permission_shizuku_rationale_title">Shizuku 授權說明</string>
     <string name="permission_shizuku_rationale_desc">ReLC 需要透過 Shizuku 存取 Android 系統特權 API，用以建立獨立的虛擬螢幕並精準模擬觸控操作。這讓自動化腳本能夠在不干擾實體螢幕的情況下穩定運行。</string>
+    <string name="permission_shizuku_uid_warning">Shizuku 目前以 root 權限執行，建議改用 adb shell（一般）權限。</string>
+    <string name="shizuku_grant_permission_failed">透過 Shizuku 取得權限失敗，請改用系統設定。</string>
 
     <string name="permission_notification_title">通知權限</string>
     <string name="permission_notification_desc">在背景執行腳本或開啟 Workbench 時顯示即時狀態與控制通知。</string>
