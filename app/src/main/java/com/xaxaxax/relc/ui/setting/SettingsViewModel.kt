@@ -58,6 +58,7 @@ data class SettingsUiState(
     val authorizedTokensCount: Int = 0,
     /** Shizuku 遠端服務跑在非 uid=2000（adb shell）身分，多半代表使用者用 root 啟動了它。 */
     val isShizukuUidWarning: Boolean = false,
+    val isDeveloperOptionsUnlocked: Boolean = false,
 ) {
     val canStartUserService: Boolean
         get() = shizukuStatus == ShizukuConnectionStatus.DISCONNECTED
@@ -131,8 +132,9 @@ class SettingsViewModel @Inject constructor(
         appSettings.autoOpenFullscreen,
         appSettings.defaultStartPage,
         _appLanguage,
-    ) { autoOpenFullscreen, defaultStartPage, appLanguage ->
-        GeneralSettingsStateHolder(autoOpenFullscreen, defaultStartPage, appLanguage)
+        appSettings.developerOptionsUnlocked,
+    ) { autoOpenFullscreen, defaultStartPage, appLanguage, developerOptionsUnlocked ->
+        GeneralSettingsStateHolder(autoOpenFullscreen, defaultStartPage, appLanguage, developerOptionsUnlocked)
     }
 
     val uiState: StateFlow<SettingsUiState> = combine(
@@ -151,6 +153,7 @@ class SettingsViewModel @Inject constructor(
             autoOpenFullscreen = general.autoOpenFullscreen,
             defaultStartPage = general.defaultStartPage,
             appLanguage = general.appLanguage,
+            isDeveloperOptionsUnlocked = general.developerOptionsUnlocked,
             autoStartUserService = autoStart,
             isScriptRunning = scriptRunning,
             workbenchEnabled = workbenchEnabled,
@@ -277,6 +280,7 @@ private data class GeneralSettingsStateHolder(
     val autoOpenFullscreen: Boolean,
     val defaultStartPage: TopLevelDestination,
     val appLanguage: String,
+    val developerOptionsUnlocked: Boolean,
 )
 
 private data class PairingStateHolder(

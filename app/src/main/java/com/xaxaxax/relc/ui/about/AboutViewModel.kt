@@ -20,8 +20,6 @@ class AboutViewModel @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val appSettings: AppSettings,
 ) : ViewModel() {
-    val isDeveloperOptionsUnlocked: StateFlow<Boolean> = appSettings.developerOptionsUnlocked
-
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
 

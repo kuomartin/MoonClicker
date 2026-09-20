@@ -125,14 +125,12 @@ fun RelcNavGraph(
             // --- SETTINGS 群組 ---
             composable<SettingsRoute> {
                 SettingsScreen(
-                    onNavigateToAbout = { navController.navigate(AboutRoute) }
+                    onNavigateToAbout = { navController.navigate(AboutRoute) },
+                    onNavigateToDeveloperOptions = { navController.navigate(DeveloperOptionsRoute) },
                 )
             }
             composable<AboutRoute> {
-                AboutScreen(
-                    onNavigateBack = { navController.popBackStack() },
-                    onNavigateToDeveloperOptions = { navController.navigate(DeveloperOptionsRoute) },
-                )
+                AboutScreen(onNavigateBack = { navController.popBackStack() })
             }
             composable<DeveloperOptionsRoute> {
                 DeveloperOptionsScreen(onNavigateBack = { navController.popBackStack() })

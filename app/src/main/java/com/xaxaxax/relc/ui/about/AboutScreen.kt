@@ -5,13 +5,11 @@ import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -46,11 +44,9 @@ private const val LICENSE_URL = "$REPO_URL/blob/master/LICENSE"
 @Composable
 fun AboutScreen(
     onNavigateBack: () -> Unit,
-    onNavigateToDeveloperOptions: () -> Unit = {},
     viewModel: AboutViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
-    val isDeveloperOptionsUnlocked by viewModel.isDeveloperOptionsUnlocked.collectAsState()
     val message by viewModel.message.collectAsState()
 
     // 連點解鎖時每一下都要立刻有回饋；系統的 Toast 佇列預設會排隊播放，快速連點會讓提示
@@ -123,26 +119,6 @@ fun AboutScreen(
                 value = stringResource(R.string.about_license_value),
                 onClick = { openUrl(LICENSE_URL) },
             )
-
-            if (isDeveloperOptionsUnlocked) {
-                HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable(onClick = onNavigateToDeveloperOptions)
-                        .padding(vertical = 12.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(stringResource(R.string.about_developer_options), style = MaterialTheme.typography.bodyLarge)
-                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
-                    }
-                }
-            }
         }
     }
 }
