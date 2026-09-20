@@ -197,6 +197,11 @@
     <string name="permission_overlay_rationale_title">懸浮窗權限說明</string>
     <string name="permission_overlay_rationale_desc">ReLC 需要「顯示在其他應用程式上層」權限，以便在腳本執行或進行螢幕錄製與除錯時，在畫面上呈現便於操作的浮動控制器。</string>
 
+    <string name="permission_local_network_title">區域網路權限</string>
+    <string name="permission_local_network_desc">允許接受來自區域網路的連線，讓 VS Code 能連上 Workbench。</string>
+    <string name="permission_local_network_rationale_title">區域網路權限說明</string>
+    <string name="permission_local_network_rationale_desc">從 Android 17 起，接受來自區域網路的連入 TCP 連線需要這個 runtime permission。ReLC 需要它讓 VS Code 擴充套件能透過 Wi-Fi 連上 Script Workbench。拒絕不會關閉 Workbench——本機診斷功能仍可使用，只是外部連線連不進來。</string>
+
     <string name="permission_secondary_displays_title">次要顯示器支援</string>
     <string name="permission_secondary_displays_desc">系統是否支援在次要/虛擬顯示器上啟動與執行應用程式。</string>
     <string name="permission_secondary_displays_enabled">系統支援</string>
