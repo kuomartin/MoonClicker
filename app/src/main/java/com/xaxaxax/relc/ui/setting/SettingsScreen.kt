@@ -63,7 +63,9 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.xaxaxax.relc.R
+import com.xaxaxax.relc.TopLevelDestination
 import com.xaxaxax.relc.shizuku.ShizukuConnectionStatus
+import com.xaxaxax.relc.ui.component.DropdownBox
 import com.xaxaxax.relc.ui.component.PermissionRationaleDialog
 import com.xaxaxax.relc.ui.component.Section
 import com.xaxaxax.relc.ui.component.shizukuStatusAppearance
@@ -195,6 +197,7 @@ fun SettingsScreen(
         },
         onRefresh = { viewModel.refreshPermissions(true) },
         onAutoOpenFullscreenChange = viewModel::setAutoOpenFullscreen,
+        onDefaultStartPageChange = viewModel::setDefaultStartPage,
         onAutoStartUserServiceChange = viewModel::setAutoStartUserService,
         onWorkbenchEnabledChange = viewModel::setWorkbenchEnabled,
         onStartUserService = viewModel::startUserService,
@@ -216,6 +219,7 @@ private fun SettingsScreenContent(
     onRequestLocalNetworkPermission: () -> Unit = {},
     onRefresh: () -> Unit,
     onAutoOpenFullscreenChange: (Boolean) -> Unit,
+    onDefaultStartPageChange: (TopLevelDestination) -> Unit = {},
     onAutoStartUserServiceChange: (Boolean) -> Unit = {},
     onWorkbenchEnabledChange: (Boolean) -> Unit = {},
     onStartUserService: () -> Unit = {},
@@ -364,6 +368,10 @@ private fun SettingsScreenContent(
                             description = stringResource(R.string.settings_auto_fullscreen_note),
                             checked = uiState.autoOpenFullscreen,
                             onCheckedChange = onAutoOpenFullscreenChange,
+                        )
+                        DefaultStartPageSettingItem(
+                            value = uiState.defaultStartPage,
+                            onChange = onDefaultStartPageChange,
                         )
                         ToggleSettingItem(
                             name = stringResource(R.string.settings_workbench),
@@ -553,6 +561,29 @@ private fun ToggleSettingItem(
             )
         }
         Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+@Composable
+private fun DefaultStartPageSettingItem(
+    value: TopLevelDestination,
+    onChange: (TopLevelDestination) -> Unit,
+) {
+    val labels = TopLevelDestination.entries.associateWith { stringResource(it.labelRes) }
+    Column(modifier = Modifier.padding(vertical = 12.dp)) {
+        Text(text = stringResource(R.string.settings_default_start_page), style = MaterialTheme.typography.bodyLarge)
+        Text(
+            text = stringResource(R.string.settings_default_start_page_note),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        DropdownBox(
+            values = TopLevelDestination.entries,
+            value = value,
+            transform = { labels.getValue(it) },
+            onChange = onChange,
+        )
     }
 }
 

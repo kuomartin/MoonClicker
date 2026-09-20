@@ -42,6 +42,7 @@ class RelcActivity : ComponentActivity() {
         setContent {
             ReLCTheme {
                 RelcNavGraph(
+                    startDestination = appSettings.defaultStartPage.value.route,
                     openScriptsPage = openScriptsPage.value,
                     onScriptsPageOpened = { openScriptsPage.value = false },
                 )

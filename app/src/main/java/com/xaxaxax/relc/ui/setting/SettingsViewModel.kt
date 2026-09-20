@@ -8,6 +8,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.xaxaxax.relc.R
+import com.xaxaxax.relc.TopLevelDestination
 import com.xaxaxax.relc.core.AppSettings
 import com.xaxaxax.relc.permission.PermissionManager
 import com.xaxaxax.relc.script.ScriptSession
@@ -38,6 +39,7 @@ data class SettingsUiState(
     val hasLocalNetworkPermission: Boolean = false,
     val isRefreshing: Boolean = false,
     val autoOpenFullscreen: Boolean = false,
+    val defaultStartPage: TopLevelDestination = TopLevelDestination.SCRIPTS,
     val autoStartUserService: Boolean = true,
     val workbenchEnabled: Boolean = false,
     /** Server 目前監聽的 "ip:port"，供 QR code 配對顯示；未啟動或還沒 bind 完成時是 null。 */
@@ -113,13 +115,18 @@ class SettingsViewModel @Inject constructor(
         authState,
     ) { enabled, address, auth -> Triple(enabled, address, auth) }
 
+    private val generalSettingsState = combine(
+        appSettings.autoOpenFullscreen,
+        appSettings.defaultStartPage,
+    ) { autoOpenFullscreen, defaultStartPage -> autoOpenFullscreen to defaultStartPage }
+
     val uiState: StateFlow<SettingsUiState> = combine(
         userServiceState,
         permissionCombinedState,
         isRefreshing,
-        appSettings.autoOpenFullscreen,
+        generalSettingsState,
         workbenchCombinedState,
-    ) { (status, autoStart, scriptRunning), permissions, refreshing, autoOpenFullscreen, (workbenchEnabled, workbenchAddress, auth) ->
+    ) { (status, autoStart, scriptRunning), permissions, refreshing, (autoOpenFullscreen, defaultStartPage), (workbenchEnabled, workbenchAddress, auth) ->
         SettingsUiState(
             shizukuStatus = status,
             hasNotificationPermission = permissions.hasNotification,
@@ -127,6 +134,7 @@ class SettingsViewModel @Inject constructor(
             hasLocalNetworkPermission = permissions.hasLocalNetwork,
             isRefreshing = refreshing,
             autoOpenFullscreen = autoOpenFullscreen,
+            defaultStartPage = defaultStartPage,
             autoStartUserService = autoStart,
             isScriptRunning = scriptRunning,
             workbenchEnabled = workbenchEnabled,
@@ -172,6 +180,8 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun setAutoOpenFullscreen(enabled: Boolean) = appSettings.setAutoOpenFullscreen(enabled)
+
+    fun setDefaultStartPage(destination: TopLevelDestination) = appSettings.setDefaultStartPage(destination)
 
     fun setAutoStartUserService(enabled: Boolean) = appSettings.setAutoStartUserService(enabled)
 
