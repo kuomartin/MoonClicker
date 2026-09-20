@@ -1,6 +1,6 @@
 {
   "name": "Alto's Adventure",
-  "description": "End-to-end test for ReLC Lua API",
+  "description": "End-to-end test for MoonClicker Lua API",
   "display": {
     "width": 1080,
     "height": 2400,
