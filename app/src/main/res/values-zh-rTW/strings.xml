@@ -156,6 +156,7 @@
     <string name="workbench_notification_channel_label">Script Workbench</string>
     <string name="workbench_notification_channel_description">Script Workbench server 開啟時的常駐通知。</string>
     <string name="workbench_notification_title">Script Workbench 正在監聽</string>
+    <string name="workbench_notification_action_stop">關閉</string>
 
     <!-- Workbench Pairing / Security -->
     <string name="settings_pairing_title">裝置配對 (PIN Pairing)</string>

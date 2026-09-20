@@ -156,6 +156,7 @@
     <string name="workbench_notification_channel_label">Script Workbench</string>
     <string name="workbench_notification_channel_description">Persistent notification when Script Workbench server is active.</string>
     <string name="workbench_notification_title">Script Workbench is listening</string>
+    <string name="workbench_notification_action_stop">Turn off</string>
 
     <!-- Workbench Pairing / Security -->
     <string name="settings_pairing_title">Device Pairing (PIN Pairing)</string>
