@@ -20,6 +20,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
+import com.xaxaxax.relc.ui.about.AboutScreen
 import com.xaxaxax.relc.ui.displaydetail.FullscreenDisplayActivity
 import com.xaxaxax.relc.ui.displays.DisplaysScreen
 import com.xaxaxax.relc.ui.scriptdetail.ScriptDetailScreen
@@ -122,7 +123,12 @@ fun RelcNavGraph(
 
             // --- SETTINGS 群組 ---
             composable<SettingsRoute> {
-                SettingsScreen()
+                SettingsScreen(
+                    onNavigateToAbout = { navController.navigate(AboutRoute) }
+                )
+            }
+            composable<AboutRoute> {
+                AboutScreen(onNavigateBack = { navController.popBackStack() })
             }
         }
     }

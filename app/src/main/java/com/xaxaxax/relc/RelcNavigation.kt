@@ -35,3 +35,6 @@ data class DisplayDetailRoute(val id: String)
 
 @Serializable
 data class ScriptDetailRoute(val id: String)
+
+@Serializable
+object AboutRoute
