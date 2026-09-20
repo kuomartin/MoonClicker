@@ -28,6 +28,7 @@ import com.xaxaxax.relc.ui.setting.SettingsScreen
 
 @Composable
 fun RelcNavGraph(
+    startDestination: Any = ScriptsRoute,
     openScriptsPage: Boolean = false,
     onScriptsPageOpened: () -> Unit = {},
 ) {
@@ -83,7 +84,7 @@ fun RelcNavGraph(
 
         NavHost(
             navController = navController,
-            startDestination = ScriptsRoute
+            startDestination = startDestination
         ) {
             // --- DISPLAYS 群組 ---
             composable<DisplaysRoute> {

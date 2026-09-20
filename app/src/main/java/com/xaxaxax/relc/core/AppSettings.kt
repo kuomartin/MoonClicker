@@ -2,6 +2,7 @@ package com.xaxaxax.relc.core
 
 import android.content.Context
 import androidx.core.content.edit
+import com.xaxaxax.relc.TopLevelDestination
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -47,6 +48,20 @@ class AppSettings @Inject constructor(
         _autoStartUserService.value = enabled
     }
 
+    private val _defaultStartPage = MutableStateFlow(
+        prefs.getString(KEY_DEFAULT_START_PAGE, null)
+            ?.let { name -> runCatching { TopLevelDestination.valueOf(name) }.getOrNull() }
+            ?: TopLevelDestination.SCRIPTS
+    )
+
+    /** App 啟動時第一個顯示的頂層頁面，目前固定為 Scripts；這裡讓使用者可以自己選。 */
+    val defaultStartPage: StateFlow<TopLevelDestination> = _defaultStartPage.asStateFlow()
+
+    fun setDefaultStartPage(destination: TopLevelDestination) {
+        prefs.edit { putString(KEY_DEFAULT_START_PAGE, destination.name) }
+        _defaultStartPage.value = destination
+    }
+
     private val _workbenchEnabled =
         MutableStateFlow(prefs.getBoolean(KEY_WORKBENCH_ENABLED, false))
 
@@ -62,5 +77,6 @@ class AppSettings @Inject constructor(
         const val KEY_AUTO_FULLSCREEN = "auto_open_fullscreen"
         const val KEY_AUTO_START_USER_SERVICE = "auto_start_user_service"
         const val KEY_WORKBENCH_ENABLED = "workbench_enabled"
+        const val KEY_DEFAULT_START_PAGE = "default_start_page"
     }
 }

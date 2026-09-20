@@ -123,6 +123,8 @@
     <string name="settings_general">General</string>
     <string name="settings_auto_fullscreen">Auto-open fullscreen when running on virtual display</string>
     <string name="settings_auto_fullscreen_note">When disabled, the script still runs in the background without popping up the mirror screen.</string>
+    <string name="settings_default_start_page">Default start page</string>
+    <string name="settings_default_start_page_note">The page shown first when the app launches.</string>
 
     <!-- Shizuku Connection Status -->
     <string name="shizuku_status_not_available">Shizuku Not Running</string>

@@ -123,6 +123,8 @@
     <string name="settings_general">一般</string>
     <string name="settings_auto_fullscreen">在虛擬顯示執行時自動開啟全螢幕</string>
     <string name="settings_auto_fullscreen_note">關閉時腳本仍在背景執行，只是不會跳出鏡像畫面。</string>
+    <string name="settings_default_start_page">預設啟動頁面</string>
+    <string name="settings_default_start_page_note">App 啟動時第一個顯示的頁面。</string>
 
     <!-- Shizuku Connection Status -->
     <string name="shizuku_status_not_available">Shizuku 未啟動</string>
