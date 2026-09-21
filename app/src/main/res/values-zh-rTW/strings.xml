@@ -9,7 +9,6 @@
     <!-- Common Actions / Labels -->
     <string name="common_cancel">取消</string>
     <string name="common_create">建立</string>
-    <string name="common_save">儲存</string>
     <string name="common_delete">刪除</string>
     <string name="common_confirm">確定</string>
     <string name="common_status">狀態</string>
@@ -55,10 +54,6 @@
     <string name="fullscreen_menu_close_display">關閉顯示器</string>
     <string name="fullscreen_menu_return_app">返回 MoonClicker</string>
     <string name="fullscreen_select_app_title">選擇要啟動的應用程式</string>
-    <string name="crop_capturing">擷取中…</string>
-    <string name="crop_save_template_title">儲存模板圖片</string>
-    <string name="crop_template_name">模板名稱</string>
-    <string name="crop_save_button">儲存裁切</string>
 
     <!-- Script status notification -->
     <string name="script_status_channel_label">腳本執行狀態</string>

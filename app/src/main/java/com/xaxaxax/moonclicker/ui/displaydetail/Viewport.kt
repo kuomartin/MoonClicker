@@ -22,8 +22,7 @@ data class Viewport(
      * MainDisplay（display 0）相對自然方向轉了幾個直角（`Surface.ROTATION_*`，0..3）。
      *
      * `d` 是這個型別唯一認識的旋轉，用來決定 letterbox 尺寸與 [viewRotationDegrees]。
-     * 鏡像目前不用後者（見 [VirtualDisplayMirror]），但 `Viewport` 本身仍支援；
-     * `CropSession` 目前是另一個呼叫端。
+     * 鏡像目前不用後者（見 [VirtualDisplayMirror]），但 `Viewport` 本身仍支援。
      */
     val d: Int,
 ) {
