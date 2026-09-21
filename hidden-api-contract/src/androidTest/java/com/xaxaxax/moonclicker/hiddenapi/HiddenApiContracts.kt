@@ -233,6 +233,13 @@ internal val HIDDEN_API_CONTRACTS: List<MemberContract> = listOf(
         sinceApi = Build.VERSION_CODES.Q,
     ),
 
+    // ── KeyEventHidden ─────────────────────────────────────────────────────────────────────
+    MemberContract(
+        owner = "android.view.KeyEvent",
+        member = MethodMember(name = "setDisplayId", parameters = listOf("int"), returns = "void"),
+        sinceApi = Build.VERSION_CODES.Q,
+    ),
+
 
     // ── MotionEventHidden ──────────────────────────────────────────────────────────────────
     MemberContract(
