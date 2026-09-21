@@ -45,14 +45,10 @@
     <string name="displays_preset_tablet">Tablet</string>
 
     <!-- Fullscreen -->
-    <string name="fullscreen_screenshot">Screenshot</string>
     <string name="fullscreen_exit">Exit</string>
-    <string name="fullscreen_more_options">More Options</string>
     <string name="fullscreen_menu_start_app">Start App</string>
-    <string name="fullscreen_menu_enable_readonly">Enable Read-Only</string>
-    <string name="fullscreen_menu_disable_readonly">Disable Read-Only</string>
     <string name="fullscreen_menu_close_display">Close Display</string>
-    <string name="fullscreen_menu_return_app">Return to MoonClicker</string>
+    <string name="fullscreen_menu_home">Home</string>
     <string name="fullscreen_select_app_title">Select App to Start</string>
 
     <!-- Script status notification -->

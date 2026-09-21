@@ -44,15 +44,11 @@
     <string name="displays_preset_medium">中</string>
     <string name="displays_preset_tablet">平板</string>
 
-    <!-- Fullscreen &amp; Crop -->
-    <string name="fullscreen_screenshot">截圖</string>
+    <!-- Fullscreen -->
     <string name="fullscreen_exit">離開</string>
-    <string name="fullscreen_more_options">更多選項</string>
     <string name="fullscreen_menu_start_app">啟動應用程式</string>
-    <string name="fullscreen_menu_enable_readonly">開啟唯讀模式</string>
-    <string name="fullscreen_menu_disable_readonly">關閉唯讀模式</string>
     <string name="fullscreen_menu_close_display">關閉顯示器</string>
-    <string name="fullscreen_menu_return_app">返回 MoonClicker</string>
+    <string name="fullscreen_menu_home">Home 鍵</string>
     <string name="fullscreen_select_app_title">選擇要啟動的應用程式</string>
 
     <!-- Script status notification -->

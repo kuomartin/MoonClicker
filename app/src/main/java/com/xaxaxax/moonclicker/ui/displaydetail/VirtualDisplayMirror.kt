@@ -54,7 +54,6 @@ fun VirtualDisplayMirror(
     addSurface: (Surface) -> Unit,
     removeSurface: (Surface) -> Unit,
     service: IMoonClickerService,
-    isReadOnly: Boolean,
     modifier: Modifier = Modifier,
     onTextureViewCreated: (TextureView) -> Unit = {},
     onFrameAvailable: () -> Unit = {},
@@ -113,7 +112,6 @@ fun VirtualDisplayMirror(
                 service = service,
                 viewport = viewport,
                 geometry = geometry,
-                isReadOnly = isReadOnly,
                 modifier = Modifier.matchParentSize(),
             )
         }
@@ -190,7 +188,6 @@ private fun TouchForwarder(
     service: IMoonClickerService,
     viewport: Viewport,
     geometry: DisplayGeometry,
-    isReadOnly: Boolean,
     modifier: Modifier = Modifier,
 ) {
     // view 沒有被旋轉過，節點座標已經直接是內容矩形的相對座標，touchTransform 只剩縮放。
@@ -204,7 +201,7 @@ private fun TouchForwarder(
 
     Box(
         modifier.pointerInteropFilter { event ->
-            if (isReadOnly || targetDisplayId == -1) return@pointerInteropFilter false
+            if (targetDisplayId == -1) return@pointerInteropFilter false
 
             val geom = currentGeometry
             val key = Triple(geom.rotation, viewport.contentWidth, viewport.contentHeight)
