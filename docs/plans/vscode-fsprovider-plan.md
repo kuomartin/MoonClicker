@@ -22,9 +22,8 @@
 |---|---|
 | 新增 oneof 分支 | `FileChangeEvent file_change = 3` |
 | FileChangeEvent 欄位 | `scriptId string`、`path string`、`kind enum{CREATED, CHANGED, DELETED}` |
-| 觸發時機 | 裝置端任何管道寫入 Script Folder 後廣播：新 HTTP 單檔 API、App 內建輯器（若有）、**以及 `FileObserver`/`WatchService` 監控到的外部改動**（檔案管理員、USB 接電腦直接改）|
-| 用途 | 擴充套件收到後 fire `onDidChangeFile`，並局部更新 tree cache，不必整包重抓 `/tree` |
-| 裝置端新增項目 | 每個開啟中的 Script Folder（有 provider client 連線期間）掛一個 `FileObserver`，變更 debounce 後推播；避免自己 API 寫入又被自己的 observer 重複推播一次（用短時間內的 self-write 標記去重） |
+| 觸發時機 | 僅限透過新 HTTP 單檔案 API 寫入時廣播（self-write）。**外部改動（檔案管理員、USB 接電腦直接改）不涵蓋，`FileObserver` 方案已放棄**——inotify 不遞迴，要涵蓋得對每個腳本資料夾與其子目錄各自維護 watch，決定不做（已查證見 [FileObserver.java](file:///home/martin/Android/Sdk/sources/android-36.1/android/os/FileObserver.java)） |
+| 用途 | 擴充套件收到後 fire `onDidChangeFile`，並局部更新 tree cache，不必整包重抓 `/tree`；效果侷限在「多個 VS Code client 同時連線時彼此同步」 |
 
 ## C. VS Code 擴充套件架構異動
 
@@ -52,4 +51,4 @@
 
 1. **Zip**：裝置端 `/export`、`/import` HTTP route 移除；`ScriptArchive.kt` 本身留著給 App 內建功能用。VS Code 端若要備份/還原，改在擴充套件內用新的細粒度 API 自己組 zip（見上表 `scriptArchive.ts`），不需要裝置端配合。
 2. **LuaLS 型別提示**：virtual 資料夾放棄，`setupStubs` 只對本機 pull 下來的資料夾生效。根因是 LuaLS 為原生行程、直接對解碼後的 OS 路徑做 `io.open`，不經過 `vscode.FileSystemProvider`，沒有繞過空間（查證見上表 `luarc.ts` 列）。
-3. **外部變更偵測**：裝置端加 `FileObserver`/`WatchService`，外部（檔案管理員、USB）改動也會推播 `file_change`（見 B 表）。
+3. **外部變更偵測**：放棄。`file_change` 只涵蓋透過新 HTTP 單檔案 API 的寫入；檔案管理員/USB 直接改動不會被偵測到，VS Code 端不會即時看到——使用者要嘛重新整理，要嘛（如果編輯中）遇到裝置端內容已不同步的落差，這是接受的取捨。
