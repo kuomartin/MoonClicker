@@ -45,8 +45,6 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.emptyFlow
-import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.Serializable
@@ -82,20 +80,15 @@ interface ScriptStream {
     val sharedData: StateFlow<Map<String, Any>>
 }
 
-/** VS Code FileSystemProvider 的 `onDidChangeFile` 要推播的單一檔案變動。 */
+/**
+ * VS Code FileSystemProvider 的 `onDidChangeFile` 要推播的單一檔案變動。只涵蓋透過 HTTP
+ * 單檔案 API 寫入的改動（self-write）——外部（檔案管理員、USB 接電腦）直接動到 Script
+ * Folder 不會被偵測到：inotify／`FileObserver` 不遞迴，要涵蓋外部改動得對每個腳本資料夾
+ * （與其子目錄）各自維護一個 watch，決定不做這件事（見 vscode-fsprovider-plan.md E3）。
+ */
 enum class ScriptFileChangeKind { CREATED, CHANGED, DELETED }
 
 data class ScriptFileChange(val scriptId: String, val path: String, val kind: ScriptFileChangeKind)
-
-/**
- * Script Folder 被**外部**（檔案管理員、USB 接電腦）改動時的通知來源。透過 HTTP 單檔案
- * API 寫入的改動不算在這裡——那些由 route handler 自己直接送進 workbenchModule 內部的
- * broadcast flow，不需要繞這層介面。存在這一層純粹是為了讓真正的實作（Android
- * `FileObserver`）可以被換成 JVM 測試用的假 flow。
- */
-interface FileChangeSource {
-    val changes: Flow<ScriptFileChange>
-}
 
 /**
  * Display info needed by the extension to show mirror choices (見 #87).
@@ -264,16 +257,11 @@ fun Application.workbenchModule(
     },
     shizukuManager: ShizukuManager? = null,
     authStore: WorkbenchAuthStore? = null,
-    fileChangeSource: FileChangeSource = object : FileChangeSource {
-        override val changes: Flow<ScriptFileChange> = emptyFlow()
-    },
 ) {
     install(WebSockets)
-    // HTTP 單檔案 API 自己寫入的改動（self-write）跟 [fileChangeSource]（外部改動）合流，
-    // 兩者都要推給每個開著的 WebSocket——一個 VS Code client 存檔，另一個開著同一顆腳本的
-    // client 也要看到。
-    val selfFileChanges = MutableSharedFlow<ScriptFileChange>(extraBufferCapacity = 64)
-    val fileChanges = merge(selfFileChanges, fileChangeSource.changes)
+    // 誰透過 HTTP 單檔案 API 寫入，都要推給每個開著的 WebSocket——一個 VS Code client
+    // 存檔，另一個開著同一顆腳本的 client 也要看到。
+    val fileChanges = MutableSharedFlow<ScriptFileChange>(extraBufferCapacity = 64)
     install(CORS) {
         anyHost()
     }
@@ -450,7 +438,7 @@ fun Application.workbenchModule(
             val existed = target.isFile
             target.parentFile?.mkdirs()
             target.writeBytes(call.receiveStream().readBytes())
-            selfFileChanges.tryEmit(
+            fileChanges.tryEmit(
                 ScriptFileChange(script.id, relativePath, if (existed) ScriptFileChangeKind.CHANGED else ScriptFileChangeKind.CREATED)
             )
             call.respondText("OK")
@@ -472,7 +460,7 @@ fun Application.workbenchModule(
                 call.respondText("Failed to delete", status = HttpStatusCode.InternalServerError)
                 return@delete
             }
-            selfFileChanges.tryEmit(ScriptFileChange(script.id, relativePath, ScriptFileChangeKind.DELETED))
+            fileChanges.tryEmit(ScriptFileChange(script.id, relativePath, ScriptFileChangeKind.DELETED))
             call.respondText("OK")
         }
 
@@ -495,7 +483,7 @@ fun Application.workbenchModule(
             val existed = target.isDirectory
             target.mkdirs()
             if (!existed) {
-                selfFileChanges.tryEmit(ScriptFileChange(script.id, relativePath, ScriptFileChangeKind.CREATED))
+                fileChanges.tryEmit(ScriptFileChange(script.id, relativePath, ScriptFileChangeKind.CREATED))
             }
             call.respondText("OK")
         }
@@ -529,8 +517,8 @@ fun Application.workbenchModule(
                 call.respondText("Failed to rename", status = HttpStatusCode.InternalServerError)
                 return@post
             }
-            selfFileChanges.tryEmit(ScriptFileChange(script.id, body.from, ScriptFileChangeKind.DELETED))
-            selfFileChanges.tryEmit(ScriptFileChange(script.id, body.to, ScriptFileChangeKind.CREATED))
+            fileChanges.tryEmit(ScriptFileChange(script.id, body.from, ScriptFileChangeKind.DELETED))
+            fileChanges.tryEmit(ScriptFileChange(script.id, body.to, ScriptFileChangeKind.CREATED))
             call.respondText("OK")
         }
 
