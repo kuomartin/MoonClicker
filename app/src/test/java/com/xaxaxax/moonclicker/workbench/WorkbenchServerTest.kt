@@ -295,6 +295,25 @@ class WorkbenchServerTest {
     }
 
     @Test
+    fun `tree route reports sha256 for files and an empty hash for directories`() = runTest {
+        val dir = scriptFolder("hello", "log('hi')")
+        File(dir, "assets").mkdirs()
+
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+
+            val response = client.get("/scripts/hello/tree")
+
+            val body = response.bodyAsText()
+            val expectedHash = java.security.MessageDigest.getInstance("SHA-256")
+                .digest("log('hi')".toByteArray())
+                .joinToString("") { "%02x".format(it) }
+            assertTrue(body.contains("\"sha256\":\"$expectedHash\""))
+            assertTrue(Regex("""\{"path":"assets","size":0,"mtimeMs":\d+,"isDirectory":true,"sha256":""}""").containsMatchIn(body))
+        }
+    }
+
+    @Test
     fun `tree route 404s for an unknown script id`() = runTest {
         testApplication {
             application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }

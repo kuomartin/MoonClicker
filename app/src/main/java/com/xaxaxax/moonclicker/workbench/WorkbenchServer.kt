@@ -233,7 +233,13 @@ class WorkbenchServer @Inject constructor(
 data class WorkbenchScriptSummary(val id: String, val name: String)
 
 @Serializable
-data class ScriptTreeEntry(val path: String, val size: Long, val mtimeMs: Long, val isDirectory: Boolean)
+data class ScriptTreeEntry(
+    val path: String,
+    val size: Long,
+    val mtimeMs: Long,
+    val isDirectory: Boolean,
+    val sha256: String,
+)
 
 @Serializable
 data class RenameRequest(val from: String, val to: String, val overwrite: Boolean = false)
@@ -381,9 +387,10 @@ fun Application.workbenchModule(
             call.respondText(Json.encodeToString(scripts), ContentType.Application.Json)
         }
 
-        // Script Folder 單檔案讀寫（見 vscode-fsprovider-plan）：VS Code 的
-        // `vscode.FileSystemProvider` 直接對著這幾個路由做 stat/readDirectory/readFile/
-        // writeFile/delete/rename，取代整包 zip 的 export/import。
+        // Script Folder 單檔案讀寫（見 vscode-local-mirror-plan）：VS Code 端維護一份本機
+        // 鏡像資料夾，靠這幾個路由跟裝置做背景同步——取代整包 zip 的 export/import，
+        // 也取代直接把這份 API 接成 vscode.FileSystemProvider 的做法（LuaLS 讀不到
+        // virtual scheme，見 vscode-fsprovider-plan E2）。
         get("/scripts/{id}/tree") {
             val script = call.parameters["id"]?.let { id -> ScriptStore.scan(scriptsRoot).find { it.id == id } }
             if (script == null) {
@@ -398,6 +405,9 @@ fun Application.workbenchModule(
                         size = if (file.isFile) file.length() else 0L,
                         mtimeMs = file.lastModified(),
                         isDirectory = file.isDirectory,
+                        // VS Code 端拿這個判斷 self-echo（自己剛推上去的改動不用重新下載）
+                        // 跟要不要跳過某個檔案的 pull，見 vscode-local-mirror-plan Q2。
+                        sha256 = if (file.isFile) file.sha256Hex() else "",
                     )
                 }
                 .toList()
@@ -626,6 +636,19 @@ private fun dataFrame(data: Map<String, Any>): Frame =
 private fun Any.toStructValue(): Any = when (this) {
     is Double, is Boolean, is String -> this
     else -> toString()
+}
+
+private fun File.sha256Hex(): String {
+    val digest = java.security.MessageDigest.getInstance("SHA-256")
+    inputStream().use { input ->
+        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+        while (true) {
+            val read = input.read(buffer)
+            if (read <= 0) break
+            digest.update(buffer, 0, read)
+        }
+    }
+    return digest.digest().joinToString("") { "%02x".format(it) }
 }
 
 private fun fileChangeFrame(change: ScriptFileChange): Frame =
