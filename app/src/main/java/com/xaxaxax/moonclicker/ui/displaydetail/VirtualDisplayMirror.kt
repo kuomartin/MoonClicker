@@ -56,7 +56,6 @@ fun VirtualDisplayMirror(
     service: IMoonClickerService,
     modifier: Modifier = Modifier,
     onTextureViewCreated: (TextureView) -> Unit = {},
-    onFrameAvailable: () -> Unit = {},
 ) {
     BoxWithConstraints(modifier.background(Color.Black)) {
         // v 已經在 distributor 被消掉，這裡的「自然尺寸」只是把 v 造成的長寬互換算回來，
@@ -96,7 +95,6 @@ fun VirtualDisplayMirror(
                 addSurface = addSurface,
                 removeSurface = removeSurface,
                 onTextureViewCreated = onTextureViewCreated,
-                onFrameAvailable = onFrameAvailable,
                 modifier = Modifier
                     .align(Alignment.Center)
                     .size(
@@ -125,14 +123,12 @@ private fun MirrorSurface(
     addSurface: (Surface) -> Unit,
     removeSurface: (Surface) -> Unit,
     onTextureViewCreated: (TextureView) -> Unit,
-    onFrameAvailable: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // rememberUpdatedState：listener 重建會連帶重建 Surface，為了換一個 callback 或换一次
+    // rememberUpdatedState：listener 重建會連帶重建 Surface，為了換一次
     // v 造成的尺寸交換而重接一次虛擬顯示不划算。
     val currentBufferWidth by rememberUpdatedState(bufferWidth)
     val currentBufferHeight by rememberUpdatedState(bufferHeight)
-    val currentOnFrameAvailable by rememberUpdatedState(onFrameAvailable)
     val listener = remember(addSurface, removeSurface) {
         object : TextureView.SurfaceTextureListener {
             private var surface: Surface? = null
@@ -160,9 +156,7 @@ private fun MirrorSurface(
                 return true
             }
 
-            // VD 每送一張新畫面就會進來一次，是「有新東西可擷取」唯一的即時訊號（見 #76 的
-            // [MirrorFrameSource]）；閒置時不會被呼叫，遠端串流因此自然停住而不是空轉。
-            override fun onSurfaceTextureUpdated(texture: SurfaceTexture) = currentOnFrameAvailable()
+            override fun onSurfaceTextureUpdated(texture: SurfaceTexture) = Unit
         }
     }
 

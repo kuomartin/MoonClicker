@@ -23,7 +23,6 @@ import io.ktor.server.request.path
 import io.ktor.server.request.receiveStream
 import io.ktor.server.request.receiveText
 import io.ktor.server.response.respondBytes
-import io.ktor.server.response.respondBytesWriter
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
@@ -31,8 +30,6 @@ import io.ktor.server.routing.put
 import io.ktor.server.routing.routing
 import io.ktor.server.websocket.WebSockets
 import io.ktor.server.websocket.webSocket
-import io.ktor.utils.io.writeFully
-import io.ktor.utils.io.writeStringUtf8
 import io.ktor.websocket.Frame
 import io.ktor.websocket.close
 import io.ktor.websocket.CloseReason
@@ -82,22 +79,6 @@ interface ScriptStream {
 }
 
 /**
- * Realtime mirror 串流需要的最小介面（見 #73）。正式實作是
- * [com.xaxaxax.moonclicker.ui.displaydetail.MirrorFrameSource]，接 [com.xaxaxax.moonclicker.ui.displaydetail.VirtualDisplayMirror]
- * 那個 `TextureView`；存在這一層是為了讓 `workbenchModule` 的 JVM 測試餵假的 frame flow，
- * 不需要真的 `Display`/`Surface`/`TextureView`。
- */
-interface FrameSource {
-    /**
-     * @return [displayId] 的 frame flow；displayId 未知時回傳 null，route 依此回 404。
-     * 回傳的 flow 是「活的鏡像串流」，正常情況下不會自己結束——收集者斷線時，route 寫入
-     * 失敗會讓 collect 拋出並結束，flow 本身的 finally/cancellation 語意就地完成清理，
-     * 呼叫端不需要另外追蹤一份 job。
-     */
-    fun frames(displayId: Int): Flow<ByteArray>?
-}
-
-/**
  * Display info needed by the extension to show mirror choices (見 #87).
  */
 @Serializable
@@ -119,7 +100,6 @@ interface DisplaySource {
 class WorkbenchServer @Inject constructor(
     private val scriptStore: ScriptStore,
     private val scriptSession: ScriptSession,
-    private val frameSource: FrameSource,
     private val shizukuManager: ShizukuManager,
     val authStore: WorkbenchAuthStore,
 ) {
@@ -194,7 +174,7 @@ class WorkbenchServer @Inject constructor(
                 CIO,
                 port = PORT,
                 host = host,
-                module = { workbenchModule(scriptsRoot, scriptRunner, scriptStream, frameSource, displaySource, shizukuManager, authStore) },
+                module = { workbenchModule(scriptsRoot, scriptRunner, scriptStream, displaySource, shizukuManager, authStore) },
             ).start(wait = false)
             _address.value = "${localIpv4Address()}:$PORT" // UI 顯示仍保留實際區網 IP 供參考
             true
@@ -254,7 +234,6 @@ fun Application.workbenchModule(
     scriptsRoot: File,
     scriptRunner: ScriptRunner,
     scriptStream: ScriptStream,
-    frameSource: FrameSource,
     displaySource: DisplaySource = object : DisplaySource {
         override fun getDisplays(): List<WorkbenchDisplaySummary> = emptyList()
     },
@@ -457,29 +436,6 @@ fun Application.workbenchModule(
             }
         }
 
-        // Realtime mirror（見 #73、#76）。選 multipart/x-mixed-replace（MJPEG）而不是逐張輪詢
-        // 或 WebRTC 是 #72/#52 已經定案的決策，這條路由跟 webSocket("/") 是分開的傳輸，互不
-        // 干擾。404 涵蓋兩種情況：displayId 不是數字，以及那台顯示目前沒有活著的擷取來源
-        // （鏡像畫面沒開，見 MirrorFrameSource）。
-        get("/mirror/{displayId}") {
-            val displayId = call.parameters["displayId"]?.toIntOrNull()
-            val frames = displayId?.let(frameSource::frames)
-            if (frames == null) {
-                call.respondText("Unknown displayId", status = HttpStatusCode.NotFound)
-                return@get
-            }
-            call.respondBytesWriter(ContentType.parse("multipart/x-mixed-replace; boundary=$MIRROR_BOUNDARY")) {
-                // frames 正常不會自己完成；寫入失敗（client 斷線）讓 collect 拋出並結束，
-                // 不需要另外 launch 一個 job 來追蹤——這個 suspend lambda 本身就是要被清理的
-                // coroutine，收集動作直接發生在它裡面。
-                frames.collect { frame ->
-                    writeStringUtf8("--$MIRROR_BOUNDARY\r\nContent-Type: image/jpeg\r\nContent-Length: ${frame.size}\r\n\r\n")
-                    writeFully(frame)
-                    writeStringUtf8("\r\n")
-                    flush()
-                }
-            }
-        }
         // Realtime mirror (H.264) via WebSocket
         webSocket("/mirror/h264/{displayId}") {
             val displayId = call.parameters["displayId"]?.toIntOrNull()
@@ -511,9 +467,6 @@ fun Application.workbenchModule(
         }
     }
 }
-
-/** MJPEG multipart 串流的 boundary token，跟內容本身無關，純粹是個不會出現在 JPEG bytes 裡的分隔字串。 */
-private const val MIRROR_BOUNDARY = "moonclicker-mirror-frame"
 
 /**
  * `StreamEvent{log=...}` 編碼成二進位 proto frame——形狀來自 `proto/workbench_stream_event.proto`，
