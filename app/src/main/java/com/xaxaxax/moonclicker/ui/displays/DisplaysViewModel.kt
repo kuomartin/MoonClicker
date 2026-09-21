@@ -2,6 +2,7 @@ package com.xaxaxax.moonclicker.ui.displays
 
 import android.content.res.Resources
 import android.hardware.display.DisplayManager
+import android.hardware.display.DisplayManagerHidden
 import android.util.DisplayMetrics
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.lifecycle.ViewModel
@@ -66,6 +67,12 @@ class DisplaysViewModel @Inject constructor(
             width = width,
             height = height,
             densityDpi = density,
+            // 沒有這個 flag，WMS 把顯示器當「沒有系統裝飾」的陽春顯示器處理：App 第一次
+            // 被建立、算初始 Configuration 時讀到的還是轉向前的直向尺寸，套上 App 橫向的
+            // 長寬比後算出一個不上不下的怪尺寸，被判定「App 不支援目前尺寸」凍結進
+            // SIZE_COMPAT_MODE，letterbox 再也不會跟著 VD 之後真正的轉向重算。見
+            // docs/research/vd-fullscreen-letterbox-root-cause.md 的真機 dumpsys 佐證。
+            flags = DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_SHOULD_SHOW_SYSTEM_DECORATIONS,
         )
     }
 
