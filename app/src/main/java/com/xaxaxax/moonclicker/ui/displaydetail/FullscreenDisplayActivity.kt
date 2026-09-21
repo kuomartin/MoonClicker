@@ -9,37 +9,18 @@ import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material.icons.filled.Stop
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Crop
-import androidx.compose.material.icons.filled.ExitToApp
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -47,30 +28,28 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import coil3.compose.AsyncImage
 import com.xaxaxax.moonclicker.R
 import com.xaxaxax.moonclicker.core.AppLocale
 import com.xaxaxax.moonclicker.core.AppSettings
+import com.xaxaxax.moonclicker.ui.component.FanFabMenu
+import com.xaxaxax.moonclicker.ui.component.FanMenuAction
 import com.xaxaxax.moonclicker.ui.theme.MoonClickerTheme
 import dagger.hilt.android.AndroidEntryPoint
 import timber.log.Timber
-import kotlin.math.roundToInt
 
 @AndroidEntryPoint
 class FullscreenDisplayActivity : ComponentActivity() {
@@ -86,7 +65,6 @@ class FullscreenDisplayActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         val displayId = intent.getIntExtra("displayId", -1)
-        val scriptDir = intent.getStringExtra("scriptDir") ?: ""
         if (displayId == -1) {
             Timber.e("No displayId provided to FullscreenDisplayActivity")
             finish()
@@ -108,7 +86,7 @@ class FullscreenDisplayActivity : ComponentActivity() {
 
         setContent {
             MoonClickerTheme {
-                FullscreenDisplayScreen(displayId, scriptDir)
+                FullscreenDisplayScreen(displayId)
             }
         }
     }
@@ -119,14 +97,16 @@ data class AppEntry(val packageName: String, val label: String)
 @Composable
 fun FullscreenDisplayScreen(
     targetDisplayId: Int,
-    scriptDir: String,
     viewModel: FullscreenDisplayViewModel = hiltViewModel()
 ) {
     val activity = LocalActivity.current
     val uiState by viewModel.uiState.collectAsState()
     val service by viewModel.service.collectAsState()
-    val cropState by viewModel.cropSession.state.collectAsState()
     val textureViewRef = remember { mutableStateOf<android.view.TextureView?>(null) }
+
+    LaunchedEffect(Unit) {
+        viewModel.finishEvents.collect { activity?.finish() }
+    }
     // 單一來源：鏡像的 Viewport 讀這一份，決定 letterbox 與內容尺寸。
     val geometry = rememberDisplayGeometry(targetDisplayId)
 
@@ -160,22 +140,6 @@ fun FullscreenDisplayScreen(
     // ADR-0017：鏡像跟著這個 Activity 的視窗自然旋轉，不釘住面板；VD 怎麼轉是它自己的事，
     // 兩者互不牽制，這個 activity 也不把 VD 的方向鎖進 requestedOrientation。
 
-    LaunchedEffect(cropState.isActive) {
-        if (cropState.isActive && cropState.bitmap == null) {
-            // TextureView 取代 SurfaceView 之後，擷取畫面不需要 PixelCopy —— getBitmap()
-            // 直接同步回傳 texture 的內容。distributor 已經把 v 轉正（ADR-0017），這裡拿到的
-            // 就是邏輯空間，不需要再轉一次——ADR-0013 的模板是邏輯空間產物這件事因此不用
-            // 任何額外處理就滿足了。
-            val bitmap = textureViewRef.value?.bitmap
-            if (bitmap != null) {
-                viewModel.cropSession.setCapturedBitmap(bitmap)
-            } else {
-                Timber.e("TextureView.getBitmap() returned null")
-                viewModel.cropSession.cancel()
-            }
-        }
-    }
-
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -188,110 +152,35 @@ fun FullscreenDisplayScreen(
                 addSurface = { viewModel.addSurface(targetDisplayId, it) },
                 removeSurface = { viewModel.removeSurface(targetDisplayId, it) },
                 service = service!!,
-                isReadOnly = uiState.isReadOnly,
                 modifier = Modifier.fillMaxSize(),
                 onTextureViewCreated = { textureViewRef.value = it },
                 onFrameAvailable = { viewModel.mirrorFrames.onFrameAvailable(targetDisplayId) },
             )
         }
 
-        if (cropState.isActive) {
-            CropScreen(session = viewModel.cropSession, scriptDir = scriptDir)
-        } else {
-            // Floating Control Bar
-            Box(
-                modifier = Modifier
-                    .offset {
-                        IntOffset(
-                            uiState.menuOffsetX.roundToInt(),
-                            uiState.menuOffsetY.roundToInt()
-                        )
-                    }
-                    .align(Alignment.Center)
-                    .pointerInput(Unit) {
-                        detectDragGestures { change, dragAmount ->
-                            change.consume()
-                            viewModel.updateMenuOffset(dragAmount.x, dragAmount.y)
-                        }
-                    }
-                    .padding(16.dp)
-            ) {
-                Card(
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.DarkGray.copy(alpha = 0.8f))
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
-                    ) {
-                        // Screenshot
-                        IconButton(onClick = { viewModel.startCropping() }) {
-                            Icon(
-                                imageVector = Icons.Default.Crop,
-                                contentDescription = stringResource(R.string.fullscreen_screenshot),
-                                tint = Color.White
-                            )
-                        }
-
-                        // Exit
-                        IconButton(onClick = { activity?.finish() }) {
-                            Icon(
-                                imageVector = Icons.Default.ExitToApp,
-                                contentDescription = stringResource(R.string.fullscreen_exit),
-                                tint = Color.White
-                            )
-                        }
-
-                        // More Menu
-                        Box {
-                            IconButton(onClick = { viewModel.setMenuExpanded(true) }) {
-                                Icon(
-                                    imageVector = Icons.Default.MoreVert,
-                                    contentDescription = stringResource(R.string.fullscreen_more_options),
-                                    tint = Color.White
-                                )
-                            }
-                            DropdownMenu(
-                                expanded = uiState.menuExpanded,
-                                onDismissRequest = { viewModel.setMenuExpanded(false) }
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.fullscreen_menu_start_app)) },
-                                    onClick = {
-                                        viewModel.setMenuExpanded(false)
-                                        viewModel.openAppList()
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text(if (uiState.isReadOnly) stringResource(R.string.fullscreen_menu_disable_readonly) else stringResource(R.string.fullscreen_menu_enable_readonly)) },
-                                    onClick = {
-                                        viewModel.toggleReadOnly()
-                                        viewModel.setMenuExpanded(false)
-                                    }
-                                )
-                                if (targetDisplayId != 0) {
-                                    DropdownMenuItem(
-                                        text = { Text(stringResource(R.string.fullscreen_menu_close_display)) },
-                                        onClick = {
-                                            viewModel.setMenuExpanded(false)
-                                            viewModel.destroyDisplay(targetDisplayId)
-                                            activity?.finish()
-                                        }
-                                    )
-                                }
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.fullscreen_menu_return_app)) },
-                                    onClick = {
-                                        activity?.finish()
-                                        viewModel.setMenuExpanded(false)
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
+        val startAppLabel = stringResource(R.string.fullscreen_menu_start_app)
+        val closeDisplayLabel = stringResource(R.string.fullscreen_menu_close_display)
+        val exitLabel = stringResource(R.string.fullscreen_exit)
+        val homeLabel = stringResource(R.string.fullscreen_menu_home)
+        val fanActions = buildList {
+            add(FanMenuAction(Icons.Default.Apps, startAppLabel) { viewModel.onAction(FullscreenAction.StartApp, targetDisplayId) })
+            if (targetDisplayId != 0) {
+                add(FanMenuAction(Icons.Default.Close, closeDisplayLabel) { viewModel.onAction(FullscreenAction.CloseDisplay, targetDisplayId) })
             }
+            add(FanMenuAction(Icons.Default.Logout, exitLabel) { viewModel.onAction(FullscreenAction.Exit, targetDisplayId) })
+            add(FanMenuAction(Icons.Default.Home, homeLabel) { viewModel.onAction(FullscreenAction.Home, targetDisplayId) })
         }
+        FanFabMenu(
+            triggerIcon = { modifier ->
+                AsyncImage(
+                    model = R.mipmap.ic_launcher,
+                    contentDescription = null,
+                    modifier = modifier
+                )
+            },
+            actions = fanActions,
+            modifier = Modifier.fillMaxSize(),
+        )
 
         if (uiState.showAppList) {
             AlertDialog(

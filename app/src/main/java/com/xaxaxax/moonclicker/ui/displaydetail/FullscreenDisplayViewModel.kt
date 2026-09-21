@@ -1,6 +1,7 @@
 package com.xaxaxax.moonclicker.ui.displaydetail
 
-import android.content.Context
+import android.os.SystemClock
+import android.view.KeyEvent
 import android.view.Surface
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
@@ -8,33 +9,38 @@ import androidx.lifecycle.viewModelScope
 import com.xaxaxax.moonclicker.IMoonClickerService
 import com.xaxaxax.moonclicker.shizuku.ShizukuManager
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
 
+/** 扇形選單四顆按鈕的命令型別，[FullscreenDisplayViewModel.onAction] 的唯一入口分派這些。 */
+sealed interface FullscreenAction {
+    data object StartApp : FullscreenAction
+    data object CloseDisplay : FullscreenAction
+    data object Exit : FullscreenAction
+    data object Home : FullscreenAction
+}
+
 @HiltViewModel
 class FullscreenDisplayViewModel @Inject constructor(
-    @ApplicationContext private val context: Context,
     savedStateHandle: SavedStateHandle,
     private val shizukuManager: ShizukuManager,
     private val thumbnailCache: DisplayThumbnailCache,
     /**
      * workbench 的 `/mirror/{displayId}` 從這裡取畫面（見 #76）。直接把 singleton 露給畫面用，
-     * 比照 [cropSession]：登記/解除登記是畫面自己的生命週期事件，再包一層轉呼叫不會更清楚。
+     * 登記/解除登記是畫面自己的生命週期事件，再包一層轉呼叫不會更清楚。
      */
     val mirrorFrames: MirrorFrameSource,
 ) : ViewModel() {
 
     data class UiState(
-        val isReadOnly: Boolean = false,
-        val menuExpanded: Boolean = false,
-        val menuOffsetX: Float = 0f,
-        val menuOffsetY: Float = 0f,
         val showAppList: Boolean = false,
         val apps: List<AppEntry> = emptyList(),
     )
@@ -42,8 +48,9 @@ class FullscreenDisplayViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(UiState())
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
-    /** 裁切工作流的唯一權威，見 [CropSession]。 */
-    val cropSession = CropSession(context)
+    /** 退出全螢幕（[FullscreenAction.Exit]／[FullscreenAction.CloseDisplay]）的一次性事件；畫面收到就 `finish()`。 */
+    private val _finishEvents = Channel<Unit>(Channel.BUFFERED)
+    val finishEvents: Flow<Unit> = _finishEvents.receiveAsFlow()
 
     /**
      * 綁好的服務，也是 UI 判斷「可以顯示鏡像了沒」的依據——服務在，鏡像才有東西可映。
@@ -53,12 +60,31 @@ class FullscreenDisplayViewModel @Inject constructor(
      */
     val service: StateFlow<IMoonClickerService?> = shizukuManager.serviceFlow
 
-    fun toggleReadOnly() {
-        _uiState.value = _uiState.value.copy(isReadOnly = !_uiState.value.isReadOnly)
+    fun onAction(action: FullscreenAction, targetDisplayId: Int) {
+        when (action) {
+            FullscreenAction.StartApp -> openAppList()
+            FullscreenAction.CloseDisplay -> destroyDisplay(targetDisplayId, thenFinish = true)
+            FullscreenAction.Exit -> _finishEvents.trySend(Unit)
+            FullscreenAction.Home -> injectHomeKey(targetDisplayId)
+        }
     }
 
-    fun startCropping() {
-        cropSession.start()
+    private fun injectHomeKey(displayId: Int) {
+        viewModelScope.launch {
+            shizukuManager.withService { service ->
+                val downTime = SystemClock.uptimeMillis()
+                service.injectKeyEvent(
+                    KeyEvent(downTime, downTime, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_HOME, 0),
+                    displayId,
+                )
+                service.injectKeyEvent(
+                    KeyEvent(downTime, SystemClock.uptimeMillis(), KeyEvent.ACTION_UP, KeyEvent.KEYCODE_HOME, 0),
+                    displayId,
+                )
+            }.onFailure {
+                Timber.e(it)
+            }
+        }
     }
 
     /**
@@ -71,18 +97,7 @@ class FullscreenDisplayViewModel @Inject constructor(
         }
     }
 
-    fun setMenuExpanded(expanded: Boolean) {
-        _uiState.value = _uiState.value.copy(menuExpanded = expanded)
-    }
-
-    fun updateMenuOffset(dragAmountX: Float, dragAmountY: Float) {
-        _uiState.value = _uiState.value.copy(
-            menuOffsetX = _uiState.value.menuOffsetX + dragAmountX,
-            menuOffsetY = _uiState.value.menuOffsetY + dragAmountY
-        )
-    }
-
-    fun openAppList() {
+    private fun openAppList() {
         viewModelScope.launch {
             shizukuManager.withService { service ->
                 val rawApps = service.launcherApps
@@ -110,12 +125,13 @@ class FullscreenDisplayViewModel @Inject constructor(
         }
     }
 
-    fun destroyDisplay(displayId: Int) {
+    private fun destroyDisplay(displayId: Int, thenFinish: Boolean) {
         viewModelScope.launch {
             shizukuManager.withService { service ->
                 service.destroyVirtualDisplay(displayId)
             }.onSuccess {
                 thumbnailCache.remove(displayId)
+                if (thenFinish) _finishEvents.trySend(Unit)
             }.onFailure {
                 Timber.e(it)
             }
