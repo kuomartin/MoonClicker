@@ -12,18 +12,12 @@ import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.InetSocketAddress
 import java.net.Socket
-import kotlinx.coroutines.flow.Flow
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
-
-/** [FrameSource] 這條測試不需要真的鏡像串流——不註冊任何 displayId 就好。 */
-private class FakeFrameSource : FrameSource {
-    override fun frames(displayId: Int): Flow<ByteArray>? = null
-}
 
 /**
  * 真機上重現過的 bug：`embeddedServer` 綁 wildcard host 會變成 dual-stack IPv6 socket，
@@ -40,15 +34,17 @@ private class FakeFrameSource : FrameSource {
 @LargeTest
 class WorkbenchServerConnectivityTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
+    private val shizukuManager = ShizukuManager(context)
     private val server = WorkbenchServer(
         scriptStore = ScriptStore(context),
         scriptSession = ScriptSession(
             context = context,
-            shizukuManager = ShizukuManager(context),
+            shizukuManager = shizukuManager,
             notifier = ScriptStatusNotifier(context),
             settings = AppSettings(context),
         ),
-        frameSource = FakeFrameSource(),
+        shizukuManager = shizukuManager,
+        authStore = WorkbenchAuthStore(context),
     )
 
     @After
