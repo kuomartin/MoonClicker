@@ -9,7 +9,6 @@
     <!-- Common Actions / Labels -->
     <string name="common_cancel">Cancel</string>
     <string name="common_create">Create</string>
-    <string name="common_save">Save</string>
     <string name="common_delete">Delete</string>
     <string name="common_confirm">Confirm</string>
     <string name="common_status">Status</string>
@@ -45,7 +44,7 @@
     <string name="displays_preset_medium">Medium</string>
     <string name="displays_preset_tablet">Tablet</string>
 
-    <!-- Fullscreen &amp; Crop -->
+    <!-- Fullscreen -->
     <string name="fullscreen_screenshot">Screenshot</string>
     <string name="fullscreen_exit">Exit</string>
     <string name="fullscreen_more_options">More Options</string>
@@ -55,10 +54,6 @@
     <string name="fullscreen_menu_close_display">Close Display</string>
     <string name="fullscreen_menu_return_app">Return to MoonClicker</string>
     <string name="fullscreen_select_app_title">Select App to Start</string>
-    <string name="crop_capturing">Capturing…</string>
-    <string name="crop_save_template_title">Save Template</string>
-    <string name="crop_template_name">Template Name</string>
-    <string name="crop_save_button">Save Crop</string>
 
     <!-- Script status notification -->
     <string name="script_status_channel_label">Script Run Status</string>
