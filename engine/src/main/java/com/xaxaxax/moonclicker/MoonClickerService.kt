@@ -30,6 +30,7 @@ import android.os.Process
 import android.os.SystemClock
 import android.os.UserHandle
 import android.view.Display
+import android.view.DisplayHidden
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -86,6 +87,20 @@ class MoonClickerService @JvmOverloads constructor(
                     false
                 }
         }
+
+        /**
+         * `Display.TYPE_*`：`@hide` 常數，Refine 沒辦法 stub static final int（會被編譯器內聯掉），
+         * 只能照 AOSP 原始碼把值抄過來（見 docs/research/display-gettype-api-levels.md）。
+         */
+        private const val DISPLAY_TYPE_VIRTUAL = 5
+
+        /**
+         * `Display.getType()` 全程都是 `@hide`（見 docs/research/display-gettype-api-levels.md），
+         * 單一反射路徑涵蓋 API 27~37；反射失敗回傳 null，讓呼叫端自行 fallback。
+         */
+        private fun Display.isVirtualType(): Boolean? =
+            runCatching { Refine.unsafeCast<DisplayHidden>(this).type == DISPLAY_TYPE_VIRTUAL }
+                .getOrNull()
 
         const val DELAY_MS = 16 // 60fps
 
@@ -918,7 +933,9 @@ class MoonClickerService @JvmOverloads constructor(
         val metrics = DisplayMetrics()
         @Suppress("DEPRECATION")
         display.getRealMetrics(metrics)
-        val isPhysical = !vdStore.containsKey(displayId)
+        // 系統回報的類型優先：`vdStore` 只認得自己建立的 VD，遇到別的進程建立的虛擬顯示
+        // （例如 #73 的情況）會誤判成實體，見 docs/research/display-gettype-api-levels.md。
+        val isPhysical = !(display.isVirtualType() ?: vdStore.containsKey(displayId))
         val isMirrorActive = isDisplayMirrorActive(displayId)
         return MoonClickerDisplayInfo().apply {
             this.displayId = displayId
