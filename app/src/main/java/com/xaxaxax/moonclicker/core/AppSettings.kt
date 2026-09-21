@@ -97,6 +97,18 @@ class AppSettings @Inject constructor(
         _developerOptionsUnlocked.value = unlocked
     }
 
+    private val _pinnedApps =
+        MutableStateFlow(prefs.getStringSet(KEY_PINNED_APPS, emptySet()) ?: emptySet())
+
+    /** 長按釘選的 app package name 集合，fullscreen 的 app 選擇清單用來把常用的排前面。 */
+    val pinnedApps: StateFlow<Set<String>> = _pinnedApps.asStateFlow()
+
+    fun setPinned(packageName: String, pinned: Boolean) {
+        val next = if (pinned) _pinnedApps.value + packageName else _pinnedApps.value - packageName
+        prefs.edit { putStringSet(KEY_PINNED_APPS, next) }
+        _pinnedApps.value = next
+    }
+
     companion object {
         private const val PREFS_NAME = "moonclicker_settings"
         private const val KEY_AUTO_FULLSCREEN = "auto_open_fullscreen"
@@ -105,6 +117,7 @@ class AppSettings @Inject constructor(
         private const val KEY_DEFAULT_START_PAGE = "default_start_page"
         private const val KEY_APP_LANGUAGE = "app_language"
         private const val KEY_DEVELOPER_OPTIONS_UNLOCKED = "developer_options_unlocked"
+        private const val KEY_PINNED_APPS = "pinned_apps"
 
         /**
          * [Activity.attachBaseContext] 跑在 Hilt 欄位注入完成之前，讀不到 [AppSettings] 實例，
