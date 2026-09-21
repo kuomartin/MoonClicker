@@ -21,6 +21,29 @@ let activeToken: string | undefined;
  *  裝置——所以每個 address 各自記自己的 token，不能只靠 [activeToken] 這個「目前連線」。 */
 const tokensByAddress = new Map<string, string>();
 
+/**
+ * `vscode.workspace.updateWorkspaceFolders` 官方文件明講：第一次加入 workspace folder、或
+ * 從空/單一資料夾轉成多資料夾時，擴充套件會被終止重啟——`tokensByAddress`／`activeToken`／
+ * `connection` 這些純記憶體狀態全部歸零，但已經掛上的 `moonclicker:` virtual 資料夾會被
+ * VS Code 保留下來。重新 activate 時得把這些資料夾對應的 token 從 secrets 撈回來，不能只
+ * 靠「使用者按過一次 Connect」這個一次性動作。
+ */
+async function rehydrateTokensForOpenFolders(): Promise<void> {
+  if (!extensionContext) return;
+  const addresses = new Set(
+    (vscode.workspace.workspaceFolders ?? [])
+      .filter((f) => f.uri.scheme === SCHEME)
+      .map((f) => f.uri.authority)
+  );
+  await Promise.all(
+    Array.from(addresses).map(async (address) => {
+      if (tokensByAddress.has(address)) return;
+      const token = await extensionContext!.secrets.get(`moonclicker_token_${address}`);
+      if (token) tokensByAddress.set(address, token);
+    })
+  );
+}
+
 export function activate(context: vscode.ExtensionContext): void {
   startMdnsDaemon();
   extensionContext = context;
@@ -36,8 +59,14 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.workspace.registerFileSystemProvider(SCHEME, fileSystemProvider, { isCaseSensitive: true })
   );
+  rehydrateTokensForOpenFolders();
 
-  context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => workspaceProvider.refresh()));
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeWorkspaceFolders(() => {
+      workspaceProvider.refresh();
+      rehydrateTokensForOpenFolders();
+    })
+  );
 
   const logChannel = vscode.window.createOutputChannel("MoonClicker Script Log");
   const dataChannel = vscode.window.createOutputChannel("MoonClicker Script Data");
