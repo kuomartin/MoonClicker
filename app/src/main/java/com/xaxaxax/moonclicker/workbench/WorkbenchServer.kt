@@ -1,8 +1,8 @@
 package com.xaxaxax.moonclicker.workbench
 
 import com.xaxaxax.moonclicker.engine.ScriptEngine
+import com.xaxaxax.moonclicker.script.SafePath
 import com.xaxaxax.moonclicker.script.Script
-import com.xaxaxax.moonclicker.script.ScriptArchive
 import com.xaxaxax.moonclicker.script.ScriptSession
 import com.xaxaxax.moonclicker.script.ScriptStore
 import com.xaxaxax.moonclicker.script.TemplateRoi
@@ -24,6 +24,7 @@ import io.ktor.server.request.receiveStream
 import io.ktor.server.request.receiveText
 import io.ktor.server.response.respondBytes
 import io.ktor.server.response.respondText
+import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.put
@@ -34,20 +35,23 @@ import io.ktor.websocket.Frame
 import io.ktor.websocket.close
 import io.ktor.websocket.CloseReason
 import io.ktor.websocket.readText
-import java.io.ByteArrayOutputStream
 import java.io.File
 import java.net.Inet4Address
 import java.net.NetworkInterface
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import moonclicker.workbench.FileChangeEvent
 import moonclicker.workbench.StreamEvent
 import timber.log.Timber
 
@@ -76,6 +80,21 @@ interface ScriptRunner {
 interface ScriptStream {
     val logLines: Flow<String>
     val sharedData: StateFlow<Map<String, Any>>
+}
+
+/** VS Code FileSystemProvider 的 `onDidChangeFile` 要推播的單一檔案變動。 */
+enum class ScriptFileChangeKind { CREATED, CHANGED, DELETED }
+
+data class ScriptFileChange(val scriptId: String, val path: String, val kind: ScriptFileChangeKind)
+
+/**
+ * Script Folder 被**外部**（檔案管理員、USB 接電腦）改動時的通知來源。透過 HTTP 單檔案
+ * API 寫入的改動不算在這裡——那些由 route handler 自己直接送進 workbenchModule 內部的
+ * broadcast flow，不需要繞這層介面。存在這一層純粹是為了讓真正的實作（Android
+ * `FileObserver`）可以被換成 JVM 測試用的假 flow。
+ */
+interface FileChangeSource {
+    val changes: Flow<ScriptFileChange>
 }
 
 /**
@@ -221,6 +240,12 @@ class WorkbenchServer @Inject constructor(
 data class WorkbenchScriptSummary(val id: String, val name: String)
 
 @Serializable
+data class ScriptTreeEntry(val path: String, val size: Long, val mtimeMs: Long, val isDirectory: Boolean)
+
+@Serializable
+data class RenameRequest(val from: String, val to: String, val overwrite: Boolean = false)
+
+@Serializable
 data class PairRequest(val pin: String = "")
 
 @Serializable
@@ -239,8 +264,16 @@ fun Application.workbenchModule(
     },
     shizukuManager: ShizukuManager? = null,
     authStore: WorkbenchAuthStore? = null,
+    fileChangeSource: FileChangeSource = object : FileChangeSource {
+        override val changes: Flow<ScriptFileChange> = emptyFlow()
+    },
 ) {
     install(WebSockets)
+    // HTTP 單檔案 API 自己寫入的改動（self-write）跟 [fileChangeSource]（外部改動）合流，
+    // 兩者都要推給每個開著的 WebSocket——一個 VS Code client 存檔，另一個開著同一顆腳本的
+    // client 也要看到。
+    val selfFileChanges = MutableSharedFlow<ScriptFileChange>(extraBufferCapacity = 64)
+    val fileChanges = merge(selfFileChanges, fileChangeSource.changes)
     install(CORS) {
         anyHost()
     }
@@ -339,6 +372,9 @@ fun Application.workbenchModule(
             val logJob = launch {
                 scriptStream.logLines.collect { send(logFrame(it)) }
             }
+            val fileChangeJob = launch {
+                fileChanges.collect { send(fileChangeFrame(it)) }
+            }
             try {
                 for (frame in incoming) {
                     if (frame is Frame.Text) {
@@ -348,40 +384,154 @@ fun Application.workbenchModule(
             } finally {
                 dataJob.cancel()
                 logJob.cancel()
+                fileChangeJob.cancel()
             }
         }
 
-        // Script Folder 雙向同步（見 #58）。三個路由都直接吃/還純 zip bytes，不用
-        // multipart——一次同步就是一份完整的資料夾內容，沒有欄位要拆。
         get("/scripts") {
             val scripts = ScriptStore.scan(scriptsRoot).map { WorkbenchScriptSummary(it.id, it.name) }
             call.respondText(Json.encodeToString(scripts), ContentType.Application.Json)
         }
 
-        // Pull：把裝置上的 Script Folder 打包成 zip 讓 extension 端下載展開到本機專案。
-        get("/scripts/{id}/export") {
+        // Script Folder 單檔案讀寫（見 vscode-fsprovider-plan）：VS Code 的
+        // `vscode.FileSystemProvider` 直接對著這幾個路由做 stat/readDirectory/readFile/
+        // writeFile/delete/rename，取代整包 zip 的 export/import。
+        get("/scripts/{id}/tree") {
             val script = call.parameters["id"]?.let { id -> ScriptStore.scan(scriptsRoot).find { it.id == id } }
             if (script == null) {
                 call.respondText("Script not found", status = HttpStatusCode.NotFound)
                 return@get
             }
-            val bytes = ByteArrayOutputStream().also { ScriptArchive.export(script, it) }.toByteArray()
-            call.respondBytes(bytes, ContentType.Application.Zip)
+            val entries = script.dir.walkTopDown()
+                .filter { it != script.dir }
+                .map { file ->
+                    ScriptTreeEntry(
+                        path = file.relativeTo(script.dir).invariantSeparatorsPath,
+                        size = if (file.isFile) file.length() else 0L,
+                        mtimeMs = file.lastModified(),
+                        isDirectory = file.isDirectory,
+                    )
+                }
+                .toList()
+            call.respondText(Json.encodeToString(entries), ContentType.Application.Json)
         }
 
-        // Push：extension 端把本機編輯完的 zip 推回來，整份覆蓋掉裝置上同 id 的資料夾——
-        // milestone 1 是單向覆蓋語意，不做多人衝突解決（見 #53 Out of Scope）。
-        put("/scripts/{id}/import") {
-            val id = call.parameters["id"]
-            if (id.isNullOrBlank()) {
-                call.respondText("Missing script id", status = HttpStatusCode.BadRequest)
+        get("/scripts/{id}/files/{path...}") {
+            val script = call.parameters["id"]?.let { id -> ScriptStore.scan(scriptsRoot).find { it.id == id } }
+            if (script == null) {
+                call.respondText("Script not found", status = HttpStatusCode.NotFound)
+                return@get
+            }
+            val relativePath = call.filePathParam()
+            val target = SafePath.resolve(script.dir, relativePath)
+            if (target == null || !target.isFile) {
+                call.respondText("File not found", status = HttpStatusCode.NotFound)
+                return@get
+            }
+            call.respondBytes(target.readBytes())
+        }
+
+        put("/scripts/{id}/files/{path...}") {
+            val script = call.parameters["id"]?.let { id -> ScriptStore.scan(scriptsRoot).find { it.id == id } }
+            if (script == null) {
+                call.respondText("Script not found", status = HttpStatusCode.NotFound)
                 return@put
             }
-            when (val result = ScriptArchive.replace(call.receiveStream(), scriptsRoot, id)) {
-                is ScriptArchive.ImportResult.Imported -> call.respondText("OK")
-                is ScriptArchive.ImportResult.Failed ->
-                    call.respondText(result.reason, status = HttpStatusCode.BadRequest)
+            val relativePath = call.filePathParam()
+            val target = SafePath.resolve(script.dir, relativePath)
+            if (target == null || relativePath.isBlank()) {
+                call.respondText("Invalid path", status = HttpStatusCode.BadRequest)
+                return@put
             }
+            if (target.isDirectory) {
+                call.respondText("Path is a directory", status = HttpStatusCode.Conflict)
+                return@put
+            }
+            val existed = target.isFile
+            target.parentFile?.mkdirs()
+            target.writeBytes(call.receiveStream().readBytes())
+            selfFileChanges.tryEmit(
+                ScriptFileChange(script.id, relativePath, if (existed) ScriptFileChangeKind.CHANGED else ScriptFileChangeKind.CREATED)
+            )
+            call.respondText("OK")
+        }
+
+        delete("/scripts/{id}/files/{path...}") {
+            val script = call.parameters["id"]?.let { id -> ScriptStore.scan(scriptsRoot).find { it.id == id } }
+            if (script == null) {
+                call.respondText("Script not found", status = HttpStatusCode.NotFound)
+                return@delete
+            }
+            val relativePath = call.filePathParam()
+            val target = SafePath.resolve(script.dir, relativePath)
+            if (target == null || relativePath.isBlank() || !target.exists()) {
+                call.respondText("File not found", status = HttpStatusCode.NotFound)
+                return@delete
+            }
+            if (!target.deleteRecursively()) {
+                call.respondText("Failed to delete", status = HttpStatusCode.InternalServerError)
+                return@delete
+            }
+            selfFileChanges.tryEmit(ScriptFileChange(script.id, relativePath, ScriptFileChangeKind.DELETED))
+            call.respondText("OK")
+        }
+
+        post("/scripts/{id}/mkdir/{path...}") {
+            val script = call.parameters["id"]?.let { id -> ScriptStore.scan(scriptsRoot).find { it.id == id } }
+            if (script == null) {
+                call.respondText("Script not found", status = HttpStatusCode.NotFound)
+                return@post
+            }
+            val relativePath = call.filePathParam()
+            val target = SafePath.resolve(script.dir, relativePath)
+            if (target == null || relativePath.isBlank()) {
+                call.respondText("Invalid path", status = HttpStatusCode.BadRequest)
+                return@post
+            }
+            if (target.isFile) {
+                call.respondText("Path already exists as a file", status = HttpStatusCode.Conflict)
+                return@post
+            }
+            val existed = target.isDirectory
+            target.mkdirs()
+            if (!existed) {
+                selfFileChanges.tryEmit(ScriptFileChange(script.id, relativePath, ScriptFileChangeKind.CREATED))
+            }
+            call.respondText("OK")
+        }
+
+        // body 是 JSON {"from": "...", "to": "...", "overwrite": false}——跟 mkdir/files 不同，
+        // 來源與目的地都是欄位，不適合塞進路徑本身。
+        post("/scripts/{id}/rename") {
+            val script = call.parameters["id"]?.let { id -> ScriptStore.scan(scriptsRoot).find { it.id == id } }
+            if (script == null) {
+                call.respondText("Script not found", status = HttpStatusCode.NotFound)
+                return@post
+            }
+            val body = runCatching { Json.decodeFromString<RenameRequest>(call.receiveText()) }.getOrNull()
+            if (body == null || body.from.isBlank() || body.to.isBlank()) {
+                call.respondText("Invalid request body", status = HttpStatusCode.BadRequest)
+                return@post
+            }
+            val source = SafePath.resolve(script.dir, body.from)
+            val destination = SafePath.resolve(script.dir, body.to)
+            if (source == null || destination == null || !source.exists()) {
+                call.respondText("Invalid rename request", status = HttpStatusCode.BadRequest)
+                return@post
+            }
+            if (destination.exists() && !body.overwrite) {
+                call.respondText("Destination already exists", status = HttpStatusCode.Conflict)
+                return@post
+            }
+            destination.parentFile?.mkdirs()
+            if (destination.exists()) destination.deleteRecursively()
+            if (!source.renameTo(destination)) {
+                call.respondText("Failed to rename", status = HttpStatusCode.InternalServerError)
+                return@post
+            }
+            selfFileChanges.tryEmit(ScriptFileChange(script.id, body.from, ScriptFileChangeKind.DELETED))
+            selfFileChanges.tryEmit(ScriptFileChange(script.id, body.to, ScriptFileChangeKind.CREATED))
+            call.respondText("OK")
         }
 
         // 觸發執行（見 #61）：統一經過既有 ScriptSession，不建立第二條執行路徑——
@@ -489,3 +639,25 @@ private fun Any.toStructValue(): Any = when (this) {
     is Double, is Boolean, is String -> this
     else -> toString()
 }
+
+private fun fileChangeFrame(change: ScriptFileChange): Frame =
+    Frame.Binary(
+        true,
+        StreamEvent.ADAPTER.encode(
+            StreamEvent(
+                file_change = FileChangeEvent(
+                    script_id = change.scriptId,
+                    path = change.path,
+                    kind = when (change.kind) {
+                        ScriptFileChangeKind.CREATED -> FileChangeEvent.Kind.CREATED
+                        ScriptFileChangeKind.CHANGED -> FileChangeEvent.Kind.CHANGED
+                        ScriptFileChangeKind.DELETED -> FileChangeEvent.Kind.DELETED
+                    },
+                )
+            )
+        )
+    )
+
+/** `{path...}` 這種 tail wildcard 路由參數，Ktor 拆成多個 segment，這裡合併回一段相對路徑。 */
+private fun io.ktor.server.application.ApplicationCall.filePathParam(): String =
+    parameters.getAll("path")?.joinToString("/").orEmpty()

@@ -4,21 +4,17 @@ import com.xaxaxax.moonclicker.script.Script
 import io.ktor.client.plugins.websocket.DefaultClientWebSocketSession
 import io.ktor.client.plugins.websocket.WebSockets as ClientWebSockets
 import io.ktor.client.plugins.websocket.webSocket
+import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
-import io.ktor.client.statement.bodyAsBytes
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.testing.testApplication
 import io.ktor.websocket.Frame
 import io.ktor.websocket.readText
-import java.io.ByteArrayOutputStream
 import java.io.File
-import java.util.zip.ZipEntry
-import java.util.zip.ZipInputStream
-import java.util.zip.ZipOutputStream
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -93,30 +89,6 @@ class WorkbenchServerTest {
         val dir = temp.newFolder(id)
         File(dir, "main.lua").writeText(mainLua)
         return dir
-    }
-
-    private fun zipOf(vararg entries: Pair<String, String>): ByteArray {
-        val bytes = ByteArrayOutputStream()
-        ZipOutputStream(bytes).use { zip ->
-            entries.forEach { (name, content) ->
-                zip.putNextEntry(ZipEntry(name))
-                zip.write(content.toByteArray())
-                zip.closeEntry()
-            }
-        }
-        return bytes.toByteArray()
-    }
-
-    private fun unzip(bytes: ByteArray): Map<String, String> {
-        val entries = mutableMapOf<String, String>()
-        ZipInputStream(bytes.inputStream()).use { zip ->
-            var entry = zip.nextEntry
-            while (entry != null) {
-                entries[entry.name] = zip.readBytes().decodeToString()
-                entry = zip.nextEntry
-            }
-        }
-        return entries
     }
 
     @Test
@@ -303,61 +275,210 @@ class WorkbenchServerTest {
     }
 
     @Test
-    fun `export route returns a zip of the script folder`() = runTest {
+    fun `tree route lists every file recursively with directories flagged`() = runTest {
         val dir = scriptFolder("hello", "log('hi')")
-        File(dir, "template.png").writeText("fake image bytes")
+        File(dir, "assets").mkdirs()
+        File(dir, "assets/template.png").writeText("fake image bytes")
 
         testApplication {
             application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
 
-            val response = client.get("/scripts/hello/export")
+            val response = client.get("/scripts/hello/tree")
 
             assertEquals(HttpStatusCode.OK, response.status)
-            val entries = unzip(response.bodyAsBytes())
-            assertEquals("log('hi')", entries["main.lua"])
-            assertEquals("fake image bytes", entries["template.png"])
+            val body = response.bodyAsText()
+            assertTrue(body.contains("\"path\":\"main.lua\""))
+            assertTrue(body.contains("\"path\":\"assets\""))
+            assertTrue(body.contains("\"isDirectory\":true"))
+            assertTrue(body.contains("\"path\":\"assets/template.png\""))
         }
     }
 
     @Test
-    fun `export route 404s for an unknown script id`() = runTest {
+    fun `tree route 404s for an unknown script id`() = runTest {
         testApplication {
             application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
 
-            val response = client.get("/scripts/does-not-exist/export")
+            val response = client.get("/scripts/does-not-exist/tree")
 
             assertEquals(HttpStatusCode.NotFound, response.status)
         }
     }
 
     @Test
-    fun `import route overwrites the existing script folder in place`() = runTest {
+    fun `files route reads a single file's raw bytes`() = runTest {
+        scriptFolder("hello", "log('hi')")
+
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+
+            val response = client.get("/scripts/hello/files/main.lua")
+
+            assertEquals(HttpStatusCode.OK, response.status)
+            assertEquals("log('hi')", response.bodyAsText())
+        }
+    }
+
+    @Test
+    fun `files route 404s for a missing file`() = runTest {
+        scriptFolder("hello", "log('hi')")
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+
+            val response = client.get("/scripts/hello/files/nope.lua")
+
+            assertEquals(HttpStatusCode.NotFound, response.status)
+        }
+    }
+
+    @Test
+    fun `files route rejects a path that escapes the script folder`() = runTest {
+        scriptFolder("hello", "log('hi')")
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+
+            val response = client.get("/scripts/hello/files/../secret.txt")
+
+            assertTrue(response.status != HttpStatusCode.OK)
+        }
+    }
+
+    @Test
+    fun `PUT files route creates a new file including intermediate directories`() = runTest {
+        val dir = scriptFolder("hello", "log('hi')")
+
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+
+            val response = client.put("/scripts/hello/files/lib/util.lua") {
+                setBody("return 1")
+            }
+
+            assertEquals(HttpStatusCode.OK, response.status)
+            assertEquals("return 1", File(dir, "lib/util.lua").readText())
+        }
+    }
+
+    @Test
+    fun `PUT files route overwrites an existing file in place`() = runTest {
         val dir = scriptFolder("hello", "log('old')")
+
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+
+            val response = client.put("/scripts/hello/files/main.lua") {
+                setBody("log('new')")
+            }
+
+            assertEquals(HttpStatusCode.OK, response.status)
+            assertEquals("log('new')", File(dir, "main.lua").readText())
+        }
+    }
+
+    @Test
+    fun `DELETE files route removes a file`() = runTest {
+        val dir = scriptFolder("hello", "log('hi')")
         File(dir, "old.png").writeText("stale")
 
         testApplication {
             application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
 
-            val response = client.put("/scripts/hello/import") {
-                setBody(zipOf("main.lua" to "log('new')"))
-            }
+            val response = client.delete("/scripts/hello/files/old.png")
 
             assertEquals(HttpStatusCode.OK, response.status)
-            assertEquals("log('new')", File(dir, "main.lua").readText())
             assertTrue(!File(dir, "old.png").exists())
         }
     }
 
     @Test
-    fun `import route rejects an archive with no main lua`() = runTest {
+    fun `DELETE files route 404s for a missing file`() = runTest {
+        scriptFolder("hello", "log('hi')")
         testApplication {
             application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
 
-            val response = client.put("/scripts/hello/import") {
-                setBody(zipOf("readme.txt" to "nothing here"))
+            val response = client.delete("/scripts/hello/files/nope.lua")
+
+            assertEquals(HttpStatusCode.NotFound, response.status)
+        }
+    }
+
+    @Test
+    fun `mkdir route creates an empty directory`() = runTest {
+        val dir = scriptFolder("hello", "log('hi')")
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+
+            val response = client.post("/scripts/hello/mkdir/assets")
+
+            assertEquals(HttpStatusCode.OK, response.status)
+            assertTrue(File(dir, "assets").isDirectory)
+        }
+    }
+
+    @Test
+    fun `mkdir route conflicts when the path already exists as a file`() = runTest {
+        scriptFolder("hello", "log('hi')")
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+
+            val response = client.post("/scripts/hello/mkdir/main.lua")
+
+            assertEquals(HttpStatusCode.Conflict, response.status)
+        }
+    }
+
+    @Test
+    fun `rename route moves a file within the script folder`() = runTest {
+        val dir = scriptFolder("hello", "log('hi')")
+        File(dir, "old.lua").writeText("return 1")
+
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+
+            val response = client.post("/scripts/hello/rename") {
+                setBody("""{"from":"old.lua","to":"new.lua"}""")
             }
 
-            assertEquals(HttpStatusCode.BadRequest, response.status)
+            assertEquals(HttpStatusCode.OK, response.status)
+            assertTrue(!File(dir, "old.lua").exists())
+            assertEquals("return 1", File(dir, "new.lua").readText())
+        }
+    }
+
+    @Test
+    fun `rename route conflicts when destination exists and overwrite is not set`() = runTest {
+        val dir = scriptFolder("hello", "log('hi')")
+        File(dir, "old.lua").writeText("return 1")
+        File(dir, "new.lua").writeText("return 2")
+
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+
+            val response = client.post("/scripts/hello/rename") {
+                setBody("""{"from":"old.lua","to":"new.lua"}""")
+            }
+
+            assertEquals(HttpStatusCode.Conflict, response.status)
+        }
+    }
+
+    @Test
+    fun `writing a file over the websocket connection broadcasts a file_change event`() = runTest {
+        scriptFolder("hello", "log('hi')")
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+            val wsClient = createClient { install(ClientWebSockets) }
+
+            wsClient.webSocket("/") {
+                receiveStreamEvent() // 初始 data 快照。
+
+                client.put("/scripts/hello/files/main.lua") { setBody("log('new')") }
+
+                val event = receiveStreamEvent()
+                assertEquals("hello", event.file_change?.script_id)
+                assertEquals("main.lua", event.file_change?.path)
+                assertEquals(moonclicker.workbench.FileChangeEvent.Kind.CHANGED, event.file_change?.kind)
+            }
         }
     }
 
