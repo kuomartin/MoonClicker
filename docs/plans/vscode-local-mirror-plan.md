@@ -1,5 +1,8 @@
 # VS Code 擴充套件改回本機鏡像＋自動同步
 
+**狀態**：已實作（`feat/workbench-file-api` 分支）。self-echo 的實作跟原本討論的「時間窗」不一樣，
+改成精確解——見 B4。
+
 取代 [vscode-fsprovider-plan.md](vscode-fsprovider-plan.md) 的 C/D（VS Code 擴充套件架構）。
 起因：LuaLS 是原生行程直接 `io.open` 磁碟路徑，讀不到 `moonclicker:` virtual scheme，
 無法在 virtual 資料夾內提供型別提示（該計畫 E2 已查證）。A/B（裝置端單檔案 API、
@@ -24,7 +27,7 @@
 1. **鏡像資料夾位置**：`context.globalStorageUri` 底下隱藏路徑，使用者不用管。
 2. **衝突處理**：比照 `writeFile` 覆蓋語意——單向覆蓋，不比對 mtime、不跳警告。本機推裝置、裝置推本機都一樣。
 3. **`moonclickerFileSystemProvider.ts`**：留著不刪，不註冊。
-4. **self-echo**：本機推上去的改動，裝置會透過同一條 `file_change` WebSocket 廣播回來——要濾掉，不然會重新下載自己剛寫的東西。inotify/WebSocket 推播沒有帶「誰觸發的」資訊，只能用「最近由本地端主動推送的 path，時間窗內忽略」這種近似判斷（不是精確解，但跟現有 self-write 廣播本來就沒有做請求來源標記一致）。
+4. **self-echo**：實作定案不是「時間窗」這種近似值，是精確解——收到 `file_change(CREATED/CHANGED)` 就重新 `readFile` 抓回內容，跟本機現有內容算雜湊比對，相同就跳過寫入。如果這是自己剛推上去、裝置廣播回來的回音，抓回來的內容必然跟本機這份完全一樣，不需要猜時間窗（見 `scriptMirror.ts` 的 `syncChangedFileToMirror`）。
 
 ## C. 已定案
 

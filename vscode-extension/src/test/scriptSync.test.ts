@@ -41,7 +41,9 @@ before(async () => {
     }
     if (url === "/scripts/hello/tree" && req.method === "GET") {
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify([{ path: "main.lua", size: 9, mtimeMs: 123, isDirectory: false }]));
+      res.end(
+        JSON.stringify([{ path: "main.lua", size: 9, mtimeMs: 123, isDirectory: false, sha256: "abc123" }]),
+      );
       return;
     }
     if (url === "/scripts/hello/files/main.lua" && req.method === "GET") {
@@ -120,7 +122,7 @@ test("listScripts returns the device's script summaries", async () => {
 
 test("getTree returns the recursive manifest", async () => {
   const tree = await getTree(address, "hello");
-  assert.deepEqual(tree, [{ path: "main.lua", size: 9, mtimeMs: 123, isDirectory: false }]);
+  assert.deepEqual(tree, [{ path: "main.lua", size: 9, mtimeMs: 123, isDirectory: false, sha256: "abc123" }]);
 });
 
 test("readFile returns the raw bytes of a single file", async () => {

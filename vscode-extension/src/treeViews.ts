@@ -1,7 +1,6 @@
 import * as vscode from "vscode";
 import { listScripts, type ScriptSummary } from "./scriptSync";
 import type { ConnectionState } from "./workbenchConnection";
-import { scriptUri } from "./moonclickerFileSystemProvider";
 
 export class MoonClickerTreeItem extends vscode.TreeItem {
   constructor(
@@ -30,9 +29,9 @@ export class RemoteScriptItem extends MoonClickerTreeItem {
 }
 
 /**
- * 只列裝置上的腳本——沒有 local 分支了（見 vscode-fsprovider-plan.md D）：編輯一律透過
- * `moonclicker.openScript` 把 `moonclicker://` virtual 資料夾掛進 workspace，VS Code 自己
- * 的 Explorer 接手顯示內容，這裡不用重複畫一份檔案樹。保留「Remote Scripts」這個根節點
+ * 只列裝置上的腳本——沒有 local 分支了：點一個腳本會整份 pull 到本機隱藏鏡像資料夾再
+ * 掛進 workspace（見 `extension.ts` 的 `openScriptCommand`／`vscode-local-mirror-plan.md`），
+ * VS Code 自己的 Explorer 接手顯示內容，這裡不用重複畫一份檔案樹。保留「Remote Scripts」這個根節點
  * （而不是直接把腳本攤平到樹的最上層），單純是為了讓 Open Mirror／Disconnect 這些跟
  * 「整條連線」有關的動作有地方掛 context menu。
  */
@@ -85,18 +84,4 @@ export class WorkspaceTreeProvider implements vscode.TreeDataProvider<MoonClicke
       return [];
     }
   }
-}
-
-/** 把裝置上的腳本掛成一個 `moonclicker://` virtual workspace folder；已經開著就直接聚焦。 */
-export async function openScriptAsWorkspaceFolder(address: string, summary: ScriptSummary): Promise<void> {
-  const uri = scriptUri(address, summary.id);
-  const existingIndex = (vscode.workspace.workspaceFolders ?? []).findIndex(
-    (f) => f.uri.toString() === uri.toString()
-  );
-  if (existingIndex !== -1) return;
-
-  vscode.workspace.updateWorkspaceFolders(vscode.workspace.workspaceFolders?.length ?? 0, 0, {
-    uri,
-    name: summary.name || summary.id,
-  });
 }

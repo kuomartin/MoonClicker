@@ -10,13 +10,11 @@ export interface ScriptTreeEntry {
   size: number;
   mtimeMs: number;
   isDirectory: boolean;
+  /** 目錄是空字串；`scriptMirror.ts` 拿這個判斷 self-echo、跳過內容沒變的檔案。 */
+  sha256: string;
 }
 
-/**
- * 裝置端 HTTP 狀態碼原樣帶出來，讓 `moonclickerFileSystemProvider.ts` 能對應到
- * 正確的 `vscode.FileSystemError`（404 → FileNotFound、409 → FileExists……），
- * 不用回頭解析錯誤訊息字串。
- */
+/** 裝置端 HTTP 狀態碼原樣帶出來，呼叫端不用回頭解析錯誤訊息字串就能判斷要怎麼處理。 */
 export class ScriptHttpError extends Error {
   constructor(message: string, public readonly status: number) {
     super(message);
@@ -24,9 +22,9 @@ export class ScriptHttpError extends Error {
 }
 
 /**
- * 裝置端 Script Folder 同步的純邏輯（見 #58、vscode-fsprovider-plan.md），不依賴 vscode
- * API——單元測試對著一個本機起的假 HTTP server 跑，`moonclickerFileSystemProvider.ts`
- * 只負責接 `vscode.FileSystemProvider` 的介面。
+ * 裝置端 Script Folder 同步的純邏輯（見 #58、vscode-local-mirror-plan.md），不依賴 vscode
+ * API——單元測試對著一個本機起的假 HTTP server 跑，`scriptMirror.ts` 拿這層去驅動本機
+ * 鏡像資料夾的背景同步。
  */
 export async function listScripts(address: string, token?: string): Promise<ScriptSummary[]> {
   const response = await fetch(`http://${address}/scripts`, {
