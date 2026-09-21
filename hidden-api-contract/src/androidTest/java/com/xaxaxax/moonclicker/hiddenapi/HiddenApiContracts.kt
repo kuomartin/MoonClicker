@@ -233,6 +233,13 @@ internal val HIDDEN_API_CONTRACTS: List<MemberContract> = listOf(
         sinceApi = Build.VERSION_CODES.Q,
     ),
 
+
+    // ── MotionEventHidden ──────────────────────────────────────────────────────────────────
+    MemberContract(
+        owner = "android.view.Display",
+        member = MethodMember(name = "getType", returns = "int"),
+    ),
+
     // ── IWindowManager ─────────────────────────────────────────────────────────────────────
     // The overload split MoonClickerService.setDisplayRotation branches on — picking the wrong one
     // throws NoSuchMethodError at runtime. API 27–28 fall outside both and take the
