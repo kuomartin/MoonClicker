@@ -4,9 +4,10 @@ import * as vscode from "vscode";
 import { ConnectionState, WorkbenchConnection } from "./workbenchConnection";
 import { mergeLuarc } from "./luarc";
 import { listDisplays, toggleDisplayMirror, type DisplaySummary } from "./displaySync";
-import { listScripts, pullScript, pushScript, runScript } from "./scriptSync";
+import { listScripts, runScript } from "./scriptSync";
 import { disposeMirrorPanel, openMirrorPanel, postStreamEventToMirror } from "./mirrorPanel";
-import { WorkspaceTreeProvider, LocalScriptItem, RemoteScriptItem } from "./treeViews";
+import { WorkspaceTreeProvider, RemoteScriptItem, openScriptAsWorkspaceFolder } from "./treeViews";
+import { MoonclickerFileSystemProvider, parseUri, SCHEME } from "./moonclickerFileSystemProvider";
 import { startMdnsDaemon, getCachedDevices, mdnsEvents, checkDeviceHealth, refreshMdns } from "./mdnsDiscovery";
 import { pairWithPin } from "./authSync";
 
@@ -14,7 +15,11 @@ let connection: WorkbenchConnection | undefined;
 let statusBarItem: vscode.StatusBarItem | undefined;
 let extensionContext: vscode.ExtensionContext | undefined;
 let workspaceProvider: WorkspaceTreeProvider;
+let fileSystemProvider: MoonclickerFileSystemProvider;
 let activeToken: string | undefined;
+/** 一個 provider 實例可能同時服務好幾個已開啟的 virtual workspace folder——可能來自不同
+ *  裝置——所以每個 address 各自記自己的 token，不能只靠 [activeToken] 這個「目前連線」。 */
+const tokensByAddress = new Map<string, string>();
 
 export function activate(context: vscode.ExtensionContext): void {
   startMdnsDaemon();
@@ -27,13 +32,12 @@ export function activate(context: vscode.ExtensionContext): void {
   workspaceProvider = new WorkspaceTreeProvider();
   vscode.window.registerTreeDataProvider("moonclicker.workspace", workspaceProvider);
 
-  const watcher = vscode.workspace.createFileSystemWatcher("**/{main.lua,script.json}");
+  fileSystemProvider = new MoonclickerFileSystemProvider((address) => tokensByAddress.get(address));
   context.subscriptions.push(
-    watcher.onDidCreate(() => workspaceProvider.refresh()),
-    watcher.onDidChange(() => workspaceProvider.refresh()),
-    watcher.onDidDelete(() => workspaceProvider.refresh()),
-    vscode.workspace.onDidChangeWorkspaceFolders(() => workspaceProvider.refresh())
+    vscode.workspace.registerFileSystemProvider(SCHEME, fileSystemProvider, { isCaseSensitive: true })
   );
+
+  context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => workspaceProvider.refresh()));
 
   const logChannel = vscode.window.createOutputChannel("MoonClicker Script Log");
   const dataChannel = vscode.window.createOutputChannel("MoonClicker Script Data");
@@ -52,6 +56,11 @@ export function activate(context: vscode.ExtensionContext): void {
     } else if (event.event.case === "data") {
       dataChannel.clear();
       dataChannel.appendLine(JSON.stringify(event.event.value, null, 2));
+    } else if (event.event.case === "fileChange") {
+      const state = connection?.state;
+      if (state?.status === "connected") {
+        fileSystemProvider.applyRemoteChange(state.address, event.event.value);
+      }
     }
     postStreamEventToMirror(event.event);
   });
@@ -60,17 +69,12 @@ export function activate(context: vscode.ExtensionContext): void {
     statusBarItem,
     logChannel,
     dataChannel,
-    watcher,
     vscode.commands.registerCommand("moonclicker.connect", connectCommand),
     vscode.commands.registerCommand("moonclicker.disconnect", () => connection?.disconnect()),
-    vscode.commands.registerCommand("moonclicker.pull", pullCommand),
-    vscode.commands.registerCommand("moonclicker.pullRemote", pullRemoteCommand),
-    vscode.commands.registerCommand("moonclicker.push", pushCommand),
-    vscode.commands.registerCommand("moonclicker.pushAndRun", pushAndRunCommand),
+    vscode.commands.registerCommand("moonclicker.openScript", openScriptCommand),
     vscode.commands.registerCommand("moonclicker.run", runCommand),
     vscode.commands.registerCommand("moonclicker.runRemote", runRemoteCommand),
     vscode.commands.registerCommand("moonclicker.openMirror", openMirrorCommand),
-    vscode.commands.registerCommand("moonclicker.renameScript", renameScriptCommand),
     vscode.commands.registerCommand("moonclicker.setupStubs", setupStubsCommand),
     vscode.commands.registerCommand("moonclicker.toggleMirror", toggleMirrorCommand),
   );
@@ -202,6 +206,7 @@ async function connectCommand(): Promise<void> {
     }
 
     activeToken = token;
+    if (token) tokensByAddress.set(address, token);
     connection?.connect(address, token);
   });
 
@@ -234,179 +239,43 @@ async function pickScript(address: string): Promise<string | undefined> {
   return picked?.id;
 }
 
-async function pullCommand(): Promise<void> {
-  const address = connectedAddress();
-  if (!address) return;
-  try {
-    const id = await pickScript(address);
-    if (!id) return;
-    const folders = await vscode.window.showOpenDialog({
-      canSelectFiles: false,
-      canSelectFolders: true,
-      openLabel: "Pull 到這個資料夾",
-    });
-    const destDir = folders?.[0]?.fsPath;
-    if (!destDir) return;
-    await pullScript(address, id, destDir, activeToken);
-    ensureLuarcConfigured(destDir);
-    vscode.window.showInformationMessage(`MoonClicker: 已把「${id}」同步到 ${destDir}`);
-  } catch (err) {
-    vscode.window.showErrorMessage(`MoonClicker: ${(err as Error).message}`);
-  }
-}
-
-async function pullRemoteCommand(item?: RemoteScriptItem): Promise<void> {
-  const address = connectedAddress();
-  if (!address) return;
-  try {
-    const id = item?.summary.id || await pickScript(address);
-    if (!id) return;
-    const folders = await vscode.window.showOpenDialog({
-      canSelectFiles: false,
-      canSelectFolders: true,
-      openLabel: "Pull 到這個資料夾",
-    });
-    const destDir = folders?.[0]?.fsPath;
-    if (!destDir) return;
-    await pullScript(address, id, destDir, activeToken);
-    ensureLuarcConfigured(destDir);
-    vscode.window.showInformationMessage(`MoonClicker: 已把「${id}」同步到 ${destDir}`);
-  } catch (err) {
-    vscode.window.showErrorMessage(`MoonClicker: ${(err as Error).message}`);
-  }
-}
-
-async function getLocalScriptTarget(item?: LocalScriptItem): Promise<{ id: string, path: string } | undefined> {
+/** 依 tree item 或（沒帶 item 時）先選裝置、再選腳本，把裝置上的腳本掛成 virtual workspace folder。 */
+async function openScriptCommand(item?: RemoteScriptItem): Promise<void> {
   if (item) {
-    return { id: item.scriptId, path: item.scriptPath };
-  }
-  
-  const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-  if (!workspaceFolder) {
-    vscode.window.showErrorMessage("MoonClicker: 請先開啟專案資料夾");
+    await openScriptAsWorkspaceFolder(item.address, item.summary);
     return;
   }
-  const root = workspaceFolder.uri.fsPath;
-  
-  if (fs.existsSync(path.join(root, "main.lua"))) {
-    const id = await ensureScriptJson(root, path.basename(root));
-    return { id, path: root };
-  }
-
-  const children = fs.readdirSync(root, { withFileTypes: true });
-  const options = children
-    .filter(c => c.isDirectory() && fs.existsSync(path.join(root, c.name, "main.lua")))
-    .map(c => ({ label: c.name, path: path.join(root, c.name) }));
-    
-  if (options.length === 0) {
-    vscode.window.showErrorMessage("MoonClicker: 在工作區找不到任何包含 main.lua 的資料夾");
-    return;
-  }
-  
-  const picked = await vscode.window.showQuickPick(options, { placeHolder: "選擇要操作的 Script Folder" });
-  if (picked) {
-    const id = await ensureScriptJson(picked.path, picked.label);
-    return { id, path: picked.path };
-  }
-  return undefined;
-}
-
-async function ensureScriptJson(folderPath: string, folderName: string): Promise<string> {
-  const jsonPath = path.join(folderPath, "script.json");
-  if (!fs.existsSync(jsonPath)) {
-    fs.writeFileSync(jsonPath, JSON.stringify({ id: folderName, name: folderName }, null, 2) + "\n");
-    return folderName;
-  }
-  try {
-    const json = JSON.parse(fs.readFileSync(jsonPath, "utf8"));
-    if (json.id) return json.id;
-  } catch {}
-  return folderName;
-}
-
-async function pushCommand(item?: LocalScriptItem): Promise<void> {
   const address = connectedAddress();
   if (!address) return;
-  const target = await getLocalScriptTarget(item);
-  if (!target) return;
-  
-  try {
-    const id = await ensureScriptJson(target.path, target.id);
-    await pushScript(address, id, target.path, activeToken);
-    vscode.window.showInformationMessage(`MoonClicker: 已把目前專案推送到裝置的「${id}」`);
-    workspaceProvider.refresh();
-  } catch (err) {
+  const scripts = await listScripts(address, activeToken).catch((err) => {
     vscode.window.showErrorMessage(`MoonClicker: ${(err as Error).message}`);
-  }
-}
-
-async function pushAndRunCommand(item?: LocalScriptItem): Promise<void> {
-  const address = connectedAddress();
-  if (!address) return;
-  const target = await getLocalScriptTarget(item);
-  if (!target) return;
-  
-  try {
-    const id = await ensureScriptJson(target.path, target.id);
-    await pushScript(address, id, target.path, activeToken);
-    insertRunDivider();
-    await runScript(address, id, activeToken);
-    vscode.window.showInformationMessage(`MoonClicker: 已推送並執行「${id}」`);
-    workspaceProvider.refresh();
-  } catch (err) {
-    vscode.window.showErrorMessage(`MoonClicker: ${(err as Error).message}`);
-  }
-}
-
-async function runCommand(): Promise<void> {
-  const address = connectedAddress();
-  if (!address) return;
-  const target = await getLocalScriptTarget();
-  if (!target) return;
-  
-  try {
-    insertRunDivider();
-    await runScript(address, target.id, activeToken);
-    vscode.window.showInformationMessage(`MoonClicker: 已在裝置上觸發「${target.id}」執行`);
-  } catch (err) {
-    vscode.window.showErrorMessage(`MoonClicker: ${(err as Error).message}`);
-  }
-}
-
-async function renameScriptCommand(item?: LocalScriptItem): Promise<void> {
-  const target = await getLocalScriptTarget(item);
-  if (!target) return;
-  
-  const newName = await vscode.window.showInputBox({
-    prompt: "輸入新的腳本名稱 (將同時重新命名資料夾與 script.json)",
-    value: target.id
+    return undefined;
   });
-  if (!newName || newName === target.id) return;
-  
-  const parentDir = path.dirname(target.path);
-  const newPath = path.join(parentDir, newName);
-  
-  if (fs.existsSync(newPath)) {
-    vscode.window.showErrorMessage(`MoonClicker: 已經存在名為「${newName}」的資料夾。`);
+  if (!scripts || scripts.length === 0) {
+    if (scripts) vscode.window.showInformationMessage("MoonClicker: 裝置上還沒有任何腳本");
     return;
   }
-  
+  const picked = await vscode.window.showQuickPick(
+    scripts.map((s) => ({ label: s.name, description: s.id, script: s })),
+    { placeHolder: "選擇要開啟的 Script Folder" },
+  );
+  if (picked) await openScriptAsWorkspaceFolder(address, picked.script);
+}
+
+/** F5／「Run Current Script」：對著目前作用中編輯器所在的 virtual workspace folder 觸發執行。 */
+async function runCommand(): Promise<void> {
+  const uri = vscode.window.activeTextEditor?.document.uri;
+  if (!uri || uri.scheme !== SCHEME) {
+    vscode.window.showErrorMessage("MoonClicker: 請先透過側邊欄開啟一個裝置上的腳本");
+    return;
+  }
+  const { address, scriptId } = parseUri(uri);
   try {
-    const jsonPath = path.join(target.path, "script.json");
-    if (fs.existsSync(jsonPath)) {
-      const json = JSON.parse(fs.readFileSync(jsonPath, "utf8"));
-      json.id = newName;
-      if (json.name === target.id) {
-        json.name = newName;
-      }
-      fs.writeFileSync(jsonPath, JSON.stringify(json, null, 2) + "\n");
-    }
-    
-    fs.renameSync(target.path, newPath);
-    vscode.window.showInformationMessage(`MoonClicker: 腳本已重新命名為「${newName}」`);
-    workspaceProvider.refresh();
+    insertRunDivider();
+    await runScript(address, scriptId, tokensByAddress.get(address));
+    vscode.window.showInformationMessage(`MoonClicker: 已在裝置上觸發「${scriptId}」執行`);
   } catch (err) {
-    vscode.window.showErrorMessage(`MoonClicker: 重新命名失敗 - ${(err as Error).message}`);
+    vscode.window.showErrorMessage(`MoonClicker: ${(err as Error).message}`);
   }
 }
 
@@ -416,7 +285,13 @@ async function setupStubsCommand(): Promise<void> {
     vscode.window.showErrorMessage("MoonClicker: 請先開啟專案資料夾");
     return;
   }
-  
+  if (workspaceFolder.uri.scheme === SCHEME) {
+    // LuaLS 是原生行程，直接對解碼後的 OS 路徑做 io.open，讀不到 moonclicker: 這個
+    // virtual scheme（查證見 vscode-fsprovider-plan.md）——這裡沒有繞過空間。
+    vscode.window.showErrorMessage("MoonClicker: 裝置上的腳本沒有 Lua 型別提示，僅支援本機資料夾");
+    return;
+  }
+
   try {
     const rootPath = workspaceFolder.uri.fsPath;
     ensureLuarcConfigured(rootPath);
