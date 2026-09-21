@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -320,76 +321,81 @@ private fun DisplayCard(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.extraLarge
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
+        // 縮圖本身就是主要動作入口：虛擬顯示／鏡像中的實體顯示點下去 = Enter，
+        // 未鏡像的實體顯示點下去 = Start Mirror。右上角疊一顆 X 做次要動作
+        // （虛擬顯示 = Close，鏡像中 = Stop Mirror），未鏡像時沒有次要動作可疊。
+        val primaryLabel = if (info.isPhysical && !info.isMirrorActive) {
+            stringResource(R.string.displays_action_start_mirror)
+        } else {
+            stringResource(R.string.displays_action_enter)
+        }
+        val primaryAction = if (info.isPhysical && !info.isMirrorActive) {
+            { onToggleMirror(true) }
+        } else {
+            onEnter
+        }
+        // 縮圖貼齊卡片邊緣、不留 padding；只有上緣兩個角要跟著卡片本身的圓角走，
+        // 下緣是直角，緊接著下面的文字內容。
+        val thumbnailShape = (MaterialTheme.shapes.extraLarge as RoundedCornerShape).copy(
+            bottomStart = CornerSize(0.dp),
+            bottomEnd = CornerSize(0.dp),
+        )
+        // Box 固定高度、縮圖缺席時也保留：同一列的卡片才不會因為有沒有縮圖而高低不齊。
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(100.dp)
+                .clip(thumbnailShape)
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .clickable(onClickLabel = primaryLabel, onClick = primaryAction),
+            contentAlignment = Alignment.Center,
         ) {
-            // 縮圖本身就是主要動作入口：虛擬顯示／鏡像中的實體顯示點下去 = Enter，
-            // 未鏡像的實體顯示點下去 = Start Mirror。右上角疊一顆 X 做次要動作
-            // （虛擬顯示 = Close，鏡像中 = Stop Mirror），未鏡像時沒有次要動作可疊。
-            val primaryLabel = if (info.isPhysical && !info.isMirrorActive) {
-                stringResource(R.string.displays_action_start_mirror)
-            } else {
-                stringResource(R.string.displays_action_enter)
+            if (info.thumbnail != null) {
+                Image(
+                    bitmap = info.thumbnail,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else if (info.isPhysical && !info.isMirrorActive) {
+                Text(
+                    text = stringResource(R.string.displays_card_mirror_not_active),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
-            val primaryAction = if (info.isPhysical && !info.isMirrorActive) {
-                { onToggleMirror(true) }
-            } else {
-                onEnter
-            }
-            // Box 固定高度、縮圖缺席時也保留：同一列的卡片才不會因為有沒有縮圖而高低不齊。
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(100.dp)
-                    .clip(MaterialTheme.shapes.medium)
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .clickable(onClickLabel = primaryLabel, onClick = primaryAction),
-                contentAlignment = Alignment.Center,
-            ) {
-                if (info.thumbnail != null) {
-                    Image(
-                        bitmap = info.thumbnail,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                } else if (info.isPhysical && !info.isMirrorActive) {
-                    Text(
-                        text = stringResource(R.string.displays_card_mirror_not_active),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
 
-                if (!info.isPhysical) {
-                    IconButton(
-                        onClick = onClose,
-                        modifier = Modifier.align(Alignment.TopEnd),
-                    ) {
-                        Icon(
-                            Icons.Default.Close,
-                            contentDescription = stringResource(R.string.displays_action_close),
-                            tint = MaterialTheme.colorScheme.error,
-                        )
-                    }
-                } else if (info.isMirrorActive) {
-                    IconButton(
-                        onClick = { onToggleMirror(false) },
-                        modifier = Modifier.align(Alignment.TopEnd),
-                    ) {
-                        Icon(
-                            Icons.Default.Close,
-                            contentDescription = stringResource(R.string.displays_action_stop_mirror),
-                            tint = MaterialTheme.colorScheme.error,
-                        )
-                    }
+            if (!info.isPhysical) {
+                IconButton(
+                    onClick = onClose,
+                    modifier = Modifier.align(Alignment.TopEnd),
+                ) {
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = stringResource(R.string.displays_action_close),
+                        tint = MaterialTheme.colorScheme.error,
+                    )
+                }
+            } else if (info.isMirrorActive) {
+                IconButton(
+                    onClick = { onToggleMirror(false) },
+                    modifier = Modifier.align(Alignment.TopEnd),
+                ) {
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = stringResource(R.string.displays_action_stop_mirror),
+                        tint = MaterialTheme.colorScheme.error,
+                    )
                 }
             }
+        }
+        Column(
+            modifier = Modifier.padding(start = 16.dp,end = 16.dp,top = 8.dp,  bottom = 12.dp)
+        ) {
             Text(
                 text = if (info.isPhysical) stringResource(R.string.displays_card_physical, info.displayId) else stringResource(R.string.displays_card_virtual, info.displayId),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(top = 8.dp),
             )
             Text(
                 text = "${info.width}x${info.height}@${info.densityDpi}",
@@ -408,7 +414,6 @@ private fun DisplayCard(
                         }
                     )
                 },
-                modifier = Modifier.padding(top = 8.dp)
             )
         }
     }
