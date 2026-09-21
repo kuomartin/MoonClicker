@@ -2,6 +2,10 @@
 
 目標：`moonclicker:` virtual scheme 直接讀寫裝置上的 Script Folder，取代手動 pull/push。裝置端與擴充套件端一起改。
 
+**狀態**：A（裝置端 API）、B（proto，除 FileObserver 已放棄）、C（擴充套件架構）、D（移除舊指令）都已實作，
+在 `feat/workbench-file-api` 分支上。E2 的 `renameScript`（改 script id／資料夾名本身）尚未做——需要裝置端
+一個新端點，這次沒涵蓋，指令先整個拿掉而不是留半殘的本機版本。
+
 ## A. 裝置端新增 API（`WorkbenchServer.kt`）
 
 | Method | Path | 用途 | 取代/沿用 |
