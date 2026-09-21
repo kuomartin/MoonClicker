@@ -52,3 +52,16 @@
 1. **Zip**：裝置端 `/export`、`/import` HTTP route 移除；`ScriptArchive.kt` 本身留著給 App 內建功能用。VS Code 端若要備份/還原，改在擴充套件內用新的細粒度 API 自己組 zip（見上表 `scriptArchive.ts`），不需要裝置端配合。
 2. **LuaLS 型別提示**：virtual 資料夾放棄，`setupStubs` 只對本機 pull 下來的資料夾生效。根因是 LuaLS 為原生行程、直接對解碼後的 OS 路徑做 `io.open`，不經過 `vscode.FileSystemProvider`，沒有繞過空間（查證見上表 `luarc.ts` 列）。
 3. **外部變更偵測**：放棄。`file_change` 只涵蓋透過新 HTTP 單檔案 API 的寫入；檔案管理員/USB 直接改動不會被偵測到，VS Code 端不會即時看到——使用者要嘛重新整理，要嘛（如果編輯中）遇到裝置端內容已不同步的落差，這是接受的取捨。
+
+## F. 與 issue #103（Script uniqueId）的交叉點
+
+另一個 session 在同時做 `ScriptMeta` 加 `uniqueId: String` 欄位（folder-independent 識別，見該 session 的
+`issue-103-plan.md`）。範圍已排除 `WorkbenchServer`／`vscode-extension`，`Script.id` 本身（＝資料夾名）不變，
+跟這份計畫的路由設計沒有衝突，但有兩點記著：
+
+1. **`ScriptArchive.kt` 合併衝突**：這份計畫把 zip slip 檢查抽成 `SafePath.resolve()`，改了 `unpackInto()`；
+   #103 那邊的 `import()` 也要改同一個函式（自動產生 `uniqueId`、撞號回傳 `ImportResult.Conflict`）。兩邊改的
+   是不同關注點，但同一段程式碼，兩支分支合併時會有文字衝突，需要花時間 rebase，不是設計層面的衝突。
+2. **`script.json` 可以被任意改，繞過 #103 的撞號檢查**：`PUT /scripts/:id/files/script.json` 讓 VS Code
+   能直接寫任何內容進 `script.json`，包括 `uniqueId`；#103 的撞號檢查只守在 `ScriptArchive.import()` 這條
+   路徑，擋不住透過這裡單檔案 API 寫入的重複 `uniqueId`。已知缺口，這次不補，先記著。
