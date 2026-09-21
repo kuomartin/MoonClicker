@@ -105,6 +105,8 @@ internal class RecordingMoonClickerService(
 
     override fun getLauncherApps(): MutableList<String> = unused("getLauncherApps")
 
+    override fun refreshLauncherApps(): MutableList<String> = unused("refreshLauncherApps")
+
     override fun getPointers(displayId: Int): IntArray = unused("getPointers")
 
     override fun injectMotionEvent(event: MotionEvent, displayId: Int): Boolean =

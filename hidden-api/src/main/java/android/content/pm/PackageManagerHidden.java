@@ -1,5 +1,7 @@
 package android.content.pm;
 
+import android.os.IRemoteCallback;
+
 import dev.rikka.tools.refine.RefineAs;
 
 @RefineAs(PackageManager.class)
@@ -19,4 +21,12 @@ public class PackageManagerHidden {
     public void removeOnPermissionsChangeListener(OnPermissionsChangedListener listener) {
         throw new RuntimeException("Stub!");
     }
+    public void registerPackageMonitorCallback(IRemoteCallback callback, int userId) {
+        throw new RuntimeException("Stub!");
+    }
+
+    public void unregisterPackageMonitorCallback(IRemoteCallback callback) {
+        throw new RuntimeException("Stub!");
+    }
+
 }

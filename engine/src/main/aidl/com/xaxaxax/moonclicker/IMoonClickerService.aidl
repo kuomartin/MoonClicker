@@ -28,7 +28,10 @@ interface IMoonClickerService {
      */
     boolean setDisplayRotation(int displayId, int rotation) = 108;
     boolean launchInDisplay(String packageName, int displayId) = 106;
+    /** 讀暖快取，見 [refreshLauncherApps] 與服務啟動時的初次查詢；不會即時重掃 PackageManager。 */
     List<String> getLauncherApps() = 107;
+    /** 強制重新查一次 PackageManager 並更新快取，回傳結果同 [getLauncherApps]。手動刷新用。 */
+    List<String> refreshLauncherApps() = 305;
 
     /**
      * points: flattened [x1, y1, x2, y2, ...]

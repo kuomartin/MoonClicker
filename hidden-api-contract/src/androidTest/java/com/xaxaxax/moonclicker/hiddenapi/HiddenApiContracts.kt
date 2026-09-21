@@ -215,6 +215,26 @@ internal val HIDDEN_API_CONTRACTS: List<MemberContract> = listOf(
         owner = "android.content.pm.PackageManager\$OnPermissionsChangedListener",
         member = MethodMember(name = "onPermissionsChanged", parameters = listOf("int"), returns = "void"),
     ),
+    // API 35（VANILLA_ICE_CREAM）起有這兩個方法，34（UPSIDE_DOWN_CAKE）沒有——已查證 AOSP
+    // 原始碼確認；標成 @Hide、非 @SystemApi。實機驗證見 Pixel 7a（API 37）。
+    MemberContract(
+        owner = "android.content.pm.PackageManager",
+        member = MethodMember(
+            name = "registerPackageMonitorCallback",
+            parameters = listOf("android.os.IRemoteCallback", "int"),
+            returns = "void",
+        ),
+        sinceApi = Build.VERSION_CODES.VANILLA_ICE_CREAM,
+    ),
+    MemberContract(
+        owner = "android.content.pm.PackageManager",
+        member = MethodMember(
+            name = "unregisterPackageMonitorCallback",
+            parameters = listOf("android.os.IRemoteCallback"),
+            returns = "void",
+        ),
+        sinceApi = Build.VERSION_CODES.VANILLA_ICE_CREAM,
+    ),
 
     // ── InputManagerHidden ─────────────────────────────────────────────────────────────────
     MemberContract(
