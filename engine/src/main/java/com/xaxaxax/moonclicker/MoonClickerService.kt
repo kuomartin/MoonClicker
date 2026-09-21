@@ -22,7 +22,9 @@ import android.hardware.display.VirtualDisplay
 import android.hardware.input.InputManager
 import android.hardware.input.InputManagerHidden
 import android.os.Build
+import android.os.Bundle
 import android.os.Handler
+import android.os.IRemoteCallback
 import android.os.Looper
 import android.os.PowerManager
 import android.os.PowerManagerHidden
@@ -170,6 +172,30 @@ class MoonClickerService @JvmOverloads constructor(
                 "Landroid/view/MotionEvent",
                 "Landroid/view/WindowManagerGlobal",
             )
+        }
+
+        rebuildLauncherAppsCache()
+
+        // registerPackageMonitorCallback 是 API 35（VANILLA_ICE_CREAM）才有的 @hide 方法
+        // （已查證＋實機驗證，見 hidden-api-contract）；35 以下沒有這條路，快取只能靠上面
+        // 這次啟動時的查詢跟 refreshLauncherApps()（手動刷新按鈕）維持。不 unregister——
+        // 跟這個 service 本身一樣，活到進程死亡為止。
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+            try {
+                val callback = object : IRemoteCallback.Stub() {
+                    override fun sendResult(data: Bundle?) {
+                        rebuildLauncherAppsCache()
+                    }
+                }
+                // UserHandle.getIdentifier()/getUserId(int) 都是 @SystemApi/@TestApi，不在
+                // 公開 SDK 的編譯期 classpath 上；uid / 100000 是 AOSP 內部固定的換算公式
+                // （UserHandle.PER_USER_RANGE），不值得為一個 int 另外開一支 hidden-api stub。
+                val userId = Process.myUid() / 100000
+                Refine.unsafeCast<PackageManagerHidden>(context.packageManager)
+                    .registerPackageMonitorCallback(callback, userId)
+            } catch (t: Throwable) {
+                Timber.e(t, "registerPackageMonitorCallback failed")
+            }
         }
     }
 
@@ -828,12 +854,27 @@ class MoonClickerService @JvmOverloads constructor(
         }
     }
 
-    override fun getLauncherApps(): List<String> {
+    @Volatile
+    private var launcherAppsCache: List<String> = emptyList()
+
+    /**
+     * 全量重查一次 launcher app 並取代快取。查詢動作本身有感（scan 全部套件 + 逐一 loadLabel），
+     * 所以 [getLauncherApps] 只讀這份快取，真正重掃交給這裡——服務啟動時跑一次（見 `init`），
+     * API 35+ 另有 [android.content.pm.PackageManagerHidden.registerPackageMonitorCallback]
+     * 在套件變動時自動叫這裡；35 以下就只剩啟動時那一次跟這個方法（手動刷新按鈕）。
+     */
+    private fun rebuildLauncherAppsCache(): List<String> {
         val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-        return context.packageManager.queryIntentActivities(intent, 0).map {
+        val result = context.packageManager.queryIntentActivities(intent, 0).map {
             "${it.activityInfo.packageName}|${it.loadLabel(context.packageManager)}"
         }
+        launcherAppsCache = result
+        return result
     }
+
+    override fun getLauncherApps(): List<String> = launcherAppsCache
+
+    override fun refreshLauncherApps(): List<String> = rebuildLauncherAppsCache()
 
     override fun injectMotionEvent(event: MotionEvent, displayId: Int): Boolean {
         return try {
