@@ -3,6 +3,7 @@ package com.xaxaxax.moonclicker.ui.displays
 import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,10 +25,10 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -35,9 +36,9 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MediumTopAppBar
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -322,13 +323,27 @@ private fun DisplayCard(
         Column(
             modifier = Modifier.padding(16.dp)
         ) {
+            // 縮圖本身就是主要動作入口：虛擬顯示／鏡像中的實體顯示點下去 = Enter，
+            // 未鏡像的實體顯示點下去 = Start Mirror。右上角疊一顆 X 做次要動作
+            // （虛擬顯示 = Close，鏡像中 = Stop Mirror），未鏡像時沒有次要動作可疊。
+            val primaryLabel = if (info.isPhysical && !info.isMirrorActive) {
+                stringResource(R.string.displays_action_start_mirror)
+            } else {
+                stringResource(R.string.displays_action_enter)
+            }
+            val primaryAction = if (info.isPhysical && !info.isMirrorActive) {
+                { onToggleMirror(true) }
+            } else {
+                onEnter
+            }
             // Box 固定高度、縮圖缺席時也保留：同一列的卡片才不會因為有沒有縮圖而高低不齊。
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(100.dp)
                     .clip(MaterialTheme.shapes.medium)
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .clickable(onClickLabel = primaryLabel, onClick = primaryAction),
                 contentAlignment = Alignment.Center,
             ) {
                 if (info.thumbnail != null) {
@@ -344,6 +359,30 @@ private fun DisplayCard(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+
+                if (!info.isPhysical) {
+                    IconButton(
+                        onClick = onClose,
+                        modifier = Modifier.align(Alignment.TopEnd),
+                    ) {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = stringResource(R.string.displays_action_close),
+                            tint = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                } else if (info.isMirrorActive) {
+                    IconButton(
+                        onClick = { onToggleMirror(false) },
+                        modifier = Modifier.align(Alignment.TopEnd),
+                    ) {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = stringResource(R.string.displays_action_stop_mirror),
+                            tint = MaterialTheme.colorScheme.error,
+                        )
+                    }
                 }
             }
             Text(
@@ -371,57 +410,6 @@ private fun DisplayCard(
                 },
                 modifier = Modifier.padding(top = 8.dp)
             )
-
-            Box(modifier = Modifier.padding(top = 12.dp).fillMaxWidth()) {
-                Column {
-                    if (info.isPhysical) {
-                        if (info.isMirrorActive) {
-                            OutlinedButton(
-                                onClick = { onToggleMirror(false) },
-                                colors = ButtonDefaults.outlinedButtonColors(
-                                    contentColor = MaterialTheme.colorScheme.error
-                                ),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(stringResource(R.string.displays_action_stop_mirror))
-                            }
-                            Button(
-                                onClick = onEnter,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 8.dp)
-                            ) {
-                                Text(stringResource(R.string.displays_action_enter))
-                            }
-                        } else {
-                            Button(
-                                onClick = { onToggleMirror(true) },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(stringResource(R.string.displays_action_start_mirror))
-                            }
-                        }
-                    } else {
-                        OutlinedButton(
-                            onClick = onClose,
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = MaterialTheme.colorScheme.error
-                            ),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(stringResource(R.string.displays_action_close))
-                        }
-                        Button(
-                            onClick = onEnter,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 8.dp)
-                        ) {
-                            Text(stringResource(R.string.displays_action_enter))
-                        }
-                    }
-                }
-            }
         }
     }
 }
