@@ -33,6 +33,7 @@ import android.view.Display
 import android.view.DisplayHidden
 import android.view.InputDevice
 import android.view.KeyEvent
+import android.view.KeyEventHidden
 import android.view.MotionEvent
 import android.view.MotionEventHidden
 import android.view.Surface
@@ -80,6 +81,17 @@ class MoonClickerService @JvmOverloads constructor(
         private fun MotionEvent.setDisplayId(displayId: Int): Boolean {
                 return if (Build.VERSION.SDK_INT>= Build.VERSION_CODES.Q) {
                     Refine.unsafeCast<MotionEventHidden>(this).setDisplayId(displayId)
+                    true
+                }
+                else {
+                    Timber.d("Cannot associate a display id to the input event")
+                    false
+                }
+        }
+
+        private fun KeyEvent.setDisplayId(displayId: Int): Boolean {
+                return if (Build.VERSION.SDK_INT>= Build.VERSION_CODES.Q) {
+                    Refine.unsafeCast<KeyEventHidden>(this).setDisplayId(displayId)
                     true
                 }
                 else {
@@ -837,6 +849,8 @@ class MoonClickerService @JvmOverloads constructor(
 
     override fun injectKeyEvent(event: KeyEvent, displayId: Int): Boolean {
         return try {
+            if (displayId!=0 && !event.setDisplayId(displayId))
+                return false
             wakeDisplayGroupIfOwned(displayId)
             inputManager.injectInputEvent(event, 0)
         } catch (t: Throwable) {
