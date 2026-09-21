@@ -7,6 +7,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.xaxaxax.moonclicker.IMoonClickerService
+import com.xaxaxax.moonclicker.core.AppSettings
 import com.xaxaxax.moonclicker.shizuku.ShizukuManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -33,6 +34,7 @@ class FullscreenDisplayViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val shizukuManager: ShizukuManager,
     private val thumbnailCache: DisplayThumbnailCache,
+    private val appSettings: AppSettings,
     /**
      * workbench 的 `/mirror/{displayId}` 從這裡取畫面（見 #76）。直接把 singleton 露給畫面用，
      * 登記/解除登記是畫面自己的生命週期事件，再包一層轉呼叫不會更清楚。
@@ -59,6 +61,13 @@ class FullscreenDisplayViewModel @Inject constructor(
      * 走樣的地方，而它表達的是同一件事。
      */
     val service: StateFlow<IMoonClickerService?> = shizukuManager.serviceFlow
+
+    /** 長按釘選的 package name 集合，畫面用來把釘選的 app 排到清單最前面。 */
+    val pinnedApps: StateFlow<Set<String>> = appSettings.pinnedApps
+
+    fun togglePinned(packageName: String) {
+        appSettings.setPinned(packageName, packageName !in appSettings.pinnedApps.value)
+    }
 
     fun onAction(action: FullscreenAction, targetDisplayId: Int) {
         when (action) {
@@ -99,18 +108,33 @@ class FullscreenDisplayViewModel @Inject constructor(
 
     private fun openAppList() {
         viewModelScope.launch {
-            shizukuManager.withService { service ->
-                val rawApps = service.launcherApps
-                val appEntries = rawApps.map {
-                    val parts = it.split("|")
-                    AppEntry(parts[0], parts.getOrElse(1) { parts[0] })
-                }.sortedBy { it.label }
-                _uiState.value = _uiState.value.copy(apps = appEntries, showAppList = true)
-            }.onFailure {
-                Timber.e(it)
-            }
+            shizukuManager.withService { service -> service.launcherApps }
+                .onSuccess { rawApps ->
+                    _uiState.value = _uiState.value.copy(apps = parseAppEntries(rawApps), showAppList = true)
+                }
+                .onFailure {
+                    Timber.e(it)
+                }
         }
     }
+
+    /** 標題列的手動刷新按鈕：強制 Shizuku 進程重掃一次 PackageManager，不是只讀暖快取。 */
+    fun refreshAppList() {
+        viewModelScope.launch {
+            shizukuManager.withService { service -> service.refreshLauncherApps() }
+                .onSuccess { rawApps ->
+                    _uiState.value = _uiState.value.copy(apps = parseAppEntries(rawApps))
+                }
+                .onFailure {
+                    Timber.e(it)
+                }
+        }
+    }
+
+    private fun parseAppEntries(rawApps: List<String>): List<AppEntry> = rawApps.map {
+        val parts = it.split("|")
+        AppEntry(parts[0], parts.getOrElse(1) { parts[0] })
+    }.sortedBy { it.label }
 
     fun closeAppList() {
         _uiState.value = _uiState.value.copy(showAppList = false)

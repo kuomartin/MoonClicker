@@ -16,6 +16,9 @@
     <string name="common_back">Back</string>
     <string name="common_stop">Stop</string>
     <string name="common_play_pause">Play/Pause</string>
+    <string name="common_refresh">Refresh</string>
+    <string name="common_search">Search</string>
+    <string name="common_pinned">Pinned</string>
 
     <!-- Displays Screen -->
     <string name="displays_title">Displays</string>

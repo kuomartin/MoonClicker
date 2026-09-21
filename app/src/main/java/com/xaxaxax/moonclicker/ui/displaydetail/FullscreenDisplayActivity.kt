@@ -8,11 +8,17 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -20,7 +26,13 @@ import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -30,6 +42,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -94,6 +108,7 @@ class FullscreenDisplayActivity : ComponentActivity() {
 
 data class AppEntry(val packageName: String, val label: String)
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun FullscreenDisplayScreen(
     targetDisplayId: Int,
@@ -183,19 +198,59 @@ fun FullscreenDisplayScreen(
         )
 
         if (uiState.showAppList) {
+            val pinnedApps by viewModel.pinnedApps.collectAsState()
+            var query by remember { mutableStateOf("") }
+            val visibleApps = remember(uiState.apps, pinnedApps, query) {
+                uiState.apps
+                    .filter { it.label.contains(query, ignoreCase = true) }
+                    .sortedWith(compareByDescending<AppEntry> { it.packageName in pinnedApps }.thenBy { it.label })
+            }
             AlertDialog(
                 onDismissRequest = { viewModel.closeAppList() },
-                title = { Text(stringResource(R.string.fullscreen_select_app_title)) },
+                title = {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(stringResource(R.string.fullscreen_select_app_title))
+                        IconButton(onClick = { viewModel.refreshAppList() }) {
+                            Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.common_refresh))
+                        }
+                    }
+                },
                 text = {
-                    LazyColumn(modifier = Modifier.heightIn(max = 400.dp)) {
-                        items(uiState.apps) { app ->
-                            TextButton(
-                                onClick = {
-                                    viewModel.launchApp(app.packageName, targetDisplayId)
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(app.label, modifier = Modifier.fillMaxWidth())
+                    Column {
+                        OutlinedTextField(
+                            value = query,
+                            onValueChange = { query = it },
+                            singleLine = true,
+                            label = { Text(stringResource(R.string.common_search)) },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        LazyColumn(modifier = Modifier.heightIn(max = 400.dp)) {
+                            items(visibleApps, key = { it.packageName }) { app ->
+                                val pinned = app.packageName in pinnedApps
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .combinedClickable(
+                                            onClick = { viewModel.launchApp(app.packageName, targetDisplayId) },
+                                            onLongClick = { viewModel.togglePinned(app.packageName) },
+                                        )
+                                        .padding(vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    if (pinned) {
+                                        Icon(
+                                            Icons.Default.PushPin,
+                                            contentDescription = stringResource(R.string.common_pinned),
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.padding(end = 8.dp),
+                                        )
+                                    }
+                                    Text(app.label, modifier = Modifier.fillMaxWidth())
+                                }
                             }
                         }
                     }
