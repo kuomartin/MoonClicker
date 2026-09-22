@@ -47,7 +47,6 @@ object ScriptArchive {
         if (!staging.mkdirs()) return ImportResult.Failed("Failed to create staging directory")
 
         try {
-            val stagingPath = staging.canonicalPath + File.separator
             var entries = 0
             var totalBytes = 0L
 
@@ -58,13 +57,9 @@ object ScriptArchive {
                         return fail(staging, "Archive contains too many entries (exceeds $MAX_ENTRIES)")
                     }
 
-                    val target = File(staging, entry.name)
-                    // canonicalPath 會把 `..` 化解掉，逃出目標目錄的 entry 在這裡被擋下。
-                    if (!(target.canonicalPath + if (entry.isDirectory) File.separator else "")
-                            .startsWith(stagingPath)
-                    ) {
-                        return fail(staging, "Archive contains insecure path: ${entry.name}")
-                    }
+                    // SafePath 把 `..` 解掉，逃出目標目錄的 entry 在這裡被擋下（zip slip）。
+                    val target = SafePath.resolve(staging, entry.name)
+                        ?: return fail(staging, "Archive contains insecure path: ${entry.name}")
 
                     if (entry.isDirectory) {
                         target.mkdirs()
