@@ -33,6 +33,14 @@ interface IMoonClickerService {
     boolean resizeVirtualDisplay(int displayId, int width, int height, int densityDpi) = 112;
 
     /**
+     * Turns off the display group owned by this virtual display (DPMS sleep), without
+     * destroying it — the reverse of the implicit wake done by [wakeDisplayGroupIfOwned]
+     * on every entry point that shows/operates the display. Only affects displays this
+     * service created; returns false otherwise.
+     */
+    boolean sleepVirtualDisplay(int displayId) = 113;
+
+    /**
      * Sets a virtual display's user rotation (Surface.ROTATION_*, 0..3).
      *
      * An app running on the display that declares its own orientation wins: WindowManager

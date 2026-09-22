@@ -51,6 +51,7 @@
     <string name="fullscreen_exit">Exit</string>
     <string name="fullscreen_menu_start_app">Start App</string>
     <string name="fullscreen_menu_close_display">Close Display</string>
+    <string name="fullscreen_menu_power_off">Power Off Display</string>
     <string name="fullscreen_menu_home">Home</string>
     <string name="fullscreen_select_app_title">Select App to Start</string>
 
