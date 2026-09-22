@@ -103,6 +103,16 @@ class DisplaysViewModel @Inject constructor(
                 .distinctUntilChanged()
                 .collect { connected -> if (connected) refreshDisplays() }
         }
+
+        // 縮圖擷取（PixelCopy）是非同步的，常常晚於本畫面 ON_RESUME 那次 refreshDisplays()
+        // 讀到的時間點；改成收到寫入完成通知才換掉對應卡片，不必整份重新整理。
+        viewModelScope.launch {
+            thumbnailCache.updates.collect { displayId ->
+                displays.value = displays.value.map { card ->
+                    if (card.displayId == displayId) card.copy(thumbnail = thumbnailCache.get(displayId)) else card
+                }
+            }
+        }
     }
 
     fun onShizukuAction() = shizukuManager.requestPermissionOrConnect()
