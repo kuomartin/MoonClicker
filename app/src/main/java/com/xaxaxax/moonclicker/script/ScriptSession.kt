@@ -101,6 +101,10 @@ class ScriptSession @Inject constructor(
                 startFailure.value = "Another script is already running"
                 return@launch
             }
+            if (script.uniqueId == null) {
+                startFailure.value = "Script is missing a uniqueId in script.json"
+                return@launch
+            }
             startFailure.value = null
 
             val result = shizukuManager.withService { service ->

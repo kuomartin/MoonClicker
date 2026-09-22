@@ -32,6 +32,8 @@ data class ScriptsUiState(
     val session: ScriptSessionState = ScriptSessionState(),
     val shizukuStatus: ShizukuConnectionStatus = ShizukuConnectionStatus.NOT_AVAILABLE,
     val scriptsPath: String = "",
+    /** 匯入的 zip 撞了裝置上既有腳本的 uniqueId，等使用者選覆蓋還是取消。 */
+    val importConflict: ScriptArchive.ImportResult.Conflict? = null,
 )
 
 @HiltViewModel
@@ -46,16 +48,20 @@ class ScriptsViewModel @Inject constructor(
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
 
+    private val _importConflict = MutableStateFlow<ScriptArchive.ImportResult.Conflict?>(null)
+
     val uiState: StateFlow<ScriptsUiState> = combine(
         store.scripts,
         session.state,
         shizukuManager.statusFlow,
-    ) { scripts, sessionState, shizuku ->
+        _importConflict,
+    ) { scripts, sessionState, shizuku, importConflict ->
         ScriptsUiState(
             scripts = scripts,
             session = sessionState,
             shizukuStatus = shizuku,
             scriptsPath = store.root.absolutePath,
+            importConflict = importConflict,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -86,11 +92,32 @@ class ScriptsViewModel @Inject constructor(
                     ScriptArchive.ImportResult.Failed(it.message ?: context.getString(R.string.scripts_imported_failed, ""))
                 }
             }
-            store.refresh()
-            _message.value = when (result) {
-                is ScriptArchive.ImportResult.Imported -> context.getString(R.string.scripts_imported_success, result.dir.name)
-                is ScriptArchive.ImportResult.Failed -> context.getString(R.string.scripts_imported_failed, result.reason)
+            applyImportResult(result)
+        }
+    }
+
+    /** 使用者對 [ScriptsUiState.importConflict] 的決定。 */
+    fun resolveImportConflict(overwrite: Boolean) {
+        val conflict = uiState.value.importConflict ?: return
+        _importConflict.value = null
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                ScriptArchive.resolveConflict(conflict, overwrite)
             }
+            applyImportResult(result)
+        }
+    }
+
+    private fun applyImportResult(result: ScriptArchive.ImportResult) {
+        when (result) {
+            is ScriptArchive.ImportResult.Imported -> {
+                store.refresh()
+                _message.value = context.getString(R.string.scripts_imported_success, result.dir.name)
+            }
+            is ScriptArchive.ImportResult.Failed ->
+                _message.value = context.getString(R.string.scripts_imported_failed, result.reason)
+            is ScriptArchive.ImportResult.Conflict ->
+                _importConflict.value = result
         }
     }
 
