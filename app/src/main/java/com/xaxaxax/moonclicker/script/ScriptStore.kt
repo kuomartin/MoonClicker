@@ -70,7 +70,9 @@ class ScriptStore @Inject constructor(
          * 列出來只會讓「按下播放卻什麼都沒發生」。
          */
         fun scan(root: File): List<Script> {
-            val dirs = root.listFiles()?.filter { it.isDirectory } ?: return emptyList()
+            // "." 開頭的資料夾（例如 vision-test 用的 scratch 腳本）是內部用途，不當成
+            // 使用者腳本列出來。
+            val dirs = root.listFiles()?.filter { it.isDirectory && !it.name.startsWith(".") } ?: return emptyList()
             return dirs.mapNotNull { dir ->
                 if (!File(dir, Script.MAIN_FILE).isFile) return@mapNotNull null
                 val metaFile = File(dir, Script.META_FILE)

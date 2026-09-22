@@ -5,6 +5,7 @@ import com.xaxaxax.moonclicker.script.SafePath
 import com.xaxaxax.moonclicker.script.Script
 import com.xaxaxax.moonclicker.script.ScriptSession
 import com.xaxaxax.moonclicker.script.ScriptStore
+import com.xaxaxax.moonclicker.script.ScriptTarget
 import com.xaxaxax.moonclicker.script.TemplateRoi
 import com.xaxaxax.moonclicker.script.TemplateStore
 import com.xaxaxax.moonclicker.engine.streaming.H264EncoderSink
@@ -68,6 +69,10 @@ import timber.log.Timber
 interface ScriptRunner {
     fun isRunning(): Boolean
     fun start(script: Script)
+    /** 停止目前執行中的腳本（若沒有在跑，是安全的 no-op）。 */
+    fun stop()
+    /** 跟 [start] 不同：不吃 `script.json` 的 `display`，強制跑在既有的虛擬顯示 [displayId] 上（見 vision-test）。 */
+    fun startOnDisplay(script: Script, displayId: Int)
 }
 
 /**
@@ -118,6 +123,9 @@ class WorkbenchServer @Inject constructor(
     private val scriptRunner = object : ScriptRunner {
         override fun isRunning() = scriptSession.state.value.isRunning
         override fun start(script: Script) = scriptSession.start(script)
+        override fun stop() = scriptSession.stop()
+        override fun startOnDisplay(script: Script, displayId: Int) =
+            scriptSession.start(script, ScriptTarget.ExistingVirtual(displayId))
     }
 
     private val scriptStream = object : ScriptStream {
@@ -246,6 +254,16 @@ data class RenameRequest(val from: String, val to: String, val overwrite: Boolea
 
 @Serializable
 data class PairRequest(val pin: String = "")
+
+/** `POST /scripts/{id}/vision-test` 的 request body，見 vision-test 合約。 */
+@Serializable
+data class VisionTestRequest(
+    val displayId: Int,
+    val image: String,
+    val roi: TemplateRoi,
+    val threshold: Double,
+    val intervalMs: Long = 300,
+)
 
 @Serializable
 data class PairResponse(val token: String)
@@ -545,6 +563,44 @@ fun Application.workbenchModule(
                 return@post
             }
             scriptRunner.start(script)
+            call.respondText("Started", status = HttpStatusCode.Accepted)
+        }
+
+        // 停止目前執行中的腳本（見 vision-test 合約）：一般腳本、vision-test 都吃同一個
+        // ScriptRunner slot，這裡不分是哪一種，統一停。沒有腳本在跑時呼叫也不報錯——
+        // ScriptSession.stop() 本來就是安全的 no-op。
+        post("/run/stop") {
+            scriptRunner.stop()
+            call.respondText("Stopped")
+        }
+
+        // 拿既有模板去對虛擬顯示做一次性 vision.find 迴圈（見 vision-test 合約）：{id} 只用來
+        // 解出模板圖片的絕對路徑，實際執行的目標顯示器是 body 裡的 displayId，不是這份腳本的
+        // script.json——所以不能走 scriptRunner.start(script)，得用 startOnDisplay。
+        post("/scripts/{id}/vision-test") {
+            val script = call.parameters["id"]?.let { id -> ScriptStore.scan(scriptsRoot).find { it.id == id } }
+            if (script == null) {
+                call.respondText("Script not found", status = HttpStatusCode.NotFound)
+                return@post
+            }
+            val request = runCatching { Json.decodeFromString<VisionTestRequest>(call.receiveText()) }.getOrNull()
+            if (request == null || request.image.isBlank()) {
+                call.respondText("Invalid request body", status = HttpStatusCode.BadRequest)
+                return@post
+            }
+            if (scriptRunner.isRunning()) {
+                call.respondText("A script is already running", status = HttpStatusCode.Conflict)
+                return@post
+            }
+            val imagePath = File(script.dir, request.image).absolutePath
+            val syntheticScript = VisionTestScript.materialize(
+                scriptsRoot = scriptsRoot,
+                imagePath = imagePath,
+                roi = request.roi,
+                threshold = request.threshold,
+                intervalMs = request.intervalMs,
+            )
+            scriptRunner.startOnDisplay(syntheticScript, request.displayId)
             call.respondText("Started", status = HttpStatusCode.Accepted)
         }
 

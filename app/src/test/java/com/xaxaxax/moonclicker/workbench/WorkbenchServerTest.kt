@@ -32,11 +32,23 @@ import moonclicker.workbench.StreamEvent
 private class FakeScriptRunner : ScriptRunner {
     var running = false
     var startedScript: Script? = null
+    var stopped = false
+    var startedOnDisplayScript: Script? = null
+    var startedOnDisplayId: Int? = null
 
     override fun isRunning() = running
 
     override fun start(script: Script) {
         startedScript = script
+    }
+
+    override fun stop() {
+        stopped = true
+    }
+
+    override fun startOnDisplay(script: Script, displayId: Int) {
+        startedOnDisplayScript = script
+        startedOnDisplayId = displayId
     }
 }
 
