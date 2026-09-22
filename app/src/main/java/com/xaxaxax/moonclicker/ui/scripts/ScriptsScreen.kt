@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -35,6 +36,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -108,6 +110,7 @@ fun ScriptsScreen(
         onPlay = { viewModel.run(it) },
         onStop = viewModel::stop,
         onOpen = { onNavigateToDetail(it.id) },
+        onResolveImportConflict = viewModel::resolveImportConflict,
     )
 }
 
@@ -121,7 +124,16 @@ fun ScriptsScreenContent(
     onPlay: (Script) -> Unit = {},
     onStop: () -> Unit = {},
     onOpen: (Script) -> Unit = {},
+    onResolveImportConflict: (overwrite: Boolean) -> Unit = {},
 ) {
+    uiState.importConflict?.let { conflict ->
+        ImportConflictDialog(
+            existingName = conflict.existingDir.name,
+            onOverwrite = { onResolveImportConflict(true) },
+            onCancel = { onResolveImportConflict(false) },
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -239,6 +251,10 @@ fun ScriptItem(
                         Spacer(modifier = Modifier.width(8.dp))
                         RunningBadge()
                     }
+                    if (script.uniqueId == null) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        MissingUniqueIdBadge()
+                    }
                 }
                 if (script.description.isNotEmpty()) {
                     Text(
@@ -274,7 +290,7 @@ fun ScriptItem(
                     )
                 }
             } else {
-                IconButton(onClick = onPlay, enabled = !otherRunning) {
+                IconButton(onClick = onPlay, enabled = !otherRunning && script.uniqueId != null) {
                     Icon(
                         Icons.Default.PlayArrow,
                         contentDescription = stringResource(R.string.script_detail_run),
@@ -328,6 +344,41 @@ private fun RunningBadge() {
     }
 }
 
+@Composable
+private fun ImportConflictDialog(existingName: String, onOverwrite: () -> Unit, onCancel: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text(stringResource(R.string.scripts_import_conflict_title)) },
+        text = { Text(stringResource(R.string.scripts_import_conflict_message, existingName)) },
+        confirmButton = {
+            TextButton(onClick = onOverwrite) { Text(stringResource(R.string.scripts_import_conflict_overwrite)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onCancel) { Text(stringResource(R.string.scripts_import_conflict_cancel)) }
+        },
+    )
+}
+
+/** 缺 `uniqueId` 的腳本：可見但不可執行（見 issue #103）。 */
+@Composable
+private fun MissingUniqueIdBadge() {
+    Row(
+        modifier = Modifier
+            .background(
+                color = MaterialTheme.colorScheme.errorContainer,
+                shape = MaterialTheme.shapes.small
+            )
+            .padding(horizontal = 8.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = stringResource(R.string.scripts_missing_unique_id_badge),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onErrorContainer
+        )
+    }
+}
+
 @Preview(showBackground = true)
 @Composable
 fun ScriptsScreenPreview() {
@@ -335,7 +386,8 @@ fun ScriptsScreenPreview() {
         ScriptsScreenContent(
             uiState = ScriptsUiState(
                 scripts = listOf(
-                    Script("daily", File("/tmp/daily"), "Daily Check-in", "Open app daily for reward", null),
+                    Script("daily", File("/tmp/daily"), "Daily Check-in", "Open app daily for reward", null, "daily"),
+                    Script("legacy", File("/tmp/legacy"), "legacy", "", null, null),
                 ),
                 scriptsPath = "/storage/emulated/0/Android/data/com.xaxaxax/files/scripts",
             )

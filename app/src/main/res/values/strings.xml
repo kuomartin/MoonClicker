@@ -91,6 +91,11 @@
     <string name="scripts_running_cannot_operate">Script is running, please stop it first</string>
     <string name="scripts_cannot_read_file">Cannot read selected file</string>
     <string name="scripts_cannot_write_target">Cannot write to selected location</string>
+    <string name="scripts_missing_unique_id_badge">Missing ID</string>
+    <string name="scripts_import_conflict_title">Duplicate Script ID</string>
+    <string name="scripts_import_conflict_message">Another script (\"%1$s\") already uses this uniqueId. Overwrite it with the imported content?</string>
+    <string name="scripts_import_conflict_overwrite">Overwrite</string>
+    <string name="scripts_import_conflict_cancel">Cancel</string>
 
     <!-- Script detail -->
     <string name="script_detail_run">Run</string>

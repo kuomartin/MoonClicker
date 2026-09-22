@@ -132,17 +132,29 @@ fun ScriptDetailScreen(
                             Text(stringResource(R.string.script_detail_stop))
                         }
                     } else {
-                        OutlinedButton(onClick = { viewModel.run() }) {
+                        val canRun = script.uniqueId != null
+                        OutlinedButton(onClick = { viewModel.run() }, enabled = canRun) {
                             Icon(Icons.Default.PlayArrow, contentDescription = null)
                             Text(stringResource(R.string.script_detail_run))
                         }
-                        OutlinedButton(onClick = {
-                            viewModel.refreshDisplays()
-                            showTargetPicker = true
-                        }) {
+                        OutlinedButton(
+                            onClick = {
+                                viewModel.refreshDisplays()
+                                showTargetPicker = true
+                            },
+                            enabled = canRun,
+                        ) {
                             Text(stringResource(R.string.script_detail_run_on))
                         }
                     }
+                }
+                if (script.uniqueId == null) {
+                    Text(
+                        text = stringResource(R.string.scripts_missing_unique_id_badge),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                    )
                 }
             }
 
