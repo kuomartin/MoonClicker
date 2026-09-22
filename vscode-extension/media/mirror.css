@@ -331,7 +331,9 @@ input:focus, select:focus { outline: 1px solid var(--vscode-focusBorder); }
   border-left: 1px solid var(--vscode-panel-border);
 }
 #testMatchResult { display: flex; align-items: center; gap: 8px; font-size: 13px; }
-.matchIcon { color: var(--moon-success); font-weight: bold; }
+.matchIcon { color: var(--vscode-descriptionForeground); font-weight: bold; }
+.matchIcon.hit { color: var(--moon-success); }
+.matchIcon.miss { color: var(--vscode-errorForeground); }
 .snippetHeader { display: flex; align-items: center; }
 .codeBlock {
   flex: 1;

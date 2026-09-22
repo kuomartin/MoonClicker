@@ -218,12 +218,27 @@
   // 裝置端 `data.set("visionTest", ...)` 回報的實際比對結果（見 docs/lua-api.md `data`）——
   // 不是延遲量測，intervalMs 只是配置的輪詢間隔，見 testLatency 的標示文字。
   function renderVisionTestResult(v) {
+    // `data.set(key, table)` 在 Lua 端「自動序列化為 JSON」（docs/lua-api.md `data`），送到
+    // webview 這邊 e.value.visionTest 拿到的是一個 JSON 字串（例如 '{"hit":false}'），不是
+    // 已經解好的物件——之前少了這一步 JSON.parse，畫面永遠卡在「等待結果…」，因為
+    // typeof v === "string" 直接被下面的物件檢查擋掉。
+    if (typeof v === "string") {
+      try {
+        v = JSON.parse(v);
+      } catch {
+        return;
+      }
+    }
     if (!v || typeof v !== "object") return;
     if (v.hit) {
       const confidence = typeof v.confidence === "number" ? v.confidence.toFixed(2) : "?";
       testMatchText.textContent = "命中 · 信心度 " + confidence + "（cx=" + v.cx + ", cy=" + v.cy + "）";
+      testMatchIcon.textContent = "✓";
+      testMatchIcon.className = "matchIcon hit";
     } else {
       testMatchText.textContent = "未命中";
+      testMatchIcon.textContent = "✕";
+      testMatchIcon.className = "matchIcon miss";
     }
   }
 
@@ -843,6 +858,7 @@
   const testAdjustRoiBtn = document.getElementById("testAdjustRoiBtn");
   const testRoiCanvas = document.getElementById("testRoiCanvas");
   const testCtx = testRoiCanvas.getContext("2d");
+  const testMatchIcon = document.getElementById("testMatchIcon");
   const testMatchText = document.getElementById("testMatchText");
   const testSnippet = document.getElementById("testSnippet");
   const copySnippetBtn = document.getElementById("copySnippetBtn");
@@ -914,6 +930,8 @@
   });
 
   function resetTestMatchUi() {
+    testMatchIcon.textContent = "?";
+    testMatchIcon.className = "matchIcon";
     const t = currentTestTemplate();
     if (!t) {
       testMatchText.textContent = "尚無模板可比對";
