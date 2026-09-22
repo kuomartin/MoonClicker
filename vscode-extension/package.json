@@ -129,7 +129,7 @@
     "@types/vscode": "^1.90.0",
     "@types/ws": "^8.5.0",
     "@vscode/vsce": "^4.0.0",
-    "esbuild": "^0.23.0",
+    "esbuild": "^0.28.2",
     "multicast-dns": "^7.2.5",
     "typescript": "^5.6.0"
   },
@@ -140,6 +140,8 @@
     "ws": "^8.18.0"
   },
   "allowScripts": {
-    "@bufbuild/buf@1.73.0": true
+    "@bufbuild/buf@1.73.0": true,
+    "esbuild@0.28.2": true,
+    "@vscode/vsce-sign@2.1.0": true
   }
 }
