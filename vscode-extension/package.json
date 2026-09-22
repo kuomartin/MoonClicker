@@ -30,12 +30,8 @@
         "title": "MoonClicker: Disconnect from Device"
       },
       {
-        "command": "moonclicker.pull",
-        "title": "MoonClicker: Pull Script Folder from Device"
-      },
-      {
-        "command": "moonclicker.push",
-        "title": "MoonClicker: Push Script Folder to Device"
+        "command": "moonclicker.openScript",
+        "title": "MoonClicker: Open Script from Device"
       },
       {
         "command": "moonclicker.run",
@@ -46,20 +42,8 @@
         "title": "MoonClicker: Open Realtime Mirror"
       },
       {
-        "command": "moonclicker.pushAndRun",
-        "title": "MoonClicker: Push & Run"
-      },
-      {
         "command": "moonclicker.runRemote",
         "title": "MoonClicker: Run Remote Script"
-      },
-      {
-        "command": "moonclicker.pullRemote",
-        "title": "MoonClicker: Pull Remote Script"
-      },
-      {
-        "command": "moonclicker.renameScript",
-        "title": "MoonClicker: Rename (Script + Folder)"
       },
       {
         "command": "moonclicker.setupStubs",
@@ -86,23 +70,7 @@
       ],
       "view/item/context": [
         {
-          "command": "moonclicker.renameScript",
-          "when": "viewItem == localScript"
-        },
-        {
-          "command": "moonclicker.push",
-          "when": "viewItem == localScript"
-        },
-        {
-          "command": "moonclicker.pushAndRun",
-          "when": "viewItem == localScript"
-        },
-        {
           "command": "moonclicker.runRemote",
-          "when": "viewItem == remoteScript"
-        },
-        {
-          "command": "moonclicker.pullRemote",
           "when": "viewItem == remoteScript"
         },
         {
@@ -117,7 +85,7 @@
     },
     "keybindings": [
       {
-        "command": "moonclicker.pushAndRun",
+        "command": "moonclicker.run",
         "key": "F5",
         "when": "editorFocus && resourceLangId == lua && resourceFilename == main.lua"
       }
