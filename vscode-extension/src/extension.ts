@@ -84,6 +84,34 @@ async function rehydrateOpenMirrors(): Promise<void> {
   }
 }
 
+/** 記錄「使用者上次手動連線的裝置」，讓 [reconnectLastDevice] 在 [rehydrateOpenMirrors] 同一輪
+ *  extension 重啟後，能把使用者剛按過的連線接回去，而不只是把鏡像資料夾的 watcher 接回去。 */
+function rememberLastAddress(address: string): void {
+  extensionContext?.globalState.update("moonclicker.lastAddress", address);
+}
+
+function forgetLastAddress(): void {
+  extensionContext?.globalState.update("moonclicker.lastAddress", undefined);
+}
+
+/** `openScript()` 掛新 workspace folder 時會觸發文件註明的 extension 重啟，把 [connection] 砍成
+ *  全新的 disconnected 實例——使用者剛連上的裝置因此無聲斷線，得靠自己按一次 Connect 才會發現。
+ *  這裡用 [rememberLastAddress] 記下的位址，在重啟後自動接回去。 */
+async function reconnectLastDevice(): Promise<void> {
+  if (!extensionContext || !connection) return;
+  const address = extensionContext.globalState.get<string>("moonclicker.lastAddress");
+  if (!address) return;
+  const state = connection.state;
+  if (state.status === "connected" || state.status === "connecting") return;
+  let token = tokensByAddress.get(address);
+  if (!token) {
+    token = await extensionContext.secrets.get(`moonclicker_token_${address}`);
+    if (token) tokensByAddress.set(address, token);
+  }
+  activeToken = token;
+  connection.connect(address, token);
+}
+
 /**
  * `handleRemoteFileChange` 寫新檔案到本機時，這個資料夾自己的 `FileSystemWatcher` 會看到
  * `onDidCreate`——沒有這個集合的話，會把「裝置推來的變動」當成「使用者新增的檔案」原封
@@ -155,12 +183,12 @@ export function activate(context: vscode.ExtensionContext): void {
   workspaceProvider = new WorkspaceTreeProvider();
   vscode.window.registerTreeDataProvider("moonclicker.workspace", workspaceProvider);
 
-  rehydrateOpenMirrors();
+  rehydrateOpenMirrors().then(() => reconnectLastDevice());
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeWorkspaceFolders(() => {
       workspaceProvider.refresh();
-      rehydrateOpenMirrors();
+      rehydrateOpenMirrors().then(() => reconnectLastDevice());
     }),
     vscode.workspace.onDidSaveTextDocument(async (doc) => {
       const mirror = findMirrorForLocalPath(doc.uri.fsPath);
@@ -222,7 +250,10 @@ export function activate(context: vscode.ExtensionContext): void {
     logChannel,
     dataChannel,
     vscode.commands.registerCommand("moonclicker.connect", connectCommand),
-    vscode.commands.registerCommand("moonclicker.disconnect", () => connection?.disconnect()),
+    vscode.commands.registerCommand("moonclicker.disconnect", () => {
+      forgetLastAddress();
+      connection?.disconnect();
+    }),
     vscode.commands.registerCommand("moonclicker.openScript", openScriptCommand),
     vscode.commands.registerCommand("moonclicker.run", runCommand),
     vscode.commands.registerCommand("moonclicker.runRemote", runRemoteCommand),
@@ -359,6 +390,7 @@ async function connectCommand(): Promise<void> {
 
     activeToken = token;
     if (token) tokensByAddress.set(address, token);
+    rememberLastAddress(address);
     connection?.connect(address, token);
   });
 
