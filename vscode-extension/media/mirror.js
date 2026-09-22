@@ -242,7 +242,7 @@
       testMatchIcon.textContent = "✓";
       testMatchIcon.className = "matchIcon hit";
       const hasBox = ["x", "y", "w", "h"].every((k) => typeof v[k] === "number");
-      lastHitBox = hasBox ? { x: v.x, y: v.y, w: v.w, h: v.h } : null;
+      lastHitBox = hasBox ? { x: v.x, y: v.y, w: v.w, h: v.h, confidence: v.confidence } : null;
     } else {
       testMatchText.textContent = "未命中";
       testMatchIcon.textContent = "✕";
@@ -885,7 +885,7 @@
   let testRunning = false;
   let testPending = false; // start/stop RPC 進行中
   let testRestartTimer = null;
-  let lastHitBox = null; // 裝置回報的命中區域（邏輯座標 {x,y,w,h}），畫在 testRoiCanvas 上
+  let lastHitBox = null; // 裝置回報的命中區域（邏輯座標 {x,y,w,h,confidence}），畫在 testRoiCanvas 上
 
   function currentIntervalMs() {
     const v = parseInt(testIntervalInput.value, 10);
@@ -1274,6 +1274,22 @@
         testCtx.strokeStyle = "#3fb950";
         testCtx.lineWidth = 2;
         testCtx.strokeRect(hr.left, hr.top, hr.right - hr.left, hr.bottom - hr.top);
+        if (typeof lastHitBox.confidence === "number") {
+          const label = lastHitBox.confidence.toFixed(2);
+          testCtx.font = "11px -apple-system, BlinkMacSystemFont, sans-serif";
+          const padX = 5;
+          const labelH = 16;
+          const labelW = testCtx.measureText(label).width + padX * 2;
+          // 貼右上角，框太靠近 canvas 頂端時往框內塞，不要被裁掉看不到。
+          const lx = hr.right - labelW;
+          const ly = hr.top - labelH - 2 >= 0 ? hr.top - labelH - 2 : hr.top + 2;
+          testCtx.fillStyle = "#1e1e1e";
+          testCtx.fillRect(lx, ly, labelW, labelH);
+          testCtx.strokeRect(lx, ly, labelW, labelH);
+          testCtx.fillStyle = "#3fb950";
+          testCtx.textBaseline = "middle";
+          testCtx.fillText(label, lx + padX, ly + labelH / 2 + 1);
+        }
       }
     }
   }
