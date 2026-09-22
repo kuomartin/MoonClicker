@@ -98,6 +98,9 @@ internal class RecordingMoonClickerService(
 
     override fun destroyVirtualDisplay(displayId: Int): Boolean = unused("destroyVirtualDisplay")
 
+    override fun resizeVirtualDisplay(displayId: Int, width: Int, height: Int, densityDpi: Int): Boolean =
+        unused("resizeVirtualDisplay")
+
     override fun getVirtualDisplays(): IntArray = unused("getVirtualDisplays")
 
     override fun setDisplayRotation(displayId: Int, rotation: Int): Boolean =

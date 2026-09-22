@@ -730,6 +730,40 @@ class MoonClickerService @JvmOverloads constructor(
         return true
     }
 
+    /**
+     * 見 [IMoonClickerService.resizeVirtualDisplay]。舊 distributor 上掛的 sink 不轉移——
+     * 低機率換高結構成本（handle 是每個 distributor 各自從 0 起算，轉移需要一張對照表，
+     * 而目前 AIDL 沒有回呼機制能把新 handle 通知回呼叫端），呼叫端自己重連即可。
+     */
+    override fun resizeVirtualDisplay(displayId: Int, width: Int, height: Int, densityDpi: Int): Boolean {
+        val managed = vdStore[displayId] ?: return false
+        val oldPtr = distributorStore[displayId] ?: return false
+
+        val newPtr = nativeCreateDistributor(width, height)
+        if (newPtr == 0L) return false
+        val newSurface = nativeGetDistributorSurface(newPtr) ?: run {
+            nativeDestroyDistributor(newPtr)
+            return false
+        }
+
+        try {
+            managed.display.resize(width, height, densityDpi)
+            managed.display.setSurface(newSurface)
+        } catch (t: Throwable) {
+            Timber.e(t, "resizeVirtualDisplay: resize/setSurface failed for display $displayId")
+            nativeDestroyDistributor(newPtr)
+            return false
+        }
+
+        stopRotationTracking(displayId)
+        nativeDestroyDistributor(oldPtr)
+        vdStore[displayId] = ManagedDisplay(managed.display, surfaceWidth = width, surfaceHeight = height)
+        distributorStore[displayId] = newPtr
+        startRotationTracking(displayId, newPtr)
+        Timber.d("resizeVirtualDisplay: display $displayId resized to ${width}x${height}@$densityDpi")
+        return true
+    }
+
     override fun destroyVirtualDisplay(displayId: Int): Boolean {
         stopRotationTracking(displayId)
         vdStore.remove(displayId)?.display?.release()

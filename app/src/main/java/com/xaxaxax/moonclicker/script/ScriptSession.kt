@@ -8,6 +8,7 @@ import com.xaxaxax.moonclicker.engine.ScriptRun
 import com.xaxaxax.moonclicker.engine.state.EngineRunState
 import com.xaxaxax.moonclicker.engine.state.EngineStateRepository
 import com.xaxaxax.moonclicker.core.AppSettings
+import com.xaxaxax.moonclicker.core.DisplayConfig
 import com.xaxaxax.moonclicker.notification.ScriptStatusNotifier
 import com.xaxaxax.moonclicker.ui.displaydetail.FullscreenDisplayActivity
 import com.xaxaxax.moonclicker.shizuku.ShizukuManager
@@ -161,10 +162,13 @@ class ScriptSession @Inject constructor(
     /**
      * 把 target 解析成實際的 displayId。
      *
-     * [ScriptTarget.NewVirtual] 會先找現有同尺寸的虛擬顯示再沿用——腳本存的是「要一個
-     * 長這樣的顯示器」，不是某個必然會過期的 id。
+     * [ScriptTarget.NewVirtual] 會先照 [DisplayConfig.name]（腳本的 `uniqueId`）找現有虛擬顯示
+     * 再沿用——腳本存的是「要一個屬於自己、長這樣的顯示器」，不是某個必然會過期的 id，
+     * 也不該跟另一個剛好同尺寸的腳本共用（見 docs/plans/virtual-display-identity-by-uniqueid-plan.md）。
+     * 名稱對得上但尺寸/densityDpi 不同（腳本改了 `script.json`）時，resize 既有的那個，
+     * 不銷毀重建——保留 displayId，正在依附它的 consumer 才不會斷線。
      */
-    private fun resolveDisplay(service: IMoonClickerService, target: ScriptTarget): Int? =
+    internal fun resolveDisplay(service: IMoonClickerService, target: ScriptTarget): Int? =
         when (target) {
             is ScriptTarget.PhysicalDisplay -> 0
             is ScriptTarget.ExistingVirtual -> target.displayId
@@ -172,17 +176,35 @@ class ScriptSession @Inject constructor(
                 val existing = runCatching { service.virtualDisplays.toList() }.getOrDefault(
                     emptyList()
                 )
-                existing.firstOrNull { matchesSize(service, it, target.config.width, target.config.height) }
-                    ?: runCatching { service.createVirtualDisplay(target.config) }
-                        .onFailure { Timber.e(it, "createVirtualDisplay failed") }
-                        .getOrNull()
-                        ?.takeIf { it >= 0 }
+                val matchByName = existing.firstOrNull { id ->
+                    runCatching { service.getDisplayInfo(id)?.name }.getOrNull() == target.config.name
+                }
+                when {
+                    matchByName == null ->
+                        runCatching { service.createVirtualDisplay(target.config) }
+                            .onFailure { Timber.e(it, "createVirtualDisplay failed") }
+                            .getOrNull()
+                            ?.takeIf { it >= 0 }
+
+                    matchesConfig(service, matchByName, target.config) -> matchByName
+
+                    else -> runCatching {
+                        service.resizeVirtualDisplay(
+                            matchByName,
+                            target.config.width,
+                            target.config.height,
+                            target.config.densityDpi,
+                        )
+                    }.getOrDefault(false).takeIf { it }?.let { matchByName }
+                }
             }
         }
 
-    private fun matchesSize(service: IMoonClickerService, displayId: Int, width: Int, height: Int): Boolean {
+    /** 現有虛擬顯示的尺寸（rotation-invariant 的建立尺寸）與 densityDpi 是否跟腳本要求的一致。 */
+    private fun matchesConfig(service: IMoonClickerService, displayId: Int, config: DisplayConfig): Boolean {
         val size = runCatching { service.getDisplaySurfaceSize(displayId) }.getOrNull()
-        return matchesSize(size, width, height)
+        val densityDpi = runCatching { service.getDisplayInfo(displayId)?.densityDpi }.getOrNull()
+        return matchesSize(size, config.width, config.height) && densityDpi == config.densityDpi
     }
 
     private fun openFullscreen(displayId: Int) {
