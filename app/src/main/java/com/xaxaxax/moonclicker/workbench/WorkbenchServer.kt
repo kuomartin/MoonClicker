@@ -3,8 +3,10 @@ package com.xaxaxax.moonclicker.workbench
 import com.xaxaxax.moonclicker.engine.ScriptEngine
 import com.xaxaxax.moonclicker.script.SafePath
 import com.xaxaxax.moonclicker.script.Script
+import com.xaxaxax.moonclicker.script.ScriptMeta
 import com.xaxaxax.moonclicker.script.ScriptSession
 import com.xaxaxax.moonclicker.script.ScriptStore
+import com.xaxaxax.moonclicker.script.ScriptTarget
 import com.xaxaxax.moonclicker.script.TemplateRoi
 import com.xaxaxax.moonclicker.script.TemplateStore
 import com.xaxaxax.moonclicker.engine.streaming.H264EncoderSink
@@ -36,6 +38,7 @@ import io.ktor.websocket.close
 import io.ktor.websocket.CloseReason
 import io.ktor.websocket.readText
 import java.io.File
+import java.io.IOException
 import java.net.Inet4Address
 import java.net.NetworkInterface
 import javax.inject.Inject
@@ -68,6 +71,14 @@ import timber.log.Timber
 interface ScriptRunner {
     fun isRunning(): Boolean
     fun start(script: Script)
+    /**
+     * 停止目前執行中的腳本並等到真的停了才回傳（若沒有在跑，是安全的 no-op）——見
+     * [ScriptSession.stopAndAwait]：不等的話，webview 端「stop 完馬上 start」的重啟流程
+     * 會因為 native 端還沒把 STOPPED 事件非同步推回來，被 isRunning() 擋下 409。
+     */
+    suspend fun stop()
+    /** 跟 [start] 不同：不吃 `script.json` 的 `display`，強制跑在既有的虛擬顯示 [displayId] 上（見 vision-test）。 */
+    fun startOnDisplay(script: Script, displayId: Int)
 }
 
 /**
@@ -118,6 +129,9 @@ class WorkbenchServer @Inject constructor(
     private val scriptRunner = object : ScriptRunner {
         override fun isRunning() = scriptSession.state.value.isRunning
         override fun start(script: Script) = scriptSession.start(script)
+        override suspend fun stop() = scriptSession.stopAndAwait()
+        override fun startOnDisplay(script: Script, displayId: Int) =
+            scriptSession.start(script, ScriptTarget.ExistingVirtual(displayId))
     }
 
     private val scriptStream = object : ScriptStream {
@@ -229,8 +243,20 @@ class WorkbenchServer @Inject constructor(
     }
 }
 
+/**
+ * `templateCount`／`modifiedMs` 故意不給預設值：兩者的合法值都包含 0，kotlinx.serialization
+ * 預設 `encodeDefaults = false` 會把等於預設值的欄位整個從 JSON 省略掉，讓 VS Code 端收到
+ * `undefined` 而不是 `0`——不給預設值就永遠會序列化出來，不用另外configure 一份 Json。
+ */
 @Serializable
-data class WorkbenchScriptSummary(val id: String, val name: String)
+data class WorkbenchScriptSummary(
+    val id: String,
+    val name: String,
+    /** [TemplateStore.list] 的大小——VS Code 端「編寫」清單顯示用，不用另外拉一次模板清單。 */
+    val templateCount: Int,
+    /** `main.lua` 與 `templates.json`（若存在）兩者 mtime 取大——粗略但夠用的「上次修改」。 */
+    val modifiedMs: Long,
+)
 
 @Serializable
 data class ScriptTreeEntry(
@@ -246,6 +272,16 @@ data class RenameRequest(val from: String, val to: String, val overwrite: Boolea
 
 @Serializable
 data class PairRequest(val pin: String = "")
+
+/** `POST /scripts/{id}/vision-test` 的 request body，見 vision-test 合約。 */
+@Serializable
+data class VisionTestRequest(
+    val displayId: Int,
+    val image: String,
+    val roi: TemplateRoi,
+    val threshold: Double,
+    val intervalMs: Long = 300,
+)
 
 @Serializable
 data class PairResponse(val token: String)
@@ -383,8 +419,45 @@ fun Application.workbenchModule(
         }
 
         get("/scripts") {
-            val scripts = ScriptStore.scan(scriptsRoot).map { WorkbenchScriptSummary(it.id, it.name) }
+            val scripts = ScriptStore.scan(scriptsRoot).map { script ->
+                val mainMtime = script.mainFile.takeIf { it.isFile }?.lastModified() ?: 0L
+                val metaMtime = File(script.dir, TemplateStore.META_FILE).takeIf { it.isFile }?.lastModified() ?: 0L
+                WorkbenchScriptSummary(
+                    id = script.id,
+                    name = script.name,
+                    templateCount = TemplateStore.list(script.dir).size,
+                    modifiedMs = maxOf(mainMtime, metaMtime),
+                )
+            }
             call.respondText(Json.encodeToString(scripts), ContentType.Application.Json)
+        }
+
+        // 新增腳本：{id} 直接當資料夾名兼 script.json 的 uniqueId（見 Script.UNIQUE_ID_PATTERN），
+        // 兩者共用同一個值就不用另外想一套 id 產生規則。main.lua 給個最小骨架，讓腳本一建立
+        // 就是可執行的狀態（uniqueId 缺失會被 ScriptSession.start 擋下來，見 #103）。
+        post("/scripts/{id}") {
+            val id = call.parameters["id"]
+            if (id.isNullOrBlank() || id.startsWith(".") || !Script.UNIQUE_ID_PATTERN.matches(id)) {
+                call.respondText(
+                    "Invalid script id (expects ${Script.UNIQUE_ID_PATTERN.pattern}, not starting with '.')",
+                    status = HttpStatusCode.BadRequest,
+                )
+                return@post
+            }
+            val dir = File(scriptsRoot, id)
+            if (dir.exists()) {
+                call.respondText("Script already exists: $id", status = HttpStatusCode.Conflict)
+                return@post
+            }
+            try {
+                dir.mkdirs()
+                File(dir, Script.MAIN_FILE).writeText("-- $id\n")
+                File(dir, Script.META_FILE).writeText(Json.encodeToString(ScriptMeta(uniqueId = id)))
+                call.respondText("Created", status = HttpStatusCode.Created)
+            } catch (e: IOException) {
+                dir.deleteRecursively()
+                call.respondText(e.message ?: "Failed to create script", status = HttpStatusCode.InternalServerError)
+            }
         }
 
         // Script Folder 單檔案讀寫（見 vscode-local-mirror-plan）：VS Code 端維護一份本機
@@ -548,6 +621,44 @@ fun Application.workbenchModule(
             call.respondText("Started", status = HttpStatusCode.Accepted)
         }
 
+        // 停止目前執行中的腳本（見 vision-test 合約）：一般腳本、vision-test 都吃同一個
+        // ScriptRunner slot，這裡不分是哪一種，統一停。沒有腳本在跑時呼叫也不報錯——
+        // ScriptSession.stop() 本來就是安全的 no-op。
+        post("/run/stop") {
+            scriptRunner.stop()
+            call.respondText("Stopped")
+        }
+
+        // 拿既有模板去對虛擬顯示做一次性 vision.find 迴圈（見 vision-test 合約）：{id} 只用來
+        // 解出模板圖片的絕對路徑，實際執行的目標顯示器是 body 裡的 displayId，不是這份腳本的
+        // script.json——所以不能走 scriptRunner.start(script)，得用 startOnDisplay。
+        post("/scripts/{id}/vision-test") {
+            val script = call.parameters["id"]?.let { id -> ScriptStore.scan(scriptsRoot).find { it.id == id } }
+            if (script == null) {
+                call.respondText("Script not found", status = HttpStatusCode.NotFound)
+                return@post
+            }
+            val request = runCatching { Json.decodeFromString<VisionTestRequest>(call.receiveText()) }.getOrNull()
+            if (request == null || request.image.isBlank()) {
+                call.respondText("Invalid request body", status = HttpStatusCode.BadRequest)
+                return@post
+            }
+            if (scriptRunner.isRunning()) {
+                call.respondText("A script is already running", status = HttpStatusCode.Conflict)
+                return@post
+            }
+            val imagePath = File(script.dir, request.image).absolutePath
+            val syntheticScript = VisionTestScript.materialize(
+                scriptsRoot = scriptsRoot,
+                imagePath = imagePath,
+                roi = request.roi,
+                threshold = request.threshold,
+                intervalMs = request.intervalMs,
+            )
+            scriptRunner.startOnDisplay(syntheticScript, request.displayId)
+            call.respondText("Started", status = HttpStatusCode.Accepted)
+        }
+
         // 裁切模板存回裝置（見 #75）：body 是裁切完的 PNG bytes，roi（邏輯座標，依 ADR-0013）
         // 走 query string，因為 body 已經是純圖片 bytes、不留給欄位混進去的空間。
         // 已存在同名模板回 409（見 #72 story 8）；script 目錄不存在或 templates.json 現有
@@ -591,6 +702,48 @@ fun Application.workbenchModule(
                 is TemplateStore.WriteResult.Conflict ->
                     call.respondText("Template already exists: ${result.name}", status = HttpStatusCode.Conflict)
                 is TemplateStore.WriteResult.Failed ->
+                    call.respondText(result.reason, status = HttpStatusCode.BadRequest)
+            }
+        }
+
+        // 列出某腳本目前存的所有模板（VS Code 端「建立模板」的清單、「測試模板」的下拉選單都
+        // 靠這個回填，不再只是本地工作階段快取）。回傳跟 templates.json 一樣的
+        // `{ 檔名: { roi } }` map，壞掉的／不存在的 templates.json 都當空清單，不是錯誤。
+        get("/scripts/{id}/templates") {
+            val id = call.parameters["id"]
+            val script = id?.let { i -> ScriptStore.scan(scriptsRoot).find { it.id == i } }
+            if (script == null) {
+                call.respondText("Script not found", status = HttpStatusCode.NotFound)
+                return@get
+            }
+            call.respondText(Json.encodeToString(TemplateStore.list(script.dir)), ContentType.Application.Json)
+        }
+
+        // 刪除模板：templates.json 裡的那一筆與圖片檔都刪，並跟 PUT 一樣補廣播——不補的話
+        // VS Code 本機鏡像不會知道這兩個檔案已經沒了。
+        delete("/scripts/{id}/templates/{name}") {
+            val id = call.parameters["id"]
+            val name = call.parameters["name"]
+            if (id.isNullOrBlank() || name.isNullOrBlank() || name.contains('/') || name.contains("..")) {
+                call.respondText("Invalid script id or template name", status = HttpStatusCode.BadRequest)
+                return@delete
+            }
+            val script = ScriptStore.scan(scriptsRoot).find { it.id == id }
+            if (script == null) {
+                call.respondText("Script not found", status = HttpStatusCode.NotFound)
+                return@delete
+            }
+            when (val result = TemplateStore.delete(script.dir, name)) {
+                is TemplateStore.DeleteResult.Deleted -> {
+                    fileChanges.tryEmit(ScriptFileChange(id, name, ScriptFileChangeKind.DELETED))
+                    fileChanges.tryEmit(
+                        ScriptFileChange(id, TemplateStore.META_FILE, ScriptFileChangeKind.CHANGED)
+                    )
+                    call.respondText("OK")
+                }
+                is TemplateStore.DeleteResult.NotFound ->
+                    call.respondText("Template not found: $name", status = HttpStatusCode.NotFound)
+                is TemplateStore.DeleteResult.Failed ->
                     call.respondText(result.reason, status = HttpStatusCode.BadRequest)
             }
         }

@@ -20,8 +20,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -135,6 +137,25 @@ class ScriptSession @Inject constructor(
 
     fun stop() {
         scope.launch { ScriptEngine.stop() }
+    }
+
+    /**
+     * 給需要「真的停了才能做下一步」的呼叫端用（見 WorkbenchServer 的 `POST /run/stop`：
+     * webview 收到成功回應就會立刻送下一個 start，若這裡只是 fire-and-forget，
+     * `state.isRunning` 還沒翻成 false 就會被 409 擋下——實測過，ROI 調整後的
+     * debounce 重啟要按兩次「開始測試」才成功）。
+     *
+     * `ScriptEngine.stop()` 呼叫的 `nativeStop()` 只是「請求」native 端停止，真正停止是
+     * native 執行緒退出後透過 [EngineEventType.STOPPED] 事件非同步推回
+     * [EngineStateRepository] 的（見該檔案），不是 `nativeStop()` 一回傳就代表停了。
+     * 這裡呼叫完就等 [state] 真的翻成非 running（或逾時），呼叫端才能放心接著做下一步。
+     */
+    suspend fun stopAndAwait(timeoutMs: Long = 3000) {
+        if (!state.value.isRunning) return
+        ScriptEngine.stop()
+        withTimeoutOrNull(timeoutMs) {
+            state.first { !it.isRunning }
+        }
     }
 
     /**

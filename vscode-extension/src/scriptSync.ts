@@ -3,6 +3,10 @@ import { authHeaders } from "./authSync";
 export interface ScriptSummary {
   id: string;
   name: string;
+  /** 裝置端 templates.json 的模板數。舊版裝置韌體不帶這個欄位時是 undefined，不是 0。 */
+  templateCount?: number;
+  /** `main.lua`／`templates.json` 兩者 mtime 取大的 epoch ms。理由同上，可能是 undefined。 */
+  modifiedMs?: number;
 }
 
 export interface ScriptTreeEntry {
@@ -114,6 +118,33 @@ export async function renameEntry(
   if (!response.ok) {
     const reason = await response.text();
     throw new ScriptHttpError(reason || `改名失敗（HTTP ${response.status}）`, response.status);
+  }
+}
+
+/**
+ * `id` 同時是資料夾名跟 `script.json` 的 `uniqueId`（見裝置端 `Script.UNIQUE_ID_PATTERN`），
+ * 兩邊共用同一條規則，不在這裡另外維護一份。
+ */
+const SCRIPT_ID_PATTERN = /^[a-z0-9._-]+$/;
+
+/**
+ * 新增一個空的、可執行的腳本資料夾（見 vision-test 計畫第 4 階段：「編寫」的新增腳本）。
+ * 呼叫 POST /scripts/{id}，裝置端會給一份最小的 main.lua 骨架跟帶 uniqueId 的 script.json。
+ */
+export async function createScript(address: string, id: string, token?: string): Promise<void> {
+  if (!id || id.startsWith(".") || !SCRIPT_ID_PATTERN.test(id)) {
+    throw new Error("腳本名稱只能是小寫英數字、「.」「_」「-」，且不能以「.」開頭");
+  }
+  const response = await fetch(`http://${address}/scripts/${encodeURIComponent(id)}`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+  if (!response.ok) {
+    const reason = await response.text();
+    if (response.status === 409) {
+      throw new Error(`腳本已存在（HTTP 409）：${reason || id}`);
+    }
+    throw new ScriptHttpError(reason || `新增腳本失敗（HTTP ${response.status}）`, response.status);
   }
 }
 
