@@ -36,8 +36,7 @@
     // 而不是各建立一支——重建會讓 JMuxer 的 MediaSource 附件失效。
     if (mode === "test") {
       testStage.insertBefore(frameEl, testStage.firstChild);
-      resizeRoiCanvas();
-      drawRoiOverlay();
+      updateRoiCanvasVisibility();
     } else if (mode === "capture") {
       captureStage.insertBefore(frameEl, captureStageHint);
     } else if (mode === "run") {
@@ -242,11 +241,15 @@
       testMatchText.textContent = "命中 · 信心度 " + confidence + "（cx=" + v.cx + ", cy=" + v.cy + "）";
       testMatchIcon.textContent = "✓";
       testMatchIcon.className = "matchIcon hit";
+      const hasBox = ["x", "y", "w", "h"].every((k) => typeof v[k] === "number");
+      lastHitBox = hasBox ? { x: v.x, y: v.y, w: v.w, h: v.h } : null;
     } else {
       testMatchText.textContent = "未命中";
       testMatchIcon.textContent = "✕";
       testMatchIcon.className = "matchIcon miss";
+      lastHitBox = null;
     }
+    if (currentMode === "test" && !testRoiCanvas.hidden) drawRoiOverlay();
   }
 
   function renderDataTree(container, data) {
@@ -356,8 +359,9 @@
       if (msg.success) {
         testRunning = true;
         setTestStatusPill("running");
-        testLatency.textContent = "輪詢間隔 " + VISION_TEST_INTERVAL_MS + " ms";
+        testLatency.textContent = "輪詢間隔 " + currentIntervalMs() + " ms";
         testMatchText.textContent = "等待結果…";
+        updateRoiCanvasVisibility();
       } else {
         testRunning = false;
         setTestStatusPill("error", msg.error || "啟動測試比對失敗");
@@ -372,8 +376,10 @@
           return;
         }
         testRunning = false;
+        lastHitBox = null;
         setTestStatusPill("idle");
         resetTestMatchUi();
+        updateRoiCanvasVisibility();
       } else {
         pendingRestart = false;
         setTestStatusPill("error", msg.error || "停止執行失敗");
@@ -862,6 +868,7 @@
   const testTemplateSelect = document.getElementById("testTemplateSelect");
   const testThreshold = document.getElementById("testThreshold");
   const testThresholdVal = document.getElementById("testThresholdVal");
+  const testIntervalInput = document.getElementById("testIntervalInput");
   const testAdjustRoiBtn = document.getElementById("testAdjustRoiBtn");
   const testRoiCanvas = document.getElementById("testRoiCanvas");
   const testCtx = testRoiCanvas.getContext("2d");
@@ -874,11 +881,16 @@
   const testLatency = document.getElementById("testLatency");
   const testErrorMsg = document.getElementById("testErrorMsg");
 
-  const VISION_TEST_INTERVAL_MS = 300;
   const VISION_TEST_DEBOUNCE_MS = 500;
   let testRunning = false;
   let testPending = false; // start/stop RPC 進行中
   let testRestartTimer = null;
+  let lastHitBox = null; // 裝置回報的命中區域（邏輯座標 {x,y,w,h}），畫在 testRoiCanvas 上
+
+  function currentIntervalMs() {
+    const v = parseInt(testIntervalInput.value, 10);
+    return Number.isFinite(v) && v > 0 ? v : 300;
+  }
 
   let roiEditing = false;
   let roiRect = null; // { left, top, right, bottom } in testStage 像素座標
@@ -936,9 +948,18 @@
     scheduleTestRestartIfRunning();
   });
 
+  testIntervalInput.addEventListener("change", () => {
+    if (testRunning) {
+      testLatency.textContent = "輪詢間隔 " + currentIntervalMs() + " ms";
+    }
+    scheduleTestRestartIfRunning();
+  });
+
   function resetTestMatchUi() {
     testMatchIcon.textContent = "?";
     testMatchIcon.className = "matchIcon";
+    lastHitBox = null;
+    if (currentMode === "test" && !testRoiCanvas.hidden) drawRoiOverlay();
     const t = currentTestTemplate();
     if (!t) {
       testMatchText.textContent = "尚無模板可比對";
@@ -1051,7 +1072,7 @@
       image: t.name,
       roi,
       threshold: testThreshold.value / 100,
-      intervalMs: VISION_TEST_INTERVAL_MS,
+      intervalMs: currentIntervalMs(),
     });
   }
 
@@ -1104,7 +1125,6 @@
   function setRoiEditing(on) {
     roiEditing = on;
     testAdjustRoiBtn.classList.toggle("active", on);
-    testRoiCanvas.hidden = !on;
     if (on) {
       resizeRoiCanvas();
       if (!roiRect) {
@@ -1120,9 +1140,9 @@
           };
         }
       }
-      drawRoiOverlay();
       updateSnippet();
     }
+    updateRoiCanvasVisibility();
   }
 
   testAdjustRoiBtn.addEventListener("click", () => setRoiEditing(!roiEditing));
@@ -1209,28 +1229,62 @@
     }
   }
 
+  // 邏輯座標（裝置回報，跟 ROI 同一個座標系，見 ADR-0013）轉成目前 canvas 的像素座標，
+  // 跟 calculateTestRoi() 反方向的換算。
+  function logicalToCanvasRect(r) {
+    const fit = roiAspectFit();
+    if (fit.scale <= 0) return null;
+    return {
+      left: fit.left + r.x * fit.scale,
+      top: fit.top + r.y * fit.scale,
+      right: fit.left + (r.x + r.w) * fit.scale,
+      bottom: fit.top + (r.y + r.h) * fit.scale,
+    };
+  }
+
   function drawRoiOverlay() {
     testCtx.clearRect(0, 0, testRoiCanvas.width, testRoiCanvas.height);
-    if (!roiRect) return;
-    const r = roiNorm(roiRect);
-    testCtx.strokeStyle = "#4fc1ff";
-    testCtx.lineWidth = 2;
-    testCtx.setLineDash([6, 4]);
-    testCtx.strokeRect(r.left, r.top, r.right - r.left, r.bottom - r.top);
-    testCtx.setLineDash([]);
-    testCtx.fillStyle = "#ffffff";
-    testCtx.strokeStyle = "#4fc1ff";
-    testCtx.lineWidth = 1.5;
-    const midX = (r.left + r.right) / 2;
-    const midY = (r.top + r.bottom) / 2;
-    const handles = [
-      [r.left, r.top], [midX, r.top], [r.right, r.top],
-      [r.left, midY], [r.right, midY],
-      [r.left, r.bottom], [midX, r.bottom], [r.right, r.bottom],
-    ];
-    for (const [hx, hy] of handles) {
-      testCtx.fillRect(hx - 4, hy - 4, 8, 8);
-      testCtx.strokeRect(hx - 4, hy - 4, 8, 8);
+    if (roiRect) {
+      const r = roiNorm(roiRect);
+      testCtx.strokeStyle = "#4fc1ff";
+      testCtx.lineWidth = 2;
+      testCtx.setLineDash([6, 4]);
+      testCtx.strokeRect(r.left, r.top, r.right - r.left, r.bottom - r.top);
+      testCtx.setLineDash([]);
+      // 拖曳手把只在真的可以拖的時候畫，不然「調整 ROI」沒開時看起來像能拖但拖不動。
+      if (roiEditing) {
+        testCtx.fillStyle = "#ffffff";
+        testCtx.lineWidth = 1.5;
+        const midX = (r.left + r.right) / 2;
+        const midY = (r.top + r.bottom) / 2;
+        const handles = [
+          [r.left, r.top], [midX, r.top], [r.right, r.top],
+          [r.left, midY], [r.right, midY],
+          [r.left, r.bottom], [midX, r.bottom], [r.right, r.bottom],
+        ];
+        for (const [hx, hy] of handles) {
+          testCtx.fillRect(hx - 4, hy - 4, 8, 8);
+          testCtx.strokeRect(hx - 4, hy - 4, 8, 8);
+        }
+      }
+    }
+    if (lastHitBox) {
+      const hr = logicalToCanvasRect(lastHitBox);
+      if (hr) {
+        testCtx.strokeStyle = "#3fb950";
+        testCtx.lineWidth = 2;
+        testCtx.strokeRect(hr.left, hr.top, hr.right - hr.left, hr.bottom - hr.top);
+      }
+    }
+  }
+
+  // ROI 框跟命中框要看得到，不是只有「調整 ROI」開著才顯示——測試進行中即使沒在拖曳
+  // ROI，使用者也該看到目前對著哪個區域、命中在哪裡。
+  function updateRoiCanvasVisibility() {
+    testRoiCanvas.hidden = !(roiEditing || testRunning);
+    if (!testRoiCanvas.hidden) {
+      resizeRoiCanvas();
+      drawRoiOverlay();
     }
   }
 

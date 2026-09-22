@@ -49,7 +49,7 @@ object VisionTestScript {
             threshold = $threshold,
           })
           if hit then
-            data.set("visionTest", { hit = true, confidence = hit.confidence, cx = hit.cx, cy = hit.cy })
+            data.set("visionTest", { hit = true, confidence = hit.confidence, cx = hit.cx, cy = hit.cy, x = hit.x, y = hit.y, w = hit.w, h = hit.h })
           else
             data.set("visionTest", { hit = false })
           end
