@@ -2,6 +2,7 @@ package com.xaxaxax.moonclicker.script
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -142,5 +143,69 @@ class ScriptArchiveTest {
         assertEquals("my-script", ScriptArchive.sanitizeId("my script.zip"))
         assertEquals("script", ScriptArchive.sanitizeId("../../.zip"))
         assertEquals("a_b-c", ScriptArchive.sanitizeId("/path/to/a_b c.zip"))
+    }
+
+    @Test
+    fun `import generates a uniqueId when the zip has none`() {
+        val imported = import(zipOf("main.lua" to "log('hi')")) as ScriptArchive.ImportResult.Imported
+
+        val script = Script.from(imported.dir, File(imported.dir, Script.META_FILE).readText())
+        assertNotNull(script.uniqueId)
+    }
+
+    @Test
+    fun `import keeps a uniqueId already present in the zip`() {
+        val imported = import(
+            zipOf("main.lua" to "log('hi')", "script.json" to """{"uniqueId":"my-id"}""")
+        ) as ScriptArchive.ImportResult.Imported
+
+        val script = Script.from(imported.dir, File(imported.dir, Script.META_FILE).readText())
+        assertEquals("my-id", script.uniqueId)
+    }
+
+    @Test
+    fun `import reports a conflict instead of overwriting when uniqueId collides`() {
+        import(zipOf("main.lua" to "first", "script.json" to """{"uniqueId":"dup"}"""), "first.zip")
+
+        val result = import(
+            zipOf("main.lua" to "second", "script.json" to """{"uniqueId":"dup"}"""),
+            "second.zip",
+        )
+
+        val conflict = result as ScriptArchive.ImportResult.Conflict
+        assertEquals("dup", conflict.uniqueId)
+        assertEquals("first", conflict.existingDir.name)
+        // 撞號當下不動既有腳本資料夾（.import- 開頭的是還沒解決的 staging，等使用者決定）。
+        assertEquals(listOf("first"), temp.root.listFiles()!!.map { it.name }.filterNot { it.startsWith(".import-") })
+    }
+
+    @Test
+    fun `resolving a conflict with overwrite replaces the existing folder's content`() {
+        import(zipOf("main.lua" to "first", "old.png" to "stale", "script.json" to """{"uniqueId":"dup"}"""), "first.zip")
+        val conflict = import(
+            zipOf("main.lua" to "second", "script.json" to """{"uniqueId":"dup"}"""),
+            "second.zip",
+        ) as ScriptArchive.ImportResult.Conflict
+
+        val result = ScriptArchive.resolveConflict(conflict, overwrite = true) as ScriptArchive.ImportResult.Imported
+
+        assertEquals("first", result.dir.name)
+        assertEquals("second", File(temp.root, "first/main.lua").readText())
+        assertFalse(File(temp.root, "first/old.png").exists())
+        assertEquals(listOf("first"), temp.root.listFiles()!!.map { it.name })
+    }
+
+    @Test
+    fun `resolving a conflict without overwrite leaves both folders untouched`() {
+        import(zipOf("main.lua" to "first", "script.json" to """{"uniqueId":"dup"}"""), "first.zip")
+        val conflict = import(
+            zipOf("main.lua" to "second", "script.json" to """{"uniqueId":"dup"}"""),
+            "second.zip",
+        ) as ScriptArchive.ImportResult.Conflict
+
+        ScriptArchive.resolveConflict(conflict, overwrite = false)
+
+        assertEquals("first", File(temp.root, "first/main.lua").readText())
+        assertEquals(listOf("first"), temp.root.listFiles()!!.map { it.name })
     }
 }

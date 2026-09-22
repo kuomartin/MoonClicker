@@ -32,6 +32,21 @@ class ScriptStoreTest {
         assertEquals("plain", scripts[0].name)   // 沒有 meta 就退回資料夾名
         assertEquals("", scripts[0].description)
         assertNull(scripts[0].display)
+        assertNull(scripts[0].uniqueId)   // 缺 uniqueId：可見但不可執行
+    }
+
+    @Test
+    fun `a valid uniqueId is surfaced`() {
+        script("daily", """{"uniqueId":"daily-checkin"}""")
+
+        assertEquals("daily-checkin", ScriptStore.scan(temp.root).single().uniqueId)
+    }
+
+    @Test
+    fun `an invalid uniqueId is treated as missing`() {
+        script("daily", """{"uniqueId":"Has Spaces!"}""")
+
+        assertNull(ScriptStore.scan(temp.root).single().uniqueId)
     }
 
     @Test

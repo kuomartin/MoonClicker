@@ -37,6 +37,9 @@ class ScriptStore @Inject constructor(
 
     fun find(id: String): Script? = _scripts.value.firstOrNull { it.id == id }
 
+    fun findByUniqueId(uniqueId: String): Script? =
+        _scripts.value.firstOrNull { it.uniqueId == uniqueId }
+
     /** 讀 `main.lua`。讀不到就回 null——UI 需要能區分「空腳本」與「檔案不見了」。 */
     fun readSource(script: Script): String? =
         runCatching { script.mainFile.readText() }.getOrNull()
