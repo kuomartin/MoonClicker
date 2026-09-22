@@ -42,7 +42,7 @@ private class FakeScriptRunner : ScriptRunner {
         startedScript = script
     }
 
-    override fun stop() {
+    override suspend fun stop() {
         stopped = true
     }
 
@@ -848,6 +848,67 @@ class WorkbenchServerTest {
             val response = client.delete("/scripts/does-not-exist/templates/button.png")
 
             assertEquals(HttpStatusCode.NotFound, response.status)
+        }
+    }
+
+    @Test
+    fun `vision-test route materializes a scratch script with a start signal and starts it on the given display`() = runTest {
+        val dir = scriptFolder("hello", "log('hi')")
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+
+            val response = client.post("/scripts/hello/vision-test") {
+                setBody("""{"displayId":7,"image":"button.png","roi":{"x":1,"y":2,"w":3,"h":4},"threshold":0.85}""")
+            }
+
+            assertEquals(HttpStatusCode.Accepted, response.status)
+            assertEquals(7, fakeRunner.startedOnDisplayId)
+            assertEquals(".__vision_test__", fakeRunner.startedOnDisplayScript?.id)
+
+            val lua = File(temp.root, ".__vision_test__/main.lua").readText()
+            assertTrue(lua.contains("""data.set("visionTest", { started = true })"""))
+            assertTrue(lua.contains(File(dir, "button.png").absolutePath))
+            assertTrue(lua.contains("threshold = 0.85"))
+        }
+    }
+
+    @Test
+    fun `vision-test route 409s when a script is already running`() = runTest {
+        scriptFolder("hello", "log('hi')")
+        fakeRunner.running = true
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+
+            val response = client.post("/scripts/hello/vision-test") {
+                setBody("""{"displayId":7,"image":"button.png","roi":{"x":1,"y":2,"w":3,"h":4},"threshold":0.85}""")
+            }
+
+            assertEquals(HttpStatusCode.Conflict, response.status)
+        }
+    }
+
+    @Test
+    fun `vision-test route 404s for an unknown script id`() = runTest {
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+
+            val response = client.post("/scripts/does-not-exist/vision-test") {
+                setBody("""{"displayId":7,"image":"button.png","roi":{"x":1,"y":2,"w":3,"h":4},"threshold":0.85}""")
+            }
+
+            assertEquals(HttpStatusCode.NotFound, response.status)
+        }
+    }
+
+    @Test
+    fun `run stop route stops whatever is running and is idempotent when idle`() = runTest {
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+
+            val response = client.post("/run/stop")
+
+            assertEquals(HttpStatusCode.OK, response.status)
+            assertTrue(fakeRunner.stopped)
         }
     }
 }

@@ -41,6 +41,7 @@ object VisionTestScript {
     }
 
     private fun luaSource(imagePath: String, roi: TemplateRoi, threshold: Double, intervalMs: Long): String = """
+        data.set("visionTest", { started = true })
         while true do
           local hit = vision.find({
             image = "${imagePath.escapeLua()}",

@@ -230,6 +230,13 @@
       }
     }
     if (!v || typeof v !== "object") return;
+    // 裝置端在進入迴圈、跑第一次 vision.find 之前會先送一次 { started: true }（見
+    // VisionTestScript.kt）——這是「腳本真的啟動了」的訊號，跟「第一輪比對結果」是兩件
+    // 事：沒有這個 special case，v.hit 是 undefined，會被誤判成「未命中」。
+    if (v.started) {
+      testMatchText.textContent = "偵測中…";
+      return;
+    }
     if (v.hit) {
       const confidence = typeof v.confidence === "number" ? v.confidence.toFixed(2) : "?";
       testMatchText.textContent = "命中 · 信心度 " + confidence + "（cx=" + v.cx + ", cy=" + v.cy + "）";
