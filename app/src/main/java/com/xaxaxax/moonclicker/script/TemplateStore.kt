@@ -55,6 +55,44 @@ object TemplateStore {
         }
     }
 
+    /**
+     * 列出 [scriptDir] 目前存的所有模板。`templates.json` 不存在視為空清單；解析失敗
+     * 一樣回空清單（列出來的用途是給 UI 顯示，不像 [write]/[delete] 動到檔案，壞掉的
+     * meta 檔在這裡不用大聲失敗——呼叫端看到空清單，改用 [write] 存新模板時才會踩到
+     * 壞掉的 `templates.json` 並被擋下來）。
+     */
+    fun list(scriptDir: File): Map<String, TemplateEntry> = readExisting(File(scriptDir, META_FILE)) ?: emptyMap()
+
+    sealed interface DeleteResult {
+        data object Deleted : DeleteResult
+        data object NotFound : DeleteResult
+        data class Failed(val reason: String) : DeleteResult
+    }
+
+    /**
+     * 從 [scriptDir] 刪除模板 [name]：`templates.json` 裡的那一筆與圖片檔都刪。名稱不在
+     * `templates.json` 裡回 [DeleteResult.NotFound]（圖片檔可能還在但沒有 meta 紀錄，
+     * 視為「這個模板不存在」，不去猜孤兒檔案要不要一併清掉）。
+     */
+    fun delete(scriptDir: File, name: String): DeleteResult {
+        val metaFile = File(scriptDir, META_FILE)
+        val existing = readExisting(metaFile)
+            ?: return DeleteResult.Failed("Could not parse existing $META_FILE")
+        if (!existing.containsKey(name)) {
+            return DeleteResult.NotFound
+        }
+
+        return try {
+            val imageFile = File(scriptDir, name)
+            if (imageFile.isFile) imageFile.delete()
+            val updated = existing - name
+            metaFile.writeText(json.encodeToString(updated))
+            DeleteResult.Deleted
+        } catch (e: IOException) {
+            DeleteResult.Failed(e.message ?: "Failed to delete template")
+        }
+    }
+
     /** 沒有 `templates.json` 視為空 map（第一個模板），讀不動／解不動視為壞掉（回 null）。 */
     private fun readExisting(metaFile: File): Map<String, TemplateEntry>? {
         if (!metaFile.isFile) return emptyMap()

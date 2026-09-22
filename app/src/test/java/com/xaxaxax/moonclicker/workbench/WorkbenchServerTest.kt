@@ -654,4 +654,117 @@ class WorkbenchServerTest {
             assertTrue(!File(dir, "button.png").exists())
         }
     }
+
+    @Test
+    fun `GET templates lists what's in templates json`() = runTest {
+        val dir = scriptFolder("hello", "log('hi')")
+        File(dir, "templates.json").writeText(
+            """{"button.png":{"roi":{"x":1,"y":2,"w":30,"h":40}}}"""
+        )
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+
+            val response = client.get("/scripts/hello/templates")
+
+            assertEquals(HttpStatusCode.OK, response.status)
+            val body = response.bodyAsText()
+            assertTrue(body.contains("\"button.png\""))
+            assertTrue(body.contains("\"w\":30"))
+        }
+    }
+
+    @Test
+    fun `GET templates is an empty object when templates json doesn't exist`() = runTest {
+        scriptFolder("hello", "log('hi')")
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+
+            val response = client.get("/scripts/hello/templates")
+
+            assertEquals(HttpStatusCode.OK, response.status)
+            assertEquals("{}", response.bodyAsText())
+        }
+    }
+
+    @Test
+    fun `GET templates 404s for an unknown script id`() = runTest {
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+
+            val response = client.get("/scripts/does-not-exist/templates")
+
+            assertEquals(HttpStatusCode.NotFound, response.status)
+        }
+    }
+
+    @Test
+    fun `DELETE templates removes the image and the templates json entry`() = runTest {
+        val dir = scriptFolder("hello", "log('hi')")
+        File(dir, "button.png").writeText("fake png bytes")
+        File(dir, "templates.json").writeText(
+            """{"button.png":{"roi":{"x":1,"y":2,"w":30,"h":40}}}"""
+        )
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+
+            val response = client.delete("/scripts/hello/templates/button.png")
+
+            assertEquals(HttpStatusCode.OK, response.status)
+            assertTrue(!File(dir, "button.png").exists())
+            assertEquals("{}", File(dir, "templates.json").readText())
+        }
+    }
+
+    @Test
+    fun `DELETE templates broadcasts file_change for the image and templates json`() = runTest {
+        val dir = scriptFolder("hello", "log('hi')")
+        File(dir, "button.png").writeText("fake png bytes")
+        File(dir, "templates.json").writeText(
+            """{"button.png":{"roi":{"x":1,"y":2,"w":30,"h":40}}}"""
+        )
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+            val wsClient = createClient { install(ClientWebSockets) }
+
+            wsClient.webSocket("/") {
+                receiveStreamEvent() // 初始 data 快照。
+
+                client.delete("/scripts/hello/templates/button.png")
+
+                val first = receiveStreamEvent()
+                assertEquals("hello", first.file_change?.script_id)
+                assertEquals("button.png", first.file_change?.path)
+                assertEquals(moonclicker.workbench.FileChangeEvent.Kind.DELETED, first.file_change?.kind)
+
+                val second = receiveStreamEvent()
+                assertEquals("templates.json", second.file_change?.path)
+                assertEquals(moonclicker.workbench.FileChangeEvent.Kind.CHANGED, second.file_change?.kind)
+            }
+        }
+    }
+
+    @Test
+    fun `DELETE templates 404s for a name that's not in templates json`() = runTest {
+        val dir = scriptFolder("hello", "log('hi')")
+        File(dir, "templates.json").writeText("{}")
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+
+            val response = client.delete("/scripts/hello/templates/button.png")
+
+            assertEquals(HttpStatusCode.NotFound, response.status)
+        }
+        assertTrue(File(dir, "templates.json").isFile)
+    }
+
+    @Test
+    fun `DELETE templates 404s for an unknown script id`() = runTest {
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+
+            val response = client.delete("/scripts/does-not-exist/templates/button.png")
+
+            assertEquals(HttpStatusCode.NotFound, response.status)
+        }
+    }
 }

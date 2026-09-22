@@ -2,7 +2,9 @@
 
 **狀態**：已實作（B 方案）。屬於 [mirror 面板五步驟工作流程](../../vscode-extension/media/mirror.js) 的第 3 階段。
 
-第 1 階段（「2 · 建立模板」的 ROI 裁切＋真的存檔）已實作：ROI 框改成跟「3 · 測試模板」同一套幾何算法的可拖曳 canvas（`vscode-extension/media/mirror.js` 的 `buildRoiCanvas`），「儲存模板」真的呼叫既有的 `PUT /scripts/{id}/templates/{name}`（走現有的 `saveTemplate` webview 訊息，`mirrorPanel.ts` 不用改）。已知限制：模板清單（`savedTemplates`）只是本次工作階段內、存檔成功後累積的本地快取——裝置端還沒有「列出已存模板」的 API（第 2 階段），面板關掉重開不會回填之前存過的模板；「刪除模板」也還只是從這份本地清單移除，裝置上的檔案不會真的被刪。
+第 1 階段（「2 · 建立模板」的 ROI 裁切＋真的存檔）已實作：ROI 框改成跟「3 · 測試模板」同一套幾何算法的可拖曳 canvas（`vscode-extension/media/mirror.js` 的 `buildRoiCanvas`），「儲存模板」真的呼叫既有的 `PUT /scripts/{id}/templates/{name}`（走現有的 `saveTemplate` webview 訊息，`mirrorPanel.ts` 不用改）。
+
+第 2 階段（模板列出／刪除的裝置端 API）已實作：`TemplateStore.kt` 新增 `list()`/`delete()`，`WorkbenchServer.kt` 新增 `GET /scripts/{id}/templates`、`DELETE /scripts/{id}/templates/{name}`（跟既有的 PUT 一樣會補 `fileChanges` 廣播，VS Code 本機鏡像才會同步刪除）。`templateSync.ts` 加 `listTemplates`/`deleteTemplate`，`mirrorPanel.ts` 轉發 `requestTemplates`/`deleteTemplate` 兩個新訊息。webview 端把 `savedTemplates`（本地快取）整個換成 `deviceTemplates`（scriptId → 裝置回報的清單，每次存檔／刪除成功都重新拉一次，不自己猜）；「3 · 測試模板」加了「腳本」選單，模板下拉跟「2 · 建立模板」共用同一份裝置清單。已知限制：`templates.json` 沒有存閾值（threshold），所以模板清單只顯示名稱與 ROI 尺寸，閾值純粹是「測試模板」工具列上的即時滑桿，跟選了哪個模板無關。
 
 起因：webview「測試模板」模式目前的比對結果、延遲、Lua snippet 全部是 mock。要接成真的，
 device 端 `WorkbenchServer.kt` 只有 `PUT /scripts/{id}/templates/{name}`（存模板），沒有任何

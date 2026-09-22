@@ -651,6 +651,48 @@ fun Application.workbenchModule(
             }
         }
 
+        // 列出某腳本目前存的所有模板（VS Code 端「建立模板」的清單、「測試模板」的下拉選單都
+        // 靠這個回填，不再只是本地工作階段快取）。回傳跟 templates.json 一樣的
+        // `{ 檔名: { roi } }` map，壞掉的／不存在的 templates.json 都當空清單，不是錯誤。
+        get("/scripts/{id}/templates") {
+            val id = call.parameters["id"]
+            val script = id?.let { i -> ScriptStore.scan(scriptsRoot).find { it.id == i } }
+            if (script == null) {
+                call.respondText("Script not found", status = HttpStatusCode.NotFound)
+                return@get
+            }
+            call.respondText(Json.encodeToString(TemplateStore.list(script.dir)), ContentType.Application.Json)
+        }
+
+        // 刪除模板：templates.json 裡的那一筆與圖片檔都刪，並跟 PUT 一樣補廣播——不補的話
+        // VS Code 本機鏡像不會知道這兩個檔案已經沒了。
+        delete("/scripts/{id}/templates/{name}") {
+            val id = call.parameters["id"]
+            val name = call.parameters["name"]
+            if (id.isNullOrBlank() || name.isNullOrBlank() || name.contains('/') || name.contains("..")) {
+                call.respondText("Invalid script id or template name", status = HttpStatusCode.BadRequest)
+                return@delete
+            }
+            val script = ScriptStore.scan(scriptsRoot).find { it.id == id }
+            if (script == null) {
+                call.respondText("Script not found", status = HttpStatusCode.NotFound)
+                return@delete
+            }
+            when (val result = TemplateStore.delete(script.dir, name)) {
+                is TemplateStore.DeleteResult.Deleted -> {
+                    fileChanges.tryEmit(ScriptFileChange(id, name, ScriptFileChangeKind.DELETED))
+                    fileChanges.tryEmit(
+                        ScriptFileChange(id, TemplateStore.META_FILE, ScriptFileChangeKind.CHANGED)
+                    )
+                    call.respondText("OK")
+                }
+                is TemplateStore.DeleteResult.NotFound ->
+                    call.respondText("Template not found: $name", status = HttpStatusCode.NotFound)
+                is TemplateStore.DeleteResult.Failed ->
+                    call.respondText(result.reason, status = HttpStatusCode.BadRequest)
+            }
+        }
+
         // Realtime mirror (H.264) via WebSocket
         webSocket("/mirror/h264/{displayId}") {
             val displayId = call.parameters["displayId"]?.toIntOrNull()
