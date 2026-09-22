@@ -20,6 +20,19 @@ interface IMoonClickerService {
     boolean isDisplayMirrorActive(int displayId) = 111;
 
     /**
+     * Resizes an existing virtual display in place — same displayId, new dimensions.
+     *
+     * Rebuilds the native GLES distributor at the new size and swaps it in via
+     * VirtualDisplay.resize()/setSurface() rather than destroying and recreating the whole
+     * VirtualDisplay: callers that only know the displayId (e.g. an already-running script)
+     * keep working across the resize. Any consumer surface already attached via
+     * addVirtualDisplaySurface is dropped with the old distributor and is NOT carried over —
+     * the caller must re-attach. Returns false (and leaves the display as it was) if resize
+     * fails at any step.
+     */
+    boolean resizeVirtualDisplay(int displayId, int width, int height, int densityDpi) = 112;
+
+    /**
      * Sets a virtual display's user rotation (Surface.ROTATION_*, 0..3).
      *
      * An app running on the display that declares its own orientation wins: WindowManager

@@ -68,20 +68,23 @@ data class Script(
             val meta = metaJson?.takeIf { it.isNotBlank() }?.let {
                 runCatching { json.decodeFromString<ScriptMeta>(it) }.getOrNull()
             }
+            val uniqueId = meta?.uniqueId?.takeIf { UNIQUE_ID_PATTERN.matches(it) }
             return Script(
                 id = dir.name,
                 dir = dir,
                 name = meta?.name?.takeIf { it.isNotBlank() } ?: dir.name,
                 description = meta?.description.orEmpty(),
-                display = meta?.display?.let {
-                    DisplayConfig(
-                        name = meta.name ?: dir.name,
-                        width = it.width,
-                        height = it.height,
-                        densityDpi = it.densityDpi,
-                    )
+                display = meta?.display?.let { displayMeta ->
+                    uniqueId?.let {
+                        DisplayConfig(
+                            name = it,
+                            width = displayMeta.width,
+                            height = displayMeta.height,
+                            densityDpi = displayMeta.densityDpi,
+                        )
+                    }
                 },
-                uniqueId = meta?.uniqueId?.takeIf { UNIQUE_ID_PATTERN.matches(it) },
+                uniqueId = uniqueId,
             )
         }
     }
