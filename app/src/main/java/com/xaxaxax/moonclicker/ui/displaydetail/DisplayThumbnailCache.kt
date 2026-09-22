@@ -6,6 +6,9 @@ import android.graphics.BitmapFactory
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import timber.log.Timber
 import java.io.File
 import java.io.FileOutputStream
@@ -30,6 +33,14 @@ class DisplayThumbnailCache @Inject constructor(
     private val thumbnailDir = File(context.filesDir, "display_thumbnails").apply { mkdirs() }
     private val cache = ConcurrentHashMap<Int, ImageBitmap>()
 
+    /**
+     * [put] 完成的通知，讓 [DisplaysViewModel][com.xaxaxax.moonclicker.ui.displays.DisplaysViewModel]
+     * 不必依賴自己的 `ON_RESUME` 時序去讀縮圖——`FullscreenDisplayActivity` 的擷取現在走
+     * `PixelCopy`，是非同步的，常常晚於 Displays 頁面的 resume。
+     */
+    private val _updates = MutableSharedFlow<Int>(extraBufferCapacity = 16)
+    val updates: SharedFlow<Int> = _updates.asSharedFlow()
+
     fun get(displayId: Int): ImageBitmap? {
         cache[displayId]?.let { return it }
         val file = File(thumbnailDir, "$displayId.png")
@@ -52,6 +63,7 @@ class DisplayThumbnailCache @Inject constructor(
                 thumbnail.compress(Bitmap.CompressFormat.PNG, 90, out)
             }
         }.onFailure { Timber.e(it, "Failed to persist thumbnail for display $displayId") }
+        _updates.tryEmit(displayId)
     }
 
     fun remove(displayId: Int) {
