@@ -61,7 +61,7 @@ test("saveTemplate sends PUT request with roi query params and PNG body", async 
 
   assert.equal(
     lastPutUrl,
-    "/scripts/hello/templates/btn_ok?x=10&y=20&w=100&h=50",
+    "/scripts/hello/templates/btn_ok.png?x=10&y=20&w=100&h=50",
   );
   assert.ok(lastPutBody);
   assert.deepEqual(new Uint8Array(lastPutBody), fakePng);
@@ -105,10 +105,11 @@ test("saveTemplate rejects invalid template name before network call", async () 
   );
 });
 
-test("normalizeTemplateName trims whitespace and strips optional .png extension", () => {
-  assert.equal(normalizeTemplateName("btn_ok"), "btn_ok");
-  assert.equal(normalizeTemplateName("  btn_ok.png  "), "btn_ok");
-  assert.equal(normalizeTemplateName("my.template.PNG"), "my.template");
+test("normalizeTemplateName trims whitespace and ensures exactly one .png extension", () => {
+  assert.equal(normalizeTemplateName("btn_ok"), "btn_ok.png");
+  assert.equal(normalizeTemplateName("  btn_ok.png  "), "btn_ok.png");
+  assert.equal(normalizeTemplateName("my.template.PNG"), "my.template.png");
+  assert.equal(normalizeTemplateName("   "), "");
 });
 
 test("checkTemplateNameConflict detects matching template names regardless of .png extension", () => {

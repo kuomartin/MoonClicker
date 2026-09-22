@@ -238,6 +238,9 @@ input:focus, select:focus { outline: 1px solid var(--vscode-focusBorder); }
   position: relative;
   overflow: hidden;
 }
+/* .modePanel 預設 flex-direction: column（見上面），這裡跟 #panel-run 一樣蓋成橫向，
+   .darkStage（flex:1）跟 #buildSidebar（width:320px）才會左右並排而不是直向疊起來。 */
+#panel-build { flex-direction: row; }
 #buildRoiCanvas {
   position: absolute;
   top: 0;

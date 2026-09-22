@@ -8,11 +8,14 @@ export interface TemplateRoi {
 }
 
 /**
- * 去除前後空白，並移除尾隨的 `.png` 副檔名（不分大小寫），取得規範化的模板名稱。
+ * 去除前後空白、去掉尾隨的 `.png`（不分大小寫）再補上一個——讓使用者打「btn_ok」或
+ * 「btn_ok.png」都存成同一個檔名，但最終一定帶副檔名。裝置端的 Lua `vision` API 文件
+ * （docs/lua-api.md）範例的 `image` 一律帶副檔名（如 "login.png"），存成不帶副檔名的
+ * 裸名字既跟文件的慣例不一致，在裝置上用檔案總管看也不像張圖。
  */
 export function normalizeTemplateName(name: string): string {
-  const trimmed = name.trim();
-  return trimmed.replace(/\.png$/i, "");
+  const trimmed = name.trim().replace(/\.png$/i, "");
+  return trimmed ? `${trimmed}.png` : "";
 }
 
 /**
@@ -97,6 +100,12 @@ export async function listTemplates(address: string, scriptId: string, token?: s
  * 刪除某腳本的一個模板（見 vision-test 計畫第 2 階段）。
  * 呼叫 DELETE /scripts/{id}/templates/{name}——裝置端會把圖片檔跟 templates.json 裡的
  * 那一筆一起刪掉。
+ *
+ * `templateName` 這裡刻意不經過 `normalizeTemplateName`：呼叫端（webview）給的名字是
+ * `listTemplates` 從裝置讀回來的原始 key，不是使用者剛打的字——裝置上可能存在不是透過
+ * 這支 client 存的模板（例如檔名本來就帶 `.png`，或完全沒有副檔名），對這種已知存在的
+ * 名字再做一次「猜副檔名」的正規化，只會把原本對得上的名字改到對不上（見 #實測：
+ * `pictureMod.png` 被砍成 `pictureMod` 找不到 404）。
  */
 export async function deleteTemplate(
   address: string,
@@ -104,18 +113,18 @@ export async function deleteTemplate(
   templateName: string,
   token?: string,
 ): Promise<void> {
-  const normName = normalizeTemplateName(templateName);
-  if (!normName) {
+  const name = templateName.trim();
+  if (!name) {
     throw new Error("模板名稱不可為空");
   }
-  if (normName.includes("/") || normName.includes("..")) {
+  if (name.includes("/") || name.includes("..")) {
     throw new Error("模板名稱不可包含「/」或「..」");
   }
   if (!scriptId || scriptId.includes("/") || scriptId.includes("..")) {
     throw new Error("腳本 ID 無效");
   }
 
-  const url = `http://${address}/scripts/${encodeURIComponent(scriptId)}/templates/${encodeURIComponent(normName)}`;
+  const url = `http://${address}/scripts/${encodeURIComponent(scriptId)}/templates/${encodeURIComponent(name)}`;
   const response = await fetch(url, {
     method: "DELETE",
     headers: authHeaders(token),
@@ -124,7 +133,7 @@ export async function deleteTemplate(
   if (!response.ok) {
     const reason = await response.text();
     if (response.status === 404) {
-      throw new Error(`找不到模板（HTTP 404）：${reason || normName}`);
+      throw new Error(`找不到模板（HTTP 404）：${reason || name}`);
     }
     throw new Error(`刪除模板失敗（HTTP ${response.status}）：${reason}`);
   }
