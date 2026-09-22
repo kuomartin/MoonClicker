@@ -71,6 +71,7 @@ export function openMirrorPanel(extensionUri: vscode.Uri, address: string, displ
       image?: string;
       threshold?: number;
       intervalMs?: number;
+      scriptName?: string;
     }) => {
       if (message?.type === "stop") {
         connection?.stop();
@@ -127,6 +128,16 @@ export function openMirrorPanel(extensionUri: vscode.Uri, address: string, displ
           mirrorOutputChannel.appendLine(`[MoonClicker Delete Template Error] ${errMsg}`);
           mirrorOutputChannel.show(true);
         }
+      } else if (message?.type === "openScriptInEditor") {
+        const { scriptId, scriptName } = message;
+        if (!scriptId) return;
+        // 沿用既有的「整份 pull 進本機鏡像資料夾、掛成 workspace folder」指令——跟樹狀圖點
+        // 一顆腳本是同一條路，這裡只是模擬 RemoteScriptItem 的 { address, summary } 形狀
+        // 讓 openScriptCommand 直接吃，不用另外重寫一次下載/掛載邏輯。
+        await vscode.commands.executeCommand("moonclicker.openScript", {
+          address,
+          summary: { id: scriptId, name: scriptName || scriptId },
+        });
       } else if (message?.type === "startVisionTest") {
         const { scriptId, displayId, image, roi, threshold, intervalMs } = message;
         if (!scriptId || typeof displayId !== "number" || !image || !roi || typeof threshold !== "number") {
