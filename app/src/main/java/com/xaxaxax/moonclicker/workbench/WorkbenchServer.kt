@@ -71,8 +71,12 @@ import timber.log.Timber
 interface ScriptRunner {
     fun isRunning(): Boolean
     fun start(script: Script)
-    /** 停止目前執行中的腳本（若沒有在跑，是安全的 no-op）。 */
-    fun stop()
+    /**
+     * 停止目前執行中的腳本並等到真的停了才回傳（若沒有在跑，是安全的 no-op）——見
+     * [ScriptSession.stopAndAwait]：不等的話，webview 端「stop 完馬上 start」的重啟流程
+     * 會因為 native 端還沒把 STOPPED 事件非同步推回來，被 isRunning() 擋下 409。
+     */
+    suspend fun stop()
     /** 跟 [start] 不同：不吃 `script.json` 的 `display`，強制跑在既有的虛擬顯示 [displayId] 上（見 vision-test）。 */
     fun startOnDisplay(script: Script, displayId: Int)
 }
@@ -125,7 +129,7 @@ class WorkbenchServer @Inject constructor(
     private val scriptRunner = object : ScriptRunner {
         override fun isRunning() = scriptSession.state.value.isRunning
         override fun start(script: Script) = scriptSession.start(script)
-        override fun stop() = scriptSession.stop()
+        override suspend fun stop() = scriptSession.stopAndAwait()
         override fun startOnDisplay(script: Script, displayId: Int) =
             scriptSession.start(script, ScriptTarget.ExistingVirtual(displayId))
     }
