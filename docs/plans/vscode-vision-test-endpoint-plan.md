@@ -2,7 +2,7 @@
 
 **狀態**：已實作（B 方案）。屬於 [mirror 面板五步驟工作流程](../../vscode-extension/media/mirror.js) 的第 3 階段。
 
-已知限制：「測試模板」現在會真的打 `POST /scripts/{id}/vision-test`，但模板圖片必須真的存在於裝置上該腳本的資料夾——「2 · 建立模板」的儲存流程（第 1／2 階段）還沒接線，webview 裡輸入的模板名稱如果裝置上沒有對應檔案，`vision.find` 會在 Lua 端找不到圖檔，錯誤只會出現在 Console log，不是乾淨的 HTTP 錯誤。
+第 1 階段（「2 · 建立模板」的 ROI 裁切＋真的存檔）已實作：ROI 框改成跟「3 · 測試模板」同一套幾何算法的可拖曳 canvas（`vscode-extension/media/mirror.js` 的 `buildRoiCanvas`），「儲存模板」真的呼叫既有的 `PUT /scripts/{id}/templates/{name}`（走現有的 `saveTemplate` webview 訊息，`mirrorPanel.ts` 不用改）。已知限制：模板清單（`savedTemplates`）只是本次工作階段內、存檔成功後累積的本地快取——裝置端還沒有「列出已存模板」的 API（第 2 階段），面板關掉重開不會回填之前存過的模板；「刪除模板」也還只是從這份本地清單移除，裝置上的檔案不會真的被刪。
 
 起因：webview「測試模板」模式目前的比對結果、延遲、Lua snippet 全部是 mock。要接成真的，
 device 端 `WorkbenchServer.kt` 只有 `PUT /scripts/{id}/templates/{name}`（存模板），沒有任何

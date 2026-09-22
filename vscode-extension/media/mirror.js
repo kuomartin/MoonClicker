@@ -351,6 +351,26 @@
         setTestStatusPill("error", msg.error || "停止執行失敗");
       }
       updateTestStartStopBtn();
+    } else if (msg.type === "saveTemplateResult") {
+      buildSaveBtn.disabled = false;
+      if (msg.success && pendingSave) {
+        savedTemplates.push({
+          id: "tpl-" + pendingSave.scriptId + "-" + pendingSave.name,
+          script: pendingSave.scriptId,
+          name: pendingSave.name,
+          threshold: pendingSave.threshold,
+        });
+        buildStatus.style.color = "var(--moon-success)";
+        buildStatus.textContent = "已存到裝置";
+        buildTemplateName.value = "";
+        renderBuildTemplateList();
+        renderTestTemplateOptions();
+        setTimeout(() => { buildStatus.textContent = ""; }, 2000);
+      } else {
+        buildStatus.style.color = "var(--vscode-errorForeground)";
+        buildStatus.textContent = msg.error || "儲存失敗";
+      }
+      pendingSave = null;
     }
   });
 
@@ -380,7 +400,7 @@
 
     const now = new Date();
     const time = now.toLocaleTimeString("zh-Hant-TW", { hour12: false });
-    const shot = { id: "shot-" + now.getTime(), time, dataUrl };
+    const shot = { id: "shot-" + now.getTime(), time, dataUrl, width: w, height: h };
     captureShots.push(shot);
     selectedShotId = shot.id;
     persistState();
@@ -431,7 +451,11 @@
   }
 
   // ==================================================================
-  // 2 · 建立模板 —— mock：畫面／ROI 為示意，儲存模板尚未接線（見下方 RPC 說明）
+  // 2 · 建立模板 —— ROI 裁切是真的互動（對著選定的擷取畫面算像素座標，跟測試模板的
+  // ROI 編輯同一套幾何算法）；「儲存模板」真的呼叫裝置既有的
+  // PUT /scripts/{id}/templates/{name}。模板清單是本次工作階段內、確認存檔成功後
+  // 累積起來的本地快取——裝置端目前沒有「列出已存模板」的 API，重開面板不會回填
+  // 之前存過的模板（見 docs/plans/vscode-vision-test-endpoint-plan.md 待實作的第 2 階段）。
   // ==================================================================
   const buildShotPicker = document.getElementById("buildShotPicker");
   const buildSourceTime = document.getElementById("buildSourceTime");
@@ -443,9 +467,33 @@
   const buildSaveBtn = document.getElementById("buildSaveBtn");
   const buildTemplateListLabel = document.getElementById("buildTemplateListLabel");
   const buildTemplateList = document.getElementById("buildTemplateList");
-
-  let mockTemplates = []; // { id, script, name, threshold }
   const buildCropPreview = document.getElementById("buildCropPreview");
+  const buildRoiCanvas = document.getElementById("buildRoiCanvas");
+  const buildCtx = buildRoiCanvas.getContext("2d");
+
+  let savedTemplates = []; // { id, script, name, threshold } —— 只在裝置確認存檔成功後加入
+  let buildRoiRect = null; // { left, top, right, bottom } in buildCropPreview 像素座標
+  let buildRoiDragMode = "None";
+  let buildRoiDragStart = { x: 0, y: 0 };
+  let buildRoiInitialRect = null;
+  let pendingSave = null;
+  const shotImageCache = {}; // shot.id -> Promise<HTMLImageElement>，避免每次存檔重新解碼同一張圖
+
+  function currentBuildShot() {
+    return captureShots.find((s) => s.id === selectedShotId) || null;
+  }
+
+  function getShotImage(shot) {
+    if (!shotImageCache[shot.id]) {
+      shotImageCache[shot.id] = new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error("圖片解碼失敗"));
+        img.src = shot.dataUrl;
+      });
+    }
+    return shotImageCache[shot.id];
+  }
 
   function renderBuildShotPicker() {
     buildShotPicker.innerHTML = "";
@@ -453,6 +501,8 @@
       buildShotPicker.innerHTML = '<span class="emptyHint">尚無擷取畫面，先到「1 · 採集」擷取一張</span>';
       buildSourceTime.textContent = "—";
       buildCropPreview.style.backgroundImage = "";
+      buildRoiRect = null;
+      buildCtx.clearRect(0, 0, buildRoiCanvas.width, buildRoiCanvas.height);
       return;
     }
     for (const shot of captureShots) {
@@ -470,7 +520,161 @@
     selectedShotId = active.id;
     buildSourceTime.textContent = active.time;
     buildCropPreview.style.backgroundImage = "url(" + active.dataUrl + ")";
+    if (currentMode === "build") resetBuildRoi();
   }
+
+  // ---------- ROI 幾何：跟「3 · 測試模板」共用 roiNorm/roiHitTest/roiDragResize，
+  // 只有「畫面跟 canvas 對應到哪個容器」不同，所以 fit/resize/draw/calculate 各自一份。
+  function buildAspectFit() {
+    const shot = currentBuildShot();
+    const rect = buildCropPreview.getBoundingClientRect();
+    const imgW = (shot && shot.width) || 1;
+    const imgH = (shot && shot.height) || 1;
+    const containerW = rect.width;
+    const containerH = rect.height;
+    if (containerW <= 0 || containerH <= 0) {
+      return { left: 0, top: 0, width: 0, height: 0, scale: 1 };
+    }
+    const containerAspect = containerW / containerH;
+    const imageAspect = imgW / imgH;
+    let w, h, scale;
+    if (containerAspect > imageAspect) {
+      scale = containerH / imgH;
+      w = imgW * scale;
+      h = containerH;
+    } else {
+      scale = containerW / imgW;
+      w = containerW;
+      h = imgH * scale;
+    }
+    return { left: (containerW - w) / 2, top: (containerH - h) / 2, width: w, height: h, scale };
+  }
+
+  function resizeBuildRoiCanvas() {
+    const rect = buildCropPreview.getBoundingClientRect();
+    buildRoiCanvas.width = rect.width;
+    buildRoiCanvas.height = rect.height;
+  }
+
+  function drawBuildRoiOverlay() {
+    buildCtx.clearRect(0, 0, buildRoiCanvas.width, buildRoiCanvas.height);
+    if (!buildRoiRect) return;
+    const r = roiNorm(buildRoiRect);
+    buildCtx.strokeStyle = "#4fc1ff";
+    buildCtx.lineWidth = 2;
+    buildCtx.setLineDash([6, 4]);
+    buildCtx.strokeRect(r.left, r.top, r.right - r.left, r.bottom - r.top);
+    buildCtx.setLineDash([]);
+    buildCtx.fillStyle = "#ffffff";
+    buildCtx.strokeStyle = "#4fc1ff";
+    buildCtx.lineWidth = 1.5;
+    const midX = (r.left + r.right) / 2;
+    const midY = (r.top + r.bottom) / 2;
+    const handles = [
+      [r.left, r.top], [midX, r.top], [r.right, r.top],
+      [r.left, midY], [r.right, midY],
+      [r.left, r.bottom], [midX, r.bottom], [r.right, r.bottom],
+    ];
+    for (const [hx, hy] of handles) {
+      buildCtx.fillRect(hx - 4, hy - 4, 8, 8);
+      buildCtx.strokeRect(hx - 4, hy - 4, 8, 8);
+    }
+  }
+
+  function calculateBuildRoi() {
+    const shot = currentBuildShot();
+    if (!buildRoiRect || !shot) return null;
+    const nr = roiNorm(buildRoiRect);
+    const fit = buildAspectFit();
+    const bmW = shot.width || 1;
+    const bmH = shot.height || 1;
+    if (fit.scale <= 0) return null;
+    const clampedLeft = Math.max(fit.left, Math.min(fit.left + fit.width, nr.left));
+    const clampedRight = Math.max(fit.left, Math.min(fit.left + fit.width, nr.right));
+    const clampedTop = Math.max(fit.top, Math.min(fit.top + fit.height, nr.top));
+    const clampedBottom = Math.max(fit.top, Math.min(fit.top + fit.height, nr.bottom));
+    const bmLeft = Math.round(Math.max(0, Math.min(bmW, (clampedLeft - fit.left) / fit.scale)));
+    const bmRight = Math.round(Math.max(0, Math.min(bmW, (clampedRight - fit.left) / fit.scale)));
+    const bmTop = Math.round(Math.max(0, Math.min(bmH, (clampedTop - fit.top) / fit.scale)));
+    const bmBottom = Math.round(Math.max(0, Math.min(bmH, (clampedBottom - fit.top) / fit.scale)));
+    const x = Math.min(bmLeft, bmRight);
+    const y = Math.min(bmTop, bmBottom);
+    const w = Math.abs(bmRight - bmLeft);
+    const h = Math.abs(bmBottom - bmTop);
+    if (w <= 0 || h <= 0) return null;
+    return { x, y, w, h };
+  }
+
+  function resetBuildRoi() {
+    resizeBuildRoiCanvas();
+    const fit = buildAspectFit();
+    if (fit.width > 0 && fit.height > 0) {
+      const w = fit.width * 0.3;
+      const h = fit.height * 0.2;
+      buildRoiRect = {
+        left: fit.left + (fit.width - w) / 2,
+        top: fit.top + (fit.height - h) / 2,
+        right: fit.left + (fit.width + w) / 2,
+        bottom: fit.top + (fit.height + h) / 2,
+      };
+    } else {
+      buildRoiRect = null;
+    }
+    drawBuildRoiOverlay();
+  }
+
+  buildRoiCanvas.addEventListener("mousedown", (e) => {
+    if (currentMode !== "build") return;
+    const rect = buildRoiCanvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const hit = roiHitTest(buildRoiRect, x, y, ROI_HANDLE_RADIUS);
+    if (hit !== "None") {
+      buildRoiDragMode = hit;
+      buildRoiDragStart = { x, y };
+      buildRoiInitialRect = { ...buildRoiRect };
+    } else {
+      buildRoiDragMode = "Create";
+      buildRoiDragStart = { x, y };
+      buildRoiRect = { left: x, top: y, right: x, bottom: y };
+    }
+    drawBuildRoiOverlay();
+  });
+
+  window.addEventListener("mousemove", (e) => {
+    if (currentMode !== "build") return;
+    const rect = buildRoiCanvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    if (buildRoiDragMode === "None") {
+      const hit = roiHitTest(buildRoiRect, x, y, ROI_HANDLE_RADIUS);
+      const cursors = {
+        TopLeft: "nwse-resize", BottomRight: "nwse-resize",
+        TopRight: "nesw-resize", BottomLeft: "nesw-resize",
+        Top: "ns-resize", Bottom: "ns-resize",
+        Left: "ew-resize", Right: "ew-resize",
+        Center: "move",
+      };
+      buildRoiCanvas.style.cursor = cursors[hit] || "crosshair";
+      return;
+    }
+    const dx = x - buildRoiDragStart.x;
+    const dy = y - buildRoiDragStart.y;
+    if (buildRoiDragMode === "Create") {
+      buildRoiRect = { left: buildRoiDragStart.x, top: buildRoiDragStart.y, right: x, bottom: y };
+    } else {
+      buildRoiRect = roiDragResize(buildRoiInitialRect, buildRoiDragMode, dx, dy);
+    }
+    drawBuildRoiOverlay();
+  });
+
+  window.addEventListener("mouseup", () => {
+    if (buildRoiDragMode !== "None") {
+      buildRoiDragMode = "None";
+      buildRoiRect = roiNorm(buildRoiRect);
+      drawBuildRoiOverlay();
+    }
+  });
 
   function populateScriptSelects() {
     const selects = [buildScriptSelect, document.getElementById("testTemplateSelect")];
@@ -500,9 +704,9 @@
 
   function renderBuildTemplateList() {
     const scriptId = buildScriptSelect.value;
-    buildTemplateListLabel.textContent = currentBuildScriptName() + " 的模板（mock）";
+    buildTemplateListLabel.textContent = currentBuildScriptName() + " 的模板（本次工作階段）";
     buildTemplateList.innerHTML = "";
-    const list = mockTemplates.filter((t) => t.script === scriptId);
+    const list = savedTemplates.filter((t) => t.script === scriptId);
     if (list.length === 0) {
       buildTemplateList.innerHTML = '<span class="emptyHint">尚無模板</span>';
       return;
@@ -520,7 +724,7 @@
       row.querySelector(".templateRowName").textContent = t.name;
       row.querySelector(".templateRowMeta").textContent = "閾值 " + t.threshold.toFixed(2);
       row.querySelector("button").addEventListener("click", () => {
-        mockTemplates = mockTemplates.filter((x) => x.id !== t.id);
+        savedTemplates = savedTemplates.filter((x) => x.id !== t.id);
         renderBuildTemplateList();
         renderTestTemplateOptions();
       });
@@ -533,9 +737,10 @@
     buildThresholdVal.textContent = (buildThreshold.value / 100).toFixed(2);
   });
 
-  buildSaveBtn.addEventListener("click", () => {
+  buildSaveBtn.addEventListener("click", async () => {
     const scriptId = buildScriptSelect.value;
     const name = buildTemplateName.value.trim();
+    const shot = currentBuildShot();
     if (!scriptId) {
       buildStatus.textContent = "請先選擇所屬腳本";
       buildStatus.style.color = "var(--vscode-errorForeground)";
@@ -546,22 +751,44 @@
       buildStatus.style.color = "var(--vscode-errorForeground)";
       return;
     }
-    mockTemplates.push({
-      id: "tpl-" + Date.now(),
-      script: scriptId,
-      name,
-      threshold: Number(buildThreshold.value) / 100,
-    });
-    buildStatus.style.color = "var(--moon-success)";
-    buildStatus.textContent = "已建立（mock，尚未送出到裝置）";
-    buildTemplateName.value = "";
-    renderBuildTemplateList();
-    renderTestTemplateOptions();
-    setTimeout(() => { buildStatus.textContent = ""; }, 2000);
+    if (!shot) {
+      buildStatus.textContent = "請先到「1 · 採集」擷取一張畫面";
+      buildStatus.style.color = "var(--vscode-errorForeground)";
+      return;
+    }
+    const roi = calculateBuildRoi();
+    if (!roi) {
+      buildStatus.textContent = "請先拉出有效的裁切區域";
+      buildStatus.style.color = "var(--vscode-errorForeground)";
+      return;
+    }
+
+    buildSaveBtn.disabled = true;
+    buildStatus.style.color = "var(--vscode-foreground)";
+    buildStatus.textContent = "裁切中…";
+    pendingSave = { scriptId, name, threshold: Number(buildThreshold.value) / 100 };
+
+    try {
+      const img = await getShotImage(shot);
+      const helperCanvas = document.createElement("canvas");
+      helperCanvas.width = roi.w;
+      helperCanvas.height = roi.h;
+      helperCanvas.getContext("2d").drawImage(img, roi.x, roi.y, roi.w, roi.h, 0, 0, roi.w, roi.h);
+      const dataUrl = helperCanvas.toDataURL("image/png");
+      const pngBase64 = dataUrl.split(",")[1];
+      buildStatus.textContent = "儲存中…";
+      vscode?.postMessage({ type: "saveTemplate", scriptId, templateName: name, roi, pngBase64 });
+    } catch (err) {
+      pendingSave = null;
+      buildSaveBtn.disabled = false;
+      buildStatus.style.color = "var(--vscode-errorForeground)";
+      buildStatus.textContent = "裁切畫面失敗：" + (err && err.message ? err.message : String(err));
+    }
   });
 
   // ==================================================================
-  // 3 · 測試模板 —— ROI 拖曳是真的（操作同一支即時畫面），比對結果／延遲是 mock
+  // 3 · 測試模板 —— ROI 拖曳、開始/停止、比對結果都是真的（裝置端 vision-test 端點）；
+  // 模板來源是「2 · 建立模板」那份本次工作階段快取，見該區塊開頭的說明
   // ==================================================================
   const testTemplateSelect = document.getElementById("testTemplateSelect");
   const testThreshold = document.getElementById("testThreshold");
@@ -593,7 +820,7 @@
   function renderTestTemplateOptions() {
     const prev = testTemplateSelect.value;
     testTemplateSelect.innerHTML = "";
-    if (mockTemplates.length === 0) {
+    if (savedTemplates.length === 0) {
       const opt = document.createElement("option");
       opt.value = "";
       opt.textContent = "（尚無模板，先到「2 · 建立模板」建立一個）";
@@ -601,16 +828,16 @@
       testThreshold.disabled = true;
     } else {
       testThreshold.disabled = false;
-      for (const t of mockTemplates) {
+      for (const t of savedTemplates) {
         const opt = document.createElement("option");
         opt.value = t.id;
         opt.textContent = t.name + "（" + currentBuildScriptNameFor(t.script) + "）";
         testTemplateSelect.appendChild(opt);
       }
-      if (prev && mockTemplates.some((t) => t.id === prev)) {
+      if (prev && savedTemplates.some((t) => t.id === prev)) {
         testTemplateSelect.value = prev;
       }
-      const active = mockTemplates.find((t) => t.id === testTemplateSelect.value) || mockTemplates[0];
+      const active = savedTemplates.find((t) => t.id === testTemplateSelect.value) || savedTemplates[0];
       testTemplateSelect.value = active.id;
       testThreshold.value = Math.round(active.threshold * 100);
       testThresholdVal.textContent = active.threshold.toFixed(2);
@@ -625,7 +852,7 @@
   }
 
   testTemplateSelect.addEventListener("change", () => {
-    const t = mockTemplates.find((x) => x.id === testTemplateSelect.value);
+    const t = savedTemplates.find((x) => x.id === testTemplateSelect.value);
     if (t) {
       testThreshold.value = Math.round(t.threshold * 100);
       testThresholdVal.textContent = t.threshold.toFixed(2);
@@ -642,7 +869,7 @@
   });
 
   function resetTestMatchUi() {
-    const t = mockTemplates.find((x) => x.id === testTemplateSelect.value);
+    const t = savedTemplates.find((x) => x.id === testTemplateSelect.value);
     if (!t) {
       testMatchText.textContent = "尚無模板可比對";
       return;
@@ -651,7 +878,7 @@
   }
 
   function currentTestTemplate() {
-    return mockTemplates.find((x) => x.id === testTemplateSelect.value) || null;
+    return savedTemplates.find((x) => x.id === testTemplateSelect.value) || null;
   }
 
   function currentTestTemplateName() {
@@ -840,6 +1067,8 @@
     if (currentMode === "test") {
       resizeRoiCanvas();
       drawRoiOverlay();
+    } else if (currentMode === "build") {
+      resetBuildRoi();
     }
   });
 
@@ -1030,7 +1259,7 @@
     for (const s of list) {
       if (!mockScriptExtra[s.id]) {
         mockScriptExtra[s.id] = {
-          templates: mockTemplates.filter((t) => t.script === s.id).length,
+          templates: savedTemplates.filter((t) => t.script === s.id).length,
           modified: "—（mock）",
         };
       }
@@ -1081,7 +1310,7 @@
       mirrorButtonText: toggleMirrorBtn ? toggleMirrorBtn.textContent : "",
       isOverlayActionVisible: overlayActionBtn ? !overlayActionBtn.hidden : false,
       captureShotsCount: captureShots.length,
-      mockTemplatesCount: mockTemplates.length,
+      savedTemplatesCount: savedTemplates.length,
       roiEditing,
     }),
     setMode: (mode) => setMode(mode),

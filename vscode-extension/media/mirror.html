@@ -22,7 +22,7 @@
     <div class="spacer"></div>
     <button id="captureShotBtn" type="button">立即擷取</button>
   </div>
-  <div id="captureStage" class="mockStage">
+  <div id="captureStage" class="darkStage">
     <div id="captureStageHint" class="stageHint">尚未收到畫面</div>
   </div>
   <div id="captureQueue">
@@ -35,13 +35,11 @@
   </div>
 </section>
 
-<!-- ========== 2 建立模板（畫面是真的擷取結果；ROI 框與儲存模板尚未接線） ========== -->
+<!-- ========== 2 建立模板（畫面與 ROI 裁切都是真的；「儲存模板」真的存到裝置） ========== -->
 <section id="panel-build" class="modePanel" hidden>
-  <div class="mockStage">
-    <div id="buildCropPreview" class="mockCropPreview">
-      <div class="mockCropRoi">
-        <span class="roiLabel">130 × 56</span>
-      </div>
+  <div class="darkStage">
+    <div id="buildCropPreview" class="cropPreview">
+      <canvas id="buildRoiCanvas"></canvas>
     </div>
     <span class="stageSourceLabel">來源：<span id="buildSourceTime">—</span> 擷取畫面</span>
   </div>
