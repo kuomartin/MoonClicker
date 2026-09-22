@@ -384,6 +384,17 @@
         buildStatus.style.color = "var(--vscode-errorForeground)";
         buildStatus.textContent = msg.error || "刪除失敗";
       }
+    } else if (msg.type === "createScriptResult") {
+      addingScript = false;
+      addScriptBtn.disabled = false;
+      if (msg.success) {
+        setWriteStatus("已建立", false);
+        newScriptIdInput.value = "";
+        setTimeout(() => { writeStatus.textContent = ""; }, 2000);
+        // 新腳本清單本身由 mirrorPanel.ts 緊接著送一次 "scripts" 補上，這裡不用自己拼。
+      } else {
+        setWriteStatus(msg.error || "建立失敗", true);
+      }
     }
   });
 
@@ -1278,28 +1289,30 @@
   });
 
   // ==================================================================
-  // 4 · 編寫 —— 「在編輯器開啟」是真的，接到既有的 moonclicker.openScript 指令
-  // （整份 pull 進本機鏡像資料夾、掛成 workspace folder，跟 Explorer 樹狀圖點腳本
-  // 是同一條路）。「模板數」/「上次修改」欄位跟「新增腳本」還是 mock。
+  // 4 · 編寫 —— 全部是真的：清單（含裝置回報的模板數／上次修改）、「在編輯器開啟」
+  // （既有的 moonclicker.openScript 指令，整份 pull 進本機鏡像資料夾、掛成 workspace
+  // folder，跟 Explorer 樹狀圖點腳本同一條路）、「新增腳本」（POST /scripts/{id}）。
   // ==================================================================
   const writeScriptCards = document.getElementById("writeScriptCards");
   const addScriptBtn = document.getElementById("addScriptBtn");
-  let mockScriptExtra = {}; // scriptId -> { templates, modified }
-  let mockScriptCounter = 0;
+  const newScriptIdInput = document.getElementById("newScriptIdInput");
+  const writeStatus = document.getElementById("writeStatus");
+  const SCRIPT_ID_PATTERN = /^[a-z0-9._-]+$/;
+  let addingScript = false;
+
+  function formatModified(ms) {
+    if (!ms) return "—";
+    return new Date(ms).toLocaleString("zh-Hant-TW", { hour12: false });
+  }
 
   function renderWriteScriptCards() {
     writeScriptCards.innerHTML = "";
-    const list = scriptsList.length > 0
-      ? scriptsList
-      : [{ id: "mock-1", name: "battle_loop.lua（mock，尚未連線）" }];
-    for (const s of list) {
-      if (!mockScriptExtra[s.id]) {
-        mockScriptExtra[s.id] = {
-          templates: (deviceTemplates[s.id] || []).length,
-          modified: "—（mock）",
-        };
-      }
-      const meta = mockScriptExtra[s.id];
+    if (scriptsList.length === 0) {
+      writeScriptCards.innerHTML = '<span class="emptyHint">尚未連線，無法列出腳本</span>';
+      return;
+    }
+    for (const s of scriptsList) {
+      const templateCount = typeof s.templateCount === "number" ? s.templateCount : (deviceTemplates[s.id] || []).length;
       const card = document.createElement("div");
       card.className = "scriptCard";
       card.innerHTML =
@@ -1307,7 +1320,7 @@
         '<div class="scriptCardInfo"><span class="scriptCardName"></span><span class="scriptCardMeta"></span></div>' +
         '<button type="button" class="secondary">在編輯器開啟</button>';
       card.querySelector(".scriptCardName").textContent = s.name || s.id;
-      card.querySelector(".scriptCardMeta").textContent = meta.templates + " 個模板 · 上次修改 " + meta.modified;
+      card.querySelector(".scriptCardMeta").textContent = templateCount + " 個模板 · 上次修改 " + formatModified(s.modifiedMs);
       card.querySelector("button").addEventListener("click", () => {
         vscode?.postMessage({ type: "openScriptInEditor", scriptId: s.id, scriptName: s.name });
       });
@@ -1315,13 +1328,27 @@
     }
   }
 
+  function setWriteStatus(text, isError) {
+    writeStatus.style.color = isError ? "var(--vscode-errorForeground)" : "var(--moon-success)";
+    writeStatus.textContent = text;
+  }
+
   addScriptBtn.addEventListener("click", () => {
-    mockScriptCounter++;
-    const id = "mock-new-" + mockScriptCounter;
-    scriptsList = scriptsList.concat([{ id, name: "new_script_" + mockScriptCounter + ".lua" }]);
-    mockScriptExtra[id] = { templates: 0, modified: "剛剛（mock）" };
-    renderWriteScriptCards();
-    populateScriptSelects();
+    if (addingScript) return;
+    const id = newScriptIdInput.value.trim();
+    if (!id) {
+      setWriteStatus("請輸入腳本名稱", true);
+      return;
+    }
+    if (id.startsWith(".") || !SCRIPT_ID_PATTERN.test(id)) {
+      setWriteStatus("只能是小寫英數字、「.」「_」「-」，且不能以「.」開頭", true);
+      return;
+    }
+    addingScript = true;
+    addScriptBtn.disabled = true;
+    writeStatus.style.color = "var(--vscode-foreground)";
+    writeStatus.textContent = "建立中…";
+    vscode?.postMessage({ type: "createScript", scriptId: id });
   });
 
   // ---------- 初始渲染 ----------

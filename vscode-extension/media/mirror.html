@@ -113,14 +113,16 @@
   </div>
 </section>
 
-<!-- ========== 4 編寫（在編輯器開啟是真的；模板數／上次修改／新增腳本還是 mock） ========== -->
+<!-- ========== 4 編寫（清單、開啟編輯器、新增腳本都是真的） ========== -->
 <section id="panel-write" class="modePanel" hidden>
   <div id="writeList">
     <div class="writeListHeader">
       <span class="sidebarLabel">腳本</span>
       <div class="spacer"></div>
+      <input id="newScriptIdInput" type="text" placeholder="script_id（小寫英數字、. _ -）" />
       <button id="addScriptBtn" type="button">新增腳本</button>
     </div>
+    <span id="writeStatus" class="statusMsg"></span>
     <div id="writeScriptCards"></div>
     <span class="statusMsg">腳本內容於 VS Code 文字編輯器分頁中撰寫；此面板僅負責清單與模板管理。</span>
   </div>

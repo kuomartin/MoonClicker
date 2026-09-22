@@ -5,7 +5,7 @@ import { MirrorConnection, type MirrorConnectionState } from "./mirrorConnection
 import { FrameStalenessTracker, type StalenessState } from "./frameStaleness";
 import { saveTemplate, listTemplates, deleteTemplate, type TemplateRoi } from "./templateSync";
 import { startVisionTest, stopRun } from "./visionTest";
-import { listScripts, type ScriptSummary } from "./scriptSync";
+import { listScripts, createScript, type ScriptSummary } from "./scriptSync";
 import { listDisplays, toggleDisplayMirror } from "./displaySync";
 
 /**
@@ -138,6 +138,17 @@ export function openMirrorPanel(extensionUri: vscode.Uri, address: string, displ
           address,
           summary: { id: scriptId, name: scriptName || scriptId },
         });
+      } else if (message?.type === "createScript") {
+        const { scriptId } = message;
+        if (!scriptId) return;
+        try {
+          await createScript(address, scriptId, token);
+          safePostMessage({ type: "createScriptResult", success: true, scriptId });
+          const scripts = await listScripts(address, token).catch(() => []);
+          safePostMessage({ type: "scripts", scripts });
+        } catch (err) {
+          safePostMessage({ type: "createScriptResult", success: false, scriptId, error: (err as Error).message });
+        }
       } else if (message?.type === "startVisionTest") {
         const { scriptId, displayId, image, roi, threshold, intervalMs } = message;
         if (!scriptId || typeof displayId !== "number" || !image || !roi || typeof threshold !== "number") {
