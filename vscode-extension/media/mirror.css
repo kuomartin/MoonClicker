@@ -21,7 +21,10 @@
   --vscode-debugTokenExpression-string: #ce9178;
   --vscode-debugTokenExpression-number: #b5cea8;
   --vscode-debugTokenExpression-boolean: #569cd6;
+  --vscode-debugTokenExpression-keyword: #569cd6;
   --vscode-editor-findMatchHighlightBackground: #ea5c0055;
+  --moon-accent: #4fc1ff;
+  --moon-success: #3fb950;
 }
 
 body {
@@ -30,11 +33,370 @@ body {
   color: var(--vscode-editor-foreground);
   font-family: var(--vscode-font-family);
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   height: 100vh;
   overflow: hidden;
   user-select: none;
+  font-size: 12px;
 }
+
+button {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  border: none;
+  padding: 4px 10px;
+  cursor: pointer;
+  border-radius: 2px;
+  font-family: inherit;
+}
+button:hover:not(:disabled) { background: var(--vscode-button-hoverBackground); }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+button.secondary {
+  background: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+}
+button.secondary:hover:not(:disabled) { background: var(--vscode-button-secondaryHoverBackground); }
+button.linkBtn {
+  background: transparent;
+  color: var(--vscode-descriptionForeground);
+  padding: 0;
+}
+button.linkBtn:hover:not(:disabled) { background: transparent; color: var(--vscode-editor-foreground); }
+
+input, select {
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  border: 1px solid var(--vscode-input-border);
+  padding: 3px 6px;
+  font-size: 12px;
+  border-radius: 2px;
+  font-family: inherit;
+}
+input:focus, select:focus { outline: 1px solid var(--vscode-focusBorder); }
+
+.spacer { flex: 1; }
+.vDivider { width: 1px; height: 20px; background: var(--vscode-panel-border); }
+
+/* ---------- 流程切換列 ---------- */
+#modeSwitcher {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 10px;
+  height: 40px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--vscode-panel-border);
+  background: var(--vscode-sideBar-background);
+}
+.modeBtn {
+  background: transparent;
+  color: var(--vscode-descriptionForeground);
+  border-radius: 4px;
+  height: 28px;
+  padding: 0 10px;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.modeBtn:hover:not(:disabled) { background: var(--vscode-button-secondaryBackground); color: var(--vscode-editor-foreground); }
+.modeBtn.active { background: var(--vscode-button-background); color: #fff; }
+.modeChevron { color: #3a3a3c; font-size: 12px; }
+#globalDisplayGroup { display: flex; align-items: center; gap: 6px; }
+#globalDisplayGroup select { min-width: 170px; }
+
+/* ---------- Mode panels ---------- */
+.modePanel { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.modePanel[hidden] { display: none; }
+
+.subToolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 40px;
+  flex-shrink: 0;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--vscode-panel-border);
+  font-size: 12px;
+}
+.hintPill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  background: var(--vscode-sideBar-background);
+  color: var(--vscode-descriptionForeground);
+  font-size: 11.5px;
+}
+.hintPill kbd {
+  background: var(--vscode-input-background);
+  border-radius: 3px;
+  padding: 1px 6px;
+  color: var(--vscode-editor-foreground);
+  font-family: var(--vscode-editor-font-family);
+}
+.statusPill {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  background: var(--vscode-sideBar-background);
+}
+.statusDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--moon-success);
+  box-shadow: 0 0 0 3px rgba(63, 185, 80, 0.25);
+}
+.statusMsg { font-size: 11px; color: var(--vscode-descriptionForeground); }
+
+/* ---------- 通用示意舞台（採集／建立模板） ---------- */
+.mockStage {
+  flex: 1;
+  position: relative;
+  background: #111;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+}
+.mockDeviceFrame {
+  width: 260px;
+  height: 500px;
+  border-radius: 16px;
+  border: 1px solid var(--vscode-panel-border);
+  background: #1a1a1a;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 16px;
+  box-sizing: border-box;
+}
+.mockDeviceLabel { font-size: 11px; color: #4a4a4c; }
+.stageHint {
+  position: absolute;
+  color: #4a4a4c;
+  font-size: 12px;
+}
+#captureStage video {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  pointer-events: none;
+}
+.stageSourceLabel {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+}
+
+/* ---------- 1 採集 ---------- */
+#captureShotBtn { display: flex; align-items: center; gap: 6px; }
+#captureQueue {
+  height: 150px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--vscode-panel-border);
+  background: var(--vscode-sideBar-background);
+}
+.captureQueueHeader {
+  display: flex;
+  align-items: center;
+  padding: 6px 16px;
+  font-size: 11.5px;
+  color: var(--vscode-descriptionForeground);
+  flex-shrink: 0;
+}
+#captureQueueItems {
+  flex: 1;
+  display: flex;
+  gap: 10px;
+  padding: 0 16px 12px;
+  overflow-x: auto;
+}
+.shotThumb {
+  flex-shrink: 0;
+  width: 90px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  cursor: pointer;
+}
+.shotThumbBox {
+  width: 90px;
+  height: 72px;
+  border-radius: 6px;
+  background: #1a1a1a center / cover no-repeat;
+  border: 2px solid var(--vscode-panel-border);
+}
+.shotThumb.selected .shotThumbBox { border-color: var(--moon-accent); }
+.shotThumbTime { font-size: 10.5px; color: var(--vscode-descriptionForeground); text-align: center; }
+.emptyHint { font-size: 11px; color: var(--vscode-descriptionForeground); padding: 8px 4px; }
+
+/* ---------- 2 建立模板 ---------- */
+.mockCropPreview {
+  width: 440px;
+  height: 280px;
+  border-radius: 8px;
+  border: 1px solid var(--vscode-panel-border);
+  background: #1a1a1a center / contain no-repeat;
+  position: relative;
+}
+.mockCropRoi {
+  position: absolute;
+  left: 160px;
+  top: 112px;
+  width: 130px;
+  height: 56px;
+  border: 2px solid var(--moon-accent);
+  background: rgba(79, 193, 255, 0.08);
+  box-sizing: border-box;
+}
+.roiLabel {
+  position: absolute;
+  top: -20px;
+  left: 0;
+  font-size: 10.5px;
+  color: var(--moon-accent);
+  background: var(--vscode-editor-background);
+  padding: 1px 5px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+#buildSidebar {
+  width: 320px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--vscode-sideBar-background);
+  border-left: 1px solid var(--vscode-panel-border);
+  overflow-y: auto;
+}
+.sidebarSection {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-bottom: 1px solid var(--vscode-panel-border);
+}
+.sidebarLabel { font-size: 12px; color: var(--vscode-descriptionForeground); }
+.fieldLabel { font-size: 11px; color: var(--vscode-descriptionForeground); }
+.shotPicker { display: flex; gap: 8px; overflow-x: auto; }
+.shotPickerItem {
+  flex-shrink: 0;
+  width: 48px;
+  height: 38px;
+  border-radius: 4px;
+  background: #1a1a1a center / cover no-repeat;
+  border: 2px solid var(--vscode-panel-border);
+  cursor: pointer;
+}
+.shotPickerItem.selected { border-color: var(--moon-accent); }
+.thresholdRow { display: flex; align-items: center; gap: 8px; }
+.thresholdRow input[type="range"] { flex: 1; }
+.templateRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border-radius: 6px;
+  background: var(--vscode-editor-background);
+}
+.templateRowThumb { width: 32px; height: 26px; border-radius: 3px; background: #111; flex-shrink: 0; }
+.templateRowInfo { flex: 1; display: flex; flex-direction: column; }
+.templateRowName { font-size: 12px; }
+.templateRowMeta { font-size: 10.5px; color: var(--vscode-descriptionForeground); }
+
+/* ---------- 3 測試模板 ---------- */
+#testStageWrap { flex: 1; display: flex; min-height: 0; }
+#testStage {
+  flex: 1;
+  position: relative;
+  background: #111;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+#testStage video {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  pointer-events: none;
+}
+#testRoiCanvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+}
+#testRoiCanvas[hidden] { display: none; }
+#testSidebar {
+  width: 320px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--vscode-sideBar-background);
+  border-left: 1px solid var(--vscode-panel-border);
+}
+#testMatchResult { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.matchIcon { color: var(--moon-success); font-weight: bold; }
+.snippetHeader { display: flex; align-items: center; }
+.codeBlock {
+  flex: 1;
+  margin: 0;
+  overflow: auto;
+  background: var(--vscode-editor-background);
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 6px;
+  padding: 10px;
+  font-family: var(--vscode-editor-font-family);
+  font-size: 11.5px;
+  line-height: 1.6;
+  white-space: pre;
+}
+#testSnippetSection { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+/* ---------- 4 編寫 ---------- */
+#writeList {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 32px 16px;
+  overflow-y: auto;
+}
+#writeList > * { width: 100%; max-width: 640px; }
+.writeListHeader { display: flex; align-items: center; margin-bottom: 12px; }
+#writeScriptCards { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
+.scriptCard {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: var(--vscode-sideBar-background);
+  border: 1px solid var(--vscode-panel-border);
+}
+.scriptCardIcon { color: var(--moon-accent); flex-shrink: 0; }
+.scriptCardInfo { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.scriptCardName { font-size: 13px; }
+.scriptCardMeta { font-size: 11px; color: var(--vscode-descriptionForeground); }
+
+/* ---------- 5 運行除錯（既有樣式） ---------- */
+#panel-run { flex-direction: row; }
 #leftPanel {
   flex: 1;
   display: flex;
@@ -43,22 +405,38 @@ body {
   min-width: 0;
 }
 #rightPanel {
-  width: 350px;
+  width: 340px;
   display: flex;
   flex-direction: column;
   background: var(--vscode-sideBar-background);
 }
+#rightTabs { display: flex; align-items: center; border-bottom: 1px solid var(--vscode-panel-border); flex-shrink: 0; }
+.rightTabBtn {
+  flex: 1;
+  background: transparent;
+  color: var(--vscode-descriptionForeground);
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 10px 0;
+  font-size: 12px;
+  border-radius: 0;
+}
+.rightTabBtn:hover:not(:disabled) { background: transparent; color: var(--vscode-editor-foreground); }
+.rightTabBtn.active { color: #fff; border-bottom-color: var(--moon-accent); }
+.rightTabPanel { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.rightTabPanel[hidden] { display: none; }
 #logContainer {
   flex: 1;
   overflow-y: auto;
   padding: 8px;
   font-family: var(--vscode-editor-font-family);
   font-size: 12px;
-  border-bottom: 1px solid var(--vscode-panel-border);
 }
 #logToolbar {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
   padding: 4px 8px;
   border-bottom: 1px solid var(--vscode-panel-border);
   font-size: 11px;
@@ -90,53 +468,6 @@ body {
   flex-shrink: 0;
 }
 #status { flex: 1; }
-button {
-  background: var(--vscode-button-background);
-  color: var(--vscode-button-foreground);
-  border: none;
-  padding: 4px 10px;
-  cursor: pointer;
-  border-radius: 2px;
-}
-button:hover:not(:disabled) { background: var(--vscode-button-hoverBackground); }
-button:disabled { opacity: 0.5; cursor: not-allowed; }
-button.secondary {
-  background: var(--vscode-button-secondaryBackground);
-  color: var(--vscode-button-secondaryForeground);
-}
-button.secondary:hover:not(:disabled) {
-  background: var(--vscode-button-secondaryHoverBackground);
-}
-#cropToolbar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  background: var(--vscode-sideBar-background);
-  border-bottom: 1px solid var(--vscode-panel-border);
-  font-size: 12px;
-  flex-shrink: 0;
-}
-#cropToolbar[hidden] { display: none; }
-input, select {
-  background: var(--vscode-input-background);
-  color: var(--vscode-input-foreground);
-  border: 1px solid var(--vscode-input-border);
-  padding: 3px 6px;
-  font-size: 12px;
-  border-radius: 2px;
-}
-input:focus, select:focus {
-  outline: 1px solid var(--vscode-focusBorder);
-}
-#cropStatus {
-  font-size: 11px;
-  color: var(--vscode-errorForeground);
-  flex: 1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 #stage {
   position: relative;
   flex: 1;
@@ -157,15 +488,6 @@ input:focus, select:focus {
   object-fit: contain;
   pointer-events: none;
 }
-#cropCanvas {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  cursor: crosshair;
-}
-#cropCanvas[hidden] { display: none; }
 #overlay {
   position: absolute;
   inset: 0;
