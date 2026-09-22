@@ -3,6 +3,7 @@ package com.xaxaxax.moonclicker.workbench
 import com.xaxaxax.moonclicker.engine.ScriptEngine
 import com.xaxaxax.moonclicker.script.SafePath
 import com.xaxaxax.moonclicker.script.Script
+import com.xaxaxax.moonclicker.script.ScriptMeta
 import com.xaxaxax.moonclicker.script.ScriptSession
 import com.xaxaxax.moonclicker.script.ScriptStore
 import com.xaxaxax.moonclicker.script.ScriptTarget
@@ -37,6 +38,7 @@ import io.ktor.websocket.close
 import io.ktor.websocket.CloseReason
 import io.ktor.websocket.readText
 import java.io.File
+import java.io.IOException
 import java.net.Inet4Address
 import java.net.NetworkInterface
 import javax.inject.Inject
@@ -237,8 +239,20 @@ class WorkbenchServer @Inject constructor(
     }
 }
 
+/**
+ * `templateCount`／`modifiedMs` 故意不給預設值：兩者的合法值都包含 0，kotlinx.serialization
+ * 預設 `encodeDefaults = false` 會把等於預設值的欄位整個從 JSON 省略掉，讓 VS Code 端收到
+ * `undefined` 而不是 `0`——不給預設值就永遠會序列化出來，不用另外configure 一份 Json。
+ */
 @Serializable
-data class WorkbenchScriptSummary(val id: String, val name: String)
+data class WorkbenchScriptSummary(
+    val id: String,
+    val name: String,
+    /** [TemplateStore.list] 的大小——VS Code 端「編寫」清單顯示用，不用另外拉一次模板清單。 */
+    val templateCount: Int,
+    /** `main.lua` 與 `templates.json`（若存在）兩者 mtime 取大——粗略但夠用的「上次修改」。 */
+    val modifiedMs: Long,
+)
 
 @Serializable
 data class ScriptTreeEntry(
@@ -401,8 +415,45 @@ fun Application.workbenchModule(
         }
 
         get("/scripts") {
-            val scripts = ScriptStore.scan(scriptsRoot).map { WorkbenchScriptSummary(it.id, it.name) }
+            val scripts = ScriptStore.scan(scriptsRoot).map { script ->
+                val mainMtime = script.mainFile.takeIf { it.isFile }?.lastModified() ?: 0L
+                val metaMtime = File(script.dir, TemplateStore.META_FILE).takeIf { it.isFile }?.lastModified() ?: 0L
+                WorkbenchScriptSummary(
+                    id = script.id,
+                    name = script.name,
+                    templateCount = TemplateStore.list(script.dir).size,
+                    modifiedMs = maxOf(mainMtime, metaMtime),
+                )
+            }
             call.respondText(Json.encodeToString(scripts), ContentType.Application.Json)
+        }
+
+        // 新增腳本：{id} 直接當資料夾名兼 script.json 的 uniqueId（見 Script.UNIQUE_ID_PATTERN），
+        // 兩者共用同一個值就不用另外想一套 id 產生規則。main.lua 給個最小骨架，讓腳本一建立
+        // 就是可執行的狀態（uniqueId 缺失會被 ScriptSession.start 擋下來，見 #103）。
+        post("/scripts/{id}") {
+            val id = call.parameters["id"]
+            if (id.isNullOrBlank() || id.startsWith(".") || !Script.UNIQUE_ID_PATTERN.matches(id)) {
+                call.respondText(
+                    "Invalid script id (expects ${Script.UNIQUE_ID_PATTERN.pattern}, not starting with '.')",
+                    status = HttpStatusCode.BadRequest,
+                )
+                return@post
+            }
+            val dir = File(scriptsRoot, id)
+            if (dir.exists()) {
+                call.respondText("Script already exists: $id", status = HttpStatusCode.Conflict)
+                return@post
+            }
+            try {
+                dir.mkdirs()
+                File(dir, Script.MAIN_FILE).writeText("-- $id\n")
+                File(dir, Script.META_FILE).writeText(Json.encodeToString(ScriptMeta(uniqueId = id)))
+                call.respondText("Created", status = HttpStatusCode.Created)
+            } catch (e: IOException) {
+                dir.deleteRecursively()
+                call.respondText(e.message ?: "Failed to create script", status = HttpStatusCode.InternalServerError)
+            }
         }
 
         // Script Folder 單檔案讀寫（見 vscode-local-mirror-plan）：VS Code 端維護一份本機

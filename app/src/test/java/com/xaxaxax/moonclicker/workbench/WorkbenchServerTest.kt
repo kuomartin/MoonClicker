@@ -287,6 +287,89 @@ class WorkbenchServerTest {
     }
 
     @Test
+    fun `scripts route includes template count and last-modified time`() = runTest {
+        val dir = scriptFolder("hello", "log('hi')")
+        File(dir, "templates.json").writeText(
+            """{"button.png":{"roi":{"x":1,"y":2,"w":3,"h":4}},"other.png":{"roi":{"x":1,"y":2,"w":3,"h":4}}}"""
+        )
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+
+            val response = client.get("/scripts")
+
+            assertEquals(HttpStatusCode.OK, response.status)
+            val body = response.bodyAsText()
+            assertTrue(body.contains("\"templateCount\":2"))
+            assertTrue(File(dir, "main.lua").lastModified() > 0)
+        }
+    }
+
+    @Test
+    fun `POST scripts creates a runnable script folder`() = runTest {
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+
+            val response = client.post("/scripts/my_new_script")
+
+            assertEquals(HttpStatusCode.Created, response.status)
+            val dir = File(temp.root, "my_new_script")
+            assertTrue(File(dir, "main.lua").isFile)
+            val metaJson = File(dir, "script.json").readText()
+            assertTrue(metaJson.contains("\"uniqueId\":\"my_new_script\""))
+        }
+    }
+
+    @Test
+    fun `POST scripts rejects an id that already exists with 409`() = runTest {
+        scriptFolder("hello", "log('hi')")
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+
+            val response = client.post("/scripts/hello")
+
+            assertEquals(HttpStatusCode.Conflict, response.status)
+        }
+    }
+
+    @Test
+    fun `POST scripts rejects an id with characters outside the uniqueId pattern`() = runTest {
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+
+            val response = client.post("/scripts/Not-Lowercase")
+
+            assertEquals(HttpStatusCode.BadRequest, response.status)
+            assertTrue(!File(temp.root, "Not-Lowercase").exists())
+        }
+    }
+
+    @Test
+    fun `POST scripts rejects an id starting with a dot`() = runTest {
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+
+            val response = client.post("/scripts/.hidden")
+
+            assertEquals(HttpStatusCode.BadRequest, response.status)
+        }
+    }
+
+    @Test
+    fun `a newly created script does not show up until it's scanned again, then lists with zero templates`() = runTest {
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+
+            client.post("/scripts/my_new_script")
+            val response = client.get("/scripts")
+
+            assertEquals(HttpStatusCode.OK, response.status)
+            val body = response.bodyAsText()
+            assertTrue(body.contains("\"id\":\"my_new_script\""))
+            assertTrue(body.contains("\"templateCount\":0"))
+        }
+    }
+
+    @Test
     fun `tree route lists every file recursively with directories flagged`() = runTest {
         val dir = scriptFolder("hello", "log('hi')")
         File(dir, "assets").mkdirs()

@@ -6,6 +6,13 @@
 
 第 2 階段（模板列出／刪除的裝置端 API）已實作：`TemplateStore.kt` 新增 `list()`/`delete()`，`WorkbenchServer.kt` 新增 `GET /scripts/{id}/templates`、`DELETE /scripts/{id}/templates/{name}`（跟既有的 PUT 一樣會補 `fileChanges` 廣播，VS Code 本機鏡像才會同步刪除）。`templateSync.ts` 加 `listTemplates`/`deleteTemplate`，`mirrorPanel.ts` 轉發 `requestTemplates`/`deleteTemplate` 兩個新訊息。webview 端把 `savedTemplates`（本地快取）整個換成 `deviceTemplates`（scriptId → 裝置回報的清單，每次存檔／刪除成功都重新拉一次，不自己猜）；「3 · 測試模板」加了「腳本」選單，模板下拉跟「2 · 建立模板」共用同一份裝置清單。已知限制：`templates.json` 沒有存閾值（threshold），所以模板清單只顯示名稱與 ROI 尺寸，閾值純粹是「測試模板」工具列上的即時滑桿，跟選了哪個模板無關。
 
+「4 · 編寫」已全部接線完成（不算計畫原本的階段編號，是同一輪順手做完）：
+- 「在編輯器開啟」接到既有的 `moonclicker.openScript` 指令（`scriptMirror.ts` 的 per-script lazy pull + workspace folder 掛載），沒有另外整包鏡像 `scripts/` 資料夾——討論過，代價（連線時要等所有腳本、所有模板圖片都 pull 完）跟這個功能的使用場景（一次只在乎一顆腳本）不成比例。
+- 「新增腳本」新增 `POST /scripts/{id}`：`{id}` 同時當資料夾名跟 `script.json` 的 `uniqueId`，給最小的 `main.lua` 骨架，建立完就是可執行狀態。
+- `GET /scripts` 順便補了 `templateCount`／`modifiedMs`（`main.lua`／`templates.json` mtime 取大），「模板數／上次修改」欄位不用再另外拼。要注意：這兩個欄位刻意不給 kotlinx.serialization 預設值——`encodeDefaults = false` 會把等於預設值（0）的欄位直接從 JSON 省略掉，之前踩到這個坑讓 `templateCount:0` 的腳本量出來變成 `undefined`。
+
+至此 webview 裡已經沒有任何 mock 資料了。
+
 起因：webview「測試模板」模式目前的比對結果、延遲、Lua snippet 全部是 mock。要接成真的，
 device 端 `WorkbenchServer.kt` 只有 `PUT /scripts/{id}/templates/{name}`（存模板），沒有任何
 「拿目前畫面跟某個模板比對一次／持續比對」的端點。
