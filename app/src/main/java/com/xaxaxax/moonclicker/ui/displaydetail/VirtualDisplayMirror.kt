@@ -3,14 +3,14 @@ package com.xaxaxax.moonclicker.ui.displaydetail
 import android.annotation.SuppressLint
 import android.graphics.Matrix
 import android.graphics.Point
-import android.graphics.SurfaceTexture
 import android.hardware.display.DisplayManager
 import android.os.Handler
 import android.os.Looper
 import android.view.Display
 import android.view.MotionEvent
 import android.view.Surface
-import android.view.TextureView
+import android.view.SurfaceHolder
+import android.view.SurfaceView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -55,7 +55,7 @@ fun VirtualDisplayMirror(
     removeSurface: (Surface) -> Unit,
     service: IMoonClickerService,
     modifier: Modifier = Modifier,
-    onTextureViewCreated: (TextureView) -> Unit = {},
+    onSurfaceViewCreated: (SurfaceView) -> Unit = {},
 ) {
     BoxWithConstraints(modifier.background(Color.Black)) {
         // v 已經在 distributor 被消掉，這裡的「自然尺寸」只是把 v 造成的長寬互換算回來，
@@ -94,7 +94,7 @@ fun VirtualDisplayMirror(
                 bufferHeight = correctedHeight,
                 addSurface = addSurface,
                 removeSurface = removeSurface,
-                onTextureViewCreated = onTextureViewCreated,
+                onSurfaceViewCreated = onSurfaceViewCreated,
                 modifier = Modifier
                     .align(Alignment.Center)
                     .size(
@@ -122,54 +122,42 @@ private fun MirrorSurface(
     bufferHeight: Int,
     addSurface: (Surface) -> Unit,
     removeSurface: (Surface) -> Unit,
-    onTextureViewCreated: (TextureView) -> Unit,
+    onSurfaceViewCreated: (SurfaceView) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // rememberUpdatedState：listener 重建會連帶重建 Surface，為了換一次
+    // rememberUpdatedState：callback 重建會連帶重建 Surface，為了換一次
     // v 造成的尺寸交換而重接一次虛擬顯示不划算。
     val currentBufferWidth by rememberUpdatedState(bufferWidth)
     val currentBufferHeight by rememberUpdatedState(bufferHeight)
-    val listener = remember(addSurface, removeSurface) {
-        object : TextureView.SurfaceTextureListener {
-            private var surface: Surface? = null
-
-            override fun onSurfaceTextureAvailable(texture: SurfaceTexture, width: Int, height: Int) {
+    val callback = remember(addSurface, removeSurface) {
+        object : SurfaceHolder.Callback {
+            override fun surfaceCreated(holder: SurfaceHolder) {
                 // buffer 尺寸是 distributor 轉正後的自然尺寸（v 已消掉），不是 view 尺寸；
-                // 必須在包成 Surface 之前設定，否則 producer 拿到的是 view 尺寸的 buffer。
-                texture.setDefaultBufferSize(currentBufferWidth, currentBufferHeight)
-                runCatching {
-                    Surface(texture).also { surface = it; addSurface(it) }
-                }.onFailure { Timber.e(it, "addSurface failed") }
+                // setFixedSize 必須在 addSurface 之前呼叫，否則 producer 拿到的是 view 尺寸的 buffer。
+                holder.setFixedSize(currentBufferWidth, currentBufferHeight)
+                runCatching { addSurface(holder.surface) }
+                    .onFailure { Timber.e(it, "addSurface failed") }
             }
 
-            override fun onSurfaceTextureSizeChanged(texture: SurfaceTexture, width: Int, height: Int) {
-                texture.setDefaultBufferSize(currentBufferWidth, currentBufferHeight)
-            }
+            override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) = Unit
 
-            override fun onSurfaceTextureDestroyed(texture: SurfaceTexture): Boolean {
-                surface?.let { current ->
-                    runCatching { removeSurface(current) }
-                        .onFailure { Timber.e(it, "removeSurface failed") }
-                    current.release()
-                }
-                surface = null
-                return true
+            override fun surfaceDestroyed(holder: SurfaceHolder) {
+                runCatching { removeSurface(holder.surface) }
+                    .onFailure { Timber.e(it, "removeSurface failed") }
             }
-
-            override fun onSurfaceTextureUpdated(texture: SurfaceTexture) = Unit
         }
     }
 
     AndroidView(
         modifier = modifier,
         factory = { context ->
-            TextureView(context).apply {
-                surfaceTextureListener = listener
-                onTextureViewCreated(this)
+            SurfaceView(context).apply {
+                holder.addCallback(callback)
+                onSurfaceViewCreated(this)
             }
         },
         update = { view ->
-            view.surfaceTexture?.setDefaultBufferSize(currentBufferWidth, currentBufferHeight)
+            view.holder.setFixedSize(currentBufferWidth, currentBufferHeight)
         },
     )
 }

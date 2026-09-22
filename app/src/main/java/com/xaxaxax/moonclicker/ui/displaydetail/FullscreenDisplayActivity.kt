@@ -1,8 +1,13 @@
 package com.xaxaxax.moonclicker.ui.displaydetail
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.view.PixelCopy
+import android.view.SurfaceView
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.LocalActivity
@@ -117,7 +122,7 @@ fun FullscreenDisplayScreen(
     val activity = LocalActivity.current
     val uiState by viewModel.uiState.collectAsState()
     val service by viewModel.service.collectAsState()
-    val textureViewRef = remember { mutableStateOf<android.view.TextureView?>(null) }
+    val surfaceViewRef = remember { mutableStateOf<SurfaceView?>(null) }
 
     LaunchedEffect(Unit) {
         viewModel.finishEvents.collect { activity?.finish() }
@@ -131,8 +136,24 @@ fun FullscreenDisplayScreen(
     DisposableEffect(lifecycleOwner, targetDisplayId) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_PAUSE) {
-                textureViewRef.value?.bitmap?.let { bitmap ->
-                    viewModel.captureThumbnail(targetDisplayId, bitmap)
+                surfaceViewRef.value?.let { surfaceView ->
+                    val bitmap = Bitmap.createBitmap(
+                        surfaceView.width.coerceAtLeast(1),
+                        surfaceView.height.coerceAtLeast(1),
+                        Bitmap.Config.ARGB_8888,
+                    )
+                    PixelCopy.request(
+                        surfaceView,
+                        bitmap,
+                        { result ->
+                            if (result == PixelCopy.SUCCESS) {
+                                viewModel.captureThumbnail(targetDisplayId, bitmap)
+                            } else {
+                                Timber.e("PixelCopy failed: result=%d", result)
+                            }
+                        },
+                        Handler(Looper.getMainLooper()),
+                    )
                 }
             }
         }
@@ -156,7 +177,7 @@ fun FullscreenDisplayScreen(
                 removeSurface = { viewModel.removeSurface(targetDisplayId, it) },
                 service = service!!,
                 modifier = Modifier.fillMaxSize(),
-                onTextureViewCreated = { textureViewRef.value = it },
+                onSurfaceViewCreated = { surfaceViewRef.value = it },
             )
         }
 
