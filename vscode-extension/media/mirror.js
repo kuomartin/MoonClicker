@@ -600,15 +600,19 @@
     return t ? t.name : "template";
   }
 
+  // 對應真正的 Lua API（見 docs/lua-api.md 的 `vision` / `input`），不是隨便編的介面。
   function updateSnippet() {
     const roi = calculateTestRoi() || { x: 96, y: 420, w: 130, h: 40 };
     const name = currentTestTemplateName();
     const threshold = (testThreshold.value / 100).toFixed(2);
     testSnippet.textContent =
-      "local roi = { x = " + roi.x + ", y = " + roi.y + ", w = " + roi.w + ", h = " + roi.h + " }\n" +
-      'local ok, score = mc.matchTemplate("' + name + '", roi, ' + threshold + ")\n" +
-      "if ok then\n" +
-      "  mc.tap(roi.x + roi.w / 2, roi.y + roi.h / 2)\n" +
+      "local hit = vision.find({\n" +
+      '  image = "' + name + '",\n' +
+      "  roi = { x = " + roi.x + ", y = " + roi.y + ", w = " + roi.w + ", h = " + roi.h + " },\n" +
+      "  threshold = " + threshold + ",\n" +
+      "})\n" +
+      "if hit then\n" +
+      "  input.tap(hit.cx, hit.cy)\n" +
       "end";
   }
 
