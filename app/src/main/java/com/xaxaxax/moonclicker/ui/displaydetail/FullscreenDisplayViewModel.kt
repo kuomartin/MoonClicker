@@ -25,6 +25,7 @@ import javax.inject.Inject
 sealed interface FullscreenAction {
     data object StartApp : FullscreenAction
     data object CloseDisplay : FullscreenAction
+    data object PowerOff : FullscreenAction
     data object Exit : FullscreenAction
     data object Home : FullscreenAction
 }
@@ -68,6 +69,7 @@ class FullscreenDisplayViewModel @Inject constructor(
         when (action) {
             FullscreenAction.StartApp -> openAppList()
             FullscreenAction.CloseDisplay -> destroyDisplay(targetDisplayId, thenFinish = true)
+            FullscreenAction.PowerOff -> sleepDisplay(targetDisplayId)
             FullscreenAction.Exit -> _finishEvents.trySend(Unit)
             FullscreenAction.Home -> injectHomeKey(targetDisplayId)
         }
@@ -151,6 +153,16 @@ class FullscreenDisplayViewModel @Inject constructor(
             }.onSuccess {
                 thumbnailCache.remove(displayId)
                 if (thenFinish) _finishEvents.trySend(Unit)
+            }.onFailure {
+                Timber.e(it)
+            }
+        }
+    }
+
+    private fun sleepDisplay(displayId: Int) {
+        viewModelScope.launch {
+            shizukuManager.withService { service ->
+                service.sleepVirtualDisplay(displayId)
             }.onFailure {
                 Timber.e(it)
             }

@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
@@ -183,12 +184,14 @@ fun FullscreenDisplayScreen(
 
         val startAppLabel = stringResource(R.string.fullscreen_menu_start_app)
         val closeDisplayLabel = stringResource(R.string.fullscreen_menu_close_display)
+        val powerOffLabel = stringResource(R.string.fullscreen_menu_power_off)
         val exitLabel = stringResource(R.string.fullscreen_exit)
         val homeLabel = stringResource(R.string.fullscreen_menu_home)
         val fanActions = buildList {
             add(FanMenuAction(Icons.Default.Apps, startAppLabel) { viewModel.onAction(FullscreenAction.StartApp, targetDisplayId) })
             if (targetDisplayId != 0) {
                 add(FanMenuAction(Icons.Default.Close, closeDisplayLabel) { viewModel.onAction(FullscreenAction.CloseDisplay, targetDisplayId) })
+                add(FanMenuAction(Icons.Default.PowerSettingsNew, powerOffLabel) { viewModel.onAction(FullscreenAction.PowerOff, targetDisplayId) })
             }
             add(FanMenuAction(Icons.Default.Logout, exitLabel) { viewModel.onAction(FullscreenAction.Exit, targetDisplayId) })
             add(FanMenuAction(Icons.Default.Home, homeLabel) { viewModel.onAction(FullscreenAction.Home, targetDisplayId) })

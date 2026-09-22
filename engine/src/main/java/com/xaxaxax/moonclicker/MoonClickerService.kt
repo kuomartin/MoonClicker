@@ -213,6 +213,13 @@ class MoonClickerService @JvmOverloads constructor(
         val display: VirtualDisplay,
         val surfaceWidth: Int,
         val surfaceHeight: Int,
+        /**
+         * 只有拿到 `VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP`（[privilegedFlags]，需要
+         * `ADD_TRUSTED_DISPLAY`）的 VD 才有自己獨立的 display group；沒有的話它跟主螢幕
+         * 共用 `DEFAULT_DISPLAY_GROUP`，對它做的電源操作會波及主螢幕。[sleepVirtualDisplay]
+         * 靠這個欄位擋下那種情況，不能只看「這個 displayId 是不是我建的」。
+         */
+        val ownsDisplayGroup: Boolean,
     )
 
     private val vdStore = mutableMapOf<Int, ManagedDisplay>()
@@ -572,7 +579,8 @@ class MoonClickerService @JvmOverloads constructor(
             return false
         }
 
-        vdStore[mirrorVdId] = ManagedDisplay(vd, surfaceWidth = width, surfaceHeight = height)
+        // 這支走 AUTO_MIRROR 的舊式 reflection 建構子，沒有帶 OWN_DISPLAY_GROUP，跟主螢幕共用預設 group。
+        vdStore[mirrorVdId] = ManagedDisplay(vd, surfaceWidth = width, surfaceHeight = height, ownsDisplayGroup = false)
         distributorStore[mirrorVdId] = nativePtr
         mirrorDisplayMap[displayId] = mirrorVdId
         Timber.d("createMirrorInternal: created mirror VD $mirrorVdId for source display $displayId (${width}x${height}@$densityDpi)")
@@ -600,8 +608,9 @@ class MoonClickerService @JvmOverloads constructor(
         Timber.d(
             "createVD: callingUid=${getCallingUid()} serviceUid=${Process.myUid()} fakePkg=${fakeDisplayContext.packageName} surfaceValid=${sourceSurface.isValid}"
         )
+        var usedFlags = privilegedFlags
         val vd = createDisplay(dm, name, width, height, densityDpi, sourceSurface, privilegedFlags)
-            ?: createDisplay(dm, name, width, height, densityDpi, sourceSurface, baseFlags)
+            ?: createDisplay(dm, name, width, height, densityDpi, sourceSurface, baseFlags).also { usedFlags = baseFlags }
             ?: run {
                 nativeDestroyDistributor(nativePtr)
                 return -1
@@ -612,7 +621,8 @@ class MoonClickerService @JvmOverloads constructor(
             nativeDestroyDistributor(nativePtr)
             return -1
         }
-        vdStore[displayId] = ManagedDisplay(vd, surfaceWidth = width, surfaceHeight = height)
+        val ownsDisplayGroup = usedFlags and DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP != 0
+        vdStore[displayId] = ManagedDisplay(vd, surfaceWidth = width, surfaceHeight = height, ownsDisplayGroup = ownsDisplayGroup)
         distributorStore[displayId] = nativePtr
         startRotationTracking(displayId, nativePtr)
         Timber.d("VirtualDisplay created: id=$displayId name=$name ${width}x${height}@$densityDpi (Distributor Active)")
@@ -757,7 +767,12 @@ class MoonClickerService @JvmOverloads constructor(
 
         stopRotationTracking(displayId)
         nativeDestroyDistributor(oldPtr)
-        vdStore[displayId] = ManagedDisplay(managed.display, surfaceWidth = width, surfaceHeight = height)
+        vdStore[displayId] = ManagedDisplay(
+            managed.display,
+            surfaceWidth = width,
+            surfaceHeight = height,
+            ownsDisplayGroup = managed.ownsDisplayGroup,
+        )
         distributorStore[displayId] = newPtr
         startRotationTracking(displayId, newPtr)
         Timber.d("resizeVirtualDisplay: display $displayId resized to ${width}x${height}@$densityDpi")
@@ -771,6 +786,33 @@ class MoonClickerService @JvmOverloads constructor(
             nativeDestroyDistributor(ptr)
         }
         return true
+    }
+
+    /**
+     * [wakeDisplayGroupIfOwned] 的逆操作：只把 display group 關掉，VD 本身留著。
+     *
+     * 只對真的拿到 `OWN_DISPLAY_GROUP`（[ManagedDisplay.ownsDisplayGroup]）的 VD 生效——
+     * 沒有這個旗標的 VD 跟主螢幕共用 `DEFAULT_DISPLAY_GROUP`，硬呼叫下去會把主螢幕也關掉。
+     */
+    override fun sleepVirtualDisplay(displayId: Int): Boolean {
+        val managed = vdStore[displayId] ?: return false
+        if (!managed.ownsDisplayGroup) {
+            Timber.w("sleepVirtualDisplay: display $displayId does not own its display group, refusing")
+            return false
+        }
+        return try {
+            val pm = context.getSystemService(PowerManager::class.java)
+            Refine.unsafeCast<PowerManagerHidden>(pm).goToSleep(
+                displayId,
+                SystemClock.uptimeMillis(),
+                PowerManagerHidden.GO_TO_SLEEP_REASON_APPLICATION,
+                0,
+            )
+            true
+        } catch (t: Throwable) {
+            Timber.w(t, "goToSleep(displayId=$displayId) failed")
+            false
+        }
     }
 
     // --- Native GLES Distributor ---

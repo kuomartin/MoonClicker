@@ -51,6 +51,7 @@
     <string name="fullscreen_exit">離開</string>
     <string name="fullscreen_menu_start_app">啟動應用程式</string>
     <string name="fullscreen_menu_close_display">關閉顯示器</string>
+    <string name="fullscreen_menu_power_off">關閉螢幕電源</string>
     <string name="fullscreen_menu_home">Home 鍵</string>
     <string name="fullscreen_select_app_title">選擇要啟動的應用程式</string>
 
