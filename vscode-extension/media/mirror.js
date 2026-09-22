@@ -44,9 +44,15 @@
       runStage.insertBefore(frameEl, runOverlay);
     }
     if (mode === "capture") captureStageHint.hidden = hasReceivedFrame;
-    if (mode === "build") renderBuildShotPicker();
+    if (mode === "build") {
+      renderBuildShotPicker();
+      requestTemplatesFor(buildScriptSelect.value);
+    }
     if (mode === "write") renderWriteScriptCards();
-    if (mode === "test") renderTestTemplateOptions();
+    if (mode === "test") {
+      requestTemplatesFor(testScriptSelect.value);
+      renderTestTemplateOptions();
+    }
   }
 
   modeBtns.forEach((btn) => {
@@ -354,23 +360,30 @@
     } else if (msg.type === "saveTemplateResult") {
       buildSaveBtn.disabled = false;
       if (msg.success && pendingSave) {
-        savedTemplates.push({
-          id: "tpl-" + pendingSave.scriptId + "-" + pendingSave.name,
-          script: pendingSave.scriptId,
-          name: pendingSave.name,
-          threshold: pendingSave.threshold,
-        });
         buildStatus.style.color = "var(--moon-success)";
         buildStatus.textContent = "已存到裝置";
         buildTemplateName.value = "";
-        renderBuildTemplateList();
-        renderTestTemplateOptions();
+        requestTemplatesFor(pendingSave.scriptId); // 重新拉裝置端的真實清單，而不是本地猜一筆
         setTimeout(() => { buildStatus.textContent = ""; }, 2000);
       } else {
         buildStatus.style.color = "var(--vscode-errorForeground)";
         buildStatus.textContent = msg.error || "儲存失敗";
       }
       pendingSave = null;
+    } else if (msg.type === "templatesResult") {
+      deviceTemplatesLoading[msg.scriptId] = false;
+      if (msg.success) {
+        deviceTemplates[msg.scriptId] = msg.templates || [];
+      }
+      if (buildScriptSelect.value === msg.scriptId) renderBuildTemplateList();
+      if (testScriptSelect.value === msg.scriptId) renderTestTemplateOptions();
+    } else if (msg.type === "deleteTemplateResult") {
+      if (msg.success) {
+        requestTemplatesFor(msg.scriptId); // 同上，讓裝置端的真實清單說了算
+      } else {
+        buildStatus.style.color = "var(--vscode-errorForeground)";
+        buildStatus.textContent = msg.error || "刪除失敗";
+      }
     }
   });
 
@@ -452,10 +465,10 @@
 
   // ==================================================================
   // 2 · 建立模板 —— ROI 裁切是真的互動（對著選定的擷取畫面算像素座標，跟測試模板的
-  // ROI 編輯同一套幾何算法）；「儲存模板」真的呼叫裝置既有的
-  // PUT /scripts/{id}/templates/{name}。模板清單是本次工作階段內、確認存檔成功後
-  // 累積起來的本地快取——裝置端目前沒有「列出已存模板」的 API，重開面板不會回填
-  // 之前存過的模板（見 docs/plans/vscode-vision-test-endpoint-plan.md 待實作的第 2 階段）。
+  // ROI 編輯同一套幾何算法）；「儲存模板」「刪除模板」「列出模板」都真的呼叫裝置既有／
+  // 新增的 PUT / GET / DELETE /scripts/{id}/templates(/{name})。deviceTemplates 是
+  // 裝置端清單的本地快取（key 是 scriptId），每次存檔／刪除成功都會重新拉一次，
+  // 不維護自己的猜測——裝置端說了算。
   // ==================================================================
   const buildShotPicker = document.getElementById("buildShotPicker");
   const buildSourceTime = document.getElementById("buildSourceTime");
@@ -471,13 +484,20 @@
   const buildRoiCanvas = document.getElementById("buildRoiCanvas");
   const buildCtx = buildRoiCanvas.getContext("2d");
 
-  let savedTemplates = []; // { id, script, name, threshold } —— 只在裝置確認存檔成功後加入
+  let deviceTemplates = {}; // scriptId -> [{ name, roi }] | undefined（尚未拉過）
+  let deviceTemplatesLoading = {}; // scriptId -> boolean
   let buildRoiRect = null; // { left, top, right, bottom } in buildCropPreview 像素座標
   let buildRoiDragMode = "None";
   let buildRoiDragStart = { x: 0, y: 0 };
   let buildRoiInitialRect = null;
   let pendingSave = null;
   const shotImageCache = {}; // shot.id -> Promise<HTMLImageElement>，避免每次存檔重新解碼同一張圖
+
+  function requestTemplatesFor(scriptId) {
+    if (!scriptId || deviceTemplatesLoading[scriptId]) return;
+    deviceTemplatesLoading[scriptId] = true;
+    vscode?.postMessage({ type: "requestTemplates", scriptId });
+  }
 
   function currentBuildShot() {
     return captureShots.find((s) => s.id === selectedShotId) || null;
@@ -676,25 +696,32 @@
     }
   });
 
-  function populateScriptSelects() {
-    const selects = [buildScriptSelect, document.getElementById("testTemplateSelect")];
-    const prevBuild = buildScriptSelect.value;
-    buildScriptSelect.innerHTML = "";
+  function populateScriptSelect(selectEl) {
+    const prev = selectEl.value;
+    selectEl.innerHTML = "";
     for (const s of scriptsList) {
       const opt = document.createElement("option");
       opt.value = s.id;
       opt.textContent = s.name || s.id;
-      buildScriptSelect.appendChild(opt);
+      selectEl.appendChild(opt);
     }
     if (scriptsList.length === 0) {
       const opt = document.createElement("option");
       opt.value = "";
       opt.textContent = "（尚未連線，無法列出腳本）";
-      buildScriptSelect.appendChild(opt);
-    } else if (prevBuild && scriptsList.some((s) => s.id === prevBuild)) {
-      buildScriptSelect.value = prevBuild;
+      selectEl.appendChild(opt);
+    } else if (prev && scriptsList.some((s) => s.id === prev)) {
+      selectEl.value = prev;
     }
+  }
+
+  function populateScriptSelects() {
+    populateScriptSelect(buildScriptSelect);
+    populateScriptSelect(testScriptSelect);
     renderBuildTemplateList();
+    requestTemplatesFor(buildScriptSelect.value);
+    requestTemplatesFor(testScriptSelect.value);
+    renderTestTemplateOptions();
   }
 
   function currentBuildScriptName() {
@@ -704,9 +731,14 @@
 
   function renderBuildTemplateList() {
     const scriptId = buildScriptSelect.value;
-    buildTemplateListLabel.textContent = currentBuildScriptName() + " 的模板（本次工作階段）";
+    buildTemplateListLabel.textContent = currentBuildScriptName() + " 的模板";
     buildTemplateList.innerHTML = "";
-    const list = savedTemplates.filter((t) => t.script === scriptId);
+    const list = deviceTemplates[scriptId];
+    if (list === undefined) {
+      buildTemplateList.innerHTML =
+        '<span class="emptyHint">' + (deviceTemplatesLoading[scriptId] ? "讀取中…" : "尚未連線") + "</span>";
+      return;
+    }
     if (list.length === 0) {
       buildTemplateList.innerHTML = '<span class="emptyHint">尚無模板</span>';
       return;
@@ -722,17 +754,19 @@
         "</div>" +
         '<button type="button" class="linkBtn" title="刪除模板">✕</button>';
       row.querySelector(".templateRowName").textContent = t.name;
-      row.querySelector(".templateRowMeta").textContent = "閾值 " + t.threshold.toFixed(2);
+      row.querySelector(".templateRowMeta").textContent = t.roi.w + " × " + t.roi.h;
       row.querySelector("button").addEventListener("click", () => {
-        savedTemplates = savedTemplates.filter((x) => x.id !== t.id);
-        renderBuildTemplateList();
-        renderTestTemplateOptions();
+        row.querySelector("button").disabled = true;
+        vscode?.postMessage({ type: "deleteTemplate", scriptId, templateName: t.name });
       });
       buildTemplateList.appendChild(row);
     }
   }
 
-  buildScriptSelect.addEventListener("change", renderBuildTemplateList);
+  buildScriptSelect.addEventListener("change", () => {
+    renderBuildTemplateList();
+    requestTemplatesFor(buildScriptSelect.value);
+  });
   buildThreshold.addEventListener("input", () => {
     buildThresholdVal.textContent = (buildThreshold.value / 100).toFixed(2);
   });
@@ -788,8 +822,10 @@
 
   // ==================================================================
   // 3 · 測試模板 —— ROI 拖曳、開始/停止、比對結果都是真的（裝置端 vision-test 端點）；
-  // 模板來源是「2 · 建立模板」那份本次工作階段快取，見該區塊開頭的說明
+  // 模板來源是 deviceTemplates（跟「2 · 建立模板」共用，見該區塊開頭的說明），選了
+  // 哪個腳本就拉那個腳本的清單
   // ==================================================================
+  const testScriptSelect = document.getElementById("testScriptSelect");
   const testTemplateSelect = document.getElementById("testTemplateSelect");
   const testThreshold = document.getElementById("testThreshold");
   const testThresholdVal = document.getElementById("testThresholdVal");
@@ -817,46 +853,44 @@
   let roiInitialRect = null;
   const ROI_HANDLE_RADIUS = 8;
 
+  function currentScriptTemplates() {
+    return deviceTemplates[testScriptSelect.value] || [];
+  }
+
   function renderTestTemplateOptions() {
     const prev = testTemplateSelect.value;
+    const list = currentScriptTemplates();
     testTemplateSelect.innerHTML = "";
-    if (savedTemplates.length === 0) {
+    if (list.length === 0) {
       const opt = document.createElement("option");
       opt.value = "";
-      opt.textContent = "（尚無模板，先到「2 · 建立模板」建立一個）";
+      opt.textContent = deviceTemplates[testScriptSelect.value] === undefined
+        ? "（讀取中…）"
+        : "（此腳本尚無模板，先到「2 · 建立模板」建立一個）";
       testTemplateSelect.appendChild(opt);
       testThreshold.disabled = true;
     } else {
       testThreshold.disabled = false;
-      for (const t of savedTemplates) {
+      for (const t of list) {
         const opt = document.createElement("option");
-        opt.value = t.id;
-        opt.textContent = t.name + "（" + currentBuildScriptNameFor(t.script) + "）";
+        opt.value = t.name;
+        opt.textContent = t.name + "（" + t.roi.w + " × " + t.roi.h + "）";
         testTemplateSelect.appendChild(opt);
       }
-      if (prev && savedTemplates.some((t) => t.id === prev)) {
+      if (prev && list.some((t) => t.name === prev)) {
         testTemplateSelect.value = prev;
       }
-      const active = savedTemplates.find((t) => t.id === testTemplateSelect.value) || savedTemplates[0];
-      testTemplateSelect.value = active.id;
-      testThreshold.value = Math.round(active.threshold * 100);
-      testThresholdVal.textContent = active.threshold.toFixed(2);
     }
     resetTestMatchUi();
     updateSnippet();
   }
 
-  function currentBuildScriptNameFor(scriptId) {
-    const s = scriptsList.find((s) => s.id === scriptId);
-    return s ? (s.name || s.id) : scriptId;
-  }
+  testScriptSelect.addEventListener("change", () => {
+    requestTemplatesFor(testScriptSelect.value);
+    renderTestTemplateOptions();
+  });
 
   testTemplateSelect.addEventListener("change", () => {
-    const t = savedTemplates.find((x) => x.id === testTemplateSelect.value);
-    if (t) {
-      testThreshold.value = Math.round(t.threshold * 100);
-      testThresholdVal.textContent = t.threshold.toFixed(2);
-    }
     resetTestMatchUi();
     updateSnippet();
     scheduleTestRestartIfRunning();
@@ -869,7 +903,7 @@
   });
 
   function resetTestMatchUi() {
-    const t = savedTemplates.find((x) => x.id === testTemplateSelect.value);
+    const t = currentTestTemplate();
     if (!t) {
       testMatchText.textContent = "尚無模板可比對";
       return;
@@ -878,7 +912,7 @@
   }
 
   function currentTestTemplate() {
-    return savedTemplates.find((x) => x.id === testTemplateSelect.value) || null;
+    return currentScriptTemplates().find((t) => t.name === testTemplateSelect.value) || null;
   }
 
   function currentTestTemplateName() {
@@ -976,7 +1010,7 @@
     setTestStatusPill("starting");
     vscode?.postMessage({
       type: "startVisionTest",
-      scriptId: t.script,
+      scriptId: testScriptSelect.value,
       displayId: currentDisplayId,
       image: t.name,
       roi,
@@ -1259,7 +1293,7 @@
     for (const s of list) {
       if (!mockScriptExtra[s.id]) {
         mockScriptExtra[s.id] = {
-          templates: savedTemplates.filter((t) => t.script === s.id).length,
+          templates: (deviceTemplates[s.id] || []).length,
           modified: "—（mock）",
         };
       }
@@ -1310,7 +1344,7 @@
       mirrorButtonText: toggleMirrorBtn ? toggleMirrorBtn.textContent : "",
       isOverlayActionVisible: overlayActionBtn ? !overlayActionBtn.hidden : false,
       captureShotsCount: captureShots.length,
-      savedTemplatesCount: savedTemplates.length,
+      deviceTemplatesCounts: Object.fromEntries(Object.entries(deviceTemplates).map(([k, v]) => [k, v.length])),
       roiEditing,
     }),
     setMode: (mode) => setMode(mode),

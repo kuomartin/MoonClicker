@@ -3,7 +3,7 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { MirrorConnection, type MirrorConnectionState } from "./mirrorConnection";
 import { FrameStalenessTracker, type StalenessState } from "./frameStaleness";
-import { saveTemplate, type TemplateRoi } from "./templateSync";
+import { saveTemplate, listTemplates, deleteTemplate, type TemplateRoi } from "./templateSync";
 import { startVisionTest, stopRun } from "./visionTest";
 import { listScripts, type ScriptSummary } from "./scriptSync";
 import { listDisplays, toggleDisplayMirror } from "./displaySync";
@@ -102,6 +102,30 @@ export function openMirrorPanel(extensionUri: vscode.Uri, address: string, displ
           mirrorOutputChannel.appendLine(`[MoonClicker Save Template Error] ${errMsg}`);
           mirrorOutputChannel.show(true);
           vscode.window.showErrorMessage(`MoonClicker 儲存模板失敗: ${errMsg}`);
+        }
+      } else if (message?.type === "requestTemplates") {
+        const { scriptId } = message;
+        if (!scriptId) return;
+        try {
+          const templates = await listTemplates(address, scriptId, token);
+          safePostMessage({ type: "templatesResult", scriptId, success: true, templates });
+        } catch (err) {
+          safePostMessage({ type: "templatesResult", scriptId, success: false, error: (err as Error).message });
+        }
+      } else if (message?.type === "deleteTemplate") {
+        const { scriptId, templateName } = message;
+        if (!scriptId || !templateName) {
+          safePostMessage({ type: "deleteTemplateResult", success: false, error: "刪除模板參數不完整" });
+          return;
+        }
+        try {
+          await deleteTemplate(address, scriptId, templateName, token);
+          safePostMessage({ type: "deleteTemplateResult", success: true, scriptId, templateName });
+        } catch (err) {
+          const errMsg = (err as Error).message;
+          safePostMessage({ type: "deleteTemplateResult", success: false, scriptId, templateName, error: errMsg });
+          mirrorOutputChannel.appendLine(`[MoonClicker Delete Template Error] ${errMsg}`);
+          mirrorOutputChannel.show(true);
         }
       } else if (message?.type === "startVisionTest") {
         const { scriptId, displayId, image, roi, threshold, intervalMs } = message;
