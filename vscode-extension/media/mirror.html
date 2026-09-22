@@ -1,40 +1,167 @@
-<div id="leftPanel">
-  <div id="toolbar">
+<div id="modeSwitcher">
+  <button class="modeBtn" data-mode="capture">1 · 採集</button>
+  <span class="modeChevron">›</span>
+  <button class="modeBtn" data-mode="build">2 · 建立模板</button>
+  <span class="modeChevron">›</span>
+  <button class="modeBtn" data-mode="test">3 · 測試模板</button>
+  <span class="modeChevron">›</span>
+  <button class="modeBtn" data-mode="write">4 · 編寫</button>
+  <span class="modeChevron">›</span>
+  <button class="modeBtn active" data-mode="run">5 · 運行除錯</button>
+  <div class="spacer"></div>
+  <div id="globalDisplayGroup">
     <select id="displaySelect"></select>
-    <button id="refreshDisplayBtn" class="secondary" type="button" title="刷新 display 列表">↻ 刷新</button>
-    <button id="toggleMirrorBtn" type="button" class="secondary" hidden>啟動鏡像</button>
-    <span id="status">連線中…</span>
-    <button id="cropBtn" type="button" disabled>開始裁切</button>
-    <button id="stopButton" type="button">停止</button>
-  </div>
-  <div id="cropToolbar" hidden>
-    <span>腳本:</span>
-    <select id="scriptSelect"></select>
-    <span>模板名稱:</span>
-    <input id="templateNameInput" type="text" placeholder="例如: btn_confirm" />
-    <span id="roiInfo" style="color:var(--vscode-descriptionForeground);"></span>
-    <span id="cropStatus"></span>
-    <button id="saveCropBtn" type="button">儲存</button>
-    <button id="cancelCropBtn" type="button" class="secondary">取消</button>
-  </div>
-  <div id="stage">
-    <video id="frame" autoplay muted playsinline></video>
-    <canvas id="cropCanvas" hidden></canvas>
-    <div id="overlay">
-      <div id="overlayText">尚未收到畫面</div>
-      <button id="overlayActionBtn" type="button" hidden>立即啟動實體螢幕鏡像</button>
-    </div>
+    <button id="refreshDisplayBtn" class="secondary" type="button" title="刷新 display 列表">↻</button>
   </div>
 </div>
-<div id="rightPanel">
-  <div id="logToolbar">
-    <span>Console</span>
-    <div>
-      <label><input type="checkbox" id="autoScroll" checked> Auto-scroll</label>
-      <button id="clearLogBtn" style="padding: 2px 6px; font-size: 10px;">Clear</button>
+
+<!-- ========== 1 採集（真的從即時串流擷取畫面；佇列僅存在於 webview 記憶體，尚未落地實際檔案） ========== -->
+<section id="panel-capture" class="modePanel" hidden>
+  <div class="subToolbar">
+    <span class="hintPill">快捷鍵 <kbd>Ctrl+Shift+S</kbd> 擷取目前畫面（尚未接線）</span>
+    <div class="spacer"></div>
+    <button id="captureShotBtn" type="button">立即擷取</button>
+  </div>
+  <div id="captureStage" class="darkStage">
+    <div id="captureStageHint" class="stageHint">尚未收到畫面</div>
+  </div>
+  <div id="captureQueue">
+    <div class="captureQueueHeader">
+      <span id="captureQueueCount">擷取佇列 · 0 張</span>
+      <div class="spacer"></div>
+      <button id="clearQueueBtn" class="linkBtn" type="button">全部清除</button>
+    </div>
+    <div id="captureQueueItems"></div>
+  </div>
+</section>
+
+<!-- ========== 2 建立模板（畫面與 ROI 裁切都是真的；「儲存模板」真的存到裝置） ========== -->
+<section id="panel-build" class="modePanel" hidden>
+  <div class="darkStage">
+    <div id="buildCropPreview" class="cropPreview">
+      <canvas id="buildRoiCanvas"></canvas>
+    </div>
+    <span class="stageSourceLabel">來源：<span id="buildSourceTime">—</span> 擷取畫面</span>
+  </div>
+  <div id="buildSidebar">
+    <div class="sidebarSection">
+      <span class="sidebarLabel">選擇擷取畫面</span>
+      <div id="buildShotPicker" class="shotPicker"></div>
+    </div>
+    <div class="sidebarSection">
+      <span class="sidebarLabel">新模板</span>
+      <label class="fieldLabel">所屬腳本</label>
+      <select id="buildScriptSelect"></select>
+      <label class="fieldLabel">模板名稱</label>
+      <input id="buildTemplateName" type="text" placeholder="例如：btn_confirm" />
+      <label class="fieldLabel">比對閾值</label>
+      <div class="thresholdRow">
+        <input id="buildThreshold" type="range" min="0" max="100" value="85" />
+        <span id="buildThresholdVal">0.85</span>
+      </div>
+      <span id="buildStatus" class="statusMsg"></span>
+      <button id="buildSaveBtn" type="button">儲存模板</button>
+    </div>
+    <div class="sidebarSection">
+      <span class="sidebarLabel" id="buildTemplateListLabel">模板</span>
+      <div id="buildTemplateList"></div>
     </div>
   </div>
-  <div id="logContainer"></div>
-  <div style="padding: 4px 8px; border-bottom: 1px solid var(--vscode-panel-border); font-size: 11px; background: var(--vscode-editor-background);">Data View</div>
-  <div id="dataContainer"></div>
-</div>
+</section>
+
+<!-- ========== 3 測試模板（模板清單來自裝置；ROI 拖曳為真實互動；比對結果為裝置端 vision.find 實際回報） ========== -->
+<section id="panel-test" class="modePanel" hidden>
+  <div class="subToolbar">
+    <span>腳本</span>
+    <select id="testScriptSelect"></select>
+    <div class="vDivider"></div>
+    <span>模板</span>
+    <select id="testTemplateSelect"></select>
+    <div class="vDivider"></div>
+    <span>閾值</span>
+    <input id="testThreshold" type="range" min="0" max="100" value="85" />
+    <span id="testThresholdVal">0.85</span>
+    <div class="vDivider"></div>
+    <span>間隔</span>
+    <input id="testIntervalInput" type="number" min="50" max="5000" step="50" value="300" style="width: 62px;" />
+    <span>ms</span>
+    <div class="vDivider"></div>
+    <button id="testAdjustRoiBtn" type="button" class="secondary">調整 ROI</button>
+    <button id="testStartStopBtn" type="button">開始測試</button>
+    <div class="spacer"></div>
+    <span id="testStatusPill" class="statusPill"><span class="statusDot"></span>未開始</span>
+  </div>
+  <div id="testStageWrap">
+    <div id="testStage">
+      <canvas id="testRoiCanvas" hidden></canvas>
+    </div>
+    <div id="testSidebar">
+      <div class="sidebarSection">
+        <span class="sidebarLabel">比對結果</span>
+        <div id="testMatchResult">
+          <span id="testMatchIcon" class="matchIcon">?</span>
+          <span id="testMatchText">尚未開始測試</span>
+        </div>
+        <span id="testLatency" class="statusMsg">輪詢間隔 300 ms</span>
+        <span id="testErrorMsg" class="statusMsg" hidden></span>
+      </div>
+      <div class="sidebarSection" id="testSnippetSection">
+        <div class="snippetHeader">
+          <span class="sidebarLabel">Lua Snippet</span>
+          <div class="spacer"></div>
+          <button id="copySnippetBtn" type="button" class="secondary">複製程式碼</button>
+        </div>
+        <pre id="testSnippet" class="codeBlock"></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ========== 4 編寫（清單、開啟編輯器、新增腳本都是真的） ========== -->
+<section id="panel-write" class="modePanel" hidden>
+  <div id="writeList">
+    <div class="writeListHeader">
+      <span class="sidebarLabel">腳本</span>
+      <div class="spacer"></div>
+      <input id="newScriptIdInput" type="text" placeholder="script_id（小寫英數字、. _ -）" />
+      <button id="addScriptBtn" type="button">新增腳本</button>
+    </div>
+    <span id="writeStatus" class="statusMsg"></span>
+    <div id="writeScriptCards"></div>
+    <span class="statusMsg">腳本內容於 VS Code 文字編輯器分頁中撰寫；此面板僅負責清單與模板管理。</span>
+  </div>
+</section>
+
+<!-- ========== 5 運行除錯（既有真實鏡像／Console／Data 功能） ========== -->
+<section id="panel-run" class="modePanel">
+  <div id="leftPanel">
+    <div id="toolbar">
+      <button id="toggleMirrorBtn" type="button" class="secondary" hidden>啟動鏡像</button>
+      <span id="status">連線中…</span>
+      <button id="stopButton" type="button">停止</button>
+    </div>
+    <div id="stage">
+      <video id="frame" autoplay muted playsinline></video>
+      <div id="overlay">
+        <div id="overlayText">尚未收到畫面</div>
+        <button id="overlayActionBtn" type="button" hidden>立即啟動實體螢幕鏡像</button>
+      </div>
+    </div>
+  </div>
+  <div id="rightPanel">
+    <div id="rightTabs">
+      <button class="rightTabBtn active" data-tab="console" type="button">Console</button>
+      <button class="rightTabBtn" data-tab="data" type="button">Data View</button>
+    </div>
+    <div id="consoleTabPanel" class="rightTabPanel">
+      <div id="logToolbar">
+        <label><input type="checkbox" id="autoScroll" checked> Auto-scroll</label>
+        <button id="clearLogBtn" style="padding: 2px 6px; font-size: 10px;">Clear</button>
+      </div>
+      <div id="logContainer"></div>
+    </div>
+    <div id="dataTabPanel" class="rightTabPanel" hidden>
+      <div id="dataContainer"></div>
+    </div>
+  </div>
+</section>

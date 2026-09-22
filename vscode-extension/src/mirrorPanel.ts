@@ -3,8 +3,9 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { MirrorConnection, type MirrorConnectionState } from "./mirrorConnection";
 import { FrameStalenessTracker, type StalenessState } from "./frameStaleness";
-import { saveTemplate, type TemplateRoi } from "./templateSync";
-import { listScripts, type ScriptSummary } from "./scriptSync";
+import { saveTemplate, listTemplates, deleteTemplate, type TemplateRoi } from "./templateSync";
+import { startVisionTest, stopRun } from "./visionTest";
+import { listScripts, createScript, type ScriptSummary } from "./scriptSync";
 import { listDisplays, toggleDisplayMirror } from "./displaySync";
 
 /**
@@ -17,6 +18,14 @@ const STALE_AFTER_MS = 3000;
 let panel: vscode.WebviewPanel | undefined;
 let connection: MirrorConnection | undefined;
 const mirrorOutputChannel = vscode.window.createOutputChannel("MoonClicker Mirror");
+
+/**
+ * 目前是不是有一個「我們自己啟動的」vision-test 迴圈在裝置端跑——只追蹤這個，不是
+ * `scriptRunner.isRunning()` 的鏡像。刻意不追蹤「裝置上是不是有東西在跑」，因為那可能是
+ * 使用者自己另外啟動的真實腳本（例如從 Explorer 樹狀圖按 Run）：面板關閉時只該清掉我們
+ * 自己留下的東西，不能連使用者的真實腳本一起停掉。
+ */
+let visionTestActive = false;
 
 /**
  * `moonclicker.openMirror` 的面板邏輯（見 #77、#78）。跟 `extension.ts` 的 [WorkbenchConnection] 是完全
@@ -58,6 +67,15 @@ export function openMirrorPanel(extensionUri: vscode.Uri, address: string, displ
       connection = undefined;
       panel = undefined;
       conn?.stop();
+      // webview 一旦 dispose，裡面所有 JS（含 stopTestIfRunningOnModeExit 那套）都停了，
+      // 沒有人會再送 stopRun——面板關閉前若我們自己啟動的 vision-test 還在跑，這裡補送
+      // 最後一次，不留孤兒迴圈在裝置端背景繼續耗電／佔著執行槽。
+      if (visionTestActive) {
+        visionTestActive = false;
+        stopRun(address, token).catch((err) => {
+          mirrorOutputChannel.appendLine(`[MoonClicker Stop Run On Dispose Error] ${(err as Error).message}`);
+        });
+      }
     });
     newPanel.webview.onDidReceiveMessage(async (message: {
       type?: string;
@@ -67,6 +85,10 @@ export function openMirrorPanel(extensionUri: vscode.Uri, address: string, displ
       pngBase64?: string;
       displayId?: number;
       enable?: boolean;
+      image?: string;
+      threshold?: number;
+      intervalMs?: number;
+      scriptName?: string;
     }) => {
       if (message?.type === "stop") {
         connection?.stop();
@@ -98,6 +120,78 @@ export function openMirrorPanel(extensionUri: vscode.Uri, address: string, displ
           mirrorOutputChannel.appendLine(`[MoonClicker Save Template Error] ${errMsg}`);
           mirrorOutputChannel.show(true);
           vscode.window.showErrorMessage(`MoonClicker 儲存模板失敗: ${errMsg}`);
+        }
+      } else if (message?.type === "requestTemplates") {
+        const { scriptId } = message;
+        if (!scriptId) return;
+        try {
+          const templates = await listTemplates(address, scriptId, token);
+          safePostMessage({ type: "templatesResult", scriptId, success: true, templates });
+        } catch (err) {
+          safePostMessage({ type: "templatesResult", scriptId, success: false, error: (err as Error).message });
+        }
+      } else if (message?.type === "deleteTemplate") {
+        const { scriptId, templateName } = message;
+        if (!scriptId || !templateName) {
+          safePostMessage({ type: "deleteTemplateResult", success: false, error: "刪除模板參數不完整" });
+          return;
+        }
+        try {
+          await deleteTemplate(address, scriptId, templateName, token);
+          safePostMessage({ type: "deleteTemplateResult", success: true, scriptId, templateName });
+        } catch (err) {
+          const errMsg = (err as Error).message;
+          safePostMessage({ type: "deleteTemplateResult", success: false, scriptId, templateName, error: errMsg });
+          mirrorOutputChannel.appendLine(`[MoonClicker Delete Template Error] ${errMsg}`);
+          mirrorOutputChannel.show(true);
+        }
+      } else if (message?.type === "openScriptInEditor") {
+        const { scriptId, scriptName } = message;
+        if (!scriptId) return;
+        // 沿用既有的「整份 pull 進本機鏡像資料夾、掛成 workspace folder」指令——跟樹狀圖點
+        // 一顆腳本是同一條路，這裡只是模擬 RemoteScriptItem 的 { address, summary } 形狀
+        // 讓 openScriptCommand 直接吃，不用另外重寫一次下載/掛載邏輯。
+        await vscode.commands.executeCommand("moonclicker.openScript", {
+          address,
+          summary: { id: scriptId, name: scriptName || scriptId },
+        });
+      } else if (message?.type === "createScript") {
+        const { scriptId } = message;
+        if (!scriptId) return;
+        try {
+          await createScript(address, scriptId, token);
+          safePostMessage({ type: "createScriptResult", success: true, scriptId });
+          const scripts = await listScripts(address, token).catch(() => []);
+          safePostMessage({ type: "scripts", scripts });
+        } catch (err) {
+          safePostMessage({ type: "createScriptResult", success: false, scriptId, error: (err as Error).message });
+        }
+      } else if (message?.type === "startVisionTest") {
+        const { scriptId, displayId, image, roi, threshold, intervalMs } = message;
+        if (!scriptId || typeof displayId !== "number" || !image || !roi || typeof threshold !== "number") {
+          safePostMessage({ type: "visionTestResult", success: false, error: "測試比對參數不完整" });
+          return;
+        }
+        try {
+          await startVisionTest(address, scriptId, displayId, image, roi, threshold, intervalMs, token);
+          visionTestActive = true;
+          safePostMessage({ type: "visionTestResult", success: true });
+        } catch (err) {
+          const errMsg = (err as Error).message;
+          safePostMessage({ type: "visionTestResult", success: false, error: errMsg });
+          mirrorOutputChannel.appendLine(`[MoonClicker Vision Test Error] ${errMsg}`);
+          mirrorOutputChannel.show(true);
+        }
+      } else if (message?.type === "stopRun") {
+        try {
+          await stopRun(address, token);
+          visionTestActive = false;
+          safePostMessage({ type: "runStopResult", success: true });
+        } catch (err) {
+          const errMsg = (err as Error).message;
+          safePostMessage({ type: "runStopResult", success: false, error: errMsg });
+          mirrorOutputChannel.appendLine(`[MoonClicker Stop Run Error] ${errMsg}`);
+          mirrorOutputChannel.show(true);
         }
       } else if (message?.type === "switchDisplay") {
         if (typeof message.displayId === "number") {

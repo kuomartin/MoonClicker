@@ -32,11 +32,23 @@ import moonclicker.workbench.StreamEvent
 private class FakeScriptRunner : ScriptRunner {
     var running = false
     var startedScript: Script? = null
+    var stopped = false
+    var startedOnDisplayScript: Script? = null
+    var startedOnDisplayId: Int? = null
 
     override fun isRunning() = running
 
     override fun start(script: Script) {
         startedScript = script
+    }
+
+    override suspend fun stop() {
+        stopped = true
+    }
+
+    override fun startOnDisplay(script: Script, displayId: Int) {
+        startedOnDisplayScript = script
+        startedOnDisplayId = displayId
     }
 }
 
@@ -271,6 +283,89 @@ class WorkbenchServerTest {
 
             assertEquals(HttpStatusCode.OK, response.status)
             assertTrue(response.bodyAsText().contains("\"id\":\"hello\""))
+        }
+    }
+
+    @Test
+    fun `scripts route includes template count and last-modified time`() = runTest {
+        val dir = scriptFolder("hello", "log('hi')")
+        File(dir, "templates.json").writeText(
+            """{"button.png":{"roi":{"x":1,"y":2,"w":3,"h":4}},"other.png":{"roi":{"x":1,"y":2,"w":3,"h":4}}}"""
+        )
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+
+            val response = client.get("/scripts")
+
+            assertEquals(HttpStatusCode.OK, response.status)
+            val body = response.bodyAsText()
+            assertTrue(body.contains("\"templateCount\":2"))
+            assertTrue(File(dir, "main.lua").lastModified() > 0)
+        }
+    }
+
+    @Test
+    fun `POST scripts creates a runnable script folder`() = runTest {
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+
+            val response = client.post("/scripts/my_new_script")
+
+            assertEquals(HttpStatusCode.Created, response.status)
+            val dir = File(temp.root, "my_new_script")
+            assertTrue(File(dir, "main.lua").isFile)
+            val metaJson = File(dir, "script.json").readText()
+            assertTrue(metaJson.contains("\"uniqueId\":\"my_new_script\""))
+        }
+    }
+
+    @Test
+    fun `POST scripts rejects an id that already exists with 409`() = runTest {
+        scriptFolder("hello", "log('hi')")
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+
+            val response = client.post("/scripts/hello")
+
+            assertEquals(HttpStatusCode.Conflict, response.status)
+        }
+    }
+
+    @Test
+    fun `POST scripts rejects an id with characters outside the uniqueId pattern`() = runTest {
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+
+            val response = client.post("/scripts/Not-Lowercase")
+
+            assertEquals(HttpStatusCode.BadRequest, response.status)
+            assertTrue(!File(temp.root, "Not-Lowercase").exists())
+        }
+    }
+
+    @Test
+    fun `POST scripts rejects an id starting with a dot`() = runTest {
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+
+            val response = client.post("/scripts/.hidden")
+
+            assertEquals(HttpStatusCode.BadRequest, response.status)
+        }
+    }
+
+    @Test
+    fun `a newly created script does not show up until it's scanned again, then lists with zero templates`() = runTest {
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+
+            client.post("/scripts/my_new_script")
+            val response = client.get("/scripts")
+
+            assertEquals(HttpStatusCode.OK, response.status)
+            val body = response.bodyAsText()
+            assertTrue(body.contains("\"id\":\"my_new_script\""))
+            assertTrue(body.contains("\"templateCount\":0"))
         }
     }
 
@@ -640,6 +735,180 @@ class WorkbenchServerTest {
 
             assertEquals(HttpStatusCode.BadRequest, response.status)
             assertTrue(!File(dir, "button.png").exists())
+        }
+    }
+
+    @Test
+    fun `GET templates lists what's in templates json`() = runTest {
+        val dir = scriptFolder("hello", "log('hi')")
+        File(dir, "templates.json").writeText(
+            """{"button.png":{"roi":{"x":1,"y":2,"w":30,"h":40}}}"""
+        )
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+
+            val response = client.get("/scripts/hello/templates")
+
+            assertEquals(HttpStatusCode.OK, response.status)
+            val body = response.bodyAsText()
+            assertTrue(body.contains("\"button.png\""))
+            assertTrue(body.contains("\"w\":30"))
+        }
+    }
+
+    @Test
+    fun `GET templates is an empty object when templates json doesn't exist`() = runTest {
+        scriptFolder("hello", "log('hi')")
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+
+            val response = client.get("/scripts/hello/templates")
+
+            assertEquals(HttpStatusCode.OK, response.status)
+            assertEquals("{}", response.bodyAsText())
+        }
+    }
+
+    @Test
+    fun `GET templates 404s for an unknown script id`() = runTest {
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+
+            val response = client.get("/scripts/does-not-exist/templates")
+
+            assertEquals(HttpStatusCode.NotFound, response.status)
+        }
+    }
+
+    @Test
+    fun `DELETE templates removes the image and the templates json entry`() = runTest {
+        val dir = scriptFolder("hello", "log('hi')")
+        File(dir, "button.png").writeText("fake png bytes")
+        File(dir, "templates.json").writeText(
+            """{"button.png":{"roi":{"x":1,"y":2,"w":30,"h":40}}}"""
+        )
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+
+            val response = client.delete("/scripts/hello/templates/button.png")
+
+            assertEquals(HttpStatusCode.OK, response.status)
+            assertTrue(!File(dir, "button.png").exists())
+            assertEquals("{}", File(dir, "templates.json").readText())
+        }
+    }
+
+    @Test
+    fun `DELETE templates broadcasts file_change for the image and templates json`() = runTest {
+        val dir = scriptFolder("hello", "log('hi')")
+        File(dir, "button.png").writeText("fake png bytes")
+        File(dir, "templates.json").writeText(
+            """{"button.png":{"roi":{"x":1,"y":2,"w":30,"h":40}}}"""
+        )
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+            val wsClient = createClient { install(ClientWebSockets) }
+
+            wsClient.webSocket("/") {
+                receiveStreamEvent() // 初始 data 快照。
+
+                client.delete("/scripts/hello/templates/button.png")
+
+                val first = receiveStreamEvent()
+                assertEquals("hello", first.file_change?.script_id)
+                assertEquals("button.png", first.file_change?.path)
+                assertEquals(moonclicker.workbench.FileChangeEvent.Kind.DELETED, first.file_change?.kind)
+
+                val second = receiveStreamEvent()
+                assertEquals("templates.json", second.file_change?.path)
+                assertEquals(moonclicker.workbench.FileChangeEvent.Kind.CHANGED, second.file_change?.kind)
+            }
+        }
+    }
+
+    @Test
+    fun `DELETE templates 404s for a name that's not in templates json`() = runTest {
+        val dir = scriptFolder("hello", "log('hi')")
+        File(dir, "templates.json").writeText("{}")
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+
+            val response = client.delete("/scripts/hello/templates/button.png")
+
+            assertEquals(HttpStatusCode.NotFound, response.status)
+        }
+        assertTrue(File(dir, "templates.json").isFile)
+    }
+
+    @Test
+    fun `DELETE templates 404s for an unknown script id`() = runTest {
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+
+            val response = client.delete("/scripts/does-not-exist/templates/button.png")
+
+            assertEquals(HttpStatusCode.NotFound, response.status)
+        }
+    }
+
+    @Test
+    fun `vision-test route materializes a scratch script with a start signal and starts it on the given display`() = runTest {
+        val dir = scriptFolder("hello", "log('hi')")
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+
+            val response = client.post("/scripts/hello/vision-test") {
+                setBody("""{"displayId":7,"image":"button.png","roi":{"x":1,"y":2,"w":3,"h":4},"threshold":0.85}""")
+            }
+
+            assertEquals(HttpStatusCode.Accepted, response.status)
+            assertEquals(7, fakeRunner.startedOnDisplayId)
+            assertEquals(".__vision_test__", fakeRunner.startedOnDisplayScript?.id)
+
+            val lua = File(temp.root, ".__vision_test__/main.lua").readText()
+            assertTrue(lua.contains("""data.set("visionTest", { started = true })"""))
+            assertTrue(lua.contains(File(dir, "button.png").absolutePath))
+            assertTrue(lua.contains("threshold = 0.85"))
+        }
+    }
+
+    @Test
+    fun `vision-test route 409s when a script is already running`() = runTest {
+        scriptFolder("hello", "log('hi')")
+        fakeRunner.running = true
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+
+            val response = client.post("/scripts/hello/vision-test") {
+                setBody("""{"displayId":7,"image":"button.png","roi":{"x":1,"y":2,"w":3,"h":4},"threshold":0.85}""")
+            }
+
+            assertEquals(HttpStatusCode.Conflict, response.status)
+        }
+    }
+
+    @Test
+    fun `vision-test route 404s for an unknown script id`() = runTest {
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+
+            val response = client.post("/scripts/does-not-exist/vision-test") {
+                setBody("""{"displayId":7,"image":"button.png","roi":{"x":1,"y":2,"w":3,"h":4},"threshold":0.85}""")
+            }
+
+            assertEquals(HttpStatusCode.NotFound, response.status)
+        }
+    }
+
+    @Test
+    fun `run stop route stops whatever is running and is idempotent when idle`() = runTest {
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+
+            val response = client.post("/run/stop")
+
+            assertEquals(HttpStatusCode.OK, response.status)
+            assertTrue(fakeRunner.stopped)
         }
     }
 }
