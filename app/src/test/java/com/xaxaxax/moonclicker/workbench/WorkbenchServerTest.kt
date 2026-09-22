@@ -502,6 +502,32 @@ class WorkbenchServerTest {
     }
 
     @Test
+    fun `saving a template over the websocket connection broadcasts file_change for both the image and templates json`() = runTest {
+        scriptFolder("hello", "log('hi')")
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+            val wsClient = createClient { install(ClientWebSockets) }
+
+            wsClient.webSocket("/") {
+                receiveStreamEvent() // 初始 data 快照。
+
+                client.put("/scripts/hello/templates/button.png?x=1&y=2&w=3&h=4") {
+                    setBody("fake png bytes".toByteArray())
+                }
+
+                val first = receiveStreamEvent()
+                assertEquals("hello", first.file_change?.script_id)
+                assertEquals("button.png", first.file_change?.path)
+                assertEquals(moonclicker.workbench.FileChangeEvent.Kind.CREATED, first.file_change?.kind)
+
+                val second = receiveStreamEvent()
+                assertEquals("templates.json", second.file_change?.path)
+                assertEquals(moonclicker.workbench.FileChangeEvent.Kind.CHANGED, second.file_change?.kind)
+            }
+        }
+    }
+
+    @Test
     fun `run route starts the script through the existing runner`() = runTest {
         scriptFolder("hello", "log('hi')")
         testApplication {

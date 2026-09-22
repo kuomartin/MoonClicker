@@ -576,7 +576,18 @@ fun Application.workbenchModule(
             }
             val pngBytes = call.receiveStream().readBytes()
             when (val result = TemplateStore.write(script.dir, name, roi, pngBytes)) {
-                is TemplateStore.WriteResult.Written -> call.respondText("OK")
+                is TemplateStore.WriteResult.Written -> {
+                    // 這條路徑不是走新的單檔案 API（見上面的 /files/*path），裁切工具直接
+                    // 呼叫這裡寫檔，寫完得自己補一次廣播，VS Code 的本機鏡像才會知道要重抓
+                    // 這兩個檔案——不補的話裁切完的模板不會同步回去（見 #103 之後的實測回報）。
+                    fileChanges.tryEmit(
+                        ScriptFileChange(id, result.imageFile.relativeTo(script.dir).invariantSeparatorsPath, ScriptFileChangeKind.CREATED)
+                    )
+                    fileChanges.tryEmit(
+                        ScriptFileChange(id, result.metaFile.relativeTo(script.dir).invariantSeparatorsPath, ScriptFileChangeKind.CHANGED)
+                    )
+                    call.respondText("OK")
+                }
                 is TemplateStore.WriteResult.Conflict ->
                     call.respondText("Template already exists: ${result.name}", status = HttpStatusCode.Conflict)
                 is TemplateStore.WriteResult.Failed ->
