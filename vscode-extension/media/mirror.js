@@ -26,6 +26,7 @@
   function setMode(mode) {
     if (!modePanels[mode] || mode === currentMode) return;
     if (currentMode === "test" && roiEditing) setRoiEditing(false);
+    if (currentMode === "test" && mode !== "test") stopTestIfRunningOnModeExit();
     modePanels[currentMode].hidden = true;
     modePanels[mode].hidden = false;
     modeBtns.forEach((b) => b.classList.toggle("active", b.dataset.mode === mode));
@@ -200,7 +201,23 @@
         logContainer.scrollTop = logContainer.scrollHeight;
       }
     } else if (e.case === "data" || e.data) {
-      renderDataTree(dataContainer, e.value || e.data || {});
+      const data = e.value || e.data || {};
+      renderDataTree(dataContainer, data);
+      if (currentMode === "test" && testRunning && Object.prototype.hasOwnProperty.call(data, "visionTest")) {
+        renderVisionTestResult(data.visionTest);
+      }
+    }
+  }
+
+  // 裝置端 `data.set("visionTest", ...)` 回報的實際比對結果（見 docs/lua-api.md `data`）——
+  // 不是延遲量測，intervalMs 只是配置的輪詢間隔，見 testLatency 的標示文字。
+  function renderVisionTestResult(v) {
+    if (!v || typeof v !== "object") return;
+    if (v.hit) {
+      const confidence = typeof v.confidence === "number" ? v.confidence.toFixed(2) : "?";
+      testMatchText.textContent = "命中 · 信心度 " + confidence + "（cx=" + v.cx + ", cy=" + v.cy + "）";
+    } else {
+      testMatchText.textContent = "未命中";
     }
   }
 
@@ -306,6 +323,34 @@
       updateToolbarMirrorState();
     } else if (msg.type === "streamEvent") {
       handleStreamEvent(msg.event);
+    } else if (msg.type === "visionTestResult") {
+      testPending = false;
+      if (msg.success) {
+        testRunning = true;
+        setTestStatusPill("running");
+        testLatency.textContent = "輪詢間隔 " + VISION_TEST_INTERVAL_MS + " ms";
+        testMatchText.textContent = "等待結果…";
+      } else {
+        testRunning = false;
+        setTestStatusPill("error", msg.error || "啟動測試比對失敗");
+      }
+      updateTestStartStopBtn();
+    } else if (msg.type === "runStopResult") {
+      testPending = false;
+      if (msg.success) {
+        if (pendingRestart) {
+          pendingRestart = false;
+          requestStartVisionTest();
+          return;
+        }
+        testRunning = false;
+        setTestStatusPill("idle");
+        resetTestMatchUi();
+      } else {
+        pendingRestart = false;
+        setTestStatusPill("error", msg.error || "停止執行失敗");
+      }
+      updateTestStartStopBtn();
     }
   });
 
@@ -527,6 +572,16 @@
   const testMatchText = document.getElementById("testMatchText");
   const testSnippet = document.getElementById("testSnippet");
   const copySnippetBtn = document.getElementById("copySnippetBtn");
+  const testStartStopBtn = document.getElementById("testStartStopBtn");
+  const testStatusPill = document.getElementById("testStatusPill");
+  const testLatency = document.getElementById("testLatency");
+  const testErrorMsg = document.getElementById("testErrorMsg");
+
+  const VISION_TEST_INTERVAL_MS = 300;
+  const VISION_TEST_DEBOUNCE_MS = 500;
+  let testRunning = false;
+  let testPending = false; // start/stop RPC 進行中
+  let testRestartTimer = null;
 
   let roiEditing = false;
   let roiRect = null; // { left, top, right, bottom } in testStage 像素座標
@@ -560,7 +615,7 @@
       testThreshold.value = Math.round(active.threshold * 100);
       testThresholdVal.textContent = active.threshold.toFixed(2);
     }
-    updateMockMatchResult();
+    resetTestMatchUi();
     updateSnippet();
   }
 
@@ -575,28 +630,32 @@
       testThreshold.value = Math.round(t.threshold * 100);
       testThresholdVal.textContent = t.threshold.toFixed(2);
     }
-    updateMockMatchResult();
+    resetTestMatchUi();
     updateSnippet();
+    scheduleTestRestartIfRunning();
   });
 
   testThreshold.addEventListener("input", () => {
     testThresholdVal.textContent = (testThreshold.value / 100).toFixed(2);
-    updateMockMatchResult();
     updateSnippet();
+    scheduleTestRestartIfRunning();
   });
 
-  function updateMockMatchResult() {
-    // mock：真正的即時比對結果要靠裝置端回報，見下方 RPC 說明（templateTestResult）
+  function resetTestMatchUi() {
     const t = mockTemplates.find((x) => x.id === testTemplateSelect.value);
     if (!t) {
       testMatchText.textContent = "尚無模板可比對";
       return;
     }
-    testMatchText.textContent = "命中 · 信心度 0.94（mock）";
+    testMatchText.textContent = testRunning ? "等待結果…" : "尚未開始測試";
+  }
+
+  function currentTestTemplate() {
+    return mockTemplates.find((x) => x.id === testTemplateSelect.value) || null;
   }
 
   function currentTestTemplateName() {
-    const t = mockTemplates.find((x) => x.id === testTemplateSelect.value);
+    const t = currentTestTemplate();
     return t ? t.name : "template";
   }
 
@@ -634,6 +693,116 @@
     copySnippetBtn.textContent = "已複製！";
     setTimeout(() => { copySnippetBtn.textContent = original; }, 1200);
   });
+
+  // ---------- 即時測試比對 start/stop（真實 RPC，共用 /run 執行槽） ----------
+
+  function setTestStatusPill(state, detail) {
+    testStatusPill.classList.remove("statusPill-error");
+    switch (state) {
+      case "idle":
+        testStatusPill.innerHTML = '<span class="statusDot"></span>未開始';
+        break;
+      case "starting":
+        testStatusPill.innerHTML = '<span class="statusDot"></span>啟動中…';
+        break;
+      case "running":
+        testStatusPill.innerHTML = '<span class="statusDot"></span>即時比對中';
+        break;
+      case "stopping":
+        testStatusPill.innerHTML = '<span class="statusDot"></span>停止中…';
+        break;
+      case "error":
+        testStatusPill.classList.add("statusPill-error");
+        testStatusPill.innerHTML = '<span class="statusDot"></span>錯誤';
+        break;
+    }
+    if (detail) {
+      testErrorMsg.textContent = detail;
+      testErrorMsg.hidden = false;
+    } else {
+      testErrorMsg.hidden = true;
+    }
+  }
+
+  function updateTestStartStopBtn() {
+    testStartStopBtn.disabled = testPending;
+    if (testPending) {
+      testStartStopBtn.textContent = testRunning ? "停止中…" : "啟動中…";
+    } else {
+      testStartStopBtn.textContent = testRunning ? "停止測試" : "開始測試";
+    }
+  }
+
+  function requestStartVisionTest() {
+    const t = currentTestTemplate();
+    if (!t) {
+      setTestStatusPill("error", "尚無模板可測試");
+      return;
+    }
+    if (currentDisplayId === null) {
+      setTestStatusPill("error", "尚未選擇顯示器");
+      return;
+    }
+    const roi = calculateTestRoi() || { x: 96, y: 420, w: 130, h: 40 };
+    testPending = true;
+    updateTestStartStopBtn();
+    setTestStatusPill("starting");
+    vscode?.postMessage({
+      type: "startVisionTest",
+      scriptId: t.script,
+      displayId: currentDisplayId,
+      image: t.name,
+      roi,
+      threshold: testThreshold.value / 100,
+      intervalMs: VISION_TEST_INTERVAL_MS,
+    });
+  }
+
+  function requestStopRun() {
+    testPending = true;
+    updateTestStartStopBtn();
+    setTestStatusPill("stopping");
+    vscode?.postMessage({ type: "stopRun" });
+  }
+
+  testStartStopBtn.addEventListener("click", () => {
+    if (testPending) return;
+    if (testRunning) {
+      requestStopRun();
+    } else {
+      requestStartVisionTest();
+    }
+  });
+
+  // ROI 拖曳／閾值調整時，若測試正在跑，Lua 迴圈無法動態改參數——debounce 後
+  // 停止再以新參數重新啟動（同一個執行槽，必須先 stop 再 start，不可並行）。
+  function scheduleTestRestartIfRunning() {
+    if (!testRunning || testPending) return;
+    if (testRestartTimer) clearTimeout(testRestartTimer);
+    testRestartTimer = setTimeout(() => {
+      testRestartTimer = null;
+      if (!testRunning || testPending) return;
+      testPending = true;
+      updateTestStartStopBtn();
+      setTestStatusPill("starting");
+      vscode?.postMessage({ type: "stopRun" });
+      // 對應的 startVisionTest 會在收到 runStopResult 後續發（見 message handler）
+      pendingRestart = true;
+    }, VISION_TEST_DEBOUNCE_MS);
+  }
+  let pendingRestart = false;
+
+  // 離開「3 · 測試模板」模式時，不留孤兒 vision-test 迴圈在裝置端繼續跑。
+  function stopTestIfRunningOnModeExit() {
+    if (testRestartTimer) {
+      clearTimeout(testRestartTimer);
+      testRestartTimer = null;
+    }
+    pendingRestart = false;
+    if (testRunning && !testPending) {
+      requestStopRun();
+    }
+  }
 
   function setRoiEditing(on) {
     roiEditing = on;
@@ -841,6 +1010,7 @@
       roiRect = roiNorm(roiRect);
       drawRoiOverlay();
       updateSnippet();
+      scheduleTestRestartIfRunning();
     }
   });
 

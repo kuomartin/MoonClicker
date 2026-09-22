@@ -71,7 +71,7 @@
   </div>
 </section>
 
-<!-- ========== 3 測試模板（ROI 拖曳為真實互動；比對結果／延遲為 mock） ========== -->
+<!-- ========== 3 測試模板（ROI 拖曳為真實互動；比對結果為裝置端 vision.find 實際回報） ========== -->
 <section id="panel-test" class="modePanel" hidden>
   <div class="subToolbar">
     <span>模板</span>
@@ -82,8 +82,9 @@
     <span id="testThresholdVal">0.85</span>
     <div class="vDivider"></div>
     <button id="testAdjustRoiBtn" type="button" class="secondary">調整 ROI</button>
+    <button id="testStartStopBtn" type="button">開始測試</button>
     <div class="spacer"></div>
-    <span id="testStatusPill" class="statusPill"><span class="statusDot"></span>即時比對中（mock）</span>
+    <span id="testStatusPill" class="statusPill"><span class="statusDot"></span>未開始</span>
   </div>
   <div id="testStageWrap">
     <div id="testStage">
@@ -93,10 +94,11 @@
       <div class="sidebarSection">
         <span class="sidebarLabel">比對結果</span>
         <div id="testMatchResult">
-          <span class="matchIcon">✓</span>
-          <span id="testMatchText">命中 · 信心度 0.94</span>
+          <span class="matchIcon">?</span>
+          <span id="testMatchText">尚未開始測試</span>
         </div>
-        <span id="testLatency" class="statusMsg">比對延遲 18 ms（mock）</span>
+        <span id="testLatency" class="statusMsg">輪詢間隔 300 ms</span>
+        <span id="testErrorMsg" class="statusMsg" hidden></span>
       </div>
       <div class="sidebarSection" id="testSnippetSection">
         <div class="snippetHeader">

@@ -1,6 +1,8 @@
 # 「測試模板」即時比對端點
 
-**狀態**：方案已定案（B），待實作。屬於 [mirror 面板五步驟工作流程](../../vscode-extension/media/mirror.js) 的第 3 階段（見 PR 討論）。
+**狀態**：已實作（B 方案）。屬於 [mirror 面板五步驟工作流程](../../vscode-extension/media/mirror.js) 的第 3 階段。
+
+已知限制：「測試模板」現在會真的打 `POST /scripts/{id}/vision-test`，但模板圖片必須真的存在於裝置上該腳本的資料夾——「2 · 建立模板」的儲存流程（第 1／2 階段）還沒接線，webview 裡輸入的模板名稱如果裝置上沒有對應檔案，`vision.find` 會在 Lua 端找不到圖檔，錯誤只會出現在 Console log，不是乾淨的 HTTP 錯誤。
 
 起因：webview「測試模板」模式目前的比對結果、延遲、Lua snippet 全部是 mock。要接成真的，
 device 端 `WorkbenchServer.kt` 只有 `PUT /scripts/{id}/templates/{name}`（存模板），沒有任何
@@ -82,10 +84,10 @@ device 端 `WorkbenchServer.kt` 只有 `PUT /scripts/{id}/templates/{name}`（�
    見 [mirror.js](../../vscode-extension/media/mirror.js) 的 `updateSnippet()`，先於本階段落地、
    已完成。
 
-## 待實作（下次動工時的清單）
+## 已實作
 
-- [ ] `ScriptStore.scan` 排除 `.` 開頭的資料夾
-- [ ] `POST /scripts/{id}/vision-test`（產生暫存 `main.lua`，呼叫 `scriptSession.start`）
-- [ ] `POST /run/stop`（補 `ScriptSession.stop()` 的 HTTP 入口，真實腳本與 vision-test 共用）
-- [ ] `mirrorPanel.ts` 轉發新訊息類型／`mirror.js` 的 `handleStreamEvent` 讀 `data.visionTest`
-- [ ] 「測試模板」的「開始測試」／ROI 變動 debounce 後重新呼叫新端點
+- [x] `ScriptStore.scan` 排除 `.` 開頭的資料夾（`.__vision_test__` 不會出現在腳本清單）
+- [x] `POST /scripts/{id}/vision-test`（[VisionTestScript.kt](../../app/src/main/java/com/xaxaxax/moonclicker/workbench/VisionTestScript.kt) 產生暫存 `main.lua`，透過新增的 `ScriptRunner.startOnDisplay` 指到正確的虛擬顯示，而不是 `script.json` 的預設 target）
+- [x] `POST /run/stop`（補 `ScriptSession.stop()` 的 HTTP 入口，真實腳本與 vision-test 共用同一執行槽，冪等）
+- [x] `mirrorPanel.ts` 轉發 `startVisionTest`/`stopRun`；`mirror.js` 的 `handleStreamEvent` 讀 `data.visionTest`
+- [x] 「測試模板」的「開始測試／停止測試」按鈕；ROI 拖曳／閾值變動時若正在測試，debounce 後 stop→start 重新呼叫（同一執行槽不能並行）；離開測試模式會自動停止，不留孤兒迴圈

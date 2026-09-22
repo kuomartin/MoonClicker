@@ -4,6 +4,7 @@ import * as vscode from "vscode";
 import { MirrorConnection, type MirrorConnectionState } from "./mirrorConnection";
 import { FrameStalenessTracker, type StalenessState } from "./frameStaleness";
 import { saveTemplate, type TemplateRoi } from "./templateSync";
+import { startVisionTest, stopRun } from "./visionTest";
 import { listScripts, type ScriptSummary } from "./scriptSync";
 import { listDisplays, toggleDisplayMirror } from "./displaySync";
 
@@ -67,6 +68,9 @@ export function openMirrorPanel(extensionUri: vscode.Uri, address: string, displ
       pngBase64?: string;
       displayId?: number;
       enable?: boolean;
+      image?: string;
+      threshold?: number;
+      intervalMs?: number;
     }) => {
       if (message?.type === "stop") {
         connection?.stop();
@@ -98,6 +102,31 @@ export function openMirrorPanel(extensionUri: vscode.Uri, address: string, displ
           mirrorOutputChannel.appendLine(`[MoonClicker Save Template Error] ${errMsg}`);
           mirrorOutputChannel.show(true);
           vscode.window.showErrorMessage(`MoonClicker 儲存模板失敗: ${errMsg}`);
+        }
+      } else if (message?.type === "startVisionTest") {
+        const { scriptId, displayId, image, roi, threshold, intervalMs } = message;
+        if (!scriptId || typeof displayId !== "number" || !image || !roi || typeof threshold !== "number") {
+          safePostMessage({ type: "visionTestResult", success: false, error: "測試比對參數不完整" });
+          return;
+        }
+        try {
+          await startVisionTest(address, scriptId, displayId, image, roi, threshold, intervalMs, token);
+          safePostMessage({ type: "visionTestResult", success: true });
+        } catch (err) {
+          const errMsg = (err as Error).message;
+          safePostMessage({ type: "visionTestResult", success: false, error: errMsg });
+          mirrorOutputChannel.appendLine(`[MoonClicker Vision Test Error] ${errMsg}`);
+          mirrorOutputChannel.show(true);
+        }
+      } else if (message?.type === "stopRun") {
+        try {
+          await stopRun(address, token);
+          safePostMessage({ type: "runStopResult", success: true });
+        } catch (err) {
+          const errMsg = (err as Error).message;
+          safePostMessage({ type: "runStopResult", success: false, error: errMsg });
+          mirrorOutputChannel.appendLine(`[MoonClicker Stop Run Error] ${errMsg}`);
+          mirrorOutputChannel.show(true);
         }
       } else if (message?.type === "switchDisplay") {
         if (typeof message.displayId === "number") {
