@@ -1278,7 +1278,9 @@
   });
 
   // ==================================================================
-  // 4 · 編寫 —— mock：清單資料為靜態附加欄位，開啟編輯器尚未接線
+  // 4 · 編寫 —— 「在編輯器開啟」是真的，接到既有的 moonclicker.openScript 指令
+  // （整份 pull 進本機鏡像資料夾、掛成 workspace folder，跟 Explorer 樹狀圖點腳本
+  // 是同一條路）。「模板數」/「上次修改」欄位跟「新增腳本」還是 mock。
   // ==================================================================
   const writeScriptCards = document.getElementById("writeScriptCards");
   const addScriptBtn = document.getElementById("addScriptBtn");
@@ -1307,7 +1309,7 @@
       card.querySelector(".scriptCardName").textContent = s.name || s.id;
       card.querySelector(".scriptCardMeta").textContent = meta.templates + " 個模板 · 上次修改 " + meta.modified;
       card.querySelector("button").addEventListener("click", () => {
-        vscode?.postMessage({ type: "log", message: "[mock] 在編輯器開啟腳本尚未接線：" + s.id });
+        vscode?.postMessage({ type: "openScriptInEditor", scriptId: s.id, scriptName: s.name });
       });
       writeScriptCards.appendChild(card);
     }
