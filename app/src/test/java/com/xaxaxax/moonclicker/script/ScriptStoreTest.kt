@@ -53,7 +53,7 @@ class ScriptStoreTest {
     fun `metadata supplies name description and display config`() {
         script(
             "daily",
-            """{"name":"自動簽到","description":"每天點簽到",
+            """{"name":"自動簽到","description":"每天點簽到","uniqueId":"daily-checkin",
                "display":{"width":1080,"height":2400,"densityDpi":440}}"""
         )
 
@@ -62,9 +62,20 @@ class ScriptStoreTest {
         assertEquals("自動簽到", found.name)
         assertEquals("每天點簽到", found.description)
         assertNotNull(found.display)
-        assertEquals(1080, found.display!!.width)
+        assertEquals("daily-checkin", found.display!!.name)   // 顯示器名稱是 uniqueId，不是 meta.name——不能跟別的腳本撞名
+        assertEquals(1080, found.display.width)
         assertEquals(2400, found.display.height)
         assertEquals(440, found.display.densityDpi)
+    }
+
+    @Test
+    fun `display config is dropped without a valid uniqueId`() {
+        script(
+            "daily",
+            """{"name":"自動簽到","display":{"width":1080,"height":2400,"densityDpi":440}}"""
+        )
+
+        assertNull(ScriptStore.scan(temp.root).single().display)   // 沒有穩定 id 就不建虛擬顯示——反正也不可執行
     }
 
     @Test
