@@ -7,6 +7,8 @@ import com.xaxaxax.moonclicker.script.ScriptTarget
 import com.xaxaxax.moonclicker.script.ScriptStore
 import com.xaxaxax.moonclicker.script.TemplateRoi
 import com.xaxaxax.moonclicker.shizuku.ShizukuManager
+import com.xaxaxax.moonclicker.shizuku.displayInfoList
+import com.xaxaxax.moonclicker.shizuku.toggleDisplayMirror
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
@@ -129,40 +131,21 @@ class WorkbenchServer @Inject constructor(
     private val displaySource = object : DisplaySource {
         override fun getDisplays(): List<WorkbenchDisplaySummary>? {
             val service = shizukuManager.service ?: return null
-            val displayInfos = runCatching { service.displayInfos.toList() }.getOrNull()
-            if (displayInfos != null) {
-                return displayInfos.map { info ->
-                    WorkbenchDisplaySummary(
-                        id = info.displayId,
-                        name = info.name ?: if (info.isPhysical) "Physical Display" else "Virtual Display ${info.displayId}",
-                        width = info.width,
-                        height = info.height,
-                        isVirtual = !info.isPhysical,
-                        isMirrorActive = if (info.isPhysical) info.isMirrorActive else true
-                    )
-                }
-            }
-            val displayIds = mutableListOf(0)
-            displayIds.addAll(service.virtualDisplays.toList())
-            return displayIds.mapNotNull { id ->
-                val size = service.getDisplaySize(id) ?: return@mapNotNull null
+            return service.displayInfoList().map { info ->
                 WorkbenchDisplaySummary(
-                    id = id,
-                    name = if (id == 0) "Physical Display" else "Virtual Display $id",
-                    width = size[0],
-                    height = size[1],
-                    isVirtual = id != 0,
-                    isMirrorActive = if (id == 0) runCatching { service.isDisplayMirrorActive(0) }.getOrDefault(false) else true
+                    id = info.displayId,
+                    name = info.name ?: if (info.isPhysical) "Physical Display" else "Virtual Display ${info.displayId}",
+                    width = info.width,
+                    height = info.height,
+                    isVirtual = !info.isPhysical,
+                    isMirrorActive = if (info.isPhysical) info.isMirrorActive else true
                 )
             }
         }
 
         override fun toggleMirror(displayId: Int, enable: Boolean): Boolean {
             val service = shizukuManager.service ?: return false
-            return runCatching {
-                if (enable) service.acquireDisplayMirror(displayId)
-                else service.releaseDisplayMirror(displayId)
-            }.getOrDefault(false)
+            return service.toggleDisplayMirror(displayId, enable)
         }
     }
 
