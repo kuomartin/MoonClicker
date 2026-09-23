@@ -226,4 +226,5 @@
     <string name="permission_secondary_displays_desc">Whether the system supports launching and running activities on secondary/virtual displays.</string>
     <string name="permission_secondary_displays_enabled">Supported</string>
     <string name="permission_secondary_displays_disabled">Unsupported or disabled by system</string>
+    <string name="settings_workbench_need_network_permission">Please configure local network permissions to use this feature.</string>
 </resources>

@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.LocaleList
+import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -226,6 +227,14 @@ class SettingsViewModel @Inject constructor(
 
     fun setWorkbenchEnabled(enabled: Boolean) {
         val intent = Intent(context, WorkbenchService::class.java)
+        if(enabled && permissionManager.hasLocalNetworkPermission.value) {
+            Toast.makeText(
+                context,
+                R.string.settings_workbench_need_network_permission,
+                Toast.LENGTH_SHORT
+            ).show()
+            return
+        }
         if (enabled) {
             ContextCompat.startForegroundService(context, intent)
         } else {
