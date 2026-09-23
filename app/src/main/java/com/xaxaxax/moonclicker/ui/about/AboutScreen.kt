@@ -35,6 +35,8 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import coil3.compose.AsyncImage
 import com.xaxaxax.moonclicker.BuildConfig
 import com.xaxaxax.moonclicker.R
+import kotlinx.coroutines.delay
+import kotlin.time.Duration.Companion.milliseconds
 
 private const val REPO_URL = "https://github.com/kuomartin/MoonClicker"
 private const val ISSUES_URL = "$REPO_URL/issues"
@@ -57,6 +59,7 @@ fun AboutScreen(
         val text = message ?: return@LaunchedEffect
         activeToast?.cancel()
         activeToast = Toast.makeText(context, text, Toast.LENGTH_SHORT).apply { show() }
+        delay(2000.milliseconds) // 2000ms for LENGTH_SHORT, 3500 for LENGTH_LONG
         viewModel.consumeMessage()
     }
 
