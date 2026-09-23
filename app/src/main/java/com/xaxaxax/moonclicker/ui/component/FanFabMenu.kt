@@ -45,7 +45,7 @@ data class FanMenuAction(
 private val TriggerSize = 32.dp
 private val TriggerIconSize = 32.dp
 private val ActionSize = 32.dp
-private val FanRadius = 72.dp
+private val FanRadius = 96.dp
 
 /**
  * 觸發鈕吸附在螢幕左右任一側；點擊展開扇形選單，動作按鈕往螢幕中央那一象限（水平＋垂直都是）
