@@ -39,8 +39,10 @@ internal data class FieldMember(
  * annotations on the stubs. A red test therefore means one of those assumptions is wrong,
  * which is the whole reason this suite exists (see issue #18).
  *
- * Outside the range the contract makes no claim: the test still runs and still reports, as a
- * skip naming the range, so every member stays visible at every API level in the matrix.
+ * The bounds are an iff, not a lower bound: within [sinceApi]..[untilApi] the member must exist
+ * with this shape, and outside it the member must not exist at all. A member that lingers past
+ * [untilApi] (platforms rarely delete hidden members cleanly) or shows up before [sinceApi] is
+ * exactly the kind of wrong assumption this suite exists to catch (see issue #18).
  */
 internal data class MemberContract(
     val owner: String,

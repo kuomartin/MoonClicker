@@ -20,13 +20,22 @@ public class DisplayManagerHidden {
     public static final int VIRTUAL_DISPLAY_FLAG_SUPPORTS_TOUCH = 1 << 6;
     public static final int VIRTUAL_DISPLAY_FLAG_ROTATES_WITH_CONTENT = 1 << 7;
     public static final int VIRTUAL_DISPLAY_FLAG_DESTROY_CONTENT_ON_REMOVAL = 1 << 8;
+    @RequiresApi(Build.VERSION_CODES.Q)
     public static final int VIRTUAL_DISPLAY_FLAG_SHOULD_SHOW_SYSTEM_DECORATIONS = 1 << 9;
+    @RequiresApi(Build.VERSION_CODES.R)
     public static final int VIRTUAL_DISPLAY_FLAG_TRUSTED = 1 << 10;
+    @RequiresApi(Build.VERSION_CODES.S)
     public static final int VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP = 1 << 11;
+    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     public static final int VIRTUAL_DISPLAY_FLAG_ALWAYS_UNLOCKED = 1 << 12;
+    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     public static final int VIRTUAL_DISPLAY_FLAG_TOUCH_FEEDBACK_DISABLED = 1 << 13;
+    @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
     public static final int VIRTUAL_DISPLAY_FLAG_OWN_FOCUS = 1 << 14;
+    @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
     public static final int VIRTUAL_DISPLAY_FLAG_DEVICE_DISPLAY_GROUP = 1 << 15;
+    // apiMatrix 已驗證：14（UPSIDE_DOWN_CAKE）就存在，非原先以為的 15（VANILLA_ICE_CREAM）。
+    @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
     public static final int VIRTUAL_DISPLAY_FLAG_STEAL_TOP_FOCUS_DISABLED = 1 << 16;
 
     public DisplayManagerHidden(Context context){

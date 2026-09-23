@@ -101,7 +101,7 @@ android {
                 create("api27") { device = "Pixel 2"; apiLevel = 27; systemImageSource = "default"; testedAbi = "x86" }
                 create("api28") { device = "Pixel 2"; apiLevel = 28; systemImageSource = "default"; testedAbi = "x86" }
                 create("api29") { device = "Pixel 3"; apiLevel = 29; systemImageSource = "default"; testedAbi = "x86" }
-                create("api30") { device = "Pixel 3"; apiLevel = 30; systemImageSource = "aosp"; testedAbi = "x86" }
+                create("api30") { device = "Pixel 3"; apiLevel = 30; systemImageSource = "aosp"; testedAbi = "x86_64" }
                 create("api31") { device = "Pixel 6"; apiLevel = 31; systemImageSource = "aosp"; testedAbi = "x86_64" }
                 create("api33") { device = "Pixel 6"; apiLevel = 33; systemImageSource = "aosp"; testedAbi = "x86_64" }
                 create("api34") { device = "Pixel 6"; apiLevel = 34; systemImageSource = "aosp"; testedAbi = "x86_64" }

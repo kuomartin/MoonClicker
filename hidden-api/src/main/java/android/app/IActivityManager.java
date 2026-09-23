@@ -18,7 +18,9 @@ import java.util.List;
  */
 public interface IActivityManager {
 
-    @DeprecatedSinceApi(api = Build.VERSION_CODES.Q)
+    // Superseded by IActivityTaskManager in API 29, but the platform never removed it — still
+    // present through API 36 (apiMatrix). No @DeprecatedSinceApi: that would claim a removal
+    // this stub cannot back up.
     int startActivity(
             IApplicationThread caller,
             String callingPackage,
@@ -33,7 +35,9 @@ public interface IActivityManager {
     );
     @DeprecatedSinceApi(api = Build.VERSION_CODES.Q)
     int createStackOnDisplay(int displayId);
-    @DeprecatedSinceApi(api = Build.VERSION_CODES.Q)
+    // Superseded in API 29, but the platform kept it through API 30 (apiMatrix) before removing
+    // it in API 31.
+    @DeprecatedSinceApi(api = Build.VERSION_CODES.S)
     void moveTaskToStack(int taskId, int stackId, boolean toTop);
 
     @RequiresApi(Build.VERSION_CODES.P)
