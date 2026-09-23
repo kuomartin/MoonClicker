@@ -1,13 +1,13 @@
 package com.xaxaxax.moonclicker
 
 import android.Manifest
-import android.annotation.SuppressLint
 import android.app.ActivityManagerHidden
 import android.app.ActivityOptions
 import android.app.ActivityOptionsHidden
-import android.app.ActivityTaskManager
 import android.app.AppOpsManager
+import android.app.AppOpsManager.permissionToOp
 import android.app.AppOpsManagerHidden
+import android.app.AppOpsManagerHidden.strOpToOp
 import android.app.RunningTaskInfoHidden_API_27
 import android.content.ActivityNotFoundException
 import android.content.Context
@@ -17,7 +17,6 @@ import android.content.pm.PackageManager
 import android.content.pm.PackageManagerHidden
 import android.hardware.display.DisplayManager
 import android.hardware.display.DisplayManagerHidden
-import android.view.WindowManagerGlobal
 import android.hardware.display.VirtualDisplay
 import android.hardware.input.InputManager
 import android.hardware.input.InputManagerHidden
@@ -31,6 +30,7 @@ import android.os.PowerManagerHidden
 import android.os.Process
 import android.os.SystemClock
 import android.os.UserHandle
+import android.util.DisplayMetrics
 import android.view.Display
 import android.view.DisplayHidden
 import android.view.InputDevice
@@ -39,10 +39,9 @@ import android.view.KeyEventHidden
 import android.view.MotionEvent
 import android.view.MotionEventHidden
 import android.view.Surface
-import android.util.DisplayMetrics
+import android.view.WindowManagerGlobal
 import androidx.annotation.Keep
 import androidx.core.content.getSystemService
-import com.xaxaxax.moonclicker.MoonClickerDisplayInfo
 import com.xaxaxax.moonclicker.script.DisplayGeometry
 import dev.rikka.tools.refine.Refine
 import kotlinx.coroutines.CoroutineScope
@@ -157,6 +156,13 @@ class MoonClickerService @JvmOverloads constructor(
 
     private val activePointersByDisplay = ConcurrentHashMap<Int, MutableList<PointerState>>()
 
+    // packageManager 系列的 by lazy 宣告必須排在 init 之前——init 裡的
+    // rebuildLauncherAppsCache() 會存取它，Kotlin 的 property initializer 是照原始碼順序跑，
+    // 排在 init 後面的話,init 執行當下這個 delegate 欄位還是 null，直接 NPE 炸掉整個
+    // service process（NullPointerException: kotlin.Lazy.getValue() on a null object reference）。
+    private val packageManager by lazy { context.packageManager }
+    private val packageManagerHidden: PackageManagerHidden by lazy { Refine.unsafeCast(packageManager) }
+
     init {
         Timber.plant(Timber.DebugTree())
         Timber.d("MoonClickerService V2 (Flattened) started")
@@ -200,9 +206,28 @@ class MoonClickerService @JvmOverloads constructor(
     }
 
     private val inputManager: InputManagerHidden by lazy {
-        val im = context.getSystemService<InputManager>()
+        context.getSystemService<InputManager>()
+            ?.let { Refine.unsafeCast(it) }
             ?: throw IllegalStateException("Can not get InputManager")
-        Refine.unsafeCast(im)
+    }
+    private val displayManager: DisplayManager by lazy {
+        context.getSystemService()
+            ?: throw IllegalStateException("Cannot get DisplayManager")
+    }
+    private val displayManagerHidden: DisplayManagerHidden by lazy {
+        DisplayManagerHidden(fakeDisplayContext)
+    }
+
+    private val appOpsManagerHidden: AppOpsManagerHidden by lazy {
+        context.getSystemService<AppOpsManager>()
+            ?.let { Refine.unsafeCast(it) }
+            ?: throw IllegalStateException("Cannot get AppOpsManager")
+    }
+
+    private val powerManagerHidden: PowerManagerHidden by lazy {
+        context.getSystemService<PowerManager>()
+            ?.let { Refine.unsafeCast(it) }
+            ?:throw IllegalStateException("Cannot get PowerManager")
     }
 
     /**
@@ -227,7 +252,6 @@ class MoonClickerService @JvmOverloads constructor(
     private val mirrorRefCounts = mutableMapOf<Int, Int>() // physicalDisplayId -> refCount
     private val mirrorDisplayMap = mutableMapOf<Int, Int>() // physicalDisplayId -> mirrorVirtualDisplayId
     private val rotationListeners = mutableMapOf<Int, DisplayManager.DisplayListener>()
-    private val plainDisplayManager by lazy { context.getSystemService(DisplayManager::class.java) }
 
     /**
      * v 在這裡（distributor）取消，consumer 不用知道它存在（ADR-0017）。這個 VD 帶
@@ -236,23 +260,22 @@ class MoonClickerService @JvmOverloads constructor(
      * 用來判斷目前的影格尺寸要不要互換長寬，同一個 `plainDisplayManager` 讀取。
      */
     private fun startRotationTracking(displayId: Int, nativePtr: Long) {
-        val manager = plainDisplayManager ?: return
-        nativeSetDistributorRotation(nativePtr, manager.getDisplay(displayId)?.rotation ?: 0)
+        nativeSetDistributorRotation(nativePtr, displayManager.getDisplay(displayId)?.rotation ?: 0)
         val listener = object : DisplayManager.DisplayListener {
             override fun onDisplayAdded(id: Int) = Unit
             override fun onDisplayRemoved(id: Int) = Unit
             override fun onDisplayChanged(id: Int) {
                 if (id != displayId) return
-                nativeSetDistributorRotation(nativePtr, manager.getDisplay(displayId)?.rotation ?: 0)
+                nativeSetDistributorRotation(nativePtr, displayManager.getDisplay(displayId)?.rotation ?: 0)
             }
         }
-        manager.registerDisplayListener(listener, Handler(Looper.getMainLooper()))
+        displayManager.registerDisplayListener(listener, Handler(Looper.getMainLooper()))
         rotationListeners[displayId] = listener
     }
 
     private fun stopRotationTracking(displayId: Int) {
         val listener = rotationListeners.remove(displayId) ?: return
-        plainDisplayManager?.unregisterDisplayListener(listener)
+        displayManager.unregisterDisplayListener(listener)
     }
     private val fakeDisplayContext = object : ContextWrapper(context) {
         override fun getPackageName(): String = callerPackage
@@ -450,8 +473,8 @@ class MoonClickerService @JvmOverloads constructor(
 
     override fun grantRuntimePermission(packageName: String, permissionName: String): Boolean {
         return try {
-            val uid = context.packageManager.getPackageUid(packageName, 0)
-            Refine.unsafeCast<PackageManagerHidden>(context.packageManager)
+            val uid = packageManager.getPackageUid(packageName, 0)
+            packageManagerHidden
                 .grantRuntimePermission(
                     packageName,
                     permissionName,
@@ -469,10 +492,9 @@ class MoonClickerService @JvmOverloads constructor(
 
     override fun setOverlayAllowed(packageName: String): Boolean {
         return try {
-            val uid = context.packageManager.getPackageUid(packageName, 0)
-            val appOps = context.getSystemService(AppOpsManager::class.java)
-            Refine.unsafeCast<AppOpsManagerHidden>(appOps).setMode(
-                AppOpsManagerHidden.strOpToOp(AppOpsManager.permissionToOp(Manifest.permission.SYSTEM_ALERT_WINDOW)),
+            val uid = packageManager.getPackageUid(packageName, 0)
+            appOpsManagerHidden.setMode(
+                strOpToOp(permissionToOp(Manifest.permission.SYSTEM_ALERT_WINDOW)),
                 uid, packageName, AppOpsManager.MODE_ALLOWED
             )
             true
@@ -534,8 +556,7 @@ class MoonClickerService @JvmOverloads constructor(
     }
 
     private fun createMirrorInternal(displayId: Int): Boolean {
-        val dm = buildDisplayManagerForVirtualDisplay()
-        val sourceDisplay = dm.getDisplay(displayId) ?: run {
+        val sourceDisplay = displayManager.getDisplay(displayId) ?: run {
             Timber.e("createMirrorInternal: source display $displayId not found")
             return false
         }
@@ -554,15 +575,12 @@ class MoonClickerService @JvmOverloads constructor(
         }
 
         val vd = try {
-            val method = DisplayManager::class.java.getMethod(
-                "createVirtualDisplay",
-                String::class.java,
-                Int::class.javaPrimitiveType,
-                Int::class.javaPrimitiveType,
-                Int::class.javaPrimitiveType,
-                Surface::class.java
-            )
-            method.invoke(null, "moonclicker-mirror-$displayId", width, height, displayId, sourceSurface) as? VirtualDisplay
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                DisplayManagerHidden.createVirtualDisplay("moonclicker-mirror-$displayId", width, height, displayId, sourceSurface)
+            } else {
+                // use SurfaceControl#createDisplay
+                 TODO("VERSION.SDK_INT < UPSIDE_DOWN_CAKE")
+            }
         } catch (e: Throwable) {
             Timber.e(e, "createMirrorInternal: reflection on createVirtualDisplay failed")
             null
@@ -603,14 +621,12 @@ class MoonClickerService @JvmOverloads constructor(
             nativeDestroyDistributor(nativePtr)
             return -1
         }
-
-        val dm = buildDisplayManagerForVirtualDisplay()
         Timber.d(
             "createVD: callingUid=${getCallingUid()} serviceUid=${Process.myUid()} fakePkg=${fakeDisplayContext.packageName} surfaceValid=${sourceSurface.isValid}"
         )
         var usedFlags = privilegedFlags
-        val vd = createDisplay(dm, name, width, height, densityDpi, sourceSurface, privilegedFlags)
-            ?: createDisplay(dm, name, width, height, densityDpi, sourceSurface, baseFlags).also { usedFlags = baseFlags }
+        val vd = createDisplay(name, width, height, densityDpi, sourceSurface, privilegedFlags)
+            ?: createDisplay(name, width, height, densityDpi, sourceSurface, baseFlags).also { usedFlags = baseFlags }
             ?: run {
                 nativeDestroyDistributor(nativePtr)
                 return -1
@@ -686,8 +702,7 @@ class MoonClickerService @JvmOverloads constructor(
         if (!vdStore.containsKey(displayId)) return
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
         try {
-            val pm = context.getSystemService(PowerManager::class.java)
-            Refine.unsafeCast<PowerManagerHidden>(pm).wakeUp(
+            powerManagerHidden.wakeUp(
                 SystemClock.uptimeMillis(),
                 PowerManagerHidden.WAKE_REASON_APPLICATION,
                 "MoonClicker own-display-group keep-awake",
@@ -707,7 +722,6 @@ class MoonClickerService @JvmOverloads constructor(
      * 權限以外的前提。非 trusted 的顯示器仍然建得起來、收得到影格與觸控，只是行為降級。
      */
     private fun createDisplay(
-        dm: DisplayManager,
         name: String,
         width: Int,
         height: Int,
@@ -715,7 +729,7 @@ class MoonClickerService @JvmOverloads constructor(
         surface: Surface,
         flags: Int,
     ): VirtualDisplay? = try {
-        dm.createVirtualDisplay(name, width, height, densityDpi, surface, flags)
+        displayManagerHidden.createVirtualDisplay(name, width, height, densityDpi, surface, flags)
     } catch (e: SecurityException) {
         Timber.w(e, "createVirtualDisplay rejected with flags=0x${flags.toString(16)}")
         null
@@ -801,8 +815,7 @@ class MoonClickerService @JvmOverloads constructor(
             return false
         }
         return try {
-            val pm = context.getSystemService(PowerManager::class.java)
-            Refine.unsafeCast<PowerManagerHidden>(pm).goToSleep(
+            powerManagerHidden.goToSleep(
                 displayId,
                 SystemClock.uptimeMillis(),
                 PowerManagerHidden.GO_TO_SLEEP_REASON_APPLICATION,
@@ -842,7 +855,7 @@ class MoonClickerService @JvmOverloads constructor(
      * 非同步通知。要抓它得在啟動後查 task 實際落在哪個顯示器——見 issue #25。
      */
     private fun launchViaActivityTaskManager(packageName: String, displayId: Int): Boolean {
-        val intent = context.packageManager.getLaunchIntentForPackage(packageName) ?: return false
+        val intent = packageManager.getLaunchIntentForPackage(packageName) ?: return false
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         val options = ActivityOptions.makeBasic()
         Refine.unsafeCast<ActivityOptionsHidden>(options).setLaunchDisplayId(displayId)
@@ -873,7 +886,7 @@ class MoonClickerService @JvmOverloads constructor(
             Timber.d("Created stack $newStackId on display $displayId")
             iam.moveTaskToStack(hiddenInfo.id, newStackId, true)
         } else {
-            val intent = context.packageManager.getLaunchIntentForPackage(packageName)
+            val intent = packageManager.getLaunchIntentForPackage(packageName)
                 ?: throw IllegalArgumentException("launchInDisplay: no launcher intent for $packageName")
                     .also { Timber.w(it) }
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -941,8 +954,8 @@ class MoonClickerService @JvmOverloads constructor(
      */
     private fun rebuildLauncherAppsCache(): List<String> {
         val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-        val result = context.packageManager.queryIntentActivities(intent, 0).map {
-            "${it.activityInfo.packageName}|${it.loadLabel(context.packageManager)}"
+        val result = packageManager.queryIntentActivities(intent, 0).map {
+            "${it.activityInfo.packageName}|${it.loadLabel(packageManager)}"
         }
         launcherAppsCache = result
         return result
@@ -1016,10 +1029,10 @@ class MoonClickerService @JvmOverloads constructor(
     }
 
     override fun getDisplaySize(displayId: Int): IntArray {
-        val dm = context.getSystemService(DisplayManager::class.java)
-        val display = dm.getDisplay(displayId) ?: return intArrayOf(0, 0)
+        val dm = context.getSystemService<DisplayManager>()
+        val display = dm?.getDisplay(displayId) ?: return intArrayOf(0, 0)
         val outSize = android.graphics.Point()
-        @Suppress("DEPRECATION") // TODO: check if this method will still work in future Android versions.
+        @Suppress("DEPRECATION")
         display.getRealSize(outSize)
         return intArrayOf(outSize.x, outSize.y)
     }
@@ -1038,7 +1051,7 @@ class MoonClickerService @JvmOverloads constructor(
     override fun getDisplaySurfaceSize(displayId: Int): IntArray {
         val actualId = mirrorDisplayMap[displayId] ?: displayId
         vdStore[actualId]?.let { managed ->
-            val rotation = plainDisplayManager?.getDisplay(actualId)?.rotation ?: 0
+            val rotation = displayManager.getDisplay(actualId)?.rotation ?: 0
             return if (rotation and 1 != 0) {
                 intArrayOf(managed.surfaceHeight, managed.surfaceWidth)
             } else {
@@ -1046,20 +1059,20 @@ class MoonClickerService @JvmOverloads constructor(
             }
         }
 
-        val dm = context.getSystemService(DisplayManager::class.java)
+        val dm = context.getSystemService<DisplayManager>()
         val display = dm?.getDisplay(displayId) ?: run {
             Timber.w("getDisplaySurfaceSize($displayId): display not found")
             return intArrayOf(0, 0)
         }
         val outSize = android.graphics.Point()
-        @Suppress("DEPRECATION") // TODO: check if this method will still work in future Android versions.
+        @Suppress("DEPRECATION")
         display.getRealSize(outSize)
         val (width, height) = DisplayGeometry.surfaceSize(outSize.x, outSize.y, display.rotation)
         return intArrayOf(width, height)
     }
 
     override fun getDisplayInfo(displayId: Int): MoonClickerDisplayInfo? {
-        val dm = context.getSystemService(DisplayManager::class.java)
+        val dm = context.getSystemService<DisplayManager>()
         val display = dm?.getDisplay(displayId) ?: return null
         val metrics = DisplayMetrics()
         @Suppress("DEPRECATION")
@@ -1080,7 +1093,7 @@ class MoonClickerService @JvmOverloads constructor(
     }
 
     override fun getDisplayInfos(): Array<MoonClickerDisplayInfo> {
-        val dm = context.getSystemService(DisplayManager::class.java)
+        val dm = context.getSystemService<DisplayManager>()
         val allDisplays = dm?.displays ?: emptyArray()
         val internalMirrorVdIds = mirrorDisplayMap.values.toSet()
         return allDisplays
@@ -1094,11 +1107,5 @@ class MoonClickerService @JvmOverloads constructor(
     override fun destroy() {
         vdStore.forEach { (_, managed) -> managed.display.release() }
         exitProcess(0)
-    }
-
-    private fun buildDisplayManagerForVirtualDisplay(): DisplayManager {
-        val ctor = DisplayManager::class.java.getDeclaredConstructor(Context::class.java)
-        ctor.isAccessible = true
-        return ctor.newInstance(fakeDisplayContext)
     }
 }
