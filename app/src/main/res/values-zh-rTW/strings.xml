@@ -169,6 +169,7 @@
     <!-- Workbench Settings -->
     <string name="settings_workbench">Script Workbench</string>
     <string name="settings_workbench_note">開啟裝置端的內嵌 server，供電腦端的 Script Workbench 連線。</string>
+    <string name="settings_workbench_need_network_permission">請至設定允許區域網路權限，以使用此功能</string>
     <string name="settings_workbench_pending">Server 啟動中…</string>
     <string name="settings_workbench_address">伺服器位址：%1$s</string>
     <string name="workbench_notification_channel_label">Script Workbench</string>
