@@ -15,6 +15,7 @@ import android.content.ContextWrapper
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.PackageManagerHidden
+import android.graphics.Rect
 import android.hardware.display.DisplayManager
 import android.hardware.display.DisplayManagerHidden
 import android.hardware.display.VirtualDisplay
@@ -23,6 +24,7 @@ import android.hardware.input.InputManagerHidden
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
+import android.os.IBinder
 import android.os.IRemoteCallback
 import android.os.Looper
 import android.os.PowerManager
@@ -39,8 +41,10 @@ import android.view.KeyEventHidden
 import android.view.MotionEvent
 import android.view.MotionEventHidden
 import android.view.Surface
+import android.view.SurfaceControlHidden
 import android.view.WindowManagerGlobal
 import androidx.annotation.Keep
+import androidx.annotation.RequiresApi
 import androidx.core.content.getSystemService
 import com.xaxaxax.moonclicker.script.DisplayGeometry
 import dev.rikka.tools.refine.Refine
@@ -252,6 +256,15 @@ class MoonClickerService @JvmOverloads constructor(
     private val mirrorRefCounts = mutableMapOf<Int, Int>() // physicalDisplayId -> refCount
     private val mirrorDisplayMap = mutableMapOf<Int, Int>() // physicalDisplayId -> mirrorVirtualDisplayId
     private val rotationListeners = mutableMapOf<Int, DisplayManager.DisplayListener>()
+
+    /**
+     * API < 34 的鏡像沒有走 `createVirtualDisplay(..., displayId, surface)`，改用
+     * `SurfaceControl#createDisplay` 直接把 layer stack 接到來源螢幕——不會產生新的
+     * `Display`/`displayId`，所以不進 [vdStore]/[mirrorDisplayMap]（兩者都假設背後有一個
+     * `VirtualDisplay`）。key 是來源 physicalDisplayId 本身，value 是 SurfaceControl 的
+     * displayToken。見 [createMirrorViaSurfaceControl]/[destroyLegacyMirror]。
+     */
+    private val legacyMirrorStore = mutableMapOf<Int, IBinder>() // physicalDisplayId -> displayToken
 
     /**
      * v 在這裡（distributor）取消，consumer 不用知道它存在（ADR-0017）。這個 VD 帶
@@ -544,6 +557,9 @@ class MoonClickerService @JvmOverloads constructor(
             if (mirrorVdId != null) {
                 destroyVirtualDisplay(mirrorVdId)
                 Timber.d("releaseDisplayMirror: destroyed mirror VD $mirrorVdId for display $displayId")
+            } else if (legacyMirrorStore.containsKey(displayId)) {
+                destroyLegacyMirror(displayId)
+                Timber.d("releaseDisplayMirror: destroyed legacy (SurfaceControl) mirror for display $displayId")
             }
         } else {
             mirrorRefCounts[displayId] = newRef
@@ -552,7 +568,8 @@ class MoonClickerService @JvmOverloads constructor(
     }
 
     override fun isDisplayMirrorActive(displayId: Int): Boolean {
-        return (mirrorRefCounts[displayId] ?: 0) > 0 && mirrorDisplayMap.containsKey(displayId)
+        if ((mirrorRefCounts[displayId] ?: 0) <= 0) return false
+        return mirrorDisplayMap.containsKey(displayId) || legacyMirrorStore.containsKey(displayId)
     }
 
     private fun createMirrorInternal(displayId: Int): Boolean {
@@ -565,7 +582,6 @@ class MoonClickerService @JvmOverloads constructor(
         sourceDisplay.getRealMetrics(metrics)
         val width = metrics.widthPixels
         val height = metrics.heightPixels
-        val densityDpi = metrics.densityDpi
 
         val nativePtr = nativeCreateDistributor(width, height)
         if (nativePtr == 0L) return false
@@ -574,18 +590,27 @@ class MoonClickerService @JvmOverloads constructor(
             return false
         }
 
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            createMirrorViaVirtualDisplay(displayId, width, height, sourceSurface, nativePtr)
+        } else {
+            createMirrorViaSurfaceControl(displayId, sourceDisplay, width, height, sourceSurface, nativePtr)
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+    private fun createMirrorViaVirtualDisplay(
+        displayId: Int,
+        width: Int,
+        height: Int,
+        sourceSurface: Surface,
+        nativePtr: Long,
+    ): Boolean {
         val vd = try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                DisplayManagerHidden.createVirtualDisplay("moonclicker-mirror-$displayId", width, height, displayId, sourceSurface)
-            } else {
-                // use SurfaceControl#createDisplay
-                 TODO("VERSION.SDK_INT < UPSIDE_DOWN_CAKE")
-            }
+            DisplayManagerHidden.createVirtualDisplay("moonclicker-mirror-$displayId", width, height, displayId, sourceSurface)
         } catch (e: Throwable) {
-            Timber.e(e, "createMirrorInternal: reflection on createVirtualDisplay failed")
+            Timber.e(e, "createMirrorViaVirtualDisplay: reflection on createVirtualDisplay failed")
             null
         }
-
         if (vd == null) {
             nativeDestroyDistributor(nativePtr)
             return false
@@ -601,8 +626,69 @@ class MoonClickerService @JvmOverloads constructor(
         vdStore[mirrorVdId] = ManagedDisplay(vd, surfaceWidth = width, surfaceHeight = height, ownsDisplayGroup = false)
         distributorStore[mirrorVdId] = nativePtr
         mirrorDisplayMap[displayId] = mirrorVdId
-        Timber.d("createMirrorInternal: created mirror VD $mirrorVdId for source display $displayId (${width}x${height}@$densityDpi)")
+        Timber.d("createMirrorViaVirtualDisplay: created mirror VD $mirrorVdId for source display $displayId (${width}x${height})")
         return true
+    }
+
+    /**
+     * API < 34 沒有帶 displayId 的 mirror 建構子重載（見呼叫端 [createMirrorInternal]），
+     * 比照 scrcpy 改用 `SurfaceControl#createDisplay` 開一個裸顯示層，把它的 layer stack
+     * 設成跟來源螢幕相同——這樣 SurfaceFlinger 端合成的畫面就等同來源螢幕的鏡像。
+     * 這條路徑不會產生新的 `Display`/`displayId`，因此不進 [vdStore]/[mirrorDisplayMap]，
+     * 另外記在 [legacyMirrorStore]。
+     */
+    private fun createMirrorViaSurfaceControl(
+        displayId: Int,
+        sourceDisplay: Display,
+        width: Int,
+        height: Int,
+        sourceSurface: Surface,
+        nativePtr: Long,
+    ): Boolean {
+        val token = try {
+            SurfaceControlHidden.createDisplay("moonclicker-mirror-$displayId", false)
+        } catch (t: Throwable) {
+            Timber.e(t, "createMirrorViaSurfaceControl: createDisplay failed")
+            null
+        }
+        if (token == null) {
+            nativeDestroyDistributor(nativePtr)
+            return false
+        }
+
+        try {
+            val layerStack = Refine.unsafeCast<DisplayHidden>(sourceDisplay).layerStack
+            SurfaceControlHidden.openTransaction()
+            try {
+                SurfaceControlHidden.setDisplaySurface(token, sourceSurface)
+                SurfaceControlHidden.setDisplayLayerStack(token, layerStack)
+                val rect = Rect(0, 0, width, height)
+                SurfaceControlHidden.setDisplayProjection(token, Surface.ROTATION_0, rect, rect)
+            } finally {
+                SurfaceControlHidden.closeTransaction()
+            }
+        } catch (t: Throwable) {
+            Timber.e(t, "createMirrorViaSurfaceControl: transaction failed for display $displayId")
+            SurfaceControlHidden.destroyDisplay(token)
+            nativeDestroyDistributor(nativePtr)
+            return false
+        }
+
+        legacyMirrorStore[displayId] = token
+        distributorStore[displayId] = nativePtr
+        Timber.d("createMirrorViaSurfaceControl: created mirror for source display $displayId (${width}x${height})")
+        return true
+    }
+
+    private fun destroyLegacyMirror(displayId: Int) {
+        legacyMirrorStore.remove(displayId)?.let { token ->
+            try {
+                SurfaceControlHidden.destroyDisplay(token)
+            } catch (t: Throwable) {
+                Timber.e(t, "destroyLegacyMirror: destroyDisplay failed for display $displayId")
+            }
+        }
+        distributorStore.remove(displayId)?.let { ptr -> nativeDestroyDistributor(ptr) }
     }
 
     override fun createVirtualDisplay(
