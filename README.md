@@ -1,4 +1,4 @@
-# MoonClicker (Remote Lua Control)
+# MoonClicker
 
 MoonClicker 是一款專為 Android 設計的遠端 Lua 控制與背景自動化工具：透過 [Shizuku](https://shizuku.rikka.app/) 建立獨立的虛擬顯示器（Virtual Display），在不佔用實體螢幕的情況下於背景執行目標應用程式、注入觸控/按鍵事件，並透過線性執行的 Lua 腳本驅動流程，支援基於 OpenCV 的本機端高效影像模板比對與 VS Code 遠端開發調試。
 
@@ -98,7 +98,7 @@ data.set("status", "執行完成")
 
 - [x] **Compose UI**：Material 3 介面與深色模式
 - [ ] **腳本管理與範例**：內建範例與本地腳本管理
-- [ ] **多語言支援 (i18n)**：UI 字串多語系化（英文預設、正體中文）
+- [x] **多語言支援 (i18n)**：UI 字串多語系化（英文、正體中文）
 - [ ] **腳本匯入/匯出**：便捷分享與打包機制
 - [ ] **社群腳本市集 (Script Hub)**：腳本探索與分享平台
 
