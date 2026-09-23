@@ -11,6 +11,8 @@ import com.xaxaxax.moonclicker.core.DisplayConfig
 import com.xaxaxax.moonclicker.shizuku.ShizukuConnectionStatus
 import com.xaxaxax.moonclicker.shizuku.ShizukuManager
 import com.xaxaxax.moonclicker.shizuku.createVirtualDisplay
+import com.xaxaxax.moonclicker.shizuku.displayInfoList
+import com.xaxaxax.moonclicker.shizuku.toggleDisplayMirror
 import com.xaxaxax.moonclicker.ui.displaydetail.DisplayThumbnailCache
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -131,7 +133,7 @@ class DisplaysViewModel @Inject constructor(
                     }
                 }
                 shizukuManager.withService { service ->
-                    val displayInfos = runCatching { service.displayInfos.toList() }.getOrElse { emptyList() }
+                    val displayInfos = service.displayInfoList()
                     val ids = displayInfos.map { it.displayId }
                     computeRemovedDisplayIds(displays.value.map { it.displayId }, ids)
                         .forEach { thumbnailCache.remove(it) }
@@ -164,13 +166,7 @@ class DisplaysViewModel @Inject constructor(
 
     fun toggleMirror(displayId: Int, enable: Boolean) {
         viewModelScope.launch {
-            shizukuManager.withService { service ->
-                if (enable) {
-                    service.acquireDisplayMirror(displayId)
-                } else {
-                    service.releaseDisplayMirror(displayId)
-                }
-            }
+            shizukuManager.withService { service -> service.toggleDisplayMirror(displayId, enable) }
             refreshDisplays()
         }
     }
