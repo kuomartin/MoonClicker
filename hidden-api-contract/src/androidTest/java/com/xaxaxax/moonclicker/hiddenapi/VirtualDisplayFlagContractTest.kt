@@ -3,9 +3,9 @@ package com.xaxaxax.moonclicker.hiddenapi
 import android.os.Build
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
-import org.junit.Assume.assumeTrue
 import org.junit.BeforeClass
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -34,23 +34,23 @@ class VirtualDisplayFlagContractTest(private val flag: VirtualDisplayFlagTable.F
 
         val field = PlatformReflection.findField(owner!!, flag.name)
 
+        if (sdk < flag.sinceApi) {
+            // Below the level we claim the flag from, the field must not exist yet: finding it
+            // means the stub's belief about when it was introduced is wrong.
+            assertNull(
+                "${flag.name} exists on API $sdk but we claim it only from API " +
+                    "${flag.sinceApi} — the stub's assumption about when it was introduced is " +
+                    "wrong.",
+                field,
+            )
+            return
+        }
+
         if (field == null) {
-            // At or above the level we claim the flag from, absence is a failure: the stub's
-            // belief about when it was introduced is wrong. This must assert, not assume —
-            // an assumption failure is reported as *skipped* and would leave the build green.
-            if (sdk >= flag.sinceApi) {
-                fail(
-                    "${flag.name} is missing on API $sdk but we claim it from API " +
-                        "${flag.sinceApi} — the stub's assumption about when it was introduced " +
-                        "is wrong.",
-                )
-            }
-            // Below that level, absence is expected: skip, so the matrix's older devices stay
-            // useful for the flags they do have.
-            assumeTrue(
-                "${flag.name} does not exist until API ${flag.sinceApi}, so API $sdk says " +
-                    "nothing about its value.",
-                false,
+            fail(
+                "${flag.name} is missing on API $sdk but we claim it from API " +
+                    "${flag.sinceApi} — the stub's assumption about when it was introduced " +
+                    "is wrong.",
             )
             return
         }

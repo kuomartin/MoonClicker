@@ -87,8 +87,10 @@ internal val HIDDEN_API_CONTRACTS: List<MemberContract> = listOf(
     ),
 
     // ── IActivityManager ───────────────────────────────────────────────────────────────────
-    // Activity/stack management moved to IActivityTaskManager in Android 10, so these are
-    // 27–28 only.
+    // Activity/stack management moved to IActivityTaskManager in Android 10, but AIDL interfaces
+    // keep dead overloads around instead of deleting them — verified against the apiMatrix, not
+    // guessed. Production code stops calling these past API 28; the platform does not stop
+    // having them.
     MemberContract(
         owner = "android.app.IActivityManager",
         member = MethodMember(
@@ -107,7 +109,8 @@ internal val HIDDEN_API_CONTRACTS: List<MemberContract> = listOf(
             ),
             returns = "int",
         ),
-        untilApi = Build.VERSION_CODES.P,
+        note = "Unused by production past API 28, but the platform still has it through API 36 " +
+            "(apiMatrix) — no known removal, so left unbounded above.",
     ),
     MemberContract(
         owner = "android.app.IActivityManager",
@@ -121,7 +124,9 @@ internal val HIDDEN_API_CONTRACTS: List<MemberContract> = listOf(
             parameters = listOf("int", "int", "boolean"),
             returns = "void",
         ),
-        untilApi = Build.VERSION_CODES.P,
+        untilApi = Build.VERSION_CODES.R,
+        note = "Unused by production past API 28; the platform kept it through API 30 " +
+            "(apiMatrix) and removed it by API 31.",
     ),
     // getTasks lost its `flags` parameter in API 28; each side of the split is claimed
     // separately because callers pick the overload by SDK_INT.
@@ -274,8 +279,9 @@ internal val HIDDEN_API_CONTRACTS: List<MemberContract> = listOf(
     // ── SurfaceControlHidden（API < 34 legacy mirror） ────────────────────────────────────
     // 沒有 `createVirtualDisplay(..., displayId, surface)` 重載的 API 上，MoonClickerService
     // 改用 SurfaceControl 直接把 layer stack 接到來源螢幕（比照 scrcpy）。stub 標
-    // `@DeprecatedSinceApi(UPSIDE_DOWN_CAKE)`——「沒出現在 android 14+」，因此這裡只聲稱到
-    // TIRAMISU（33）為止；34+ 是否真的移除，contract 機制本身只會 skip、不驗證消失。
+    // `@DeprecatedSinceApi(UPSIDE_DOWN_CAKE)`——production code 不再用它。實測（apiMatrix）：
+    // display 相關的六個方法在 34（UPSIDE_DOWN_CAKE）之後真的被移除；`openTransaction`／
+    // `closeTransaction` 是共用的 transaction 生命週期方法，36（BAKLAVA）仍在，故不設上界。
     MemberContract(
         owner = "android.view.SurfaceControl",
         member = MethodMember(
@@ -284,17 +290,19 @@ internal val HIDDEN_API_CONTRACTS: List<MemberContract> = listOf(
             returns = "android.os.IBinder",
             static = true,
         ),
-        untilApi = Build.VERSION_CODES.TIRAMISU,
+        untilApi = Build.VERSION_CODES.UPSIDE_DOWN_CAKE,
     ),
     MemberContract(
         owner = "android.view.SurfaceControl",
         member = MethodMember(name = "openTransaction", returns = "void", static = true),
-        untilApi = Build.VERSION_CODES.TIRAMISU,
+        note = "Unused by production past API 33, but still present through API 36 (apiMatrix) — " +
+            "no known removal, so left unbounded above.",
     ),
     MemberContract(
         owner = "android.view.SurfaceControl",
         member = MethodMember(name = "closeTransaction", returns = "void", static = true),
-        untilApi = Build.VERSION_CODES.TIRAMISU,
+        note = "Unused by production past API 33, but still present through API 36 (apiMatrix) — " +
+            "no known removal, so left unbounded above.",
     ),
     MemberContract(
         owner = "android.view.SurfaceControl",
@@ -304,7 +312,7 @@ internal val HIDDEN_API_CONTRACTS: List<MemberContract> = listOf(
             returns = "void",
             static = true,
         ),
-        untilApi = Build.VERSION_CODES.TIRAMISU,
+        untilApi = Build.VERSION_CODES.UPSIDE_DOWN_CAKE,
     ),
     MemberContract(
         owner = "android.view.SurfaceControl",
@@ -314,7 +322,7 @@ internal val HIDDEN_API_CONTRACTS: List<MemberContract> = listOf(
             returns = "void",
             static = true,
         ),
-        untilApi = Build.VERSION_CODES.TIRAMISU,
+        untilApi = Build.VERSION_CODES.UPSIDE_DOWN_CAKE,
     ),
     MemberContract(
         owner = "android.view.SurfaceControl",
@@ -329,7 +337,7 @@ internal val HIDDEN_API_CONTRACTS: List<MemberContract> = listOf(
             returns = "void",
             static = true,
         ),
-        untilApi = Build.VERSION_CODES.TIRAMISU,
+        untilApi = Build.VERSION_CODES.UPSIDE_DOWN_CAKE,
     ),
     MemberContract(
         owner = "android.view.SurfaceControl",
@@ -339,7 +347,7 @@ internal val HIDDEN_API_CONTRACTS: List<MemberContract> = listOf(
             returns = "void",
             static = true,
         ),
-        untilApi = Build.VERSION_CODES.TIRAMISU,
+        untilApi = Build.VERSION_CODES.UPSIDE_DOWN_CAKE,
     ),
 
     // ── IWindowManager ─────────────────────────────────────────────────────────────────────

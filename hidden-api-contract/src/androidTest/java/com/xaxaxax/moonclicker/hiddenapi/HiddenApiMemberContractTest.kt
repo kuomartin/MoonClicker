@@ -2,8 +2,8 @@ package com.xaxaxax.moonclicker.hiddenapi
 
 import android.os.Build
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
-import org.junit.Assume.assumeTrue
 import org.junit.BeforeClass
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -31,13 +31,17 @@ internal class HiddenApiMemberContractTest(private val contract: MemberContract)
     @Test
     fun platformMatchesStub() {
         val sdk = Build.VERSION.SDK_INT
-        assumeTrue(
-            "$contract is only claimed on API ${contract.sinceApi}..${contract.untilApi.orUnbounded()}, " +
-                "so API $sdk says nothing about it.${contract.noteSuffix()}",
-            sdk in contract.sinceApi..contract.untilApi,
-        )
-
         val resolution = contract.resolveAgainstPlatform()
+
+        if (sdk !in contract.sinceApi..contract.untilApi) {
+            assertFalse(
+                "$contract is only claimed on API ${contract.sinceApi}..${contract.untilApi.orUnbounded()} " +
+                    "but ${resolution.detail} on API $sdk — the stub's assumption about when it " +
+                    "exists is wrong.${contract.noteSuffix()}",
+                resolution.found,
+            )
+            return
+        }
 
         assertTrue(
             "$contract should exist on API $sdk but ${resolution.detail}.${contract.noteSuffix()}",

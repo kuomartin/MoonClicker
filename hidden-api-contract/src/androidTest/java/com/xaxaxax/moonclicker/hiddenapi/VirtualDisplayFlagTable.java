@@ -95,7 +95,7 @@ public final class VirtualDisplayFlagTable {
                 Build.VERSION_CODES.UPSIDE_DOWN_CAKE));
         flags.add(new Flag("VIRTUAL_DISPLAY_FLAG_STEAL_TOP_FOCUS_DISABLED",
                 DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_STEAL_TOP_FOCUS_DISABLED,
-                Build.VERSION_CODES.VANILLA_ICE_CREAM));
+                Build.VERSION_CODES.UPSIDE_DOWN_CAKE));
         return Collections.unmodifiableList(flags);
     }
 
