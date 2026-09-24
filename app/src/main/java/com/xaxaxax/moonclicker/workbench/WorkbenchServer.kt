@@ -9,6 +9,7 @@ import com.xaxaxax.moonclicker.script.TemplateRoi
 import com.xaxaxax.moonclicker.shizuku.ShizukuManager
 import com.xaxaxax.moonclicker.shizuku.displayInfoList
 import com.xaxaxax.moonclicker.shizuku.toggleDisplayMirror
+import com.xaxaxax.moonclicker.ui.displaydetail.DisplayThumbnailCache
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
@@ -113,6 +114,7 @@ class WorkbenchServer @Inject constructor(
     private val scriptStore: ScriptStore,
     private val scriptSession: ScriptSession,
     private val shizukuManager: ShizukuManager,
+    private val thumbnailCache: DisplayThumbnailCache,
     val authStore: WorkbenchAuthStore,
 ) {
     private val scriptRunner = object : ScriptRunner {
@@ -145,7 +147,8 @@ class WorkbenchServer @Inject constructor(
 
         override fun toggleMirror(displayId: Int, enable: Boolean): Boolean {
             val service = shizukuManager.service ?: return false
-            return service.toggleDisplayMirror(displayId, enable)
+            // 與 DisplaysViewModel.toggleMirror 相同：關閉鏡像後縮圖就過期了。
+            return service.toggleDisplayMirror(displayId, enable).also { if (!enable) thumbnailCache.remove(displayId) }
         }
     }
 
