@@ -8,6 +8,7 @@ import com.xaxaxax.moonclicker.notification.ScriptStatusNotifier
 import com.xaxaxax.moonclicker.script.ScriptSession
 import com.xaxaxax.moonclicker.script.ScriptStore
 import com.xaxaxax.moonclicker.shizuku.ShizukuManager
+import com.xaxaxax.moonclicker.ui.displaydetail.DisplayThumbnailCache
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.InetSocketAddress
@@ -44,6 +45,7 @@ class WorkbenchServerConnectivityTest {
             settings = AppSettings(context),
         ),
         shizukuManager = shizukuManager,
+        thumbnailCache = DisplayThumbnailCache(context),
         authStore = WorkbenchAuthStore(context),
     )
 

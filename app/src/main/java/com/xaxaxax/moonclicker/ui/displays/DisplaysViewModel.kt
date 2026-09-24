@@ -167,6 +167,8 @@ class DisplaysViewModel @Inject constructor(
     fun toggleMirror(displayId: Int, enable: Boolean) {
         viewModelScope.launch {
             shizukuManager.withService { service -> service.toggleDisplayMirror(displayId, enable) }
+            // 鏡像期間留下的縮圖在關閉後就過期了，不清掉的話下次開啟鏡像會先顯示舊畫面。
+            if (!enable) thumbnailCache.remove(displayId)
             refreshDisplays()
         }
     }
