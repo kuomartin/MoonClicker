@@ -84,6 +84,17 @@ fun DeveloperOptionsScreen(
             }
 
             item {
+                Section(name = stringResource(R.string.developer_options_displays)) {
+                    ToggleSettingItem(
+                        name = stringResource(R.string.developer_options_show_external_displays),
+                        description = stringResource(R.string.developer_options_show_external_displays_note),
+                        checked = uiState.showExternalDisplays,
+                        onCheckedChange = viewModel::setShowExternalDisplays,
+                    )
+                }
+            }
+
+            item {
                 Button(
                     onClick = {
                         viewModel.disableDeveloperOptions()

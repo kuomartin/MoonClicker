@@ -7,6 +7,7 @@ import android.util.DisplayMetrics
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.xaxaxax.moonclicker.core.AppSettings
 import com.xaxaxax.moonclicker.core.DisplayConfig
 import com.xaxaxax.moonclicker.shizuku.ShizukuConnectionStatus
 import com.xaxaxax.moonclicker.shizuku.ShizukuManager
@@ -38,8 +39,15 @@ data class DisplayCardInfo(
     val densityDpi: Int,
     val isPhysical: Boolean = false,
     val isMirrorActive: Boolean = false,
+    val isManaged: Boolean = false,
     val thumbnail: ImageBitmap? = null,
-)
+) {
+    /** 外部 app 建立的虛擬螢幕；API 29 以下無法判斷類型，會被歸為實體螢幕。 */
+    val isExternal: Boolean get() = !isPhysical && !isManaged
+
+    /** 不是本服務建立的顯示器沒有 distributor，要先開鏡像才有畫面可看。 */
+    val needsMirror: Boolean get() = !isManaged
+}
 
 data class DisplaysUiState(
     val displays: List<DisplayCardInfo> = emptyList(),
@@ -55,6 +63,7 @@ private const val REFRESH_DELAY = 500
 class DisplaysViewModel @Inject constructor(
     private val shizukuManager: ShizukuManager,
     private val thumbnailCache: DisplayThumbnailCache,
+    appSettings: AppSettings,
 ) : ViewModel() {
     private val displays = MutableStateFlow<List<DisplayCardInfo>>(emptyList())
     private val isLoading = MutableStateFlow(false)
@@ -82,10 +91,11 @@ class DisplaysViewModel @Inject constructor(
         displays,
         shizukuManager.statusFlow,
         isLoading,
-        isRefreshing
-    ) { displays, shizukuStatus, loading, refreshing ->
+        isRefreshing,
+        appSettings.externalDisplaysVisible,
+    ) { displays, shizukuStatus, loading, refreshing, showExternal ->
         DisplaysUiState(
-            displays = displays,
+            displays = visibleDisplays(displays, showExternal),
             shizukuStatus = shizukuStatus,
             isLoading = loading,
             isRefreshing = refreshing
@@ -147,7 +157,8 @@ class DisplaysViewModel @Inject constructor(
                                 densityDpi = info.densityDpi,
                                 isPhysical = info.isPhysical,
                                 isMirrorActive = info.isMirrorActive,
-                                thumbnail = if (info.isPhysical && !info.isMirrorActive) null else thumbnailCache.get(info.displayId),
+                                isManaged = info.isManaged,
+                                thumbnail = if (!info.isManaged && !info.isMirrorActive) null else thumbnailCache.get(info.displayId),
                             )
                         }
                     }
@@ -194,3 +205,7 @@ class DisplaysViewModel @Inject constructor(
 /** 上一輪清單裡有、這一輪沒了的 displayId——縮圖快取該一併清掉的對象。 */
 internal fun computeRemovedDisplayIds(previousIds: List<Int>, currentIds: List<Int>): Set<Int> =
     previousIds.toSet() - currentIds.toSet()
+
+/** 外部虛擬螢幕只在開發人員選項開啟時列出。 */
+internal fun visibleDisplays(displays: List<DisplayCardInfo>, showExternal: Boolean): List<DisplayCardInfo> =
+    if (showExternal) displays else displays.filterNot { it.isExternal }

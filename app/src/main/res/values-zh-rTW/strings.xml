@@ -30,6 +30,9 @@
     <string name="displays_card_mirror_not_active">鏡像未開啟</string>
     <string name="displays_card_tag_physical_mirroring">實體螢幕 (鏡像運作中)</string>
     <string name="displays_card_tag_physical">實體螢幕</string>
+    <string name="displays_card_external">外部虛擬螢幕 #%1$d</string>
+    <string name="displays_card_tag_external">外部虛擬螢幕</string>
+    <string name="displays_card_tag_external_mirroring">外部虛擬螢幕 (鏡像運作中)</string>
     <string name="displays_card_tag_service">虛擬顯示</string>
     <string name="displays_action_start_mirror">開啟鏡像</string>
     <string name="displays_action_stop_mirror">關閉鏡像</string>
@@ -140,6 +143,9 @@
 
     <!-- Developer options page -->
     <string name="developer_options_title">開發人員選項</string>
+    <string name="developer_options_displays">顯示器</string>
+    <string name="developer_options_show_external_displays">顯示外部虛擬螢幕</string>
+    <string name="developer_options_show_external_displays_note">列出其他 app（例如 Android Studio）建立的虛擬螢幕，並允許鏡像</string>
     <string name="developer_options_disable">停用開發人員選項</string>
 
     <!-- Shizuku Connection Status -->

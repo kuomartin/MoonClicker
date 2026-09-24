@@ -46,6 +46,7 @@ class WorkbenchServerConnectivityTest {
         ),
         shizukuManager = shizukuManager,
         thumbnailCache = DisplayThumbnailCache(context),
+        appSettings = AppSettings(context),
         authStore = WorkbenchAuthStore(context),
     )
 

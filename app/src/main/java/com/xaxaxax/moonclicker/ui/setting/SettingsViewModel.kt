@@ -60,6 +60,7 @@ data class SettingsUiState(
     /** Shizuku 遠端服務跑在非 uid=2000（adb shell）身分，多半代表使用者用 root 啟動了它。 */
     val isShizukuUidWarning: Boolean = false,
     val isDeveloperOptionsUnlocked: Boolean = false,
+    val showExternalDisplays: Boolean = false,
 ) {
     val canStartUserService: Boolean
         get() = shizukuStatus == ShizukuConnectionStatus.DISCONNECTED
@@ -134,8 +135,9 @@ class SettingsViewModel @Inject constructor(
         appSettings.defaultStartPage,
         _appLanguage,
         appSettings.developerOptionsUnlocked,
-    ) { autoOpenFullscreen, defaultStartPage, appLanguage, developerOptionsUnlocked ->
-        GeneralSettingsStateHolder(autoOpenFullscreen, defaultStartPage, appLanguage, developerOptionsUnlocked)
+        appSettings.showExternalDisplays,
+    ) { autoOpenFullscreen, defaultStartPage, appLanguage, developerOptionsUnlocked, showExternalDisplays ->
+        GeneralSettingsStateHolder(autoOpenFullscreen, defaultStartPage, appLanguage, developerOptionsUnlocked, showExternalDisplays)
     }
 
     val uiState: StateFlow<SettingsUiState> = combine(
@@ -155,6 +157,7 @@ class SettingsViewModel @Inject constructor(
             defaultStartPage = general.defaultStartPage,
             appLanguage = general.appLanguage,
             isDeveloperOptionsUnlocked = general.developerOptionsUnlocked,
+            showExternalDisplays = general.showExternalDisplays,
             autoStartUserService = autoStart,
             isScriptRunning = scriptRunning,
             workbenchEnabled = workbenchEnabled,
@@ -277,6 +280,7 @@ class SettingsViewModel @Inject constructor(
     fun revokeAllTokens() = authStore.revokeAllTokens()
 
     fun disableDeveloperOptions() = appSettings.setDeveloperOptionsUnlocked(false)
+    fun setShowExternalDisplays(enabled: Boolean) = appSettings.setShowExternalDisplays(enabled)
 }
 
 private data class PermissionsStateHolder(
@@ -290,6 +294,7 @@ private data class GeneralSettingsStateHolder(
     val defaultStartPage: TopLevelDestination,
     val appLanguage: String,
     val developerOptionsUnlocked: Boolean,
+    val showExternalDisplays: Boolean,
 )
 
 private data class PairingStateHolder(
