@@ -28,6 +28,7 @@ sealed interface FullscreenAction {
     data object PowerOff : FullscreenAction
     data object Exit : FullscreenAction
     data object Home : FullscreenAction
+    data object Back : FullscreenAction
 }
 
 @HiltViewModel
@@ -71,20 +72,21 @@ class FullscreenDisplayViewModel @Inject constructor(
             FullscreenAction.CloseDisplay -> destroyDisplay(targetDisplayId, thenFinish = true)
             FullscreenAction.PowerOff -> sleepDisplay(targetDisplayId)
             FullscreenAction.Exit -> _finishEvents.trySend(Unit)
-            FullscreenAction.Home -> injectHomeKey(targetDisplayId)
+            FullscreenAction.Home -> injectKey(targetDisplayId, KeyEvent.KEYCODE_HOME)
+            FullscreenAction.Back -> injectKey(targetDisplayId, KeyEvent.KEYCODE_BACK)
         }
     }
 
-    private fun injectHomeKey(displayId: Int) {
+    private fun injectKey(displayId: Int, keyCode: Int) {
         viewModelScope.launch {
             shizukuManager.withService { service ->
                 val downTime = SystemClock.uptimeMillis()
                 service.injectKeyEvent(
-                    KeyEvent(downTime, downTime, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_HOME, 0),
+                    KeyEvent(downTime, downTime, KeyEvent.ACTION_DOWN, keyCode, 0),
                     displayId,
                 )
                 service.injectKeyEvent(
-                    KeyEvent(downTime, SystemClock.uptimeMillis(), KeyEvent.ACTION_UP, KeyEvent.KEYCODE_HOME, 0),
+                    KeyEvent(downTime, SystemClock.uptimeMillis(), KeyEvent.ACTION_UP, keyCode, 0),
                     displayId,
                 )
             }.onFailure {
