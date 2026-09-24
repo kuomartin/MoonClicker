@@ -130,6 +130,7 @@ fun FullscreenDisplayScreen(
     LaunchedEffect(Unit) {
         viewModel.finishEvents.collect { activity?.finish() }
     }
+    LaunchedEffect(targetDisplayId) { viewModel.loadDisplayInfo(targetDisplayId) }
     // 單一來源：鏡像的 Viewport 讀這一份，決定 letterbox 與內容尺寸。
     val geometry = rememberDisplayGeometry(targetDisplayId)
 
@@ -198,7 +199,7 @@ fun FullscreenDisplayScreen(
         val homeLabel = stringResource(R.string.fullscreen_menu_home)
         val fanActions = buildList {
             add(FanMenuAction(Icons.Default.Apps, startAppLabel) { viewModel.onAction(FullscreenAction.StartApp, targetDisplayId) })
-            if (targetDisplayId != 0) {
+            if (uiState.isManaged) {
                 add(FanMenuAction(Icons.Default.Close, closeDisplayLabel) { viewModel.onAction(FullscreenAction.CloseDisplay, targetDisplayId) })
                 add(FanMenuAction(Icons.Default.PowerSettingsNew, powerOffLabel) { viewModel.onAction(FullscreenAction.PowerOff, targetDisplayId) })
             }

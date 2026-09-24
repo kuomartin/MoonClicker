@@ -30,6 +30,9 @@
     <string name="displays_card_mirror_not_active">Mirror not active</string>
     <string name="displays_card_tag_physical_mirroring">Physical Screen (Mirroring)</string>
     <string name="displays_card_tag_physical">Physical Screen</string>
+    <string name="displays_card_external">External #%1$d</string>
+    <string name="displays_card_tag_external">External Virtual Display</string>
+    <string name="displays_card_tag_external_mirroring">External Virtual Display (Mirroring)</string>
     <string name="displays_card_tag_service">Virtual Display</string>
     <string name="displays_action_start_mirror">Start Mirror</string>
     <string name="displays_action_stop_mirror">Stop Mirror</string>
@@ -145,6 +148,9 @@
 
     <!-- Developer options page -->
     <string name="developer_options_title">Developer options</string>
+    <string name="developer_options_displays">Displays</string>
+    <string name="developer_options_show_external_displays">Show external virtual displays</string>
+    <string name="developer_options_show_external_displays_note">List virtual displays created by other apps (e.g. Android Studio) and allow mirroring them</string>
     <string name="developer_options_disable">Disable developer options</string>
 
     <!-- Shizuku Connection Status -->

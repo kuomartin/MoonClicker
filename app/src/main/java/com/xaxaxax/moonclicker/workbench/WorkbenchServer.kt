@@ -1,5 +1,6 @@
 package com.xaxaxax.moonclicker.workbench
 
+import com.xaxaxax.moonclicker.core.AppSettings
 import com.xaxaxax.moonclicker.engine.ScriptEngine
 import com.xaxaxax.moonclicker.script.Script
 import com.xaxaxax.moonclicker.script.ScriptSession
@@ -115,6 +116,7 @@ class WorkbenchServer @Inject constructor(
     private val scriptSession: ScriptSession,
     private val shizukuManager: ShizukuManager,
     private val thumbnailCache: DisplayThumbnailCache,
+    private val appSettings: AppSettings,
     val authStore: WorkbenchAuthStore,
 ) {
     private val scriptRunner = object : ScriptRunner {
@@ -133,16 +135,19 @@ class WorkbenchServer @Inject constructor(
     private val displaySource = object : DisplaySource {
         override fun getDisplays(): List<WorkbenchDisplaySummary>? {
             val service = shizukuManager.service ?: return null
-            return service.displayInfoList().map { info ->
-                WorkbenchDisplaySummary(
-                    id = info.displayId,
-                    name = info.name ?: if (info.isPhysical) "Physical Display" else "Virtual Display ${info.displayId}",
-                    width = info.width,
-                    height = info.height,
-                    isVirtual = !info.isPhysical,
-                    isMirrorActive = if (info.isPhysical) info.isMirrorActive else true
-                )
-            }
+            return service.displayInfoList()
+                .filter { info -> info.isPhysical || info.isManaged || appSettings.isExternalDisplaysVisible }
+                .map { info ->
+                    WorkbenchDisplaySummary(
+                        id = info.displayId,
+                        name = info.name ?: if (info.isPhysical) "Physical Display" else "Virtual Display ${info.displayId}",
+                        width = info.width,
+                        height = info.height,
+                        // 插件以 isVirtual 判斷要不要先開鏡像：外部虛擬螢幕沒有 distributor，要比照實體螢幕。
+                        isVirtual = info.isManaged,
+                        isMirrorActive = if (info.isManaged) true else info.isMirrorActive
+                    )
+                }
         }
 
         override fun toggleMirror(displayId: Int, enable: Boolean): Boolean {
