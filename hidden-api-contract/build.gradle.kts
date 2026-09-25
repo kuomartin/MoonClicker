@@ -5,7 +5,7 @@ plugins {
 /**
  * Contract tests for `:hidden-api`'s stubs — see issue #18.
  *
- * There is no main source set. The module exists only to host an androidTest APK, and it is
+ * The module exists to host the contracts (`src/main`) and the tests that check them, and it is
  * deliberately its own module rather than part of `:hidden-api` or `:engine`:
  *
  *  - Not `:hidden-api`: a module's androidTest packages that module's own classes, so the
@@ -15,9 +15,9 @@ plugins {
  *    drags in the CMake/OpenCV native build across four ABIs — a ~79 MB test APK, rebuilt for
  *    every device in the matrix below.
  *
- * What *is* tested is the platform, against the assumptions `:hidden-api` encodes. The contracts
- * themselves live in `src/contracts` and are compiled into both test source sets: `androidTest`
- * checks them against the platform, `test` checks them against the stubs (`StubCoverageTest`).
+ * What *is* tested is the platform, against the assumptions `:hidden-api` encodes: `androidTest`
+ * checks the contracts against the platform, `test` checks them against the stubs
+ * (`StubCoverageTest`).
  */
 
 val sdkPath = file("${System.getProperty("user.home")}/Android/Sdk")
@@ -40,15 +40,6 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
-    }
-
-    sourceSets {
-        listOf("androidTest", "test").forEach { name ->
-            getByName(name) {
-                java.srcDir("src/contracts/java")
-                kotlin.srcDir("src/contracts/java")
-            }
-        }
     }
 
     testOptions {
@@ -131,10 +122,10 @@ android {
 }
 
 dependencies {
-    // compileOnly is load-bearing: it lets javac inline DisplayManagerHidden's
-    // VIRTUAL_DISPLAY_FLAG_* constants into the test (which is exactly what production callers
-    // get) while keeping the stubs out of the APK, so the platform is the only thing loaded.
-    androidTestCompileOnly(project(":hidden-api"))
+    // compileOnly is load-bearing: it lets javac inline the stubs' constants into
+    // StubConstantTable (which is exactly what production callers get) while keeping the stubs
+    // out of the test APK, so the platform is the only thing loaded.
+    compileOnly(project(":hidden-api"))
     androidTestImplementation(libs.androidx.junit)
     // Supplies AndroidJUnitRunner itself — androidx.test.ext:junit does not pull it in.
     androidTestImplementation(libs.androidx.test.runner)
