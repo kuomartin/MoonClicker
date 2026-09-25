@@ -1,6 +1,8 @@
 package com.xaxaxax.moonclicker.hiddenapi
 
 import android.os.Build
+import com.xaxaxax.moonclicker.hiddenapi.contracts.ALL_STUB_CONTRACTS
+import com.xaxaxax.moonclicker.hiddenapi.contracts.MemberContract
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -62,7 +64,7 @@ internal class HiddenApiMemberContractTest(private val contract: MemberContract)
 
         @JvmStatic
         @Parameterized.Parameters(name = "{0}")
-        fun contracts(): List<MemberContract> = HIDDEN_API_CONTRACTS
+        fun contracts(): List<MemberContract> = ALL_STUB_CONTRACTS.flatMap { it.contracts }
     }
 }
 
