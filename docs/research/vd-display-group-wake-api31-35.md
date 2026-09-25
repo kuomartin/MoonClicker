@@ -97,6 +97,14 @@ WindowManager 本來就用同一機制：VD 上有 `FLAG_KEEP_SCREEN_ON` 視窗�
 
 `ACQUIRE_CAUSES_WAKEUP` 只在 acquire 那一刻生效，釋放後若已超過逾時，group 會立刻關閉（Note20 實測）。所以「只在需要時持有」的用法等於：需要時 acquire（順便叫醒），不需要時 release（隨即可能睡著）。
 
+acquire 後立即 release（pulse）可以當作帶 displayId 的 `wakeUp` 用。Note20 實測（主螢幕關閉、鎖定中）：
+
+- **pulse 本身：** 叫醒 group 後約 6 秒再次逾時，加 `ON_AFTER_RELEASE` 也一樣。
+- **pulse 後注入輸入：** 之後用 `input -d <id> tap` 注入的觸控會重設該 group 的計時，group 在最後一次觸控約 6 秒後才逾時。
+- **不鎖定時：** 同一台機器在 `screen_off_timeout=120000`、主螢幕剛喚醒的情況下，VD group 33 秒內沒有逾時。
+
+6 秒不是 `screen_off_timeout`（15 秒），推測是鎖定畫面時 WindowManager 設下的 user activity timeout override 作用到所有 group，這點未確認。持有中的 wake lock 不受影響：同樣在鎖定狀態下持有 40 秒都沒有逾時。
+
 ### B. 定期 `userActivity(displayId)`
 
 | 欄位 | 內容 |
