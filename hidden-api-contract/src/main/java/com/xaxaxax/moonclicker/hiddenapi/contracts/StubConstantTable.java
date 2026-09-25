@@ -96,11 +96,9 @@ public final class StubConstantTable {
                         DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_STEAL_TOP_FOCUS_DISABLED,
                         Build.VERSION_CODES.UPSIDE_DOWN_CAKE),
 
-                // Reason codes VirtualDisplayLifecycle passes to goToSleep/wakeUp. The WAKE_REASON_*
-                // family was introduced in Android 10; GO_TO_SLEEP_REASON_* predates minSdk.
+                // Reason code VirtualDisplayLifecycle passes to goToSleep; predates minSdk.
                 new Constant(POWER_MANAGER_STUB, POWER_MANAGER, "GO_TO_SLEEP_REASON_APPLICATION",
-                        PowerManagerHidden.GO_TO_SLEEP_REASON_APPLICATION, MIN_API), new Constant(POWER_MANAGER_STUB, POWER_MANAGER, "WAKE_REASON_APPLICATION",
-                        PowerManagerHidden.WAKE_REASON_APPLICATION, Build.VERSION_CODES.Q));
+                        PowerManagerHidden.GO_TO_SLEEP_REASON_APPLICATION, MIN_API));
     }
 
     private static Constant displayFlag(String name, int stubValue, int sinceApi) {
