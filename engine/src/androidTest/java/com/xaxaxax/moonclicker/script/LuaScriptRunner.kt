@@ -11,7 +11,9 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -23,10 +25,8 @@ internal data class ScriptOutcome(
     val runState: EngineRunState,
     /** 腳本用 `data.set` 發佈的東西——腳本自己回報結果的管道。 */
     val data: Map<String, Any>,
-    val calls: List<RecordingMoonClickerService.Call>,
     val notifications: List<Pair<String, String>>,
     val openedUris: List<String>,
-    val logLines: List<String>,
 ) {
     val error: String? get() = (runState as? EngineRunState.Error)?.message
 }
@@ -41,7 +41,7 @@ internal data class ScriptOutcome(
  *     一個新 API 加新的測試管線。
  *  2. **[ScriptOutcome.runState]** —— `Finished` / `Error(訊息)` / `Stopped`。驗「這個
  *     呼叫該不該炸」與「停止是不是乾淨地展開」。
- *  3. **[ScriptOutcome.calls]** —— [RecordingMoonClickerService] 記下的服務呼叫。驗座標、
+ *  3. **[LuaScriptRunner.recorded]** —— [RecordingMoonClickerService] 記下的服務呼叫。驗座標、
  *     duration、pointer id 這些送到邊界上的實際值。
  *
  * 每個 runner 只跑一份腳本；原生引擎是單例，所以測試之間一定要 [close]。
@@ -61,7 +61,7 @@ internal class LuaScriptRunner(
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
     private val notifications = CopyOnWriteArrayList<Pair<String, String>>()
     private val openedUris = CopyOnWriteArrayList<String>()
-    private val logLines = CopyOnWriteArrayList<String>()
+    private val logLines = MutableStateFlow<List<String>>(emptyList())
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var dir: File? = null
 
@@ -98,7 +98,7 @@ internal class LuaScriptRunner(
         // UNDISPATCHED：保證 collect 真的掛上 SharedFlow 才讓這行 launch 返回，避免腳本執行緒
         // 在訂閱建立前就把最早幾行 log 發出去（SharedFlow 沒有 replay，emit 時没人訂閱就遺失）。
         scope.launch(start = CoroutineStart.UNDISPATCHED) {
-            ScriptEngine.logLines.collect { logLines += it }
+            ScriptEngine.logLines.collect { line -> logLines.update { it + line } }
         }
 
         val started = ScriptEngine.start(
@@ -124,11 +124,22 @@ internal class LuaScriptRunner(
         ScriptOutcome(
             runState = state.runState,
             data = ScriptEngine.sharedData.value,
-            calls = (service as? RecordingMoonClickerService)?.calls?.toList() ?: emptyList(),
             notifications = notifications.toList(),
             openedUris = openedUris.toList(),
-            logLines = logLines.toList(),
         )
+    }
+
+    /** 等到腳本用 `data.set` 發佈 [key]——要在腳本執行到某一行之後才做事時用這個。 */
+    fun awaitData(key: String, timeoutMs: Long = DEFAULT_TIMEOUT_MS) = runBlocking {
+        withTimeout(timeoutMs) { ScriptEngine.sharedData.first { key in it } }
+    }
+
+    /**
+     * 等到收齊 [count] 行 log。log 由另一個 coroutine 非同步收集，腳本進入終態時最後幾行
+     * 可能還沒收進來，所以不放進 [ScriptOutcome]。
+     */
+    fun awaitLogLines(count: Int, timeoutMs: Long = DEFAULT_TIMEOUT_MS): List<String> = runBlocking {
+        withTimeout(timeoutMs) { logLines.first { it.size >= count } }
     }
 
     /** 從外部停止執行中的腳本，模擬使用者按下停止。 */
@@ -150,3 +161,7 @@ internal val EngineRunState.isTerminal: Boolean
     get() = this is EngineRunState.Finished ||
             this is EngineRunState.Error ||
             this is EngineRunState.Stopped
+
+/** 每個測試都要自己的 runner，而且一定要收掉——原生引擎是單例。 */
+internal inline fun withRunner(block: (LuaScriptRunner) -> Unit) =
+    LuaScriptRunner().use(block)

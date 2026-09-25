@@ -51,8 +51,15 @@ class LuaScriptLifecycleTest {
      */
     @Test
     fun stopping_a_sleeping_script_reports_Stopped_not_Error() = withRunner { runner ->
-        runner.start("sleep(60000)\ndata.set('reached_the_end', true)")
-        Thread.sleep(300)
+        runner.start(
+            """
+            data.set("sleeping", true)
+            sleep(60000)
+            data.set("reached_the_end", true)
+            """.trimIndent()
+        )
+        // interruptibleSleep 進入前先檢查執行旗標，所以 stop 落在 data.set 與 sleep 之間也算數。
+        runner.awaitData("sleeping")
 
         val elapsed = kotlin.system.measureTimeMillis { runner.stop() }
         val outcome = runner.await()
@@ -113,11 +120,7 @@ class LuaScriptLifecycleTest {
         assertEquals(listOf("https://example.com"), outcome.openedUris)
     }
 
-    /**
-     * `on_stop` 在引擎裡存在（ScriptRuntime::runScript 在 pcall 之後會呼叫它），
-     * 但 `docs/lua-api.md` v3 沒有提到它。這個測試釘住實際行為；文件與它不一致時，
-     * 要嘛補文件、要嘛把它拿掉——別讓它繼續是個只有讀 C++ 才知道的功能。
-     */
+    /** `on_stop` 在腳本本體跑完之後被呼叫（`docs/lua-api.md`）。 */
     @Test
     fun on_stop_runs_after_the_script_body() = withRunner { runner ->
         val outcome = runner.run(
