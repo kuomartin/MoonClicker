@@ -75,6 +75,7 @@ internal class DisplayQuery(
             this.densityDpi = metrics.densityDpi
             this.isPhysical = isPhysical
             this.isMirrorActive = isMirrorActive
+            this.isManaged = virtualDisplayLifecycle.isKnownVirtualDisplay(displayId)
         }
     }
 

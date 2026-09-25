@@ -4,9 +4,11 @@ import android.content.Context
 import androidx.core.content.edit
 import com.xaxaxax.moonclicker.TopLevelDestination
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -97,6 +99,27 @@ class AppSettings @Inject constructor(
         _developerOptionsUnlocked.value = unlocked
     }
 
+    private val _showExternalDisplays =
+        MutableStateFlow(prefs.getBoolean(KEY_SHOW_EXTERNAL_DISPLAYS, false))
+
+    /**
+     * 開發人員選項：列出並允許鏡像外部 app 建立的虛擬螢幕。Android Studio 等工具會自動建立
+     * 虛擬螢幕，一般使用者不需要看到。這是開關本身的值；實際是否生效看 [externalDisplaysVisible]。
+     */
+    val showExternalDisplays: StateFlow<Boolean> = _showExternalDisplays.asStateFlow()
+
+    fun setShowExternalDisplays(enabled: Boolean) {
+        prefs.edit { putBoolean(KEY_SHOW_EXTERNAL_DISPLAYS, enabled) }
+        _showExternalDisplays.value = enabled
+    }
+
+    /** 開發人員選項整體關閉時，底下的開關一律不生效。 */
+    val externalDisplaysVisible: Flow<Boolean> =
+        combine(_developerOptionsUnlocked, _showExternalDisplays) { unlocked, show -> unlocked && show }
+
+    val isExternalDisplaysVisible: Boolean
+        get() = _developerOptionsUnlocked.value && _showExternalDisplays.value
+
     private val _pinnedApps =
         MutableStateFlow(prefs.getStringSet(KEY_PINNED_APPS, emptySet()) ?: emptySet())
 
@@ -118,6 +141,7 @@ class AppSettings @Inject constructor(
         private const val KEY_APP_LANGUAGE = "app_language"
         private const val KEY_DEVELOPER_OPTIONS_UNLOCKED = "developer_options_unlocked"
         private const val KEY_PINNED_APPS = "pinned_apps"
+        private const val KEY_SHOW_EXTERNAL_DISPLAYS = "show_external_displays"
 
         /**
          * [Activity.attachBaseContext] 跑在 Hilt 欄位注入完成之前，讀不到 [AppSettings] 實例，

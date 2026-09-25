@@ -142,6 +142,7 @@ internal class RecordingMoonClickerService(
             this.densityDpi = 420
             this.isPhysical = (displayId == 0)
             this.isMirrorActive = mirrorActive
+            this.isManaged = (displayId != 0)
         }
 
     override fun getDisplayInfos(): Array<com.xaxaxax.moonclicker.MoonClickerDisplayInfo> =
