@@ -16,7 +16,6 @@ import android.os.HandlerThread
 import android.os.ParcelFileDescriptor
 import android.os.PowerManager
 import android.view.MotionEvent
-import androidx.core.content.ContextCompat
 import androidx.test.platform.app.InstrumentationRegistry
 import com.xaxaxax.moonclicker.MoonClickerService
 import com.xaxaxax.moonclicker.script.puppet.PuppetActivity
@@ -127,9 +126,14 @@ class Tier1Env : ExternalResource() {
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) = screenOn.countDown()
         }
-        ContextCompat.registerReceiver(
-            context, receiver, IntentFilter(Intent.ACTION_SCREEN_ON), ContextCompat.RECEIVER_NOT_EXPORTED,
-        )
+        // 不用 ContextCompat：它在 API 33 以下靠 manifest merge 宣告的權限模擬 NOT_EXPORTED，
+        // library 的測試 APK 沒有那個權限。ACTION_SCREEN_ON 是受保護的系統廣播，不需要模擬。
+        val filter = IntentFilter(Intent.ACTION_SCREEN_ON)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            context.registerReceiver(receiver, filter)
+        }
         try {
             shell("input keyevent KEYCODE_WAKEUP")
             if (!power.isInteractive) screenOn.await(2, TimeUnit.SECONDS)
