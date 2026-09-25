@@ -11,16 +11,15 @@ import org.junit.runner.RunWith
 /**
  * `screen.*` 與「這個目標有沒有影格」的分界。
  *
- * 影格已經是邏輯空間（distributor 在源頭把 v 轉正，見 ADR-0017），`screen.width`／
- * `screen.height`／`screen.rotation` 是啟動當下的快照，整場執行固定不變——不像舊版
- * 會隨顯示器中途旋轉即時更新，這裡不需要真的顯示器就能驗。
+ * `screen.width`／`screen.height`／`screen.rotation` 是啟動當下的快照，整場執行固定不變，
+ * 所以不需要真的顯示器就能驗。隨旋轉互換長寬的部分在 Tier 1 的 `VisionCoordinatesTest`。
  */
 @RunWith(AndroidJUnit4::class)
 class LuaScreenApiTest {
 
     @Test
-    fun screen_reports_the_surface_size_when_the_display_is_unrotated() {
-        LuaScriptRunner(RecordingMoonClickerService(surfaceSize = intArrayOf(1080, 1920))).use { runner ->
+    fun screen_reports_the_display_size() {
+        LuaScriptRunner(RecordingMoonClickerService(size = intArrayOf(1080, 1920))).use { runner ->
             val outcome = runner.run(
                 """
                 data.set("w", screen.width)
@@ -32,13 +31,6 @@ class LuaScreenApiTest {
             assertEquals(1920.0, outcome.data["h"])
         }
     }
-
-    // screen.width/height 隨旋轉互換長寬的覆蓋率在 Tier 1（Tier1SpikeTest，真的顯示器、真的
-    // WindowManager 旋轉）——RecordingMoonClickerService 是純 Kotlin 假服務，不實作
-    // MoonClickerService.getDisplaySurfaceSize 依目前 rotation 互換長寬那段邏輯（ADR-0017 的
-    // B），這裡量不出任何東西。screen.rotation 也不再能從腳本執行緒外中途改變（見
-    // VisionMatcher 的建構子：整場執行固定），舊版靠 nativeSetDisplayRotation 從外部注入
-    // 的測試手法已經沒有對應的生產路徑，一併移除。
 
     @Test
     fun has_vision_is_false_on_a_target_without_a_frame_source() = withRunner { runner ->
@@ -92,26 +84,40 @@ class LuaScreenApiTest {
     }
 
     @Test
-    fun screen_start_mirror_and_stop_mirror_work() {
+    fun start_mirror_activates_it() {
         val service = RecordingMoonClickerService().apply { mirrorActive = false }
         LuaScriptRunner(service = service, displayId = 0).use { runner ->
             val outcome = runner.run(
                 """
-                data.set('initial_mirror', screen.is_mirror_active)
-                local started = screen.start_mirror()
-                data.set('started', started)
-                data.set('after_start_mirror', screen.is_mirror_active)
-                local stopped = screen.stop_mirror()
-                data.set('stopped', stopped)
-                data.set('after_stop_mirror', screen.is_mirror_active)
+                data.set("before", screen.is_mirror_active)
+                data.set("started", screen.start_mirror())
+                data.set("after", screen.is_mirror_active)
                 """.trimIndent()
             )
+
             assertEquals(EngineRunState.Finished, outcome.runState)
-            assertEquals(false, outcome.data["initial_mirror"])
+            assertEquals(false, outcome.data["before"])
             assertEquals(true, outcome.data["started"])
-            assertEquals(true, outcome.data["after_start_mirror"])
+            assertEquals(true, outcome.data["after"])
+        }
+    }
+
+    /** 只釋放這支腳本自己 `start_mirror` 取得的鏡像。 */
+    @Test
+    fun stop_mirror_releases_the_mirror_this_script_started() {
+        val service = RecordingMoonClickerService().apply { mirrorActive = false }
+        LuaScriptRunner(service = service, displayId = 0).use { runner ->
+            val outcome = runner.run(
+                """
+                screen.start_mirror()
+                data.set("stopped", screen.stop_mirror())
+                data.set("after", screen.is_mirror_active)
+                """.trimIndent()
+            )
+
+            assertEquals(EngineRunState.Finished, outcome.runState)
             assertEquals(true, outcome.data["stopped"])
-            assertEquals(false, outcome.data["after_stop_mirror"])
+            assertEquals(false, outcome.data["after"])
         }
     }
 }

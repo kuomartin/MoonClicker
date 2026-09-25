@@ -1,65 +1,61 @@
 package com.xaxaxax.moonclicker.script.puppet
 
 import android.graphics.Rect
-import java.util.concurrent.CopyOnWriteArrayList
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
+
+/** [PuppetActivity] 此刻觀測到的一切，整份一起發佈，讀的人不會拿到不同時間點的欄位組合。 */
+internal data class PuppetState(
+    /** activity 還沒被 destroy。 */
+    val alive: Boolean = false,
+    /** puppet 目前 resume 在哪個顯示器上；-1 表示沒有。 */
+    val resumedOnDisplay: Int = -1,
+    /** content view 的實際尺寸——用來確認它鋪滿了顯示器，以及旋轉有沒有生效。 */
+    val contentSize: Pair<Int, Int>? = null,
+    /** [PuppetMarker]（旋轉對稱）被畫在 view 座標的哪裡。 */
+    val markerRect: Rect? = null,
+    /** [PuppetGlyph]（不對稱）被畫在哪裡。 */
+    val glyphRect: Rect? = null,
+    val touches: List<PuppetRecorder.Touch> = emptyList(),
+)
 
 /**
  * [PuppetActivity] 看到什麼，就記在這裡。
  *
- * 這是個 process-wide 的 object，而這正是它能存在的原因：library 的 androidTest APK 是
- * 自我 instrument 的，所以 puppet 與測試程式碼**在同一個進程**——測試直接讀這裡，不需要
- * 任何 IPC、不需要第二個 APK、不需要 UiAutomator 去畫面上撈文字。
- *
- * 每個測試在 setUp 時 [reset]。
+ * library 的 androidTest APK 是自我 instrument 的，puppet 與測試程式碼在同一個進程，所以測試
+ * 直接讀這個 object，不需要 IPC、第二個 APK 或 UiAutomator。等待一律掛在 [state] 上，由
+ * puppet 的每一次更新喚醒，不輪詢。
  */
 internal object PuppetRecorder {
 
     data class Touch(val action: Int, val x: Float, val y: Float, val displayId: Int)
 
-    val touches = CopyOnWriteArrayList<Touch>()
-    val keys = CopyOnWriteArrayList<Int>()
+    private val _state = MutableStateFlow(PuppetState())
+    val state: StateFlow<PuppetState> = _state.asStateFlow()
 
-    /** puppet 目前活在哪個顯示器上；-1 表示還沒 resume。 */
-    @Volatile
-    var resumedOnDisplay: Int = -1
+    val current: PuppetState get() = _state.value
 
-    /** [PuppetMarker]（旋轉對稱）實際被畫在 view 座標的哪裡。 */
-    @Volatile
-    var markerRect: Rect? = null
+    fun update(transform: (PuppetState) -> PuppetState) = _state.update(transform)
 
-    /** [PuppetGlyph]（不對稱）實際被畫在哪裡。旋轉時只有它問得出「模板方向對不對」。 */
-    @Volatile
-    var glyphRect: Rect? = null
+    /** 保留 [PuppetState.alive]：它描述的是 activity 本身，不是這個測試觀測到的東西。 */
+    fun reset() = _state.update { PuppetState(alive = it.alive) }
 
-    /** puppet 的 content view 實際多大——用來確認它真的鋪滿了那個顯示器。 */
-    @Volatile
-    var contentSize: Pair<Int, Int>? = null
+    fun clearTouches() = _state.update { it.copy(touches = emptyList()) }
 
-    fun reset() {
-        touches.clear()
-        keys.clear()
-        resumedOnDisplay = -1
-        markerRect = null
-        glyphRect = null
-        contentSize = null
+    /** @return 第一個滿足 [condition] 的狀態；逾時為 null。 */
+    fun await(timeoutMs: Long, condition: (PuppetState) -> Boolean): PuppetState? = runBlocking {
+        withTimeoutOrNull(timeoutMs) { state.first(condition) }
     }
 
     /** 等到 puppet 在 [displayId] 上 resume 並完成第一次 layout。 */
     fun awaitReady(displayId: Int, timeoutMs: Long = 10_000): Boolean =
-        await(timeoutMs) { resumedOnDisplay == displayId && markerRect != null }
+        await(timeoutMs) { it.resumedOnDisplay == displayId && it.markerRect != null } != null
 
-    fun awaitTouch(timeoutMs: Long = 5_000, predicate: (Touch) -> Boolean): Touch? {
-        await(timeoutMs) { touches.any(predicate) }
-        return touches.firstOrNull(predicate)
-    }
-
-    /** 輪詢而不是用 latch：條件是好幾個獨立欄位的組合，用 latch 反而要多一層狀態機。 */
-    private inline fun await(timeoutMs: Long, condition: () -> Boolean): Boolean {
-        val deadline = System.currentTimeMillis() + timeoutMs
-        while (System.currentTimeMillis() < deadline) {
-            if (condition()) return true
-            Thread.sleep(50)
-        }
-        return condition()
-    }
+    fun awaitTouch(timeoutMs: Long = 5_000, predicate: (Touch) -> Boolean): Touch? =
+        await(timeoutMs) { it.touches.any(predicate) }?.touches?.first(predicate)
 }
