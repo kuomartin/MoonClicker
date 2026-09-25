@@ -65,7 +65,7 @@ duration 插值。所以 Tier 0 能說「引擎送出了什麼」，不能說「
 | `AppMutingTest` | `app.mute` 對測試 APK 自己：package 層 mode 讀回 deny／ignore、焦點請求被拒，解除後回到原值；重複靜音、未安裝的 package、行程停止與異常結束後的還原 |
 | `VisionWaitTest` | `vision.wait`／`wait_any` 的等待語意與 `step_ms`、`find_any` 的 index |
 | `InputTextTest` | `input.text` 打出的字（大小寫、符號、Enter）送到虛擬顯示上有焦點的 puppet |
-| `VirtualDisplayIdleDeadlockTest` | issue #6、#121：注入的輸入喚醒睡著的 own display group |
+| `VirtualDisplayIdleDeadlockTest` | issue #6、#121：注入的輸入喚醒睡著的 own display group；落在預設 group 的 VD 不准被關 |
 | `VirtualDisplayKeepAwakeSlowTest` | issue #121：掛著 surface 時 own display group 不逾時，拿掉後照常逾時（慢測試，見下） |
 
 ```bash
@@ -181,7 +181,7 @@ puppet 同時畫**旋轉對稱**的同心方框與**不對稱**的 Γ 字形，�
 全部用**有圖形堆疊**的映像檔（27–29 只有 `default` 有，30 起用 `aosp`），否則比對那一段會被
 跳過，而跨版本要驗的正好包含它。
 
-每一級都跑同一組 49 條（Tier 0 + Tier 1）；表中只列跳過的，其餘全過。跳過一律是 `Assume`——環境不提供被測物，不是失敗。`VirtualDisplayKeepAwakeSlowTest` 預設跳過（見[慢測試](#慢測試)），不列在表中；帶 `slow=true` 時在 33–36 模擬器上通過；拿不到 `FLAG_OWN_DISPLAY_GROUP` 的環境以 `Assume` 跳過。
+每一級都跑同一組 50 條（Tier 0 + Tier 1）；表中只列跳過的，其餘全過。跳過一律是 `Assume`——環境不提供被測物，不是失敗。`VirtualDisplayKeepAwakeSlowTest` 預設跳過（見[慢測試](#慢測試)），不列在表中；帶 `slow=true` 時在 33–36 模擬器上通過；拿不到 `FLAG_OWN_DISPLAY_GROUP` 的環境以 `Assume` 跳過。
 
 | API | 跳過 | 原因 |
 |---|---|---|
@@ -191,7 +191,7 @@ puppet 同時畫**旋轉對稱**的同心方框與**不對稱**的 Γ 字形，�
 | 33 | idle deadlock | 帶 displayId 的 `goToSleep` 從 API 34 起才有 |
 | 36（`aosp-atd`） | idle deadlock、11 條 vision | ATD 沒有圖形堆疊 |
 | 36（`aosp`） | — | |
-| 37（Pixel 7a 實機） | — | |
+| 37（Pixel 7a 實機） | idle deadlock | VD 被歸進預設 group（見 [pitfalls](virtual-display-pitfalls.md#要了-own_display_group-也可能落在預設-group)） |
 
 **Tier 1 的下限是 API 29**，因為它整個建立在 `UiAutomation.adoptShellPermissionIdentity` 上，
 而那是 API 29 才有的（27/28 實測 `NoSuchMethodError`）。這是**測試框架**的限制，不是產品的：
