@@ -11,7 +11,9 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -25,7 +27,6 @@ internal data class ScriptOutcome(
     val data: Map<String, Any>,
     val notifications: List<Pair<String, String>>,
     val openedUris: List<String>,
-    val logLines: List<String>,
 ) {
     val error: String? get() = (runState as? EngineRunState.Error)?.message
 }
@@ -60,7 +61,7 @@ internal class LuaScriptRunner(
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
     private val notifications = CopyOnWriteArrayList<Pair<String, String>>()
     private val openedUris = CopyOnWriteArrayList<String>()
-    private val logLines = CopyOnWriteArrayList<String>()
+    private val logLines = MutableStateFlow<List<String>>(emptyList())
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var dir: File? = null
 
@@ -97,7 +98,7 @@ internal class LuaScriptRunner(
         // UNDISPATCHED：保證 collect 真的掛上 SharedFlow 才讓這行 launch 返回，避免腳本執行緒
         // 在訂閱建立前就把最早幾行 log 發出去（SharedFlow 沒有 replay，emit 時没人訂閱就遺失）。
         scope.launch(start = CoroutineStart.UNDISPATCHED) {
-            ScriptEngine.logLines.collect { logLines += it }
+            ScriptEngine.logLines.collect { line -> logLines.update { it + line } }
         }
 
         val started = ScriptEngine.start(
@@ -125,13 +126,20 @@ internal class LuaScriptRunner(
             data = ScriptEngine.sharedData.value,
             notifications = notifications.toList(),
             openedUris = openedUris.toList(),
-            logLines = logLines.toList(),
         )
     }
 
     /** 等到腳本用 `data.set` 發佈 [key]——要在腳本執行到某一行之後才做事時用這個。 */
     fun awaitData(key: String, timeoutMs: Long = DEFAULT_TIMEOUT_MS) = runBlocking {
         withTimeout(timeoutMs) { ScriptEngine.sharedData.first { key in it } }
+    }
+
+    /**
+     * 等到收齊 [count] 行 log。log 由另一個 coroutine 非同步收集，腳本進入終態時最後幾行
+     * 可能還沒收進來，所以不放進 [ScriptOutcome]。
+     */
+    fun awaitLogLines(count: Int, timeoutMs: Long = DEFAULT_TIMEOUT_MS): List<String> = runBlocking {
+        withTimeout(timeoutMs) { logLines.first { it.size >= count } }
     }
 
     /** 從外部停止執行中的腳本，模擬使用者按下停止。 */
