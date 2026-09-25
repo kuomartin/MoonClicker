@@ -42,14 +42,17 @@ class VirtualDisplayIdleDeadlockTest {
             precondition.contains("FLAG_OWN_DISPLAY_GROUP"),
         )
 
-        // 前提而非斷言：API 34 上 goToSleep 回傳成功，顯示器卻維持 ON，睡不著就沒有死結可驗。
-        // 不能拿掉這一步——顯示器從沒睡著的話，下面「被叫醒」恆真。
+        // 前提而非斷言：API 33 以下 sleepVirtualDisplay 依版本拒絕（帶 displayId 的 goToSleep 從 API 34
+        // 起才有），API 34 起在部分環境上回傳成功但顯示器維持 ON。
+        // 睡不著就沒有死結可驗；也不能拿掉這一步——顯示器從沒睡著的話，下面「被叫醒」恆真。
+        var accepted = false
+        val slept = awaitDisplayState(displayId, Display.STATE_OFF) {
+            accepted = env.service.sleepVirtualDisplay(displayId)
+        }
         assumeTrue(
-            "display $displayId stayed ON after sleepVirtualDisplay (Display.state ${stateOf(displayId)}), " +
-                    "so there is no sleeping display group to wake on API ${Build.VERSION.SDK_INT}",
-            awaitDisplayState(displayId, Display.STATE_OFF) {
-                check(env.service.sleepVirtualDisplay(displayId)) { "sleepVirtualDisplay($displayId) refused" }
-            },
+            "display $displayId did not go to sleep on API ${Build.VERSION.SDK_INT} " +
+                    "(sleepVirtualDisplay returned $accepted, Display.state ${stateOf(displayId)})",
+            slept,
         )
 
         assertTrue(
