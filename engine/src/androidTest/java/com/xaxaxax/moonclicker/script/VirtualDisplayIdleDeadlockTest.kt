@@ -4,6 +4,7 @@ import android.os.Build
 import android.os.SystemClock
 import android.view.MotionEvent
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Rule
@@ -39,7 +40,12 @@ class VirtualDisplayIdleDeadlockTest {
             precondition.contains("FLAG_OWN_DISPLAY_GROUP"),
         )
         val group = powerGroups.groupOf(displayId)
-        assertTrue("display $displayId owns a display group but none shows in dumpsys display", group != null)
+        assertTrue("display $displayId has no display group in dumpsys display", group != null)
+        // 前提而非斷言：要了旗標，平台仍可能把它歸進預設 group（Android 17 的分開逾時）。
+        assumeTrue(
+            "display $displayId was put in the default display group despite FLAG_OWN_DISPLAY_GROUP",
+            group != 0,
+        )
 
         // 前提而非斷言：帶 displayId 的 goToSleep 從 API 34 起才有，更早的版本 sleepVirtualDisplay 一律拒絕。
         // 睡不著就沒有死結可驗；也不能拿掉這一步——group 從沒睡著的話，下面「被叫醒」恆真。
@@ -58,6 +64,23 @@ class VirtualDisplayIdleDeadlockTest {
                     "before injection; if it stays asleep the deadlock from issue #6 is back\n" +
                     powerGroups.recent(),
             powerGroups.await(group, awake = true) { injectTap(displayId) },
+        )
+    }
+
+    /**
+     * 跟主螢幕同一個 display group 的 VD，讓它睡就是讓整支手機睡——必須拒絕。要了
+     * `OWN_DISPLAY_GROUP` 也可能落在這裡（Android 17 的分開逾時），所以不能從旗標推斷。
+     */
+    @Test
+    fun sleepRefusesADisplayInTheDefaultGroup() {
+        val displayId = env.createDisplay()
+        val group = powerGroups.groupOf(displayId)
+        assumeTrue("display $displayId has its own display group ($group)", group == 0)
+
+        assertFalse(
+            "sleepVirtualDisplay($displayId) accepted a display in the default group, which " +
+                    "would turn the main screen off",
+            env.service.sleepVirtualDisplay(displayId),
         )
     }
 

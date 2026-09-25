@@ -37,7 +37,12 @@ class VirtualDisplayKeepAwakeSlowTest {
             env.displayDump(displayId).contains("FLAG_OWN_DISPLAY_GROUP"),
         )
         val group = powerGroups.groupOf(displayId)
-        assertTrue("display $displayId owns a display group but none shows in dumpsys display", group != null)
+        assertTrue("display $displayId has no display group in dumpsys display", group != null)
+        // 前提而非斷言：要了旗標，平台仍可能把它歸進預設 group（Android 17 的分開逾時）。
+        assumeTrue(
+            "display $displayId was put in the default display group despite FLAG_OWN_DISPLAY_GROUP",
+            group != 0,
+        )
 
         val oldTimeout = env.shell("settings get system screen_off_timeout").trim()
         val oldStayOn = env.shell("settings get global stay_on_while_plugged_in").trim()
