@@ -10,6 +10,7 @@ import android.view.PixelCopy
 import android.view.SurfaceView
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -53,6 +54,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
@@ -128,10 +130,18 @@ fun FullscreenDisplayScreen(
     LaunchedEffect(Unit) {
         viewModel.finishEvents.collect { activity?.finish() }
     }
+    LaunchedEffect(targetDisplayId) { viewModel.loadDisplayInfo(targetDisplayId) }
     // 單一來源：鏡像的 Viewport 讀這一份，決定 letterbox 與內容尺寸。
     val geometry = rememberDisplayGeometry(targetDisplayId)
 
-    // issue #41：退出畫面（返回鍵、Home、或畫面上的 Exit 按鈕，onPause 一律涵蓋）時留一張
+    // 返回手勢轉送給目標顯示器，離開 fullscreen 由 fab menu 的 Exit 負責。目標就是本畫面
+    // 所在的顯示器時不攔截：注入的返回會送回這個 activity 自己，形成迴圈。
+    val hostDisplayId = LocalView.current.display?.displayId
+    BackHandler(enabled = hostDisplayId != targetDisplayId) {
+        viewModel.onAction(FullscreenAction.Back, targetDisplayId)
+    }
+
+    // issue #41：退出畫面（Home、畫面上的 Exit 按鈕等，onPause 一律涵蓋）時留一張
     // 縮圖給 Displays 列表用；只在真的有鏡像畫面時才有東西可擷取。
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner, targetDisplayId) {
@@ -189,7 +199,7 @@ fun FullscreenDisplayScreen(
         val homeLabel = stringResource(R.string.fullscreen_menu_home)
         val fanActions = buildList {
             add(FanMenuAction(Icons.Default.Apps, startAppLabel) { viewModel.onAction(FullscreenAction.StartApp, targetDisplayId) })
-            if (targetDisplayId != 0) {
+            if (uiState.isManaged) {
                 add(FanMenuAction(Icons.Default.Close, closeDisplayLabel) { viewModel.onAction(FullscreenAction.CloseDisplay, targetDisplayId) })
                 add(FanMenuAction(Icons.Default.PowerSettingsNew, powerOffLabel) { viewModel.onAction(FullscreenAction.PowerOff, targetDisplayId) })
             }

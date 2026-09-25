@@ -28,6 +28,7 @@ sealed interface FullscreenAction {
     data object PowerOff : FullscreenAction
     data object Exit : FullscreenAction
     data object Home : FullscreenAction
+    data object Back : FullscreenAction
 }
 
 @HiltViewModel
@@ -41,6 +42,8 @@ class FullscreenDisplayViewModel @Inject constructor(
     data class UiState(
         val showAppList: Boolean = false,
         val apps: List<AppEntry> = emptyList(),
+        /** 本服務建立的虛擬螢幕才能關閉、關電源；實體螢幕與外部虛擬螢幕都不行。 */
+        val isManaged: Boolean = false,
     )
 
     private val _uiState = MutableStateFlow(UiState())
@@ -65,26 +68,35 @@ class FullscreenDisplayViewModel @Inject constructor(
         appSettings.setPinned(packageName, packageName !in appSettings.pinnedApps.value)
     }
 
+    fun loadDisplayInfo(displayId: Int) {
+        viewModelScope.launch {
+            shizukuManager.withService { service -> service.getDisplayInfo(displayId)?.isManaged == true }
+                .onSuccess { managed -> _uiState.value = _uiState.value.copy(isManaged = managed) }
+                .onFailure { Timber.e(it) }
+        }
+    }
+
     fun onAction(action: FullscreenAction, targetDisplayId: Int) {
         when (action) {
             FullscreenAction.StartApp -> openAppList()
             FullscreenAction.CloseDisplay -> destroyDisplay(targetDisplayId, thenFinish = true)
             FullscreenAction.PowerOff -> sleepDisplay(targetDisplayId)
             FullscreenAction.Exit -> _finishEvents.trySend(Unit)
-            FullscreenAction.Home -> injectHomeKey(targetDisplayId)
+            FullscreenAction.Home -> injectKey(targetDisplayId, KeyEvent.KEYCODE_HOME)
+            FullscreenAction.Back -> injectKey(targetDisplayId, KeyEvent.KEYCODE_BACK)
         }
     }
 
-    private fun injectHomeKey(displayId: Int) {
+    private fun injectKey(displayId: Int, keyCode: Int) {
         viewModelScope.launch {
             shizukuManager.withService { service ->
                 val downTime = SystemClock.uptimeMillis()
                 service.injectKeyEvent(
-                    KeyEvent(downTime, downTime, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_HOME, 0),
+                    KeyEvent(downTime, downTime, KeyEvent.ACTION_DOWN, keyCode, 0),
                     displayId,
                 )
                 service.injectKeyEvent(
-                    KeyEvent(downTime, SystemClock.uptimeMillis(), KeyEvent.ACTION_UP, KeyEvent.KEYCODE_HOME, 0),
+                    KeyEvent(downTime, SystemClock.uptimeMillis(), KeyEvent.ACTION_UP, keyCode, 0),
                     displayId,
                 )
             }.onFailure {

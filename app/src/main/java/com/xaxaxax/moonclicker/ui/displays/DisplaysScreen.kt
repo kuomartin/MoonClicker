@@ -290,7 +290,7 @@ private fun PreviewDisplaysScreen() {
             uiState = DisplaysUiState(
                 displays = listOf(
                     DisplayCardInfo(displayId = 0, name = "Built-in Screen", width = 1080, height = 2400, densityDpi = 420, isPhysical = true, isMirrorActive = false),
-                    DisplayCardInfo(displayId = 1, width = 1080, height = 1920, densityDpi = 320),
+                    DisplayCardInfo(displayId = 1, width = 1080, height = 1920, densityDpi = 320, isManaged = true),
                     DisplayCardInfo(displayId = 42, width = 1280, height = 720, densityDpi = 240),
                 ),
                 shizukuStatus = ShizukuConnectionStatus.CONNECTED,
@@ -321,15 +321,15 @@ private fun DisplayCard(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.extraLarge
     ) {
-        // 縮圖本身就是主要動作入口：虛擬顯示／鏡像中的實體顯示點下去 = Enter，
-        // 未鏡像的實體顯示點下去 = Start Mirror。右上角疊一顆 X 做次要動作
-        // （虛擬顯示 = Close，鏡像中 = Stop Mirror），未鏡像時沒有次要動作可疊。
-        val primaryLabel = if (info.isPhysical && !info.isMirrorActive) {
+        // 縮圖本身就是主要動作入口：本服務建立的虛擬顯示／鏡像中的顯示點下去 = Enter，
+        // 需要鏡像但還沒鏡像的（實體螢幕、外部虛擬螢幕）點下去 = Start Mirror。右上角疊一顆 X
+        // 做次要動作（本服務建立的虛擬顯示 = Close，鏡像中 = Stop Mirror），未鏡像時沒有次要動作可疊。
+        val primaryLabel = if (info.needsMirror && !info.isMirrorActive) {
             stringResource(R.string.displays_action_start_mirror)
         } else {
             stringResource(R.string.displays_action_enter)
         }
-        val primaryAction = if (info.isPhysical && !info.isMirrorActive) {
+        val primaryAction = if (info.needsMirror && !info.isMirrorActive) {
             { onToggleMirror(true) }
         } else {
             onEnter
@@ -357,7 +357,7 @@ private fun DisplayCard(
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
                 )
-            } else if (info.isPhysical && !info.isMirrorActive) {
+            } else if (info.needsMirror && !info.isMirrorActive) {
                 Text(
                     text = stringResource(R.string.displays_card_mirror_not_active),
                     style = MaterialTheme.typography.bodySmall,
@@ -365,7 +365,7 @@ private fun DisplayCard(
                 )
             }
 
-            if (!info.isPhysical) {
+            if (info.isManaged) {
                 IconButton(
                     onClick = onClose,
                     modifier = Modifier.align(Alignment.TopEnd),
@@ -393,7 +393,11 @@ private fun DisplayCard(
             modifier = Modifier.padding(start = 16.dp,end = 16.dp,top = 8.dp,  bottom = 12.dp)
         ) {
             Text(
-                text = if (info.isPhysical) stringResource(R.string.displays_card_physical, info.displayId) else stringResource(R.string.displays_card_virtual, info.displayId),
+                text = when {
+                    info.isExternal -> stringResource(R.string.displays_card_external, info.displayId)
+                    info.isPhysical -> stringResource(R.string.displays_card_physical, info.displayId)
+                    else -> stringResource(R.string.displays_card_virtual, info.displayId)
+                },
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
             )
@@ -407,10 +411,12 @@ private fun DisplayCard(
                 enabled = false,
                 label = {
                     Text(
-                        if (info.isPhysical) {
-                            if (info.isMirrorActive) stringResource(R.string.displays_card_tag_physical_mirroring) else stringResource(R.string.displays_card_tag_physical)
-                        } else {
-                            stringResource(R.string.displays_card_tag_service)
+                        when {
+                            info.isExternal && info.isMirrorActive -> stringResource(R.string.displays_card_tag_external_mirroring)
+                            info.isExternal -> stringResource(R.string.displays_card_tag_external)
+                            info.isPhysical && info.isMirrorActive -> stringResource(R.string.displays_card_tag_physical_mirroring)
+                            info.isPhysical -> stringResource(R.string.displays_card_tag_physical)
+                            else -> stringResource(R.string.displays_card_tag_service)
                         }
                     )
                 },
