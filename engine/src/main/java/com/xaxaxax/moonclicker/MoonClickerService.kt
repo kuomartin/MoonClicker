@@ -89,6 +89,8 @@ class MoonClickerService @JvmOverloads constructor(
                 "Landroid/app/AppOpsManager",            // PermissionGrants
                 "Landroid/content/pm/PackageManager",    // LauncherAppsCache, PermissionGrants
                 "Landroid/hardware/input/InputManager",  // InputInjector
+                "Landroid/os/IPowerManager",             // DisplayGroupWakeLocks
+                "Landroid/os/ServiceManager",            // PlatformHandles
                 "Landroid/view/MotionEvent",             // InputInjector
                 "Landroid/view/WindowManagerGlobal",     // DisplayQuery
             )
@@ -110,17 +112,23 @@ class MoonClickerService @JvmOverloads constructor(
 
     override fun addVirtualDisplaySurface(displayId: Int, surface: Surface): Int {
         Timber.d("addVirtualDisplaySurface: id=$displayId surfaceValid=${surface.isValid}")
-        virtualDisplayLifecycle.wakeDisplayGroupIfOwned(displayId)
+        // 有 surface 掛著就是有人在看（全螢幕預覽、串流、vision 腳本取影格），這段期間不讓它逾時。
+        virtualDisplayLifecycle.holdDisplayGroupAwake(displayId)
         val actualId = displayMirroring.resolveDistributorId(displayId)
         val handle = glesDistributor.attachSurface(actualId, surface)
-        if (handle < 0) Timber.e("addVirtualDisplaySurface: distributor not found for id=$displayId (actualId=$actualId)")
+        if (handle < 0) {
+            Timber.e("addVirtualDisplaySurface: distributor not found for id=$displayId (actualId=$actualId)")
+            virtualDisplayLifecycle.releaseDisplayGroupAwake(displayId)
+        }
         return handle
     }
 
     override fun removeVirtualDisplaySurface(displayId: Int, handle: Int): Boolean {
         Timber.d("removeVirtualDisplaySurface: id=$displayId handle=$handle")
         val actualId = displayMirroring.resolveDistributorId(displayId)
-        return glesDistributor.detachSurface(actualId, handle)
+        val detached = glesDistributor.detachSurface(actualId, handle)
+        if (detached) virtualDisplayLifecycle.releaseDisplayGroupAwake(displayId)
+        return detached
     }
 
     override fun resizeVirtualDisplay(displayId: Int, width: Int, height: Int, densityDpi: Int): Boolean =

@@ -34,9 +34,10 @@ interface IMoonClickerService {
 
     /**
      * Turns off the display group owned by this virtual display (DPMS sleep), without
-     * destroying it — the reverse of the implicit wake done by [wakeDisplayGroupIfOwned]
-     * on every entry point that shows/operates the display. Only affects displays this
-     * service created; returns false otherwise.
+     * destroying it — the reverse of the implicit wake done on every entry point that
+     * operates the display (injected input, launchInDisplay) and of the wake lock held while
+     * a surface is attached via addVirtualDisplaySurface. Only affects displays this service
+     * created that own their display group; returns false otherwise.
      */
     boolean sleepVirtualDisplay(int displayId) = 113;
 

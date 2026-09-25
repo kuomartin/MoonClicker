@@ -62,6 +62,7 @@ internal class VirtualDisplayLifecycle(
     }
 
     private val vdStore = mutableMapOf<Int, ManagedDisplay>()
+    private val wakeLocks = DisplayGroupWakeLocks({ platformHandles.powerManagerService }, platformHandles.callerPackage)
     private val grantedPermissions = ConcurrentHashMap<String, Boolean>()
 
     fun allDisplayIds(): Set<Int> = vdStore.keys.toSet()
@@ -140,6 +141,9 @@ internal class VirtualDisplayLifecycle(
 
         glesDistributor.unregister(displayId)
         glesDistributor.destroyDistributor(oldPtr)
+        // 舊 distributor 上的 surface 跟著消失，不會有人再為它們呼叫 remove；它們撐著的 wake lock
+        // 一併放掉，重連的人會再撐起來。
+        wakeLocks.dropAll(displayId)
         vdStore[displayId] = ManagedDisplay(
             managed.display,
             surfaceWidth = width,
@@ -152,6 +156,7 @@ internal class VirtualDisplayLifecycle(
     }
 
     fun destroyVirtualDisplay(displayId: Int): Boolean {
+        wakeLocks.dropAll(displayId)
         vdStore.remove(displayId)?.display?.release()
         glesDistributor.unregister(displayId)?.let { ptr -> glesDistributor.destroyDistributor(ptr) }
         return true
@@ -187,31 +192,41 @@ internal class VirtualDisplayLifecycle(
     }
 
     /**
-     * `FLAG_OWN_DISPLAY_GROUP` 的顯示器有自己獨立的 wakefulness 計時器，閒置逾時後
-     * `state` 變 OFF——而 OFF 之後 `InputDispatcher` 直接丟棄送進來的輸入事件，
-     * 正常的「輸入喚醒 userActivity」路徑因此叫不醒它，是個死結（issue #6）。
+     * `FLAG_OWN_DISPLAY_GROUP` 的顯示器有自己獨立的 wakefulness 計時器，閒置逾時後該 group 關閉：
+     * API 36 起 VD 的 `state` 變 OFF、輸入被丟棄；API 33–35 的 `state` 仍回報 ON，但系統在上面
+     * 疊一層黑色 ColorFade，33/34 上注入的觸控被當成遭遮蔽而丟棄。之後的輸入都叫不醒它，
+     * 是個死結（issue #6、#121）。預設 group 的 `wakeUp` 叫不到這個 group。
      *
-     * 在每個會讓使用者看到/操作這個顯示器的入口都主動喚醒一次，讓它沒有機會卡進那個死結。
-     * 只對本服務自己建立、確實拿到這個旗標的顯示器做，不動主螢幕或其他一般顯示器。
-     *
-     * 帶 displayId 的 `wakeUp` 從 API 36 起才有；API 31–35 的 VD 同樣有獨立 display group，
-     * 卻沒有 API 能單獨喚醒它，這幾個版本上死結仍可能發生。
+     * 在每個會操作這個顯示器的入口都先喚醒一次（[DisplayGroupWakeLocks.pulse]），讓它沒有機會
+     * 卡進那個死結；緊接著送進去的輸入會重設該 group 的計時。有人在看的期間則由
+     * [holdDisplayGroupAwake] 撐著不讓它逾時。
      */
     fun wakeDisplayGroupIfOwned(displayId: Int) {
-        if (displayId == Display.DEFAULT_DISPLAY) return
-        if (!vdStore.containsKey(displayId)) return
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.BAKLAVA) return
-        try {
-            platformHandles.powerManagerHidden.wakeUp(
-                SystemClock.uptimeMillis(),
-                PowerManagerHidden.WAKE_REASON_APPLICATION,
-                "MoonClicker own-display-group keep-awake",
-                displayId,
-            )
-        } catch (t: Throwable) {
-            Timber.d(t, "wakeUp(displayId=$displayId) failed")
-        }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        if (ownsDisplayGroup(displayId)) wakeLocks.pulse(displayId)
     }
+
+    /**
+     * 多一個正在看 [displayId] 畫面的人（掛上一個 surface）：持有綁在它 display group 上的螢幕
+     * wake lock，第一個人進來時順便叫醒它。與 [releaseDisplayGroupAwake] 成對呼叫。
+     *
+     * surface 的主人若死掉而沒呼叫 [releaseDisplayGroupAwake]，wake lock 會持有到顯示器銷毀為止。
+     */
+    fun holdDisplayGroupAwake(displayId: Int) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        if (ownsDisplayGroup(displayId)) wakeLocks.hold(displayId)
+    }
+
+    fun releaseDisplayGroupAwake(displayId: Int) {
+        wakeLocks.drop(displayId)
+    }
+
+    /**
+     * 只有真的拿到 `OWN_DISPLAY_GROUP` 的 VD 才能做——其餘顯示器在預設 group，wake lock 會連主螢幕
+     * 一起點亮、一起撐著。這也把範圍限在 API 33+：更早的版本不要求這個旗標。
+     */
+    private fun ownsDisplayGroup(displayId: Int): Boolean =
+        displayId != Display.DEFAULT_DISPLAY && vdStore[displayId]?.ownsDisplayGroup == true
 
     /**
      * API 33+ 的特權旗標，逐項按它自己的前提決定——`DisplayManagerService` 裡是三條獨立的

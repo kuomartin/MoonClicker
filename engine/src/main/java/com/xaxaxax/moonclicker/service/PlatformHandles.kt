@@ -9,8 +9,10 @@ import android.hardware.display.DisplayManager
 import android.hardware.display.DisplayManagerHidden
 import android.hardware.input.InputManager
 import android.hardware.input.InputManagerHidden
+import android.os.IPowerManager
 import android.os.PowerManager
 import android.os.PowerManagerHidden
+import android.os.ServiceManager
 import androidx.core.content.getSystemService
 import dev.rikka.tools.refine.Refine
 
@@ -22,7 +24,8 @@ import dev.rikka.tools.refine.Refine
  */
 internal class PlatformHandles(
     context: Context,
-    callerPackage: String,
+    /** 向系統宣稱的套件名，見 [com.xaxaxax.moonclicker.MoonClickerService] 的同名參數。 */
+    val callerPackage: String,
 ) {
     /**
      * 向系統宣稱是 [callerPackage] 的假 Context，`DisplayManagerHidden`／`SurfaceControl`
@@ -62,5 +65,16 @@ internal class PlatformHandles(
         context.getSystemService<PowerManager>()
             ?.let { Refine.unsafeCast(it) }
             ?: throw IllegalStateException("Cannot get PowerManager")
+    }
+
+    /**
+     * 直接對 power service 下的 binder 介面。wake lock 帶上去的 packageName 必須是 calling uid
+     * 擁有的套件，`PowerManager.newWakeLock` 卻一律拿它自己 context 的套件名，所以 wake lock
+     * 走這條，自己傳 [callerPackage]。
+     */
+    val powerManagerService: IPowerManager by lazy {
+        ServiceManager.getService(Context.POWER_SERVICE)
+            ?.let { IPowerManager.Stub.asInterface(it) }
+            ?: throw IllegalStateException("Cannot get the power service")
     }
 }
