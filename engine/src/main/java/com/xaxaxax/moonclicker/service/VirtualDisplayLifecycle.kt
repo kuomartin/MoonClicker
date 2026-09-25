@@ -162,8 +162,11 @@ internal class VirtualDisplayLifecycle(
      *
      * 只對真的拿到 `OWN_DISPLAY_GROUP`（[ManagedDisplay.ownsDisplayGroup]）的 VD 生效——
      * 沒有這個旗標的 VD 跟主螢幕共用 `DEFAULT_DISPLAY_GROUP`，硬呼叫下去會把主螢幕也關掉。
+     *
+     * 帶 displayId 的 `goToSleep` 從 API 34 起才有，更早的版本一律回 false。
      */
     fun sleepVirtualDisplay(displayId: Int): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return false
         val managed = vdStore[displayId] ?: return false
         if (!managed.ownsDisplayGroup) {
             Timber.w("sleepVirtualDisplay: display $displayId does not own its display group, refusing")
@@ -190,11 +193,14 @@ internal class VirtualDisplayLifecycle(
      *
      * 在每個會讓使用者看到/操作這個顯示器的入口都主動喚醒一次，讓它沒有機會卡進那個死結。
      * 只對本服務自己建立、確實拿到這個旗標的顯示器做，不動主螢幕或其他一般顯示器。
+     *
+     * 帶 displayId 的 `wakeUp` 從 API 36 起才有；API 31–35 的 VD 同樣有獨立 display group，
+     * 卻沒有 API 能單獨喚醒它，這幾個版本上死結仍可能發生。
      */
     fun wakeDisplayGroupIfOwned(displayId: Int) {
         if (displayId == Display.DEFAULT_DISPLAY) return
         if (!vdStore.containsKey(displayId)) return
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.BAKLAVA) return
         try {
             platformHandles.powerManagerHidden.wakeUp(
                 SystemClock.uptimeMillis(),
