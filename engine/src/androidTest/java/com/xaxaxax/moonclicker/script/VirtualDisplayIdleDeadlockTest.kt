@@ -1,6 +1,7 @@
 package com.xaxaxax.moonclicker.script
 
 import android.hardware.display.DisplayManager
+import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.SystemClock
@@ -8,6 +9,7 @@ import android.view.Display
 import android.view.MotionEvent
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -18,7 +20,9 @@ import java.util.concurrent.TimeUnit
  * issue #6 的 regression test：`FLAG_OWN_DISPLAY_GROUP` 的虛擬顯示所屬 power group
  * 睡著之後，注入的輸入要能把它喚醒——修法前這裡會卡死（見 [com.xaxaxax.moonclicker.MoonClickerService.wakeDisplayGroupIfOwned]）。
  *
- * 用 `cmd power sleep --display-id` 取代真的等待閒置逾時，讓這個場景在秒級內決定性重現。
+ * 用 [com.xaxaxax.moonclicker.MoonClickerService.sleepVirtualDisplay] 取代真的等待閒置逾時：兩者都讓這個
+ * display group 走 `goToSleep`，這個場景因此在秒級內決定性重現。不用 `cmd power sleep --display-id`——
+ * API 34 沒有這個 shell 指令。
  */
 @RunWith(AndroidJUnit4::class)
 class VirtualDisplayIdleDeadlockTest {
@@ -37,17 +41,20 @@ class VirtualDisplayIdleDeadlockTest {
             precondition.contains("FLAG_OWN_DISPLAY_GROUP"),
         )
 
-        assertTrue(
-            "display did not go OFF after cmd power sleep (state ${stateOf(displayId)})",
+        // 前提而非斷言：API 34 上 goToSleep 回傳成功，顯示器卻維持 ON，睡不著就沒有死結可驗。
+        // 不能拿掉這一步——顯示器從沒睡著的話，下面「被叫醒」恆真。
+        assumeTrue(
+            "display $displayId stayed ON after sleepVirtualDisplay (Display.state ${stateOf(displayId)}), " +
+                    "so there is no sleeping display group to wake on API ${Build.VERSION.SDK_INT}",
             awaitDisplayState(displayId, Display.STATE_OFF) {
-                env.shell("cmd power sleep --display-id $displayId")
+                check(env.service.sleepVirtualDisplay(displayId)) { "sleepVirtualDisplay($displayId) refused" }
             },
         )
 
         assertTrue(
             "display should wake from injected input once wakeDisplayGroupIfOwned runs " +
                     "before injection; if it's still OFF the deadlock from issue #6 is back " +
-                    "(state ${stateOf(displayId)})",
+                    "(Display.state ${stateOf(displayId)})",
             awaitDisplayState(displayId, Display.STATE_ON) { injectTap(displayId) },
         )
     }
