@@ -9,8 +9,11 @@ import android.os.PowerManagerHidden
 import android.os.Process
 import android.os.SystemClock
 import android.view.Display
+import android.view.DisplayHidden
+import android.view.DisplayInfo
 import android.view.Surface
 import com.xaxaxax.moonclicker.MoonClickerService
+import dev.rikka.tools.refine.Refine
 import java.util.concurrent.ConcurrentHashMap
 import timber.log.Timber
 
@@ -23,10 +26,10 @@ private class ManagedDisplay(
     val surfaceWidth: Int,
     val surfaceHeight: Int,
     /**
-     * 只有拿到 `VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP`（需要 `ADD_TRUSTED_DISPLAY`）的 VD
-     * 才有自己獨立的 display group；沒有的話它跟主螢幕共用 `DEFAULT_DISPLAY_GROUP`，對它做的
-     * 電源操作會波及主螢幕。[VirtualDisplayLifecycle.sleepVirtualDisplay] 靠這個欄位擋下那種
-     * 情況，不能只看「這個 displayId 是不是我建的」。
+     * 只有拿到 `VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP`（需要 `ADD_TRUSTED_DISPLAY`）、而且實際
+     * 落在預設 group 以外的 VD 才有自己獨立的 display group；否則它跟主螢幕共用
+     * `DEFAULT_DISPLAY_GROUP`，對它做的電源操作會波及主螢幕。電源相關的操作都靠這個欄位擋下
+     * 那種情況，不能只看「這個 displayId 是不是我建的」。
      */
     val ownsDisplayGroup: Boolean,
 )
@@ -59,6 +62,9 @@ internal class VirtualDisplayLifecycle(
         /** API 34 起，兩者都依賴顯示器是 trusted。 */
         const val ADD_FLAGS_34 = DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_OWN_FOCUS or
                 DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_DEVICE_DISPLAY_GROUP
+
+        /** `Display.DEFAULT_DISPLAY_GROUP`，@hide。 */
+        private const val DEFAULT_DISPLAY_GROUP = 0
     }
 
     private val vdStore = mutableMapOf<Int, ManagedDisplay>()
@@ -107,7 +113,8 @@ internal class VirtualDisplayLifecycle(
             glesDistributor.destroyDistributor(nativePtr)
             return -1
         }
-        val ownsDisplayGroup = usedFlags and DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP != 0
+        val ownsDisplayGroup = usedFlags and DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP != 0 &&
+                landedOutsideDefaultGroup(vd.display)
         vdStore[displayId] = ManagedDisplay(vd, surfaceWidth = width, surfaceHeight = height, ownsDisplayGroup = ownsDisplayGroup)
         glesDistributor.register(displayId, nativePtr)
         Timber.d("VirtualDisplay created: id=$displayId name=$name ${width}x${height}@$densityDpi (Distributor Active)")
@@ -165,8 +172,8 @@ internal class VirtualDisplayLifecycle(
     /**
      * 只把 display group 關掉，VD 本身留著——[wakeDisplayGroupIfOwned] 的逆操作。
      *
-     * 只對真的拿到 `OWN_DISPLAY_GROUP`（[ManagedDisplay.ownsDisplayGroup]）的 VD 生效——
-     * 沒有這個旗標的 VD 跟主螢幕共用 `DEFAULT_DISPLAY_GROUP`，硬呼叫下去會把主螢幕也關掉。
+     * 只對真的擁有獨立 display group（[ManagedDisplay.ownsDisplayGroup]）的 VD 生效——
+     * 其餘 VD 跟主螢幕共用 `DEFAULT_DISPLAY_GROUP`，硬呼叫下去會把主螢幕也關掉。
      *
      * 帶 displayId 的 `goToSleep` 從 API 34 起才有，更早的版本一律回 false。
      */
@@ -227,6 +234,22 @@ internal class VirtualDisplayLifecycle(
      */
     private fun ownsDisplayGroup(displayId: Int): Boolean =
         displayId != Display.DEFAULT_DISPLAY && vdStore[displayId]?.ownsDisplayGroup == true
+
+    /**
+     * 要了 `OWN_DISPLAY_GROUP` 不保證拿到：Android 17 開啟各 display group 分開逾時時，
+     * `LogicalDisplayMapper` 依顯示器類型決定 group，虛擬顯示一律歸進預設 group，旗標被蓋掉
+     * （Pixel 7a 實測）。所以問它實際落在哪個 group，不從送出的旗標推斷。讀不到就當作沒拿到——
+     * 誤判成擁有會讓電源操作波及主螢幕，反過來只是少了喚醒。
+     */
+    private fun landedOutsideDefaultGroup(display: Display): Boolean = try {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return false
+        val info = DisplayInfo()
+        Refine.unsafeCast<DisplayHidden>(display).getDisplayInfo(info) &&
+                info.displayGroupId != DEFAULT_DISPLAY_GROUP
+    } catch (t: Throwable) {
+        Timber.w(t, "could not read the display group of display ${display.displayId}")
+        false
+    }
 
     /**
      * API 33+ 的特權旗標，逐項按它自己的前提決定——`DisplayManagerService` 裡是三條獨立的
