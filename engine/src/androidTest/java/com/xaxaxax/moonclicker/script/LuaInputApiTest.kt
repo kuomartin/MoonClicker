@@ -151,7 +151,3 @@ class LuaInputApiTest {
         assertEquals(true, outcome.data["ok"])
     }
 }
-
-/** 每個測試都要自己的 runner，而且一定要收掉——原生引擎是單例。 */
-internal inline fun withRunner(block: (LuaScriptRunner) -> Unit) =
-    LuaScriptRunner().use(block)

@@ -22,7 +22,7 @@ class LuaLogStreamTest {
         )
 
         assertEquals(EngineRunState.Finished, outcome.runState)
-        assertEquals(listOf("a\t1\ttrue"), outcome.logLines)
+        assertEquals(listOf("a\t1\ttrue"), runner.awaitLogLines(1))
         assertEquals(true, outcome.data["done"])
     }
 }

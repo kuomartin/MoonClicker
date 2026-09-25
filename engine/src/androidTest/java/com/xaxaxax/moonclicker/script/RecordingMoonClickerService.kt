@@ -22,10 +22,8 @@ import java.util.concurrent.CopyOnWriteArrayList
  * 別讓它靜靜地通過。
  */
 internal class RecordingMoonClickerService(
-    /** 顯示器**建立時**的尺寸；`ScriptEngine.start` 會拿它去開 ImageReader。 */
-    private val surfaceSize: IntArray = intArrayOf(1080, 1920),
-    /** 邏輯尺寸；旋轉時與 surface 尺寸長寬互換。 */
-    private val logicalSize: IntArray = surfaceSize,
+    /** 顯示器尺寸。這裡沒有旋轉，所以 surface 尺寸與邏輯尺寸相同。 */
+    private val size: IntArray = intArrayOf(1080, 1920),
 ) : IMoonClickerService.Stub() {
 
     sealed interface Call
@@ -72,9 +70,9 @@ internal class RecordingMoonClickerService(
         return true
     }
 
-    override fun getDisplaySurfaceSize(displayId: Int): IntArray = surfaceSize
+    override fun getDisplaySurfaceSize(displayId: Int): IntArray = size
 
-    override fun getDisplaySize(displayId: Int): IntArray = logicalSize
+    override fun getDisplaySize(displayId: Int): IntArray = size
 
     override fun addVirtualDisplaySurface(displayId: Int, surface: Surface): Int =
         if (mirrorActive) 1001 else -1
@@ -137,8 +135,8 @@ internal class RecordingMoonClickerService(
         com.xaxaxax.moonclicker.MoonClickerDisplayInfo().apply {
             this.displayId = displayId
             this.name = "Recording Display $displayId"
-            this.width = logicalSize[0]
-            this.height = logicalSize[1]
+            this.width = size[0]
+            this.height = size[1]
             this.densityDpi = 420
             this.isPhysical = (displayId == 0)
             this.isMirrorActive = mirrorActive

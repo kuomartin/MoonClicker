@@ -70,8 +70,8 @@ android {
         managedDevices {
             localDevices {
                 // ATD（automated test device）映像檔把圖形堆疊拿掉了：虛擬顯示建得起來、
-                // 影格也照送，但每一張都是全黑。所以它跑得完 Tier 0 與 Tier 1 的
-                // step1–5，`vision.*` 的比對會被 Tier1SpikeTest 的 assumption 跳過。
+                // 影格也照送，但每一張都是全黑。所以它跑得完 Tier 0 與 Tier 1 的非比對測試，
+                // `vision.*` 的比對會被 Tier1Env.assumeFramesHaveContent 跳過。
                 // 開機快，適合平常跑。
                 create("api36") {
                     device = "Pixel 6"
