@@ -66,6 +66,14 @@ API 33 起都能用的是綁在 displayId 上的 `SCREEN_BRIGHT_WAKE_LOCK`：持
 
 → `DisplayGroupWakeLocks`、`VirtualDisplayLifecycle.wakeDisplayGroupIfOwned`／`holdDisplayGroupAwake`、`VirtualDisplayIdleDeadlockTest`、`VirtualDisplayKeepAwakeSlowTest`
 
+### 要了 `OWN_DISPLAY_GROUP` 也可能落在預設 group
+
+Android 17 開啟各 display group 分開逾時（`isSeparateTimeoutsEnabled`）時，`LogicalDisplayMapper` 先由 `DisplayGroupAllocator` 依顯示器類型決定 group，虛擬顯示一律是 primary，也就是預設 group；`assignDisplayGroupIdLocked` 優先採用這個決定，旗標被蓋掉（[android-17.0.0_r1 LogicalDisplayMapper](https://android.googlesource.com/platform/frameworks/base/+/refs/tags/android-17.0.0_r1/services/core/java/com/android/server/display/LogicalDisplayMapper.java)）。Pixel 7a（API 37）實測：VD 帶著 `FLAG_OWN_DISPLAY_GROUP` 卻在 group 0，對它 `goToSleep(displayId)` 關掉的是整支手機的螢幕。
+
+所以「擁有獨立 display group」要看建立後實際的 `DisplayInfo.displayGroupId`，不能從送出的旗標推斷。
+
+→ `VirtualDisplayLifecycle.landedOutsideDefaultGroup`、`VirtualDisplayIdleDeadlockTest.sleepRefusesADisplayInTheDefaultGroup`
+
 ### API 27–28 注入不到虛擬顯示
 
 `MotionEvent.setDisplayId` 是 API 29 才有的隱藏 API，在那之前沒有辦法把事件標到某個顯示器
