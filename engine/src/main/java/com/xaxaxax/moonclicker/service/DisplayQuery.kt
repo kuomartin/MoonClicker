@@ -76,6 +76,7 @@ internal class DisplayQuery(
             this.isPhysical = isPhysical
             this.isMirrorActive = isMirrorActive
             this.isManaged = virtualDisplayLifecycle.isKnownVirtualDisplay(displayId)
+            this.canSleep = virtualDisplayLifecycle.canSleep(displayId)
         }
     }
 

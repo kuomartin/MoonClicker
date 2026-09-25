@@ -78,6 +78,10 @@ class VirtualDisplayIdleDeadlockTest {
         assumeTrue("display $displayId has its own display group ($group)", group == 0)
 
         assertFalse(
+            "getDisplayInfo($displayId).canSleep offers power-off for a display in the default group",
+            env.service.getDisplayInfo(displayId)?.canSleep == true,
+        )
+        assertFalse(
             "sleepVirtualDisplay($displayId) accepted a display in the default group, which " +
                     "would turn the main screen off",
             env.service.sleepVirtualDisplay(displayId),

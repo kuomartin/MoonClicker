@@ -117,7 +117,13 @@ internal class VirtualDisplayLifecycle(
                 landedOutsideDefaultGroup(vd.display)
         vdStore[displayId] = ManagedDisplay(vd, surfaceWidth = width, surfaceHeight = height, ownsDisplayGroup = ownsDisplayGroup)
         glesDistributor.register(displayId, nativePtr)
-        Timber.d("VirtualDisplay created: id=$displayId name=$name ${width}x${height}@$densityDpi (Distributor Active)")
+        Timber.d("VirtualDisplay created: id=$displayId name=$name ${width}x${height}@$densityDpi (Distributor Active xxx)")
+
+        runCatching {
+            val info = DisplayInfo()
+            Refine.unsafeCast<DisplayHidden>(vd.display).getDisplayInfo(info)
+            info
+        }.onSuccess { Timber.d("DisplayInfo = $it") }
         return displayId
     }
 
@@ -178,10 +184,8 @@ internal class VirtualDisplayLifecycle(
      * 帶 displayId 的 `goToSleep` 從 API 34 起才有，更早的版本一律回 false。
      */
     fun sleepVirtualDisplay(displayId: Int): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return false
-        val managed = vdStore[displayId] ?: return false
-        if (!managed.ownsDisplayGroup) {
-            Timber.w("sleepVirtualDisplay: display $displayId does not own its display group, refusing")
+        if (!canSleep(displayId)) {
+            Timber.w("sleepVirtualDisplay: display $displayId cannot be put to sleep on its own, refusing")
             return false
         }
         return try {
@@ -197,6 +201,10 @@ internal class VirtualDisplayLifecycle(
             false
         }
     }
+
+    /** [sleepVirtualDisplay] 會不會接受：UI 據此決定要不要給「關電源」。 */
+    fun canSleep(displayId: Int): Boolean =
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && ownsDisplayGroup(displayId)
 
     /**
      * `FLAG_OWN_DISPLAY_GROUP` 的顯示器有自己獨立的 wakefulness 計時器，閒置逾時後該 group 關閉：
