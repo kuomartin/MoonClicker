@@ -15,7 +15,9 @@ plugins {
  *    drags in the CMake/OpenCV native build across four ABIs — a ~79 MB test APK, rebuilt for
  *    every device in the matrix below.
  *
- * What *is* tested is the platform, against the assumptions `:hidden-api` encodes.
+ * What *is* tested is the platform, against the assumptions `:hidden-api` encodes. The contracts
+ * themselves live in `src/contracts` and are compiled into both test source sets: `androidTest`
+ * checks them against the platform, `test` checks them against the stubs (`StubCoverageTest`).
  */
 
 val sdkPath = file("${System.getProperty("user.home")}/Android/Sdk")
@@ -38,6 +40,25 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+    }
+
+    sourceSets {
+        listOf("androidTest", "test").forEach { name ->
+            getByName(name) {
+                java.srcDir("src/contracts/java")
+                kotlin.srcDir("src/contracts/java")
+            }
+        }
+    }
+
+    testOptions {
+        unitTests.all {
+            // StubCoverageTest enumerates the stubs from source, so a stub with no contract at all
+            // is still found.
+            val stubSources = rootProject.file("hidden-api/src/main/java")
+            it.inputs.dir(stubSources)
+            it.systemProperty("hiddenApi.srcDir", stubSources.absolutePath)
+        }
     }
 
     // The contract only means anything when checked across API levels, so the matrix is the
@@ -119,4 +140,8 @@ dependencies {
     androidTestImplementation(libs.androidx.test.runner)
     // Non-SDK interface restrictions would otherwise hide the very members under test.
     androidTestImplementation(libs.hiddenapibypass)
+    // On the JVM there is no bootclasspath to shadow the stubs, so reflection sees the stubs
+    // themselves — which is what StubCoverageTest compares the contracts against.
+    testImplementation(project(":hidden-api"))
+    testImplementation(libs.junit)
 }
