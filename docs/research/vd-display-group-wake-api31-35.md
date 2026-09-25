@@ -10,7 +10,7 @@
 2. **API 33–35 的 VD 在自己的 group（≠ 0）**，前提是 shell 持有 `ADD_TRUSTED_DISPLAY`（AOSP 13 起的 shell manifest 有，OEM 可能拿掉，`ManagedDisplay.ownsDisplayGroup` 會如實記錄）。模擬器 33/34/35 實測 `displayGroupId 1`、`FLAG_OWN_DISPLAY_GROUP`；Note20（One UI 5.1）上 uid 2000 以相同旗標建的 VD 為 `displayGroupId 6`、`FLAG_OWN_DISPLAY_GROUP`。34+ 一併送出的 `DEVICE_DISPLAY_GROUP` 在沒有 virtual device 時是空操作，不影響歸屬。
 3. **33–35 上死結是真的，但機制跟 36 不同。** VD 的 `Display.getState()` 在這幾版只反映「有沒有 surface」，group 睡著時仍回報 ON；真正起作用的是每個 display 各自的 `DisplayPowerController` 在 group 關閉時疊上的 **ColorFade 黑色圖層**。實測：33、34 畫面全黑且注入的觸控被 `InputDispatcher` 以「untrusted touch occlusion」丟棄；35（`AE3A.240806.019`）畫面全黑但觸控仍送達。之後的 `userActivity` 對已睡著的 group 無效，所以自己醒不過來。
 4. **33–35 可行且已實測有效的解法：綁在 VD displayId 上的螢幕 wake lock。** `PowerManager.newWakeLock(level, tag, displayId)`（@hide，12 起就有）拿 `SCREEN_BRIGHT_WAKE_LOCK`：持有期間該 group 不會逾時；加上 `ACQUIRE_CAUSES_WAKEUP` 取得的那一刻會只喚醒該 group（13 起）。33/34/35/36 四版模擬器都驗證了「叫醒 → 觸控恢復 → 持有 25 秒（逾時設 10 秒）仍醒著」；Note20 實機以 uid 2000、packageName `com.android.shell` 驗證了「只喚醒 VD 的 group 6 → 持有 40 秒（逾時設 15 秒）不逾時 → 釋放當下即因逾時關閉」。需要 `WAKE_LOCK`（shell 有）。
-5. **帶 displayId 的 `wakeUp` 不是 36 才有，是 `android-15.0.0_r20`（BP1A，2025-03 QPR2）起就有；** 同一批 tag 也把 VD 狀態改成跟隨電源、輸入改成逐 display 判斷 interactive，也就是 36 那種死結同時出現在 API 35 的較新 build 上。專案的 apiMatrix 結論「36 起」只反映模擬器映像 `AE3A.240806.019`（`android-15.0.0_r1` 那一代）。`wakeDisplayGroupIfOwned` 應以方法是否存在而非 `SDK_INT >= BAKLAVA` 判斷。
+5. **帶 displayId 的 `wakeUp` 不是 36 才有，是 `android-15.0.0_r20`（BP1A，2025-03 QPR2）起就有；** 同一批 tag 也把 VD 狀態改成跟隨電源、輸入改成逐 display 判斷 interactive，也就是 36 那種死結同時出現在 API 35 的較新 build 上。專案的 apiMatrix 結論「36 起」只反映模擬器映像 `AE3A.240806.019`（`android-15.0.0_r1` 那一代）。依賴這個方法就得以方法是否存在判斷，不能看 `SDK_INT`。
 6. 不適用：`DisplayManagerGlobal.requestDisplayPower`（API 35，只改 display device 狀態、不碰 PowerGroup，對 VD 回 false）、`SurfaceControl.setDisplayPowerMode`（SurfaceFlinger 直接拒絕 virtual display）、`cmd power`／`cmd display`／`input keyevent WAKEUP`（沒有非預設 group 的喚醒入口）。
 
 ---
@@ -168,7 +168,7 @@ acquire 後立即 release（pulse）可以當作帶 displayId 的 `wakeUp` 用�
 | 位置 | 現況 | 與本研究的出入 |
 |---|---|---|
 | `VirtualDisplayLifecycle.wakeDisplayGroupIfOwned` 的 KDoc 與 #121 內文 | 「API 31–35 的 VD 同樣有獨立 display group」 | 31–32 沒有；33–35 才有 |
-| `wakeDisplayGroupIfOwned` 的版本閘門 | `SDK_INT < BAKLAVA` 就返回 | 35 QPR2（`android-15.0.0_r20`）以後有這個方法，也有 36 式的死結；應改為偵測方法是否存在 |
+| `wakeDisplayGroupIfOwned` 的版本閘門 | `SDK_INT < BAKLAVA` 就返回 | 35 QPR2（`android-15.0.0_r20`）以後有這個方法，也有 36 式的死結；以 `SDK_INT` 判斷會漏掉這些 build |
 | `hidden-api/…/PowerManagerHidden.java`、`hidden-api-contract/…/PowerManagerHidden.kt` | `wakeUp(…, displayId)` 標 `sinceApi = BAKLAVA` | 只對 `AE3A` 映像成立 |
 | `VirtualDisplayIdleDeadlockTest` 與 `docs/lua-api-testing.md` 的 34/35 列 | 等 `Display.state == OFF` 當作「睡著了」的前提 | 36 以前 VD 的 `Display.state` 不反映電源；33–35 應改觀察 PowerGroup（logcat `PowerGroup`）、ColorFade 圖層或 tap 是否送達 |
 

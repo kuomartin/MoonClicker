@@ -65,12 +65,25 @@ duration 插值。所以 Tier 0 能說「引擎送出了什麼」，不能說「
 | `AppMutingTest` | `app.mute` 對測試 APK 自己：package 層 mode 讀回 deny／ignore、焦點請求被拒，解除後回到原值；重複靜音、未安裝的 package、行程停止與異常結束後的還原 |
 | `VisionWaitTest` | `vision.wait`／`wait_any` 的等待語意與 `step_ms`、`find_any` 的 index |
 | `InputTextTest` | `input.text` 打出的字（大小寫、符號、Enter）送到虛擬顯示上有焦點的 puppet |
-| `VirtualDisplayIdleDeadlockTest` | issue #6：注入的輸入喚醒睡著的 own display group |
+| `VirtualDisplayIdleDeadlockTest` | issue #6、#121：注入的輸入喚醒睡著的 own display group |
+| `VirtualDisplayKeepAwakeSlowTest` | issue #121：掛著 surface 時 own display group 不逾時，拿掉後照常逾時（慢測試，見下） |
 
 ```bash
 ANDROID_SERIAL=<serial> ./gradlew :engine:connectedDebugAndroidTest \
     -Pandroid.testInstrumentationRunnerArguments.class=com.xaxaxax.moonclicker.script.VisionCoordinatesTest
 ```
+
+### 慢測試
+
+要真的等過 `screen_off_timeout` 的測試一條就要半分鐘以上，預設以 `Assume` 跳過，要跑時加參數：
+
+```bash
+ANDROID_SERIAL=<serial> ./gradlew :engine:connectedDebugAndroidTest \
+    -Pandroid.testInstrumentationRunnerArguments.class=com.xaxaxax.moonclicker.script.VirtualDisplayKeepAwakeSlowTest \
+    -Pandroid.testInstrumentationRunnerArguments.slow=true
+```
+
+display group 的睡醒從 logcat 的 `PowerGroup` 行讀（`PowerGroupLog`）：API 36 以前虛擬顯示的 `Display.state` 不反映它所屬 group 的電源，13–15 的 `dumpsys power` 也不列出各 group 的 wakefulness。
 
 ### 沒有 Shizuku 也拿得到 shell 身分
 
@@ -168,7 +181,7 @@ puppet 同時畫**旋轉對稱**的同心方框與**不對稱**的 Γ 字形，�
 全部用**有圖形堆疊**的映像檔（27–29 只有 `default` 有，30 起用 `aosp`），否則比對那一段會被
 跳過，而跨版本要驗的正好包含它。
 
-每一級都跑同一組 48 條（Tier 0 + Tier 1）；表中只列跳過的，其餘全過。跳過一律是 `Assume`——環境不提供被測物，不是失敗。
+每一級都跑同一組 49 條（Tier 0 + Tier 1）；表中只列跳過的，其餘全過。跳過一律是 `Assume`——環境不提供被測物，不是失敗。`VirtualDisplayKeepAwakeSlowTest` 預設跳過（見[慢測試](#慢測試)），不列在表中；帶 `slow=true` 時在 33–36 模擬器上通過；拿不到 `FLAG_OWN_DISPLAY_GROUP` 的環境以 `Assume` 跳過。
 
 | API | 跳過 | 原因 |
 |---|---|---|
@@ -176,7 +189,6 @@ puppet 同時畫**旋轉對稱**的同心方框與**不對稱**的 Γ 字形，�
 | 29, 30 | idle deadlock | 拿不到 `FLAG_OWN_DISPLAY_GROUP` |
 | 31（模擬器） | idle deadlock、13 條 vision、2 條旋轉的 input | 影格全是單一顏色；app 宣告的方向傳不到虛擬顯示（見 [pitfalls](virtual-display-pitfalls.md#未解)） |
 | 33 | idle deadlock | 帶 displayId 的 `goToSleep` 從 API 34 起才有 |
-| 34, 35 | idle deadlock | `goToSleep` 回傳成功，顯示器維持 ON |
 | 36（`aosp-atd`） | idle deadlock、11 條 vision | ATD 沒有圖形堆疊 |
 | 36（`aosp`） | — | |
 | 37（Pixel 7a 實機） | — | |
