@@ -161,13 +161,18 @@ puppet 同時畫**旋轉對稱**的同心方框與**不對稱**的 Γ 字形，�
 全部用**有圖形堆疊**的映像檔（27–29 只有 `default` 有，30 起用 `aosp`），否則比對那一段會被
 跳過，而跨版本要驗的正好包含它。
 
-| API | 結果 |
-|---|---|
-| 27, 28 | Tier 0 全過；**Tier 1 跳過** |
-| 29 | 31/31 —— Tier 1 能觸及的最舊一級，含 vision 與注入 |
-| 30, 33, 34, 35, 36 | 31/31 |
-| 31（模擬器） | 旋轉那兩步跳過，其餘全過 |
-| 31（SM-A217F 實機） | 31/31 |
+每一級都跑同一組 48 條（Tier 0 + Tier 1）；表中只列跳過的，其餘全過。跳過一律是 `Assume`——環境不提供被測物，不是失敗。
+
+| API | 跳過 | 原因 |
+|---|---|---|
+| 27, 28 | Tier 1 全部 | 沒有 `adoptShellPermissionIdentity`（見下） |
+| 29, 30 | idle deadlock | 拿不到 `FLAG_OWN_DISPLAY_GROUP` |
+| 31（模擬器） | idle deadlock、13 條 vision、2 條旋轉的 input | 影格全是單一顏色；app 宣告的方向傳不到虛擬顯示（見 [pitfalls](virtual-display-pitfalls.md#未解)） |
+| 33 | idle deadlock | 帶 displayId 的 `goToSleep` 從 API 34 起才有 |
+| 34, 35 | idle deadlock | `goToSleep` 回傳成功，顯示器維持 ON |
+| 36（`aosp-atd`） | idle deadlock、11 條 vision | ATD 沒有圖形堆疊 |
+| 36（`aosp`） | — | |
+| 37（Pixel 7a 實機） | — | |
 
 **Tier 1 的下限是 API 29**，因為它整個建立在 `UiAutomation.adoptShellPermissionIdentity` 上，
 而那是 API 29 才有的（27/28 實測 `NoSuchMethodError`）。這是**測試框架**的限制，不是產品的：
