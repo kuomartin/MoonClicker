@@ -40,7 +40,7 @@ MoonClicker 原本從 API 31 起無條件加上 `VIRTUAL_DISPLAY_FLAG_TRUSTED`�
 會為一個旗標賠掉整個 trusted 顯示器。而 `ALWAYS_UNLOCKED` 決定的是**鎖屏時虛擬顯示還收不
 收得到觸控**。
 
-→ `MoonClickerService.privilegedFlags()`、`Tier1SpikeTest.step2b`
+→ `MoonClickerService.privilegedFlags()`、`DisplayBringUpTest.each_privileged_flag_follows_its_own_permission`
 
 ### 沒有 `ALWAYS_UNLOCKED` 的顯示器，在裝置休眠時不派送觸控
 
@@ -64,8 +64,8 @@ Tier 1 觀察不到它：`UiAutomation.adoptShellPermissionIdentity` 也是 API 
 （同為 API 31 的 SM-A217F 會跟隨，30/33/34/35 也會）。最大嫌疑是
 `ignoreOrientationRequest`（API 31 引進的 per-display 設定）。
 
-`Tier1SpikeTest` 的旋轉步驟在轉不動的環境下 assume 掉，訊息裡帶著
-`dumpsys window displays` 供下一個人接手。
+`Tier1Env.rotate()` 在轉不動的環境下 assume 掉，訊息裡帶著 `dumpsys window displays`
+供下一個人接手。
 
 ### 轉虛擬顯示要讓裡面的 app 宣告方向
 
@@ -75,6 +75,16 @@ Tier 1 觀察不到它：`UiAutomation.adoptShellPermissionIdentity` 也是 API 
 
 → `PuppetActivity.requestOrientation()`
 
+### 轉場開始前畫面會先靜止一段
+
+Pixel 7a（API 37）上，app 啟動到虛擬顯示後，影格會先連續多張完全相同，之後整個畫面才水平
+滑入。只看「連續 N 張影格相同」會在滑入前就判定穩定，接著 `vision` 以 confidence 1.0 比中
+水平平移過的位置——y 完全正確、x 偏 100–270 px，每次不同。
+
+轉場期間注入的觸控座標也帶著位移，所以「點下去落在標記裡」才是轉場結束的訊號。
+
+→ `Tier1Env.stage()`
+
 ### ATD 系統映像檔沒有圖形堆疊
 
 虛擬顯示建得起來、`GlesDistributor` 照樣送影格——但每一張都是全黑（在 Android Studio 裡開
@@ -83,7 +93,7 @@ Tier 1 觀察不到它：`UiAutomation.adoptShellPermissionIdentity` 也是 API 
 
 判斷方式是**量性質不是認裝置名**：`Build.PRODUCT` 含 "atd" 是 proxy，會隨映像檔改名腐爛。
 
-→ `Tier1Env.distinctColorsOnDisplay()`
+→ `Tier1Env.assumeFramesHaveContent()`
 
 ---
 
@@ -142,17 +152,19 @@ SurfaceTexture 的佇列滿了會擋住生產端。
 
 ### 環境前提會偽裝成產品 bug
 
-同一個模式出現四次，症狀都是某個斷言失敗、看起來像座標或權限錯了：
+同一個模式反覆出現，症狀都是某個斷言失敗、看起來像座標或權限錯了：
 
 | 真正的原因 | 偽裝成 | 對策 |
 |---|---|---|
-| ATD 影格全黑 | 比對不中 | `distinctColorsOnDisplay` |
-| Android 12 splash 還壓在已 resume 的視窗上 | 觸控沒送達 | `tapUntilInside` 重試 |
+| ATD 影格全黑 | 比對不中 | `assumeFramesHaveContent` |
+| Android 12 splash 還壓在已 resume 的視窗上 | 觸控沒送達 | `assertTapLandsInside` 重試 |
 | 裝置 Dozing／鎖屏 | 觸控沒送達 | `wakeAndUnlock` |
-| 啟動／旋轉動畫未結束 | 座標算錯 | `awaitStableFrame` |
+| 旋轉動畫未結束 | 座標算錯 | `awaitSettled` |
+| 轉場開始前的靜止期 | 座標算錯 | `stage` 的 tap 暖身 |
 
-前三次都是再補一個**代理條件**；第四次才改成量真正在意的性質——**連續幾張影格取樣相同**
-——而那一個條件回頭涵蓋了前面三種。
+對策要量真正在意的性質，而不是代理條件。「連續幾張影格相同」量的是畫面有沒有在動，但
+轉場還沒開始時畫面也不動；vision 測試真正在意的是「畫面上的東西已經在最終位置」，而觸控落點
+是目前唯一直接量得到它的訊號。
 
 動畫期間的證據：注入 y=506，收到 334.01 與 369.01，x 精確不變、y 各差一個純縮放
 （1.515 與 1.371）。旋轉動畫則是 `vision` 以 **confidence 1.0** 命中一個過渡位置。
@@ -189,7 +201,7 @@ bitmap 帶的是預設顯示器的密度，canvas 目標是虛擬顯示器的，
 
 兩次差點收下沒有鑑別力的綠燈：
 
-- **旋轉方向**：step7/8 原本只用旋轉對稱的圖樣，而對稱圖樣轉 90° 還是自己——方向寫反也全綠。
+- **旋轉方向**：旋轉的 round trip 原本只用旋轉對稱的圖樣，而對稱圖樣轉 90° 還是自己——方向寫反也全綠。
   加上不對稱的 Γ 字形之後，先確認它在改動前是紅的（rotation 1/3 `found=false`、rotation 0
   通過），才動實作。
 - **`vision.wait` 的等待**：`elapsed >= 2000` 有可能只是撞到「腳本啟動＋拆除本來就要 2 秒」
