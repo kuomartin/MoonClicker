@@ -34,8 +34,9 @@ class VirtualDisplayIdleDeadlockTest {
     fun injectedTapWakesASleepingOwnDisplayGroup() {
         val displayId = env.createDisplay()
 
+        // 前提而非斷言：舊版平台或 shell 沒有對應權限時拿不到這個旗標，也就沒有獨立的 power group。
         val precondition = env.displayDump(displayId)
-        assertTrue(
+        assumeTrue(
             "FLAG_OWN_DISPLAY_GROUP was not granted to this VD, so this run isn't " +
                     "exercising issue #6's precondition:\n$precondition",
             precondition.contains("FLAG_OWN_DISPLAY_GROUP"),

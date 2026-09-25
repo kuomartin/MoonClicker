@@ -15,6 +15,7 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.os.ParcelFileDescriptor
 import android.os.PowerManager
+import android.os.SystemClock
 import android.view.MotionEvent
 import androidx.test.platform.app.InstrumentationRegistry
 import com.xaxaxax.moonclicker.MoonClickerService
@@ -245,10 +246,13 @@ class Tier1Env : ExternalResource() {
     fun assumeFramesHaveContent(displayId: Int) {
         val seen = HashSet<Int>()
         val hasContent = sampleFrames(displayId, timeoutMs = 2_000) { buffer, rowStride ->
-            var offset = 0
-            while (offset + 4 <= buffer.limit() && seen.size < 2) {
-                seen += buffer.getInt(offset)
-                offset += rowStride * 8
+            // 格點橫跨整張影格：只取某一行的話，那一行可能整條都是底色。
+            for (row in 0 until HEIGHT step 16) {
+                for (col in 0 until WIDTH step 16) {
+                    val offset = row * rowStride + col * 4
+                    if (offset + 4 > buffer.limit()) break
+                    seen += buffer.getInt(offset)
+                }
             }
             seen.size > 1
         }
@@ -307,9 +311,10 @@ class Tier1Env : ExternalResource() {
      * 落進 [target]，失敗訊息分辨「一次都沒收到」與「收到但始終在外面」。
      */
     fun assertTapLandsInside(displayId: Int, target: Rect, timeoutMs: Long = 15_000) {
-        val deadline = System.currentTimeMillis() + timeoutMs
+        // 單調時鐘：模擬器從 snapshot 還原後會把牆上時鐘往前校正一大段，deadline 會瞬間過期。
+        val deadline = SystemClock.uptimeMillis() + timeoutMs
         var last: PuppetRecorder.Touch? = null
-        while (System.currentTimeMillis() < deadline) {
+        while (SystemClock.uptimeMillis() < deadline) {
             PuppetRecorder.clearTouches()
             service.multiTouchSwipe(
                 -1, displayId,

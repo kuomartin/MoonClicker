@@ -192,6 +192,12 @@ bitmap 帶的是預設顯示器的密度，canvas 目標是虛擬顯示器的，
 `VisionMatcher::match` 低於門檻就 `continue`，留下預設的 0。所以「看分數判斷是全黑還是縮放」
 行不通。
 
+### 模擬器的牆上時鐘會在測試中途往前跳
+
+受管理裝置從 snapshot 還原後，牆上時鐘停在建立 snapshot 的時間，開機後才校正——實測一次往前跳了一天半。用 `System.currentTimeMillis()` 算的 deadline 會瞬間過期，重試迴圈只跑一兩輪就放棄，症狀是「觸控一次都沒送到」。跳躍落在哪一段取決於前面的步驟花多久，所以只有每次開機後的第一個測試會中。
+
+→ `Tier1Env.assertTapLandsInside()`（改用 `SystemClock.uptimeMillis()`）
+
 ### `@After` 會在 setUp 的 assumption 失敗後照樣執行
 
 `env` 沒初始化就 `close()`，`UninitializedPropertyAccessException` 把**跳過偽裝成失敗**。
