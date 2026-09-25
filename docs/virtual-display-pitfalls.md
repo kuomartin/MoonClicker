@@ -220,5 +220,6 @@ bitmap 帶的是預設顯示器的密度，canvas 目標是虛擬顯示器的，
 ## 未解
 
 - **API 31 模擬器的方向請求**（見上）。
+- **API 31 模擬器的虛擬顯示影格全是單一顏色**，puppet 明明在畫面上。映像檔是有圖形堆疊的 `aosp`，同一套程式在 30、33 以上都比得中。vision 測試在這一級被 `assumeFramesHaveContent` 跳過。
 - **`multi_swipe_dispatches_every_pointer` 在 API 31 模擬器上是沒有訊息的裸 `<skipped/>`。**
   它屬於 Tier 0、不依賴環境，其他五級都正常。沒有追出原因。
