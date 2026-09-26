@@ -11,5 +11,13 @@ internal val DISPLAY_HIDDEN = StubContracts(
             owner = "android.view.Display",
             member = MethodMember(name = "getLayerStack", returns = "int"),
         ),
+        MemberContract(
+            owner = "android.view.Display",
+            member = MethodMember(
+                name = "getDisplayInfo",
+                parameters = listOf("android.view.DisplayInfo"),
+                returns = "boolean",
+            ),
+        ),
     ),
 )

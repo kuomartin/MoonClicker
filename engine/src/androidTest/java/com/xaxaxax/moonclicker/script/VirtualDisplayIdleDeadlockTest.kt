@@ -1,34 +1,32 @@
 package com.xaxaxax.moonclicker.script
 
-import android.hardware.display.DisplayManager
 import android.os.Build
-import android.os.Handler
-import android.os.HandlerThread
 import android.os.SystemClock
-import android.view.Display
 import android.view.MotionEvent
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
 
 /**
- * issue #6 的 regression test：`FLAG_OWN_DISPLAY_GROUP` 的虛擬顯示所屬 power group
- * 睡著之後，注入的輸入要能把它喚醒——修法前這裡會卡死（見 [com.xaxaxax.moonclicker.MoonClickerService.wakeDisplayGroupIfOwned]）。
+ * issue #6、#121 的 regression test：`FLAG_OWN_DISPLAY_GROUP` 的虛擬顯示所屬 power group
+ * 睡著之後，注入的輸入要能把它喚醒——修法前這裡會卡死（見
+ * `VirtualDisplayLifecycle.wakeDisplayGroupIfOwned`）。
  *
  * 用 [com.xaxaxax.moonclicker.MoonClickerService.sleepVirtualDisplay] 取代真的等待閒置逾時：兩者都讓這個
  * display group 走 `goToSleep`，這個場景因此在秒級內決定性重現。不用 `cmd power sleep --display-id`——
- * API 34 沒有這個 shell 指令。
+ * API 34 沒有這個 shell 指令。睡醒看 [PowerGroupLog]，不看 `Display.state`：36 以前 VD 的 state 不反映電源。
  */
 @RunWith(AndroidJUnit4::class)
 class VirtualDisplayIdleDeadlockTest {
 
     @get:Rule
     val env = Tier1Env()
+
+    private val powerGroups = PowerGroupLog(env)
 
     @Test
     fun injectedTapWakesASleepingOwnDisplayGroup() {
@@ -41,25 +39,52 @@ class VirtualDisplayIdleDeadlockTest {
                     "exercising issue #6's precondition:\n$precondition",
             precondition.contains("FLAG_OWN_DISPLAY_GROUP"),
         )
+        val group = powerGroups.groupOf(displayId)
+        assertTrue("display $displayId has no display group in dumpsys display", group != null)
+        // 前提而非斷言：要了旗標，平台仍可能把它歸進預設 group（Android 17 的分開逾時）。
+        assumeTrue(
+            "display $displayId was put in the default display group despite FLAG_OWN_DISPLAY_GROUP",
+            group != 0,
+        )
 
-        // 前提而非斷言：API 33 以下 sleepVirtualDisplay 依版本拒絕（帶 displayId 的 goToSleep 從 API 34
-        // 起才有），API 34 起在部分環境上回傳成功但顯示器維持 ON。
-        // 睡不著就沒有死結可驗；也不能拿掉這一步——顯示器從沒睡著的話，下面「被叫醒」恆真。
+        // 前提而非斷言：帶 displayId 的 goToSleep 從 API 34 起才有，更早的版本 sleepVirtualDisplay 一律拒絕。
+        // 睡不著就沒有死結可驗；也不能拿掉這一步——group 從沒睡著的話，下面「被叫醒」恆真。
         var accepted = false
-        val slept = awaitDisplayState(displayId, Display.STATE_OFF) {
+        val slept = powerGroups.await(group!!, awake = false) {
             accepted = env.service.sleepVirtualDisplay(displayId)
         }
         assumeTrue(
-            "display $displayId did not go to sleep on API ${Build.VERSION.SDK_INT} " +
-                    "(sleepVirtualDisplay returned $accepted, Display.state ${stateOf(displayId)})",
+            "display group $group did not go to sleep on API ${Build.VERSION.SDK_INT} " +
+                    "(sleepVirtualDisplay returned $accepted)\n${powerGroups.recent()}",
             slept,
         )
 
         assertTrue(
-            "display should wake from injected input once wakeDisplayGroupIfOwned runs " +
-                    "before injection; if it's still OFF the deadlock from issue #6 is back " +
-                    "(Display.state ${stateOf(displayId)})",
-            awaitDisplayState(displayId, Display.STATE_ON) { injectTap(displayId) },
+            "display group $group should wake from injected input once wakeDisplayGroupIfOwned runs " +
+                    "before injection; if it stays asleep the deadlock from issue #6 is back\n" +
+                    powerGroups.recent(),
+            powerGroups.await(group, awake = true) { injectTap(displayId) },
+        )
+    }
+
+    /**
+     * 跟主螢幕同一個 display group 的 VD，讓它睡就是讓整支手機睡——必須拒絕。要了
+     * `OWN_DISPLAY_GROUP` 也可能落在這裡（Android 17 的分開逾時），所以不能從旗標推斷。
+     */
+    @Test
+    fun sleepRefusesADisplayInTheDefaultGroup() {
+        val displayId = env.createDisplay()
+        val group = powerGroups.groupOf(displayId)
+        assumeTrue("display $displayId has its own display group ($group)", group == 0)
+
+        assertFalse(
+            "getDisplayInfo($displayId).canSleep offers power-off for a display in the default group",
+            env.service.getDisplayInfo(displayId)?.canSleep == true,
+        )
+        assertFalse(
+            "sleepVirtualDisplay($displayId) accepted a display in the default group, which " +
+                    "would turn the main screen off",
+            env.service.sleepVirtualDisplay(displayId),
         )
     }
 
@@ -73,36 +98,6 @@ class VirtualDisplayIdleDeadlockTest {
         } finally {
             down.recycle()
             up.recycle()
-        }
-    }
-
-    private val displayManager get() = env.context.getSystemService(DisplayManager::class.java)
-
-    private fun stateOf(displayId: Int): Int? = displayManager.getDisplay(displayId)?.state
-
-    /** 先掛上 listener 再做 [action]，才不會漏掉 [action] 觸發的那次狀態變化。 */
-    private fun awaitDisplayState(
-        displayId: Int,
-        state: Int,
-        timeoutMs: Long = 5_000,
-        action: () -> Unit,
-    ): Boolean {
-        val reached = CountDownLatch(1)
-        val listener = object : DisplayManager.DisplayListener {
-            override fun onDisplayChanged(id: Int) {
-                if (id == displayId && stateOf(id) == state) reached.countDown()
-            }
-            override fun onDisplayAdded(id: Int) {}
-            override fun onDisplayRemoved(id: Int) {}
-        }
-        val thread = HandlerThread("display-state").apply { start() }
-        displayManager.registerDisplayListener(listener, Handler(thread.looper))
-        try {
-            action()
-            return stateOf(displayId) == state || reached.await(timeoutMs, TimeUnit.MILLISECONDS)
-        } finally {
-            displayManager.unregisterDisplayListener(listener)
-            thread.quitSafely()
         }
     }
 }

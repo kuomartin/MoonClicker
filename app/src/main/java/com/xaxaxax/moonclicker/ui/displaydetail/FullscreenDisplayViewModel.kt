@@ -42,8 +42,13 @@ class FullscreenDisplayViewModel @Inject constructor(
     data class UiState(
         val showAppList: Boolean = false,
         val apps: List<AppEntry> = emptyList(),
-        /** 本服務建立的虛擬螢幕才能關閉、關電源；實體螢幕與外部虛擬螢幕都不行。 */
+        /** 本服務建立的虛擬螢幕才能關閉；實體螢幕與外部虛擬螢幕都不行。 */
         val isManaged: Boolean = false,
+        /**
+         * 能單獨關電源：VD 要實際擁有獨立 display group，且 API 34+。否則關的是主螢幕所在的
+         * group，或根本做不到。
+         */
+        val canPowerOff: Boolean = false,
     )
 
     private val _uiState = MutableStateFlow(UiState())
@@ -70,8 +75,13 @@ class FullscreenDisplayViewModel @Inject constructor(
 
     fun loadDisplayInfo(displayId: Int) {
         viewModelScope.launch {
-            shizukuManager.withService { service -> service.getDisplayInfo(displayId)?.isManaged == true }
-                .onSuccess { managed -> _uiState.value = _uiState.value.copy(isManaged = managed) }
+            shizukuManager.withService { service -> service.getDisplayInfo(displayId) }
+                .onSuccess { info ->
+                    _uiState.value = _uiState.value.copy(
+                        isManaged = info?.isManaged == true,
+                        canPowerOff = info?.canSleep == true,
+                    )
+                }
                 .onFailure { Timber.e(it) }
         }
     }

@@ -201,6 +201,8 @@ fun FullscreenDisplayScreen(
             add(FanMenuAction(Icons.Default.Apps, startAppLabel) { viewModel.onAction(FullscreenAction.StartApp, targetDisplayId) })
             if (uiState.isManaged) {
                 add(FanMenuAction(Icons.Default.Close, closeDisplayLabel) { viewModel.onAction(FullscreenAction.CloseDisplay, targetDisplayId) })
+            }
+            if (uiState.canPowerOff) {
                 add(FanMenuAction(Icons.Default.PowerSettingsNew, powerOffLabel) { viewModel.onAction(FullscreenAction.PowerOff, targetDisplayId) })
             }
             add(FanMenuAction(Icons.Default.Logout, exitLabel) { viewModel.onAction(FullscreenAction.Exit, targetDisplayId) })
