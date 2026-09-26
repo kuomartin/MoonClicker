@@ -50,10 +50,14 @@ class PermissionManager @Inject constructor(
     }
 
     fun getHasLocalNetworkPermission(): Boolean {
-        return ContextCompat.checkSelfPermission(
-            context,
-            PERMISSION_ACCESS_LOCAL_NETWORK,
-        ) == PackageManager.PERMISSION_GRANTED
+        return if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.BAKLAVA) {
+            true
+        }
+        else {
+            context.checkSelfPermission(
+                PERMISSION_ACCESS_LOCAL_NETWORK,
+            ) == PackageManager.PERMISSION_GRANTED
+        }
     }
 
     private fun getOsAllowSecondaryDisplays(): Boolean {

@@ -9,8 +9,11 @@ import android.os.PowerManagerHidden
 import android.os.Process
 import android.os.SystemClock
 import android.view.Display
+import android.view.DisplayHidden
+import android.view.DisplayInfo
 import android.view.Surface
 import com.xaxaxax.moonclicker.MoonClickerService
+import dev.rikka.tools.refine.Refine
 import java.util.concurrent.ConcurrentHashMap
 import timber.log.Timber
 
@@ -23,10 +26,10 @@ private class ManagedDisplay(
     val surfaceWidth: Int,
     val surfaceHeight: Int,
     /**
-     * 只有拿到 `VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP`（需要 `ADD_TRUSTED_DISPLAY`）的 VD
-     * 才有自己獨立的 display group；沒有的話它跟主螢幕共用 `DEFAULT_DISPLAY_GROUP`，對它做的
-     * 電源操作會波及主螢幕。[VirtualDisplayLifecycle.sleepVirtualDisplay] 靠這個欄位擋下那種
-     * 情況，不能只看「這個 displayId 是不是我建的」。
+     * 只有拿到 `VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP`（需要 `ADD_TRUSTED_DISPLAY`）、而且實際
+     * 落在預設 group 以外的 VD 才有自己獨立的 display group；否則它跟主螢幕共用
+     * `DEFAULT_DISPLAY_GROUP`，對它做的電源操作會波及主螢幕。電源相關的操作都靠這個欄位擋下
+     * 那種情況，不能只看「這個 displayId 是不是我建的」。
      */
     val ownsDisplayGroup: Boolean,
 )
@@ -59,9 +62,13 @@ internal class VirtualDisplayLifecycle(
         /** API 34 起，兩者都依賴顯示器是 trusted。 */
         const val ADD_FLAGS_34 = DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_OWN_FOCUS or
                 DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_DEVICE_DISPLAY_GROUP
+
+        /** `Display.DEFAULT_DISPLAY_GROUP`，@hide。 */
+        private const val DEFAULT_DISPLAY_GROUP = 0
     }
 
     private val vdStore = mutableMapOf<Int, ManagedDisplay>()
+    private val wakeLocks = DisplayGroupWakeLocks({ platformHandles.powerManagerService }, platformHandles.callerPackage)
     private val grantedPermissions = ConcurrentHashMap<String, Boolean>()
 
     fun allDisplayIds(): Set<Int> = vdStore.keys.toSet()
@@ -106,10 +113,17 @@ internal class VirtualDisplayLifecycle(
             glesDistributor.destroyDistributor(nativePtr)
             return -1
         }
-        val ownsDisplayGroup = usedFlags and DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP != 0
+        val ownsDisplayGroup = usedFlags and DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP != 0 &&
+                landedOutsideDefaultGroup(vd.display)
         vdStore[displayId] = ManagedDisplay(vd, surfaceWidth = width, surfaceHeight = height, ownsDisplayGroup = ownsDisplayGroup)
         glesDistributor.register(displayId, nativePtr)
-        Timber.d("VirtualDisplay created: id=$displayId name=$name ${width}x${height}@$densityDpi (Distributor Active)")
+        Timber.d("VirtualDisplay created: id=$displayId name=$name ${width}x${height}@$densityDpi (Distributor Active xxx)")
+
+        runCatching {
+            val info = DisplayInfo()
+            Refine.unsafeCast<DisplayHidden>(vd.display).getDisplayInfo(info)
+            info
+        }.onSuccess { Timber.d("DisplayInfo = $it") }
         return displayId
     }
 
@@ -140,6 +154,9 @@ internal class VirtualDisplayLifecycle(
 
         glesDistributor.unregister(displayId)
         glesDistributor.destroyDistributor(oldPtr)
+        // 舊 distributor 上的 surface 跟著消失，不會有人再為它們呼叫 remove；它們撐著的 wake lock
+        // 一併放掉，重連的人會再撐起來。
+        wakeLocks.dropAll(displayId)
         vdStore[displayId] = ManagedDisplay(
             managed.display,
             surfaceWidth = width,
@@ -152,6 +169,7 @@ internal class VirtualDisplayLifecycle(
     }
 
     fun destroyVirtualDisplay(displayId: Int): Boolean {
+        wakeLocks.dropAll(displayId)
         vdStore.remove(displayId)?.display?.release()
         glesDistributor.unregister(displayId)?.let { ptr -> glesDistributor.destroyDistributor(ptr) }
         return true
@@ -160,16 +178,14 @@ internal class VirtualDisplayLifecycle(
     /**
      * 只把 display group 關掉，VD 本身留著——[wakeDisplayGroupIfOwned] 的逆操作。
      *
-     * 只對真的拿到 `OWN_DISPLAY_GROUP`（[ManagedDisplay.ownsDisplayGroup]）的 VD 生效——
-     * 沒有這個旗標的 VD 跟主螢幕共用 `DEFAULT_DISPLAY_GROUP`，硬呼叫下去會把主螢幕也關掉。
+     * 只對真的擁有獨立 display group（[ManagedDisplay.ownsDisplayGroup]）的 VD 生效——
+     * 其餘 VD 跟主螢幕共用 `DEFAULT_DISPLAY_GROUP`，硬呼叫下去會把主螢幕也關掉。
      *
      * 帶 displayId 的 `goToSleep` 從 API 34 起才有，更早的版本一律回 false。
      */
     fun sleepVirtualDisplay(displayId: Int): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return false
-        val managed = vdStore[displayId] ?: return false
-        if (!managed.ownsDisplayGroup) {
-            Timber.w("sleepVirtualDisplay: display $displayId does not own its display group, refusing")
+        if (!canSleep(displayId)) {
+            Timber.w("sleepVirtualDisplay: display $displayId cannot be put to sleep on its own, refusing")
             return false
         }
         return try {
@@ -186,31 +202,61 @@ internal class VirtualDisplayLifecycle(
         }
     }
 
+    /** [sleepVirtualDisplay] 會不會接受：UI 據此決定要不要給「關電源」。 */
+    fun canSleep(displayId: Int): Boolean =
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && ownsDisplayGroup(displayId)
+
     /**
-     * `FLAG_OWN_DISPLAY_GROUP` 的顯示器有自己獨立的 wakefulness 計時器，閒置逾時後
-     * `state` 變 OFF——而 OFF 之後 `InputDispatcher` 直接丟棄送進來的輸入事件，
-     * 正常的「輸入喚醒 userActivity」路徑因此叫不醒它，是個死結（issue #6）。
+     * `FLAG_OWN_DISPLAY_GROUP` 的顯示器有自己獨立的 wakefulness 計時器，閒置逾時後該 group 關閉：
+     * API 36 起 VD 的 `state` 變 OFF、輸入被丟棄；API 33–35 的 `state` 仍回報 ON，但系統在上面
+     * 疊一層黑色 ColorFade，33/34 上注入的觸控被當成遭遮蔽而丟棄。之後的輸入都叫不醒它，
+     * 是個死結（issue #6、#121）。預設 group 的 `wakeUp` 叫不到這個 group。
      *
-     * 在每個會讓使用者看到/操作這個顯示器的入口都主動喚醒一次，讓它沒有機會卡進那個死結。
-     * 只對本服務自己建立、確實拿到這個旗標的顯示器做，不動主螢幕或其他一般顯示器。
-     *
-     * 帶 displayId 的 `wakeUp` 從 API 36 起才有；API 31–35 的 VD 同樣有獨立 display group，
-     * 卻沒有 API 能單獨喚醒它，這幾個版本上死結仍可能發生。
+     * 在每個會操作這個顯示器的入口都先喚醒一次（[DisplayGroupWakeLocks.pulse]），讓它沒有機會
+     * 卡進那個死結；緊接著送進去的輸入會重設該 group 的計時。有人在看的期間則由
+     * [holdDisplayGroupAwake] 撐著不讓它逾時。
      */
     fun wakeDisplayGroupIfOwned(displayId: Int) {
-        if (displayId == Display.DEFAULT_DISPLAY) return
-        if (!vdStore.containsKey(displayId)) return
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.BAKLAVA) return
-        try {
-            platformHandles.powerManagerHidden.wakeUp(
-                SystemClock.uptimeMillis(),
-                PowerManagerHidden.WAKE_REASON_APPLICATION,
-                "MoonClicker own-display-group keep-awake",
-                displayId,
-            )
-        } catch (t: Throwable) {
-            Timber.d(t, "wakeUp(displayId=$displayId) failed")
-        }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        if (ownsDisplayGroup(displayId)) wakeLocks.pulse(displayId)
+    }
+
+    /**
+     * 多一個正在看 [displayId] 畫面的人（掛上一個 surface）：持有綁在它 display group 上的螢幕
+     * wake lock，第一個人進來時順便叫醒它。與 [releaseDisplayGroupAwake] 成對呼叫。
+     *
+     * surface 的主人若死掉而沒呼叫 [releaseDisplayGroupAwake]，wake lock 會持有到顯示器銷毀為止。
+     */
+    fun holdDisplayGroupAwake(displayId: Int) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        if (ownsDisplayGroup(displayId)) wakeLocks.hold(displayId)
+    }
+
+    fun releaseDisplayGroupAwake(displayId: Int) {
+        wakeLocks.drop(displayId)
+    }
+
+    /**
+     * 只有真的拿到 `OWN_DISPLAY_GROUP` 的 VD 才能做——其餘顯示器在預設 group，wake lock 會連主螢幕
+     * 一起點亮、一起撐著。這也把範圍限在 API 33+：更早的版本不要求這個旗標。
+     */
+    private fun ownsDisplayGroup(displayId: Int): Boolean =
+        displayId != Display.DEFAULT_DISPLAY && vdStore[displayId]?.ownsDisplayGroup == true
+
+    /**
+     * 要了 `OWN_DISPLAY_GROUP` 不保證拿到：Android 17 開啟各 display group 分開逾時時，
+     * `LogicalDisplayMapper` 依顯示器類型決定 group，虛擬顯示一律歸進預設 group，旗標被蓋掉
+     * （Pixel 7a 實測）。所以問它實際落在哪個 group，不從送出的旗標推斷。讀不到就當作沒拿到——
+     * 誤判成擁有會讓電源操作波及主螢幕，反過來只是少了喚醒。
+     */
+    private fun landedOutsideDefaultGroup(display: Display): Boolean = try {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return false
+        val info = DisplayInfo()
+        Refine.unsafeCast<DisplayHidden>(display).getDisplayInfo(info) &&
+                info.displayGroupId != DEFAULT_DISPLAY_GROUP
+    } catch (t: Throwable) {
+        Timber.w(t, "could not read the display group of display ${display.displayId}")
+        false
     }
 
     /**
