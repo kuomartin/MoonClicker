@@ -42,8 +42,8 @@ android {
     defaultConfig {
         applicationId = "com.xaxaxax.moonclicker"
         minSdk = libs.versions.minSdk.get().toInt()
-        versionCode = 3
-        versionName = "0.2.1"
+        versionCode = 4
+        versionName = "0.2.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         targetSdk = libs.versions.targetSdk.get().toInt()
