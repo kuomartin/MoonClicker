@@ -230,7 +230,7 @@ class SettingsViewModel @Inject constructor(
 
     fun setWorkbenchEnabled(enabled: Boolean) {
         val intent = Intent(context, WorkbenchService::class.java)
-        if(enabled && permissionManager.hasLocalNetworkPermission.value) {
+        if(enabled && !permissionManager.hasLocalNetworkPermission.value) {
             Toast.makeText(
                 context,
                 R.string.settings_workbench_need_network_permission,
