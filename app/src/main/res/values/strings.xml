@@ -182,20 +182,15 @@
     <string name="shizuku_status_connecting">Connecting…</string>
     <string name="shizuku_status_connected">Service Connected</string>
     <string name="shizuku_action_grant">Grant</string>
-    <string name="shizuku_action_connect">Connect</string>
 
     <!-- UserService Settings -->
-    <string name="settings_user_service">UserService</string>
-    <string name="settings_auto_start_user_service">Auto-start UserService</string>
-    <string name="settings_auto_start_user_service_note">Only affects whether a new service is started automatically; a service that\'s already running won\'t be stopped.</string>
-    <string name="settings_user_service_start">Start</string>
-    <string name="settings_user_service_restart">Restart</string>
     <string name="settings_user_service_stop">Stop</string>
-    <string name="settings_user_service_script_running">Script is running. Stop the script before stopping or restarting the service.</string>
+    <string name="settings_shizuku">Shizuku</string>
+    <string name="developer_options_user_service">UserService</string>
+    <string name="developer_options_user_service_note">MoonClicker starts and stops the service on its own. Stopping it here restarts it the next time it is needed, which reloads a rebuilt service.</string>
+    <string name="settings_user_service_script_running">Script is running. Stop the script before stopping the service.</string>
+    <string name="settings_user_service_stop_message">Stopping the service will release all virtual displays; all active displays will be closed. It starts again the next time it is needed.</string>
     <string name="settings_user_service_stop_title">Stop UserService?</string>
-    <string name="settings_user_service_stop_message">Stopping the service will release all virtual displays; all active displays will be closed.</string>
-    <string name="settings_user_service_restart_title">Restart UserService?</string>
-    <string name="settings_user_service_restart_message">The service will be stopped and restarted; all virtual displays will be released during this process.</string>
     <string name="settings_user_service_confirm">Confirm</string>
     <string name="settings_user_service_cancel">Cancel</string>
 

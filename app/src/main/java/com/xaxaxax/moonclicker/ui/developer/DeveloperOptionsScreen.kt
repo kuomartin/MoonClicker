@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -23,6 +24,9 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -30,6 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.xaxaxax.moonclicker.R
+import com.xaxaxax.moonclicker.shizuku.ShizukuConnectionStatus
 import com.xaxaxax.moonclicker.ui.component.Section
 import com.xaxaxax.moonclicker.ui.component.ToggleSettingItem
 import com.xaxaxax.moonclicker.ui.setting.SettingsUiState
@@ -42,6 +47,18 @@ fun DeveloperOptionsScreen(
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    // 停止會連帶銷毀虛擬顯示，值得先問一句。
+    var confirmStop by remember { mutableStateOf(false) }
+
+    if (confirmStop) {
+        StopUserServiceDialog(
+            onConfirm = {
+                confirmStop = false
+                viewModel.stopUserService()
+            },
+            onDismiss = { confirmStop = false },
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -90,6 +107,15 @@ fun DeveloperOptionsScreen(
                         description = stringResource(R.string.developer_options_show_external_displays_note),
                         checked = uiState.showExternalDisplays,
                         onCheckedChange = viewModel::setShowExternalDisplays,
+                    )
+                }
+            }
+
+            item {
+                Section(name = stringResource(R.string.developer_options_user_service)) {
+                    UserServiceRow(
+                        uiState = uiState,
+                        onRequestStop = { confirmStop = true },
                     )
                 }
             }
@@ -230,4 +256,67 @@ private fun WorkbenchTokensRow(
             Text(stringResource(R.string.settings_pairing_revoke_tokens))
         }
     }
+}
+
+@Composable
+private fun UserServiceRow(
+    uiState: SettingsUiState,
+    onRequestStop: () -> Unit,
+) {
+    val statusText = stringResource(
+        when (uiState.shizukuStatus) {
+            ShizukuConnectionStatus.CONNECTED -> R.string.shizuku_status_connected
+            ShizukuConnectionStatus.CONNECTING -> R.string.shizuku_status_connecting
+            else -> R.string.shizuku_status_disconnected
+        }
+    )
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(text = statusText, style = MaterialTheme.typography.bodyLarge)
+            OutlinedButton(
+                onClick = onRequestStop,
+                enabled = uiState.canStopUserService,
+            ) {
+                Text(stringResource(R.string.settings_user_service_stop))
+            }
+        }
+        Text(
+            text = stringResource(
+                if (uiState.isScriptRunning) R.string.settings_user_service_script_running
+                else R.string.developer_options_user_service_note
+            ),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun StopUserServiceDialog(
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.settings_user_service_stop_title)) },
+        text = { Text(stringResource(R.string.settings_user_service_stop_message)) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(stringResource(R.string.settings_user_service_confirm))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.settings_user_service_cancel))
+            }
+        },
+    )
 }
