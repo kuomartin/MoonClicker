@@ -1,5 +1,6 @@
 package com.xaxaxax.moonclicker.workbench
 
+import com.xaxaxax.moonclicker.IMoonClickerService
 import com.xaxaxax.moonclicker.core.AppSettings
 import com.xaxaxax.moonclicker.engine.ScriptEngine
 import com.xaxaxax.moonclicker.script.Script
@@ -106,8 +107,8 @@ data class WorkbenchDisplaySummary(
 )
 
 interface DisplaySource {
-    fun getDisplays(): List<WorkbenchDisplaySummary>?
-    fun toggleMirror(displayId: Int, enable: Boolean): Boolean = false
+    suspend fun getDisplays(): List<WorkbenchDisplaySummary>?
+    suspend fun toggleMirror(displayId: Int, enable: Boolean): Boolean = false
 }
 
 @Singleton
@@ -133,9 +134,11 @@ class WorkbenchServer @Inject constructor(
     }
 
     private val displaySource = object : DisplaySource {
-        override fun getDisplays(): List<WorkbenchDisplaySummary>? {
-            val service = shizukuManager.service ?: return null
-            return service.displayInfoList()
+        override suspend fun getDisplays(): List<WorkbenchDisplaySummary>? =
+            shizukuManager.withService { service -> displaySummaries(service) }.getOrNull()
+
+        private fun displaySummaries(service: IMoonClickerService): List<WorkbenchDisplaySummary> =
+            service.displayInfoList()
                 .filter { info -> info.isPhysical || info.isManaged || appSettings.isExternalDisplaysVisible }
                 .map { info ->
                     WorkbenchDisplaySummary(
@@ -148,13 +151,12 @@ class WorkbenchServer @Inject constructor(
                         isMirrorActive = if (info.isManaged) true else info.isMirrorActive
                     )
                 }
-        }
 
-        override fun toggleMirror(displayId: Int, enable: Boolean): Boolean {
-            val service = shizukuManager.service ?: return false
-            // 與 DisplaysViewModel.toggleMirror 相同：關閉鏡像後縮圖就過期了。
-            return service.toggleDisplayMirror(displayId, enable).also { if (!enable) thumbnailCache.remove(displayId) }
-        }
+        override suspend fun toggleMirror(displayId: Int, enable: Boolean): Boolean =
+            shizukuManager.withService { service ->
+                // 與 DisplaysViewModel.toggleMirror 相同：關閉鏡像後縮圖就過期了。
+                service.toggleDisplayMirror(displayId, enable).also { if (!enable) thumbnailCache.remove(displayId) }
+            }.getOrDefault(false)
     }
 
     private var server: EmbeddedServer<*, *>? = null
@@ -273,7 +275,7 @@ fun Application.workbenchModule(
     scriptRunner: ScriptRunner,
     scriptStream: ScriptStream,
     displaySource: DisplaySource = object : DisplaySource {
-        override fun getDisplays(): List<WorkbenchDisplaySummary> = emptyList()
+        override suspend fun getDisplays(): List<WorkbenchDisplaySummary> = emptyList()
     },
     shizukuManager: ShizukuManager? = null,
     authStore: WorkbenchAuthStore? = null,

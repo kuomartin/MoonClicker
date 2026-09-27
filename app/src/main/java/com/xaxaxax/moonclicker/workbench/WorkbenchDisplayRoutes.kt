@@ -51,25 +51,33 @@ fun Route.displayRoutes(displaySource: DisplaySource, shizukuManager: ShizukuMan
             return@webSocket
         }
 
-        val service = shizukuManager?.service
-        if (service == null) {
+        if (shizukuManager == null) {
             close(CloseReason(CloseReason.Codes.INTERNAL_ERROR, "Service not connected"))
             return@webSocket
         }
 
-        val size = service.getDisplaySurfaceSize(displayId)
-        if (size == null || size[0] == 0) {
-            close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "Invalid displayId"))
-            return@webSocket
-        }
-
-        val sink = H264EncoderSink(service, displayId, size[0], size[1])
-        try {
-            sink.h264Flow.collect { nalu ->
-                send(Frame.Binary(true, nalu))
+        // 串流期間持有租約：鏡像實體螢幕時服務端沒有 VD，閒置停止會把串流中的服務收掉。
+        shizukuManager.leases.hold {
+            val service = shizukuManager.withService { it }.getOrNull()
+            if (service == null) {
+                close(CloseReason(CloseReason.Codes.INTERNAL_ERROR, "Service not connected"))
+                return@webSocket
             }
-        } catch (e: Exception) {
-            Timber.e(e, "H264 WebSocket error")
+
+            val size = service.getDisplaySurfaceSize(displayId)
+            if (size == null || size[0] == 0) {
+                close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "Invalid displayId"))
+                return@webSocket
+            }
+
+            val sink = H264EncoderSink(service, displayId, size[0], size[1])
+            try {
+                sink.h264Flow.collect { nalu ->
+                    send(Frame.Binary(true, nalu))
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "H264 WebSocket error")
+            }
         }
     }
 }

@@ -34,22 +34,6 @@ class AppSettings @Inject constructor(
         _autoOpenFullscreen.value = enabled
     }
 
-    private val _autoStartUserService =
-        MutableStateFlow(prefs.getBoolean(KEY_AUTO_START_USER_SERVICE, true))
-
-    /**
-     * 沒有執行中的 UserService 時，要不要自動把它啟動起來。
-     *
-     * 關閉時仍會自動接上已在執行的服務（Shizuku 的 user service 是 daemon，會活過 App 被殺），
-     * 只是不再主動建立新的——想完全掌握特權行程何時存在的人要的是這個。
-     */
-    val autoStartUserService: StateFlow<Boolean> = _autoStartUserService.asStateFlow()
-
-    fun setAutoStartUserService(enabled: Boolean) {
-        prefs.edit { putBoolean(KEY_AUTO_START_USER_SERVICE, enabled) }
-        _autoStartUserService.value = enabled
-    }
-
     private val _defaultStartPage = MutableStateFlow(
         prefs.getString(KEY_DEFAULT_START_PAGE, null)
             ?.let { name -> runCatching { TopLevelDestination.valueOf(name) }.getOrNull() }
@@ -135,7 +119,6 @@ class AppSettings @Inject constructor(
     companion object {
         private const val PREFS_NAME = "moonclicker_settings"
         private const val KEY_AUTO_FULLSCREEN = "auto_open_fullscreen"
-        private const val KEY_AUTO_START_USER_SERVICE = "auto_start_user_service"
         private const val KEY_WORKBENCH_ENABLED = "workbench_enabled"
         private const val KEY_DEFAULT_START_PAGE = "default_start_page"
         private const val KEY_APP_LANGUAGE = "app_language"

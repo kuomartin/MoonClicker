@@ -11,7 +11,7 @@ import com.xaxaxax.moonclicker.shizuku.ShizukuConnectionStatus
 data class ShizukuStatusAppearance(val label: String, val tint: Color)
 
 /**
- * 狀態列與設定頁共用同一份對映。
+ * Shizuku 授權狀態的呈現，狀態列與設定頁共用同一份對映。
  *
  * 各寫一份的話，同一個狀態遲早會在兩個畫面上有兩個名字——而使用者看到的是同一件事。
  */
@@ -27,18 +27,11 @@ fun shizukuStatusAppearance(status: ShizukuConnectionStatus): ShizukuStatusAppea
         MaterialTheme.colorScheme.error,
     )
 
-    ShizukuConnectionStatus.DISCONNECTED -> ShizukuStatusAppearance(
-        stringResource(R.string.shizuku_status_disconnected),
-        MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-
-    ShizukuConnectionStatus.CONNECTING -> ShizukuStatusAppearance(
-        stringResource(R.string.shizuku_status_connecting),
-        MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-
+    // UserService 由 App 自動啟停，連線與否不是使用者要處理的狀態，授權之後一律是「已授權」。
+    ShizukuConnectionStatus.DISCONNECTED,
+    ShizukuConnectionStatus.CONNECTING,
     ShizukuConnectionStatus.CONNECTED -> ShizukuStatusAppearance(
-        stringResource(R.string.shizuku_status_connected),
+        stringResource(R.string.permission_granted),
         MaterialTheme.colorScheme.primary,
     )
 }

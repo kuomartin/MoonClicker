@@ -155,20 +155,15 @@
     <string name="shizuku_status_connecting">連線中…</string>
     <string name="shizuku_status_connected">服務已連線</string>
     <string name="shizuku_action_grant">授權</string>
-    <string name="shizuku_action_connect">連線</string>
 
     <!-- UserService Settings -->
-    <string name="settings_user_service">UserService</string>
-    <string name="settings_auto_start_user_service">自動啟動 UserService</string>
-    <string name="settings_auto_start_user_service_note">只影響是否自動啟動服務；已在執行中的服務不會因此被停用。</string>
-    <string name="settings_user_service_start">啟動</string>
-    <string name="settings_user_service_restart">重新啟動</string>
     <string name="settings_user_service_stop">關閉</string>
-    <string name="settings_user_service_script_running">腳本執行中，先停止腳本才能關閉或重啟服務。</string>
+    <string name="settings_shizuku">Shizuku</string>
+    <string name="developer_options_user_service">UserService</string>
+    <string name="developer_options_user_service_note">MoonClicker 會自動啟停服務。在這裡關閉後，下次用到時會啟動新的服務，可用來載入重新建置的服務。</string>
+    <string name="settings_user_service_script_running">腳本執行中，先停止腳本才能關閉服務。</string>
+    <string name="settings_user_service_stop_message">服務結束前會釋放所有虛擬顯示，目前建立的 display 都會消失。下次用到時會自動重新啟動。</string>
     <string name="settings_user_service_stop_title">關閉 UserService？</string>
-    <string name="settings_user_service_stop_message">服務結束前會釋放所有虛擬顯示，目前建立的 display 都會消失。</string>
-    <string name="settings_user_service_restart_title">重新啟動 UserService？</string>
-    <string name="settings_user_service_restart_message">服務會先結束再啟動，過程中所有虛擬顯示都會被釋放。</string>
     <string name="settings_user_service_confirm">確定</string>
     <string name="settings_user_service_cancel">取消</string>
 

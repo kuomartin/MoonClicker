@@ -73,9 +73,9 @@ private class FakeDisplaySource : DisplaySource {
     var lastToggle: Pair<Int, Boolean>? = null
     var toggleResult: Boolean = true
 
-    override fun getDisplays(): List<WorkbenchDisplaySummary>? = displaysToReturn
+    override suspend fun getDisplays(): List<WorkbenchDisplaySummary>? = displaysToReturn
 
-    override fun toggleMirror(displayId: Int, enable: Boolean): Boolean {
+    override suspend fun toggleMirror(displayId: Int, enable: Boolean): Boolean {
         lastToggle = displayId to enable
         return toggleResult
     }

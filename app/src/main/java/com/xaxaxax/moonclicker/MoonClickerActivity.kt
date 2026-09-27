@@ -7,7 +7,6 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.viewModels
 import androidx.compose.runtime.mutableStateOf
 import androidx.core.content.ContextCompat
 import com.xaxaxax.moonclicker.core.AppLocale
@@ -30,9 +29,6 @@ class MoonClickerActivity : ComponentActivity() {
      */
     private val openScriptsPage = mutableStateOf(false)
 
-    /** 決定這次打開 App 要不要把 UserService 啟動起來。 */
-    private val autoStarter: UserServiceAutoStarter by viewModels()
-
     @Inject
     lateinit var appSettings: AppSettings
 
@@ -50,7 +46,6 @@ class MoonClickerActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        autoStarter.onAppOpened()
         reconcileWorkbenchState()
         consumeNavTarget(intent)
         enableEdgeToEdge()
@@ -73,8 +68,7 @@ class MoonClickerActivity : ComponentActivity() {
 
     /**
      * `workbenchEnabled` 只是持久化偏好，實際的前景服務可能被系統在背景殺掉而不會自動重啟
-     * （`START_STICKY` 不保證），所以每次打開 App 都依偏好值重新對帳一次——比照
-     * [UserServiceAutoStarter.onAppOpened] 對 Shizuku user service 的作法。
+     * （`START_STICKY` 不保證），所以每次打開 App 都依偏好值重新對帳一次。
      */
     private fun reconcileWorkbenchState() {
         if (!appSettings.workbenchEnabled.value) return

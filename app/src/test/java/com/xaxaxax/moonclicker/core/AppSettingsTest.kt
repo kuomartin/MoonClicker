@@ -5,8 +5,8 @@ import android.content.SharedPreferences
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AppSettingsTest {
@@ -36,24 +36,24 @@ class AppSettingsTest {
     )
 
     @Test
-    fun `autoStartUserService defaults to enabled when nothing is persisted yet`() {
-        assertEquals(true, appSettings(fakePrefs()).autoStartUserService.value)
+    fun `autoOpenFullscreen defaults to disabled when nothing is persisted yet`() {
+        assertFalse(appSettings(fakePrefs()).autoOpenFullscreen.value)
     }
 
     @Test
-    fun `setAutoStartUserService updates the observable flow immediately`() {
+    fun `setAutoOpenFullscreen updates the observable flow immediately`() {
         val settings = appSettings(fakePrefs())
 
-        settings.setAutoStartUserService(false)
+        settings.setAutoOpenFullscreen(true)
 
-        assertFalse(settings.autoStartUserService.value)
+        assertTrue(settings.autoOpenFullscreen.value)
     }
 
     @Test
     fun `a persisted value survives into a freshly constructed AppSettings`() {
         val prefs = fakePrefs()
-        appSettings(prefs).setAutoStartUserService(false)
+        appSettings(prefs).setAutoOpenFullscreen(true)
 
-        assertFalse(appSettings(prefs).autoStartUserService.value)
+        assertTrue(appSettings(prefs).autoOpenFullscreen.value)
     }
 }
