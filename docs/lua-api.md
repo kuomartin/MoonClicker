@@ -84,11 +84,16 @@ end
 * **`vision.find(request)` -> `VisionHit?`**
   對目前最新影格立即比對一次，未命中回傳 `nil`。
 
-* **`vision.wait(request [, timeout_ms])` -> `VisionHit?`**
+* **`vision.find_any(requests)` -> `(integer?, VisionHit?)`**
+  對目前最新影格比對多個目標（陣列）一次，回傳依陣列順序第一個命中的 `(1-based 索引, VisionHit)`，都未命中回傳 `nil, nil`。
+
+* **`vision.wait(request [, timeout_ms [, step_ms]])` -> `VisionHit?`**
   持續等待目標出現直到逾時（預設 `10000` ms），逾時回傳 `nil`。
 
-* **`vision.wait_any(requests [, timeout_ms])` -> `(integer?, VisionHit?)`**
+* **`vision.wait_any(requests [, timeout_ms [, step_ms]])` -> `(integer?, VisionHit?)`**
   同時等待多個目標（陣列），回傳第一個命中的 `(1-based 索引, VisionHit)`，逾時回傳 `nil, nil`。
+
+`step_ms` 是兩次比對開始的最小間隔（預設 `0`：每張新影格都比對一次）。目標不需要即時反應、或比對成本高（大模板、多目標）時調高它可以降低 CPU 用量，代價是命中最多晚 `step_ms` 才回傳。逾時前一定會再比對最後一次。
 
 ---
 
