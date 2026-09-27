@@ -70,19 +70,27 @@ vision = {}
 ---@overload fun(image: string): moonclicker.VisionHit?
 function vision.find(request) end
 
+--- 對目前最新的影格比對多個目標一次，不等待；回傳依列表順序第一個命中的 1-based index 與結果，都找不到回傳 `nil`。
+---@param requests (moonclicker.VisionRequest|string)[] 目標列表（可混用 request table 或圖片路徑字串）
+---@return integer? index 1-based 索引，找不到為 `nil`
+---@return moonclicker.VisionHit? hit 命中結果，找不到為 `nil`
+function vision.find_any(requests) end
+
 --- 等到出現為止，逾時回傳 `nil`。
 ---@param request moonclicker.VisionRequest|string 完整的 request 物件或圖片路徑字串簡寫
 ---@param timeout_ms integer? 逾時毫秒數，選填，預設 10000
+---@param step_ms integer? 兩次比對開始的最小間隔（毫秒），選填，預設 0（每張新影格都比對）
 ---@return moonclicker.VisionHit? hit 命中結果，逾時為 `nil`
----@overload fun(image: string, timeout_ms?: integer): moonclicker.VisionHit?
-function vision.wait(request, timeout_ms) end
+---@overload fun(image: string, timeout_ms?: integer, step_ms?: integer): moonclicker.VisionHit?
+function vision.wait(request, timeout_ms, step_ms) end
 
 --- 同時等多個目標；命中哪個就回傳它的 1-based index 與結果，逾時回傳 `nil`。
 ---@param requests (moonclicker.VisionRequest|string)[] 目標列表（可混用 request table 或圖片路徑字串）
 ---@param timeout_ms integer? 逾時毫秒數，選填，預設 10000
+---@param step_ms integer? 兩次比對開始的最小間隔（毫秒），選填，預設 0（每張新影格都比對）
 ---@return integer? index 1-based 索引，逾時為 `nil`
 ---@return moonclicker.VisionHit? hit 命中結果，逾時為 `nil`
-function vision.wait_any(requests, timeout_ms) end
+function vision.wait_any(requests, timeout_ms, step_ms) end
 
 ---@alias moonclicker.InputPoints (number[])|(number[][]) 攤平的 `{x1,y1,x2,y2,...}` 或巢狀的 `{{x1,y1},{x2,y2},...}`
 
