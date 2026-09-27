@@ -116,6 +116,26 @@ class AppSettings @Inject constructor(
         _pinnedApps.value = next
     }
 
+    private val _ocrThreads = MutableStateFlow(prefs.getInt(KEY_OCR_THREADS, 0))
+
+    /** OCR 的執行緒數；0 表示自動，採用 [ocrCalibratedThreads]。 */
+    val ocrThreads: StateFlow<Int> = _ocrThreads.asStateFlow()
+
+    fun setOcrThreads(threads: Int) {
+        prefs.edit { putInt(KEY_OCR_THREADS, threads) }
+        _ocrThreads.value = threads
+    }
+
+    private val _ocrCalibratedThreads = MutableStateFlow(prefs.getInt(KEY_OCR_CALIBRATED_THREADS, 0))
+
+    /** 最近一次校準量出最快的執行緒數；0 表示還沒校準過。 */
+    val ocrCalibratedThreads: StateFlow<Int> = _ocrCalibratedThreads.asStateFlow()
+
+    fun setOcrCalibratedThreads(threads: Int) {
+        prefs.edit { putInt(KEY_OCR_CALIBRATED_THREADS, threads) }
+        _ocrCalibratedThreads.value = threads
+    }
+
     companion object {
         private const val PREFS_NAME = "moonclicker_settings"
         private const val KEY_AUTO_FULLSCREEN = "auto_open_fullscreen"
@@ -125,6 +145,8 @@ class AppSettings @Inject constructor(
         private const val KEY_DEVELOPER_OPTIONS_UNLOCKED = "developer_options_unlocked"
         private const val KEY_PINNED_APPS = "pinned_apps"
         private const val KEY_SHOW_EXTERNAL_DISPLAYS = "show_external_displays"
+        private const val KEY_OCR_THREADS = "ocr_threads"
+        private const val KEY_OCR_CALIBRATED_THREADS = "ocr_calibrated_threads"
 
         /**
          * [Activity.attachBaseContext] 跑在 Hilt 欄位注入完成之前，讀不到 [AppSettings] 實例，
