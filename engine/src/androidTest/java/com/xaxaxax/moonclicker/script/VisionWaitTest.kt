@@ -10,7 +10,10 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** `vision.wait` / `vision.wait_any` 的等待語意：畫面在腳本已經在等的時候才改變。 */
+/**
+ * `vision.wait` / `vision.wait_any` 的等待語意：畫面在腳本已經在等的時候才改變。
+ * `vision.find_any` 也在這裡：它與 `wait_any` 共用多目標的 index 語意。
+ */
 @RunWith(AndroidJUnit4::class)
 class VisionWaitTest {
 
@@ -93,6 +96,63 @@ class VisionWaitTest {
         assertEquals("only the glyph was ever drawn, so wait_any must report index 2 (1-based)", 2.0, outcome.data["index"])
     }
 
+    /**
+     * step 讓比對只在 step 邊界發生：標記在 +2 秒出現，但下一次比對排在 +3 秒，
+     * 所以命中不會早於 3 秒。不帶 step 時同一條件約 2 秒就返回，這條斷言因此有鑑別力。
+     */
+    @Test
+    fun vision_wait_with_step_matches_only_on_step_boundaries() {
+        val displayId = stageWithHiddenMarkers()
+        PuppetActivity.showAfter(APPEAR_DELAY_MS)
+
+        val started = SystemClock.uptimeMillis()
+        val outcome = env.runScript(
+            displayId,
+            """
+            local hit = vision.wait("marker.png", 15000, $STEP_MS)
+            data.set("found", hit ~= nil)
+            """.trimIndent(),
+        )
+        val elapsed = SystemClock.uptimeMillis() - started
+
+        assertEquals(EngineRunState.Finished, outcome.runState)
+        if (outcome.data["found"] != true) env.assumeFramesHaveContent(displayId)
+        assertEquals(true, outcome.data["found"])
+        assertTrue(
+            "vision.wait with step ${STEP_MS}ms returned after ${elapsed}ms — it matched between " +
+                    "step boundaries instead of waiting for the next one",
+            elapsed >= STEP_MS,
+        )
+    }
+
+    /** 同 wait_any：只顯示其中一個，index 才有意義；全部都不在畫面上時回傳 nil 而不是拋錯。 */
+    @Test
+    fun vision_find_any_reports_which_one_is_on_screen() {
+        val displayId = env.createDisplay()
+        env.launchPuppet(displayId)
+        PuppetActivity.setVisible(marker = false, glyph = true)
+        env.awaitSettled(displayId)
+
+        val outcome = env.runScript(
+            displayId,
+            """
+            -- find_any 只看當下那一張；先等到 glyph 確定已在影格裡，避免比到第一張影格之前。
+            vision.wait("glyph.png", 15000)
+            local i, hit = vision.find_any({ { image = "marker.png" }, "glyph.png" })
+            data.set("index", i)
+            data.set("found", hit ~= nil)
+            local miss = vision.find_any({ "marker.png" })
+            data.set("miss_is_nil", miss == nil)
+            """.trimIndent(),
+        )
+
+        assertEquals(EngineRunState.Finished, outcome.runState)
+        if (outcome.data["found"] != true) env.assumeFramesHaveContent(displayId)
+        assertEquals(true, outcome.data["found"])
+        assertEquals("only the glyph is on screen, so find_any must report index 2 (1-based)", 2.0, outcome.data["index"])
+        assertEquals(true, outcome.data["miss_is_nil"])
+    }
+
     /** 顯示器 + puppet 就緒、標記全部藏起來、畫面已經穩定。 */
     private fun stageWithHiddenMarkers(): Int {
         val displayId = env.createDisplay()
@@ -106,5 +166,7 @@ class VisionWaitTest {
         /** 排程改變畫面的延遲，要明顯大於「第一幀就比中」的時間尺度。 */
         const val APPEAR_DELAY_MS = 2_000L
         const val TIMEOUT_MS = 2_000L
+        /** 比 [APPEAR_DELAY_MS] 大：第二次比對必須落在標記出現之後。 */
+        const val STEP_MS = 3_000L
     }
 }
