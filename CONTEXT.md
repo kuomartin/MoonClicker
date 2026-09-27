@@ -89,7 +89,7 @@ The native OpenCV-backed component that performs on-demand template matching on 
 _Avoid_: VisionEngine, image recognizer, matcher.
 
 **MoonClickerService**:
-The Shizuku-hosted AIDL service (`IMoonClickerService`) providing virtual display management, native input injection, and app launching ([ADR-0001](docs/adr/0001-v2-service-supersedes-v1.md)).
+The Shizuku-hosted AIDL service (`IMoonClickerService`) providing virtual display management, native input injection, and app launching ([ADR-0001](docs/adr/0001-v2-service-supersedes-v1.md)). Started on demand and stopped when idle; users never start or stop it ([ADR-0019](docs/adr/0019-userservice-started-on-demand.md)).
 _Avoid_: Shizuku service, backend service.
 
 **Script Status Notification**:
