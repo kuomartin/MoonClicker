@@ -65,6 +65,7 @@ add_library(moonclicker_native SHARED
         GlesDistributor.cpp
         Ocr.cpp
         OrtLoader.cpp
+        TextMatch.cpp
         ${LUA_SRC}
         ${LUA_CJSON_SRC}
 )

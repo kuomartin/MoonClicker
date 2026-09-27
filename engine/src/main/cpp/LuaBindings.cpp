@@ -69,7 +69,7 @@ bool readRect(lua_State *L, int index, cv::Rect &out) {
 
 /**
  * 讀出一個 vision request。接受完整的 table，或只給圖片路徑的字串簡寫。
- * 路徑相對腳本資料夾解析。
+ * 路徑相對腳本資料夾解析。`image` 與 `text` 擇一；`scale`／`gray` 只用於模板。
  */
 VisionRequest readRequest(lua_State *L, int index, ScriptRuntime *runtime) {
     VisionRequest request;
@@ -82,18 +82,28 @@ VisionRequest readRequest(lua_State *L, int index, ScriptRuntime *runtime) {
     luaL_checktype(L, index, LUA_TTABLE);
 
     lua_getfield(L, index, "image");
-    if (!lua_isstring(L, -1)) {
-        lua_pop(L, 1);
-        luaL_error(L, "vision request needs an `image` field (a path relative to the script)");
-    }
-    request.imagePath = runtime->vision().resolvePath(lua_tostring(L, -1));
+    bool hasImage = lua_isstring(L, -1);
+    if (hasImage) request.imagePath = runtime->vision().resolvePath(lua_tostring(L, -1));
     lua_pop(L, 1);
+
+    lua_getfield(L, index, "text");
+    bool hasText = lua_isstring(L, -1);
+    if (hasText) request.text = lua_tostring(L, -1);
+    lua_pop(L, 1);
+
+    if (hasImage == hasText) {
+        luaL_error(L, "vision request needs exactly one of `image` (a path relative to the script) or `text`");
+    }
+    if (hasText && request.text.empty()) {
+        luaL_error(L, "vision request `text` must not be empty");
+    }
 
     lua_getfield(L, index, "threshold");
     if (lua_isnumber(L, -1)) request.threshold = lua_tonumber(L, -1);
     lua_pop(L, 1);
 
     lua_getfield(L, index, "scale");
+    if (!lua_isnil(L, -1) && hasText) luaL_error(L, "`scale` only applies to image requests");
     if (lua_isnumber(L, -1)) {
         double scale = lua_tonumber(L, -1);
         if (scale > 0.0 && scale <= 1.0) request.scale = scale;
@@ -101,7 +111,13 @@ VisionRequest readRequest(lua_State *L, int index, ScriptRuntime *runtime) {
     lua_pop(L, 1);
 
     lua_getfield(L, index, "gray");
+    if (!lua_isnil(L, -1) && hasText) luaL_error(L, "`gray` only applies to image requests");
     if (lua_isboolean(L, -1)) request.gray = lua_toboolean(L, -1);
+    lua_pop(L, 1);
+
+    lua_getfield(L, index, "exact");
+    if (!lua_isnil(L, -1) && hasImage) luaL_error(L, "`exact` only applies to text requests");
+    if (lua_isboolean(L, -1)) request.exact = lua_toboolean(L, -1);
     lua_pop(L, 1);
 
     lua_getfield(L, index, "roi");
@@ -124,6 +140,28 @@ void pushHit(lua_State *L, const VisionHit &hit) {
     set("cx", hit.cx);
     set("cy", hit.cy);
     set("confidence", hit.confidence);
+    if (!hit.text.empty()) {
+        lua_pushstring(L, hit.text.c_str());
+        lua_setfield(L, -2, "text");
+    }
+}
+
+/** `vision.read`／`read_lines` 的一項（TextLine）：confidence 是 OCR 的信心度。 */
+void pushTextLine(lua_State *L, const OcrLine &line) {
+    lua_newtable(L);
+    lua_pushstring(L, line.text.c_str());
+    lua_setfield(L, -2, "text");
+    auto set = [&](const char *name, double value) {
+        lua_pushnumber(L, value);
+        lua_setfield(L, -2, name);
+    };
+    set("confidence", line.confidence);
+    set("x", line.box.x);
+    set("y", line.box.y);
+    set("w", line.box.width);
+    set("h", line.box.height);
+    set("cx", line.box.x + line.box.width / 2.0);
+    set("cy", line.box.y + line.box.height / 2.0);
 }
 
 /** 把這一輪的比對結果回報給 Kotlin，讓 Scripts UI 看得到最後一次比對發生了什麼。 */
@@ -134,7 +172,8 @@ void reportHits(ScriptRuntime *runtime, const std::vector<VisionRequest> &reques
     for (size_t i = 0; i < hits.size(); i++) {
         const VisionHit &hit = hits[i];
         if (i > 0) out << ',';
-        out << "{\"name\":\"" << jsonEscape(requests[i].imagePath)
+        const std::string &name = requests[i].isText() ? "text:" + requests[i].text : requests[i].imagePath;
+        out << "{\"name\":\"" << jsonEscape(name)
             << "\",\"found\":" << (hit.found ? "true" : "false")
             << ",\"x\":" << hit.x << ",\"y\":" << hit.y
             << ",\"width\":" << hit.w << ",\"height\":" << hit.h
@@ -160,9 +199,37 @@ void requireInput(lua_State *L, ScriptRuntime *runtime) {
     }
 }
 
+/** 有文字請求時載入 OCR；未安裝或載入失敗直接報錯。沒有文字請求回傳 null。 */
+Ocr *ocrFor(lua_State *L, ScriptRuntime *runtime, const std::vector<VisionRequest> &requests) {
+    bool anyText = std::any_of(requests.begin(), requests.end(),
+                               [](const VisionRequest &r) { return r.isText(); });
+    if (!anyText) return nullptr;
+    std::string error;
+    Ocr *ocr = runtime->ocr(error);
+    if (ocr == nullptr) luaL_error(L, "%s", error.c_str());
+    return ocr;
+}
+
+/**
+ * 在 Lua 與 C++ 例外的邊界執行 [body]：ORT 以 C++ 例外回報錯誤，而 Lua 以 longjmp 收錯，
+ * 例外不能穿過 Lua 堆疊。先在 try 內把訊息存起來，離開 catch 之後才 luaL_error。
+ */
+template<typename Body>
+void guarded(lua_State *L, Body body) {
+    std::string error;
+    try {
+        body();
+        return;
+    } catch (const std::exception &e) {
+        error = e.what();
+    }
+    luaL_error(L, "OCR failed: %s", error.c_str());
+}
+
 /** 比對一次，把第一個命中的結果推上堆疊。@return 命中的 request 索引，沒有就回傳 -1。 */
-int matchOnce(lua_State *L, ScriptRuntime *runtime, const std::vector<VisionRequest> &requests) {
-    std::vector<VisionHit> hits = runtime->vision().match(requests);
+int matchOnce(lua_State *L, ScriptRuntime *runtime, const std::vector<VisionRequest> &requests, Ocr *ocr) {
+    std::vector<VisionHit> hits;
+    guarded(L, [&] { hits = runtime->vision().match(requests, ocr); });
     reportHits(runtime, requests, hits);
 
     for (size_t i = 0; i < hits.size(); i++) {
@@ -181,6 +248,7 @@ int matchOnce(lua_State *L, ScriptRuntime *runtime, const std::vector<VisionRequ
  */
 int matchUntil(lua_State *L, ScriptRuntime *runtime, const std::vector<VisionRequest> &requests,
                long timeoutMs, long stepMs) {
+    Ocr *ocr = ocrFor(L, runtime, requests);
     long deadline = nowMs() + std::max(0L, timeoutMs);
 
     while (true) {
@@ -188,7 +256,7 @@ int matchUntil(lua_State *L, ScriptRuntime *runtime, const std::vector<VisionReq
 
         long attemptStart = nowMs();
         uint64_t seen = runtime->vision().frameCounter();
-        int index = matchOnce(L, runtime, requests);
+        int index = matchOnce(L, runtime, requests, ocr);
         if (index >= 0) return index;
 
         long remaining = deadline - nowMs();
@@ -323,12 +391,13 @@ int lua_screen_index(lua_State *L) {
 
 // --- vision ----------------------------------------------------------------
 
+// 請求先解析再檢查影格來源：參數寫錯時不論跑在哪裡都報同一個錯。
+
 int lua_vision_find(lua_State *L) {
     ScriptRuntime *runtime = self(L);
-    requireVision(L, runtime);
-
     std::vector<VisionRequest> requests{readRequest(L, 1, runtime)};
-    if (matchOnce(L, runtime, requests) < 0) {
+    requireVision(L, runtime);
+    if (matchOnce(L, runtime, requests, ocrFor(L, runtime, requests)) < 0) {
         lua_pushnil(L);
     }
     return 1;
@@ -336,17 +405,15 @@ int lua_vision_find(lua_State *L) {
 
 int lua_vision_find_any(lua_State *L) {
     ScriptRuntime *runtime = self(L);
-    requireVision(L, runtime);
-
     std::vector<VisionRequest> requests = readRequestList(L, 1, runtime, "vision.find_any");
-    return pushIndexedHit(L, matchOnce(L, runtime, requests));
+    requireVision(L, runtime);
+    return pushIndexedHit(L, matchOnce(L, runtime, requests, ocrFor(L, runtime, requests)));
 }
 
 int lua_vision_wait(lua_State *L) {
     ScriptRuntime *runtime = self(L);
-    requireVision(L, runtime);
-
     std::vector<VisionRequest> requests{readRequest(L, 1, runtime)};
+    requireVision(L, runtime);
     if (matchUntil(L, runtime, requests, readTimeout(L, 2), readStep(L, 3)) < 0) {
         lua_pushnil(L);
     }
@@ -355,10 +422,53 @@ int lua_vision_wait(lua_State *L) {
 
 int lua_vision_wait_any(lua_State *L) {
     ScriptRuntime *runtime = self(L);
+    std::vector<VisionRequest> requests = readRequestList(L, 1, runtime, "vision.wait_any");
+    requireVision(L, runtime);
+    return pushIndexedHit(L, matchUntil(L, runtime, requests, readTimeout(L, 2), readStep(L, 3)));
+}
+
+/** read／read_lines 共用：讀最新影格的文字。[roiIndex] 沒給（nil／none）時是整張。 */
+std::vector<OcrLine> readText(lua_State *L, ScriptRuntime *runtime, int roiIndex, bool roiRequired, bool detect) {
+    cv::Rect roi;
+    bool hasRoi = false;
+    if (!lua_isnoneornil(L, roiIndex)) {
+        luaL_checktype(L, roiIndex, LUA_TTABLE);
+        hasRoi = readRect(L, roiIndex, roi);
+        if (!hasRoi) luaL_argerror(L, roiIndex, "roi needs a positive width and height");
+    } else if (roiRequired) {
+        luaL_argerror(L, roiIndex, "roi {x, y, w, h} is required");
+    }
     requireVision(L, runtime);
 
-    std::vector<VisionRequest> requests = readRequestList(L, 1, runtime, "vision.wait_any");
-    return pushIndexedHit(L, matchUntil(L, runtime, requests, readTimeout(L, 2), readStep(L, 3)));
+    std::string error;
+    Ocr *ocr = runtime->ocr(error);
+    if (ocr == nullptr) luaL_error(L, "%s", error.c_str());
+
+    std::vector<OcrLine> lines;
+    guarded(L, [&] { lines = runtime->vision().readText(*ocr, hasRoi, roi, detect); });
+    return lines;
+}
+
+int lua_vision_read(lua_State *L) {
+    ScriptRuntime *runtime = self(L);
+    std::vector<OcrLine> lines = readText(L, runtime, 1, true, false);
+    if (lines.empty()) {
+        lua_pushnil(L);
+    } else {
+        pushTextLine(L, lines[0]);
+    }
+    return 1;
+}
+
+int lua_vision_read_lines(lua_State *L) {
+    ScriptRuntime *runtime = self(L);
+    std::vector<OcrLine> lines = readText(L, runtime, 1, false, true);
+    lua_createtable(L, static_cast<int>(lines.size()), 0);
+    for (size_t i = 0; i < lines.size(); i++) {
+        pushTextLine(L, lines[i]);
+        lua_rawseti(L, -2, static_cast<lua_Integer>(i + 1));
+    }
+    return 1;
 }
 
 // --- input -----------------------------------------------------------------
@@ -577,6 +687,8 @@ void registerModule(lua_State *L, ScriptRuntime *runtime, const char *name,
 const luaL_Reg kVision[] = {
         {"find",     lua_vision_find},
         {"find_any", lua_vision_find_any},
+        {"read",     lua_vision_read},
+        {"read_lines", lua_vision_read_lines},
         {"wait",     lua_vision_wait},
         {"wait_any", lua_vision_wait_any},
         {nullptr, nullptr},

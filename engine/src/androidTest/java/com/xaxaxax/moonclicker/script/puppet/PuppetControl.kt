@@ -14,8 +14,13 @@ internal object PuppetControl {
     @Volatile
     var glyphVisible: Boolean = true
 
+    /** 以空白分隔的一行字，畫在左上方；`null` 不畫。每個字的位置記在 [PuppetState.wordRects]。 */
+    @Volatile
+    var text: String? = null
+
     fun reset() {
         markerVisible = true
         glyphVisible = true
+        text = null
     }
 }

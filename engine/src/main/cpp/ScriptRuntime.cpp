@@ -58,7 +58,8 @@ ScriptRuntime::~ScriptRuntime() {
 }
 
 bool ScriptRuntime::start(int displayId, bool isPhysical, bool withVision, int surfaceWidth, int surfaceHeight,
-                          int initialRotation, const std::string &scriptDir) {
+                          int initialRotation, const std::string &scriptDir, const std::string &ocrPackDir,
+                          int ocrThreads) {
     if (running.load()) {
         LOGE("start() called while a script is already running");
         return false;
@@ -70,6 +71,8 @@ bool ScriptRuntime::start(int displayId, bool isPhysical, bool withVision, int s
     this->surfaceWidth = surfaceWidth;
     this->surfaceHeight = surfaceHeight;
     this->heldMirrorRef = false;
+    this->ocrPackDir = ocrPackDir;
+    this->ocrThreads = ocrThreads;
 
     visionMatcher = std::make_unique<VisionMatcher>(surfaceWidth, surfaceHeight, initialRotation, scriptDir);
 
@@ -101,6 +104,7 @@ void ScriptRuntime::stop() {
         sleepCv.notify_all();
     }
     if (luaThread.joinable()) luaThread.join();
+    ocrEngine.reset();
 
     detachImageReader();
     if (heldMirrorRef) {
@@ -116,6 +120,21 @@ void ScriptRuntime::stop() {
         heldMirrorRef = false;
     }
     if (luaEngine) luaEngine->close();
+}
+
+Ocr *ScriptRuntime::ocr(std::string &error) {
+    if (ocrEngine) return ocrEngine.get();
+    if (ocrPackDir.empty()) {
+        error = "OCR is not installed: download it in Settings > Text recognition (OCR)";
+        return nullptr;
+    }
+    try {
+        ocrEngine = std::make_unique<Ocr>(ocrPackDir, ocrThreads);
+    } catch (const std::exception &e) {
+        error = std::string("failed to load OCR: ") + e.what();
+        return nullptr;
+    }
+    return ocrEngine.get();
 }
 
 bool ScriptRuntime::attachImageReader() {

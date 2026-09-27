@@ -1,10 +1,13 @@
 #include "VisionMatcher.h"
+#include "Ocr.h"
+#include "TextMatch.h"
 
 #include <opencv2/imgproc.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <android/log.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <sys/stat.h>
 
@@ -109,15 +112,104 @@ cv::Mat VisionMatcher::templateFor(const VisionRequest &request) {
     return image;
 }
 
-std::vector<VisionHit> VisionMatcher::match(const std::vector<VisionRequest> &requests) {
+cv::Mat VisionMatcher::snapshot() {
+    std::lock_guard<std::mutex> lock(frameMutex);
+    cv::Mat frame;
+    latestFrame.copyTo(frame);
+    return frame;
+}
+
+cv::Rect VisionMatcher::clampRoi(const cv::Mat &frame, bool hasRoi, const cv::Rect &roi) const {
+    cv::Rect bounds(0, 0, frame.cols, frame.rows);
+    return hasRoi ? (roi & bounds) : bounds;
+}
+
+namespace {
+
+/** 辨識是對裁切出的 ROI 做的，把框與字元位置移回影格座標。 */
+void offsetLine(OcrLine &line, cv::Point offset) {
+    line.box += offset;
+    for (auto &span: line.spans) {
+        span.first += static_cast<float>(offset.x);
+        span.second += static_cast<float>(offset.x);
+    }
+}
+
+/** 影格是 RGBA（NativeImageReader），PP-OCR 以 BGR 訓練。 */
+cv::Mat toBgr(const cv::Mat &rgba) {
+    cv::Mat bgr;
+    cv::cvtColor(rgba, bgr, cv::COLOR_RGBA2BGR);
+    return bgr;
+}
+
+}  // namespace
+
+std::vector<OcrLine> VisionMatcher::readText(Ocr &ocr, bool hasRoi, const cv::Rect &roi, bool detect) {
+    cv::Mat frame = snapshot();
+    if (frame.empty()) return {};
+    cv::Rect area = clampRoi(frame, hasRoi, roi);
+    if (area.empty()) return {};
+
+    cv::Mat bgr = toBgr(frame(area));
+    cv::Rect whole(0, 0, bgr.cols, bgr.rows);
+    std::vector<OcrLine> lines;
+    if (detect) {
+        lines = ocr.detectAndRecognize(bgr, whole);
+    } else {
+        OcrLine line = ocr.recognize(bgr, whole);
+        if (!line.text.empty()) lines.push_back(std::move(line));
+    }
+    for (auto &line: lines) offsetLine(line, area.tl());
+    return lines;
+}
+
+std::vector<VisionHit> VisionMatcher::match(const std::vector<VisionRequest> &requests, Ocr *ocr) {
     std::vector<VisionHit> hits(requests.size());
 
-    cv::Mat frame;
-    {
-        std::lock_guard<std::mutex> lock(frameMutex);
-        if (latestFrame.empty()) return hits;
-        latestFrame.copyTo(frame);
-    }
+    cv::Mat frame = snapshot();
+    if (frame.empty()) return hits;
+
+    // 同一個 ROI 的文字辨識在這批 request 之間共用：wait_any 等多段文字時不重複推論。
+    std::map<std::array<int, 4>, std::vector<OcrLine>> textCache;
+    auto linesFor = [&](const VisionRequest &request) -> const std::vector<OcrLine> & {
+        cv::Rect area = clampRoi(frame, request.hasRoi, request.roi);
+        std::array<int, 4> key{area.x, area.y, area.width, area.height};
+        auto it = textCache.find(key);
+        if (it != textCache.end()) return it->second;
+
+        std::vector<OcrLine> lines;
+        if (!area.empty()) {
+            cv::Mat bgr = toBgr(frame(area));
+            lines = ocr->detectAndRecognize(bgr, cv::Rect(0, 0, bgr.cols, bgr.rows));
+            for (auto &line: lines) offsetLine(line, area.tl());
+        }
+        return textCache.emplace(key, std::move(lines)).first->second;
+    };
+
+    auto matchTextRequest = [&](const VisionRequest &request, VisionHit &hit) {
+        const OcrLine *bestLine = nullptr;
+        TextMatch best;
+        for (const auto &line: linesFor(request)) {
+            TextMatch candidate = matchText(request.text, line.text, request.exact);
+            // 嚴格大於：同分時留閱讀順序在前的那一行。
+            if (bestLine == nullptr || candidate.similarity > best.similarity) {
+                best = candidate;
+                bestLine = &line;
+            }
+        }
+        if (bestLine == nullptr || best.similarity < request.threshold) return;
+
+        cv::Rect box = bestLine->spanBox(best.start, best.end);
+        hit.found = true;
+        hit.x = box.x;
+        hit.y = box.y;
+        hit.w = box.width;
+        hit.h = box.height;
+        hit.cx = box.x + box.width / 2.0;
+        hit.cy = box.y + box.height / 2.0;
+        hit.confidence = best.similarity;
+        hit.text = bestLine->text;
+    };
 
     // 同一個 scale 的縮放結果在這批 request 之間共用，灰階轉換同理。
     std::unordered_map<double, cv::Mat> scaledColor;
@@ -150,6 +242,10 @@ std::vector<VisionHit> VisionMatcher::match(const std::vector<VisionRequest> &re
 
     for (size_t i = 0; i < requests.size(); i++) {
         const VisionRequest &request = requests[i];
+        if (request.isText()) {
+            matchTextRequest(request, hits[i]);
+            continue;
+        }
         cv::Mat templateImage = templateFor(request);
         if (templateImage.empty()) continue;
 

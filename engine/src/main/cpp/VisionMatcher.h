@@ -3,22 +3,31 @@
 
 #include <opencv2/core.hpp>
 #include <condition_variable>
+#include <map>
 #include <mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
+class Ocr;
+struct OcrLine;
+
 /**
- * 一個要找的模板。`roi` 用**邏輯空間**座標（腳本看到的那個），
- * 轉回影格空間由 VisionMatcher 內部處理。
+ * 一個要找的目標：模板圖片（[imagePath]）或文字（[text]），兩者擇一。`roi` 用**邏輯空間**座標
+ * （腳本看到的那個），影格本身就是邏輯空間。
  */
 struct VisionRequest {
-    std::string imagePath;      // 絕對路徑
+    std::string imagePath;      // 絕對路徑；文字請求為空
+    std::string text;           // 要找的文字；模板請求為空
+    bool exact = false;         // 文字與整行比對，而不是找子字串（見 TextMatch.h）
+    /** 模板是比對分數的下限，文字是 Levenshtein 相似度的下限。 */
     double threshold = 0.8;
-    double scale = 1.0;         // 比對前把影格與模板一起縮小，純粹是效能旋鈕
-    bool gray = false;
+    double scale = 1.0;         // 比對前把影格與模板一起縮小，純粹是效能旋鈕；只用於模板
+    bool gray = false;          // 只用於模板
     bool hasRoi = false;
     cv::Rect roi;               // 邏輯空間
+
+    bool isText() const { return !text.empty(); }
 };
 
 /** 命中的位置。**全部都是邏輯空間座標**——可以直接餵給 input.tap。 */
@@ -27,7 +36,10 @@ struct VisionHit {
     double x = 0, y = 0;        // 左上角
     double w = 0, h = 0;
     double cx = 0, cy = 0;      // 中心點
+    /** 模板是比對分數，文字是相似度——都是 `threshold` 比較的那個值。 */
     double confidence = 0;
+    /** 文字請求命中的那一整行的辨識結果。 */
+    std::string text;
 };
 
 /**
@@ -64,8 +76,18 @@ public:
      */
     bool waitForFrameAfter(uint64_t after, long timeoutMs);
 
-    /** 對最新影格比對 [requests]，回傳與其等長的結果。沒有影格時全部 found = false。 */
-    std::vector<VisionHit> match(const std::vector<VisionRequest> &requests);
+    /**
+     * 對最新影格比對 [requests]，回傳與其等長的結果。沒有影格時全部 found = false。
+     * 有文字請求時 [ocr] 不可為 null；同一次呼叫內 `roi` 相同的文字請求共用一次辨識。
+     * OCR 推論失敗會拋 std::exception，由呼叫端轉成 Lua error。
+     */
+    std::vector<VisionHit> match(const std::vector<VisionRequest> &requests, Ocr *ocr = nullptr);
+
+    /**
+     * 對最新影格的 [roi] 讀文字（邏輯空間；hasRoi 為 false 時是整張）。[detect] 為 false 時把 ROI
+     * 當成單一文字行直接辨識，回傳至多一項；true 時偵測所有行後逐行辨識。沒有影格或沒有字時回傳空。
+     */
+    std::vector<OcrLine> readText(Ocr &ocr, bool hasRoi, const cv::Rect &roi, bool detect);
 
     /** 喚醒所有等待者並讓後續等待立刻返回（停止腳本時呼叫）。 */
     void shutdown();
@@ -77,6 +99,12 @@ public:
     bool templateExists(const VisionRequest &request);
 
 private:
+    /** 最新影格的複本；沒有影格時為空。 */
+    cv::Mat snapshot();
+
+    /** 影格中 [roi]（hasRoi 為 false 時整張）與影格邊界的交集。 */
+    cv::Rect clampRoi(const cv::Mat &frame, bool hasRoi, const cv::Rect &roi) const;
+
     /** 取得（必要時載入並快取）已套用 gray/scale 前處理的模板。失敗回傳空 Mat。 */
     cv::Mat templateFor(const VisionRequest &request);
 

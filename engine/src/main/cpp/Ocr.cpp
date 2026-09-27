@@ -138,23 +138,41 @@ OcrLine Ocr::recognizeCrop(const cv::Mat &crop) {
     cv::Mat out = run(rec, toBlob(image));  // [1, T, C]，模型內含 softmax
 
     // CTC greedy 解碼：類別 0 是 blank，類別 i 對應 dict 第 i-1 行；超出字典的最後一類是空白。
+    // 同一類別連續的時間步合併成一個字元，那段時間步就是它在行內的水平位置。
     const int steps = out.size[1], classes = out.size[2];
+    const float stepWidth = static_cast<float>(crop.cols) / steps;
     OcrLine line;
     int previous = -1;
     double sum = 0;
     int count = 0;
+    size_t firstSpan = 0;  // 目前這個字元在 spans 中的起點，後續時間步延長它的 x1
     for (int t = 0; t < steps; t++) {
         const float *row = out.ptr<float>(0, t);
         int best = static_cast<int>(std::max_element(row, row + classes) - row);
         if (best != 0 && best != previous) {
-            line.text += best - 1 < static_cast<int>(dict.size()) ? dict[best - 1] : " ";
+            const std::string &piece = best - 1 < static_cast<int>(dict.size()) ? dict[best - 1] : " ";
+            line.text += piece;
+            firstSpan = line.spans.size();
+            // 字典的一項可能不只一個 codepoint，每個 codepoint 都記同一段範圍。
+            for (unsigned char c: piece) {
+                if ((c & 0xC0) != 0x80) line.spans.emplace_back(t * stepWidth, (t + 1) * stepWidth);
+            }
             sum += row[best];
             count++;
+        } else if (best != 0 && best == previous) {
+            for (size_t i = firstSpan; i < line.spans.size(); i++) line.spans[i].second = (t + 1) * stepWidth;
         }
         previous = best;
     }
     line.confidence = count ? static_cast<float>(sum / count) : 0.f;
     return line;
+}
+
+cv::Rect OcrLine::spanBox(int start, int end) const {
+    if (spans.empty() || start < 0 || end > static_cast<int>(spans.size()) || start >= end) return box;
+    int x0 = static_cast<int>(std::floor(spans[start].first));
+    int x1 = static_cast<int>(std::ceil(spans[end - 1].second));
+    return cv::Rect(x0, box.y, std::max(1, x1 - x0), box.height) & box;
 }
 
 OcrLine Ocr::recognize(const cv::Mat &bgr, const cv::Rect &roi, OcrTiming *timing) {
@@ -169,6 +187,10 @@ OcrLine Ocr::recognize(const cv::Mat &bgr, const cv::Rect &roi, OcrTiming *timin
                        cv::BORDER_REPLICATE | cv::BORDER_ISOLATED);
     OcrLine line = recognizeCrop(padded);
     line.box = area;
+    for (auto &span: line.spans) {
+        span.first = std::clamp(span.first - kRoiPad, 0.f, static_cast<float>(area.width)) + area.x;
+        span.second = std::clamp(span.second - kRoiPad, 0.f, static_cast<float>(area.width)) + area.x;
+    }
     if (timing) timing->recMs += msSince(start);
     return line;
 }
@@ -205,10 +227,19 @@ std::vector<OcrLine> Ocr::detectAndRecognize(const cv::Mat &bgr, const cv::Rect 
         if (crop.width < 1 || crop.height < 1) continue;
 
         cv::Mat patch = source(crop);
-        if (patch.rows >= 1.5 * patch.cols) cv::rotate(patch, patch, cv::ROTATE_90_COUNTERCLOCKWISE);
+        bool vertical = patch.rows >= 1.5 * patch.cols;
+        if (vertical) cv::rotate(patch, patch, cv::ROTATE_90_COUNTERCLOCKWISE);
         OcrLine line = recognizeCrop(patch);
         if (line.text.empty()) continue;
         line.box = crop + area.tl();
+        if (vertical) {
+            line.spans.clear();  // 旋轉過，水平位置沒有意義，spanBox 會退回整行
+        } else {
+            for (auto &span: line.spans) {
+                span.first += static_cast<float>(line.box.x);
+                span.second += static_cast<float>(line.box.x);
+            }
+        }
         lines.push_back(std::move(line));
     }
     std::sort(lines.begin(), lines.end(), [](const OcrLine &a, const OcrLine &b) {

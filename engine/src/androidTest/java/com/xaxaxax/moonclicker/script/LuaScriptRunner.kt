@@ -6,6 +6,7 @@ import com.xaxaxax.moonclicker.engine.ScriptEngine
 import com.xaxaxax.moonclicker.engine.ScriptRun
 import com.xaxaxax.moonclicker.engine.state.EngineRunState
 import com.xaxaxax.moonclicker.engine.state.EngineStateRepository
+import com.xaxaxax.moonclicker.ocr.OcrRuntime
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -53,6 +54,8 @@ internal class LuaScriptRunner(
     private val displayId: Int = 0,
     /** Tier 0 固定 false：沒有真實影格來源，`vision.*` 應當明確報錯。 */
     private val hasVision: Boolean = false,
+    /** 已安裝的 OCR 套件；`null` 時腳本用到 OCR 會報「未安裝」。 */
+    private val ocr: OcrRuntime? = null,
 ) : AutoCloseable {
 
     /** 以 [RecordingMoonClickerService] 執行時記下來的呼叫。Tier 1 用不到。 */
@@ -109,6 +112,7 @@ internal class LuaScriptRunner(
                 scriptDir = folder,
                 displayId = displayId,
                 hasVision = hasVision,
+                ocr = ocr,
             ),
             onNotify = { title, text -> notifications += title to text },
             onOpenUri = { openedUris += it },
