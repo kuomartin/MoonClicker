@@ -8,6 +8,7 @@ import com.xaxaxax.moonclicker.engine.ScriptRun
 import com.xaxaxax.moonclicker.engine.state.EngineRunState
 import com.xaxaxax.moonclicker.engine.state.EngineStateRepository
 import com.xaxaxax.moonclicker.core.AppSettings
+import com.xaxaxax.moonclicker.core.OcrManager
 import com.xaxaxax.moonclicker.core.DisplayConfig
 import com.xaxaxax.moonclicker.notification.ScriptStatusNotifier
 import com.xaxaxax.moonclicker.ui.displaydetail.FullscreenDisplayActivity
@@ -57,6 +58,7 @@ class ScriptSession @Inject constructor(
     private val shizukuManager: ShizukuManager,
     private val notifier: ScriptStatusNotifier,
     private val settings: AppSettings,
+    private val ocrManager: OcrManager,
 ) {
     private data class RunInfo(val script: Script, val displayId: Int)
 
@@ -136,6 +138,7 @@ class ScriptSession @Inject constructor(
                         scriptDir = script.dir,
                         displayId = displayId,
                         hasVision = target.hasVision,
+                        ocr = ocrManager.runtime(),
                     ),
                     onNotify = { title, text -> notifier.showScriptMessage(title, text) },
                     onOpenUri = ::openUri,

@@ -19,6 +19,7 @@ import android.os.SystemClock
 import android.view.MotionEvent
 import androidx.test.platform.app.InstrumentationRegistry
 import com.xaxaxax.moonclicker.MoonClickerService
+import com.xaxaxax.moonclicker.ocr.OcrRuntime
 import com.xaxaxax.moonclicker.script.puppet.PuppetActivity
 import com.xaxaxax.moonclicker.script.puppet.PuppetControl
 import com.xaxaxax.moonclicker.script.puppet.PuppetGlyph
@@ -343,8 +344,13 @@ class Tier1Env : ExternalResource() {
     }
 
     /** 跑一份以 [PuppetMarker]（`marker.png`）與 [PuppetGlyph]（`glyph.png`）為模板的腳本。 */
-    internal fun runScript(displayId: Int, main: String, timeoutMs: Long = 40_000): ScriptOutcome =
-        LuaScriptRunner(service = service, displayId = displayId, hasVision = true).use {
+    internal fun runScript(
+        displayId: Int,
+        main: String,
+        timeoutMs: Long = 40_000,
+        ocr: OcrRuntime? = null,
+    ): ScriptOutcome =
+        LuaScriptRunner(service = service, displayId = displayId, hasVision = true, ocr = ocr).use {
             it.run(
                 main = main,
                 assets = mapOf("marker.png" to PuppetMarker.png(), "glyph.png" to PuppetGlyph.png()),
