@@ -53,8 +53,8 @@
 | # | 位置 | 內容 |
 |---|---|---|
 | E1 | `SettingsScreen` 新增「OCR」區塊 | 狀態列（未安裝／下載中 x%／已安裝 版本／失敗 原因／不支援）、下載／取消／刪除、執行緒數（自動（n 條）／1／2／4）、重新測試（顯示各組耗時）；中英文字串 |
-| E2 | `engine/src/androidTest/…/ocr/OcrAccuracyTest.kt` | 讀 `/data/local/tmp/ocr-samples/`（spike 的 16 張截圖＋`ground_truth.json`，手動 push，不進 repo）與已安裝的套件；ROI 讀數與整行完全正確數不低於研究文件（26/28、72/79）；樣本或套件不存在時 `assume` 跳過 |
-| E3 | `engine/src/androidTest/…/ocr/OcrLatencyTest.kt` | 同一組樣本量 ROI 讀數與整張的 p50／p95，以校準出的執行緒數跑；結果印 logcat，不斷言數值 |
+| E2 | `engine/src/androidTest/…/ocr/OcrAccuracyTest.kt` | 套件 zip 與 spike 的 16 張截圖手動推到 `/data/local/tmp/ocr/`，測試以 shell 身分讀出後安裝套件、校準、逐張辨識；`ground_truth.json` 放 androidTest assets。ROI 讀數與整行完全正確數不低於研究文件（26/28、72/79）；套件或樣本不存在時 `assume` 跳過 |
+| E3 | 同一個測試 | ROI 讀數與整張的 p50／p95 印 logcat（tag `OcrAccuracyTest`），不斷言數值 |
 | E4 | 實機 | A21s 跑 E2、E3，與研究文件的 A21s 表比對（ROI p50 約 80 ms、整張 p50 約 2.3 s）；結果貼在 PR |
 | E5 | JVM 單元測試 | `OcrPackInstaller`：雜湊不符、解壓中斷、`pack.json` 逐檔不符、舊版本清除 |
 
