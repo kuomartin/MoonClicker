@@ -32,11 +32,8 @@ import timber.log.Timber
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
-/** 放棄等待 bind 的時限，逾時後狀態退回 [ShizukuConnectionStatus.DISCONNECTED] 讓使用者手動重試。 */
-private val BIND_TIMEOUT = 10.seconds
-
-/** 重啟時等舊行程退場的時限。 */
-private val STOP_TIMEOUT = 5.seconds
+/** 放棄等待 bind 的時限，逾時後狀態退回 [ShizukuConnectionStatus.DISCONNECTED]。 */
+val BIND_TIMEOUT = 10.seconds
 
 /**
  * Shizuku 的可用程度：一條階梯，後面的必然蘊含前面的。
@@ -59,6 +56,9 @@ class ShizukuManager(private val context: Context) {
 
     val service: IMoonClickerService?
         get() = _serviceFlow.value
+
+    /** 持有租約時服務會被啟動、不會被自動停止，見 [UserServiceLeases]。 */
+    val leases = UserServiceLeases()
 
     /** bind 已送出但服務還沒接上，也就是 UI 的「連線中」。 */
     private val _isBinding = MutableStateFlow(false)
@@ -110,6 +110,9 @@ class ShizukuManager(private val context: Context) {
 
     private var bindJob: Job? = null
 
+    /** [bindJob] 是啟動（bind）而不是只探現成服務（peek）。 */
+    private var bindJobStarts = false
+
     /** 分辨「當前這次連線嘗試」與被取消的前一次，只有當前那次能清掉 [_isBinding]。 */
     private var connectGeneration = 0
 
@@ -131,16 +134,25 @@ class ShizukuManager(private val context: Context) {
             }
         }
 
-        // 已授權卻沒連上時，探一次有沒有現成的服務可接。只 attach 不啟動：要不要「存在」一個特權
-        // 行程是 UI 的政策（見 UserServiceAutoStarter），這裡只負責「已經存在就接上」。
+        // 已授權卻沒連上時，探一次有沒有現成的服務可接（Shizuku 的 user service 會活過 App 被殺）。
         //
         // 探不到不會改變下面任何一個值，所以 distinctUntilChanged 會擋掉重算——一次狀態轉換探一次，
-        // 不會在背景重試。服務非預期斷線同理：探一次，探不到就停在未連線等使用者。
+        // 不會在背景重試。服務非預期斷線同理：探一次，探不到就停在未連線，等下一個租約或 withService。
         scope.launch {
             combine(_access, serviceFlow) { access, service ->
                 access == ShizukuAccess.GRANTED && service == null
             }.distinctUntilChanged().collect { canAttach ->
                 if (canAttach) connect(startIfNotRunning = false)
+            }
+        }
+
+        // 有租約（例如 App 進入前景）而且已授權時啟動服務。只看「租約從無到有」與「授權到位」這兩個
+        // 轉換，不看服務斷線：斷線後自動重啟可能變成崩潰迴圈，改由下一次 withService 按需啟動。
+        scope.launch {
+            combine(_access, leases.count) { access, count ->
+                access == ShizukuAccess.GRANTED && count > 0
+            }.distinctUntilChanged().collect { wanted ->
+                if (wanted) startUserService()
             }
         }
     }
@@ -161,24 +173,23 @@ class ShizukuManager(private val context: Context) {
         }
     }
 
-    /** 狀態列按鈕的統一入口：未授權先要授權，已授權就（重）連線。 */
+    /** 狀態列按鈕的統一入口：未授權先要授權，已授權就啟動服務。 */
     fun requestPermissionOrConnect() {
         when (_access.value) {
             ShizukuAccess.NOT_AVAILABLE -> Timber.w("Shizuku binder is not available")
             ShizukuAccess.NEED_PERMISSION -> requestPermission()
-            // 使用者按了才叫它連，這時就該把服務啟動起來，而不是只看看有沒有在跑。
             ShizukuAccess.GRANTED -> startUserService()
         }
     }
 
-    /** 啟動 UserService（沒在跑就建立），並解除先前的「關閉」意圖。 */
-    fun startUserService() = connect(startIfNotRunning = true, force = true)
+    /** 啟動 UserService（沒在跑就建立）。已經在啟動中就不重來。 */
+    fun startUserService() = connect(startIfNotRunning = true)
 
     /**
      * 關閉 UserService。
      *
      * 副作用不小：MoonClickerService.destroy() 會 release 掉所有虛擬顯示再結束行程，所以呼叫端
-     * 必須先確認沒有腳本在跑，並讓使用者知道 display 會一起消失。
+     * 必須先確認沒有腳本在跑，並讓使用者知道 display 會一起消失。之後的 withService 會啟動新的行程。
      */
     @Synchronized
     fun stopUserService() {
@@ -191,32 +202,16 @@ class ShizukuManager(private val context: Context) {
     }
 
     /**
-     * 重新啟動 UserService。
-     *
-     * debug build 沿用同一個 versionCode 時 Shizuku 不會重載服務，改了 MoonClickerService 的程式碼
-     * 卻還是跑到舊行程——這顆是那時候用的。副作用同 [stopUserService]。
-     */
-    fun restartUserService() {
-        scope.launch {
-            stopUserService()
-            // 等舊行程真的退場再啟動，否則新的請求可能接到還沒死透的那一個。
-            withTimeoutOrNull(STOP_TIMEOUT) { serviceFlow.first { it == null } }
-                ?: Timber.w("Timed out waiting for MoonClickerService to stop")
-            startUserService()
-        }
-    }
-
-    /**
      * 連上 UserService。等到服務真的接上才離開「連線中」，逾時就放棄，
      * 讓狀態退回 DISCONNECTED 而不是永遠卡在 CONNECTING。
      */
-    @Synchronized // 自動連線在背景執行緒上跑，可能與使用者按下的按鈕同時抵達這裡。
-    private fun connect(startIfNotRunning: Boolean, force: Boolean = false) {
+    @Synchronized // 自動連線與 withService 在不同執行緒上，可能同時抵達這裡。
+    private fun connect(startIfNotRunning: Boolean) {
         if (_serviceFlow.value != null) return
         if (bindJob?.isActive == true) {
-            // 使用者按下的啟動要能蓋過進行中的自動嘗試，否則重啟會被剛觸發的 attach 卡住，
-            // 而那個 attach 探的正是我們剛殺掉的服務。
-            if (!force) return
+            // 進行中的啟動不重來；進行中的 peek 則要讓給啟動，否則 peek 探不到服務就停在未連線，
+            // 而觸發啟動的那個狀態轉換已經用掉了。
+            if (bindJobStarts || !startIfNotRunning) return
             bindJob?.cancel()
         }
         if (_access.value != ShizukuAccess.GRANTED) {
@@ -225,6 +220,7 @@ class ShizukuManager(private val context: Context) {
         }
 
         val generation = ++connectGeneration
+        bindJobStarts = startIfNotRunning
         _isBinding.value = true
         bindJob = scope.launch {
             try {
@@ -249,18 +245,22 @@ class ShizukuManager(private val context: Context) {
     }
 
     /**
-     * 確保等待到 Service 處於連線狀態後執行，若逾時則回傳 Failure
+     * 持有租約執行 [block]：服務沒在跑就啟動它並等連線，期間不會被自動停止。
+     * 未授權或逾時回傳 Failure。
      */
     suspend inline fun <R> withService(
-        timeout: Duration = 5.seconds,
+        timeout: Duration = BIND_TIMEOUT,
         block: suspend (IMoonClickerService) -> R
-    ): Result<R> = runCatching {
-        val svc = withTimeout(timeout) {
-            serviceFlow.filterNotNull().first()
+    ): Result<R> = leases.hold {
+        runCatching {
+            if (service == null) startUserService()
+            val svc = withTimeout(timeout) {
+                serviceFlow.filterNotNull().first()
+            }
+            block(svc)
+        }.onFailure {
+            Timber.e(it, "Call to MoonClickerService timed out or service unavailable")
         }
-        block(svc)
-    }.onFailure {
-        Timber.e(it, "Call to MoonClickerService timed out or service unavailable")
     }
 
     // -------------------------------------------------------------
