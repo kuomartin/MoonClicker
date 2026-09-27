@@ -29,10 +29,10 @@
 
 | # | 函式 | 行為 |
 |---|---|---|
-| C1 | `vision.read(roi)` | ROI 當成單一文字行直接辨識（不經偵測），回傳 `{text, confidence, x, y, w, h, cx, cy}`；辨識不出任何字回傳 `nil` |
+| C1 | `vision.read(roi)` | ROI 當成單一文字行直接辨識（不經偵測），回傳 `TextLine`：`{text, confidence, x, y, w, h, cx, cy}`；辨識不出任何字回傳 `nil` |
 | C2 | `vision.read_lines([roi])` | ROI（省略為整張）內偵測所有行後逐行辨識，回傳依 y、x 排序的陣列，每一項同 C1；沒有字回傳空陣列 |
 
-`confidence` 在讀取 API 是 OCR 的信心度（CTC 解碼時每個字元機率的平均），不是相似度。`read_lines` 必須先偵測：辨識模型只吃單一橫向文字行（高 48 px），多行直接辨識會被壓成一行而讀成亂碼。
+每個回傳物件只有一個 `confidence`，意思由物件決定：`VisionHit`（`find`／`wait` 的命中，模板或文字）是「與要找的東西有多像」，`threshold` 比較的就是它；讀取 API 回傳的 `TextLine` 是 OCR 對這段文字的信心度（CTC 解碼時每個字元機率的平均），因為讀取沒有要找的東西，相似度不存在。文件與 LuaLS stub 把兩種型別分開寫。文字命中不另外附 OCR 信心度：同一個物件出現兩個分數正是要避免的混亂，需要時再加不破壞相容性。`read_lines` 必須先偵測：辨識模型只吃單一橫向文字行（高 48 px），多行直接辨識會被壓成一行而讀成亂碼。
 
 兩者都只看當下最新的一張影格，不等待；要等畫面出現某段文字用 `vision.wait{text=…}`。
 
@@ -50,5 +50,5 @@
 | # | 檔案 | 改動 |
 |---|---|---|
 | E1 | `docs/lua-api.md` | `vision` 一節：`text`／`exact` 欄位、比對規則與相似度門檻（含短字串與數字的注意事項）、命中結果的 `text`、`read`／`read_lines`；效能建議（給 `roi`、搭配 `step_ms`） |
-| E2 | `vscode-extension/lua-meta/moonclicker.lua` | `VisionRequest.text`／`exact`、`VisionHit.text`、`vision.read`、`vision.read_lines` |
+| E2 | `vscode-extension/lua-meta/moonclicker.lua` | `VisionRequest.text`／`exact`、`VisionHit.text`、`TextLine`、`vision.read`、`vision.read_lines` |
 | E3 | `docs/lua-api-testing.md` | 新增 `OcrVisionTest` 列與套件推送方式 |
