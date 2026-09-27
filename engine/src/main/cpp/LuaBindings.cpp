@@ -160,35 +160,90 @@ void requireInput(lua_State *L, ScriptRuntime *runtime) {
     }
 }
 
+/** 比對一次，把第一個命中的結果推上堆疊。@return 命中的 request 索引，沒有就回傳 -1。 */
+int matchOnce(lua_State *L, ScriptRuntime *runtime, const std::vector<VisionRequest> &requests) {
+    std::vector<VisionHit> hits = runtime->vision().match(requests);
+    reportHits(runtime, requests, hits);
+
+    for (size_t i = 0; i < hits.size(); i++) {
+        if (hits[i].found) {
+            pushHit(L, hits[i]);
+            return static_cast<int>(i);
+        }
+    }
+    return -1;
+}
+
 /**
- * find/wait 共用的核心：比對到第一個命中就停，或撐到 [timeoutMs] 為止。
+ * wait 系列共用的核心：比對到第一個命中就停，或撐到 [timeoutMs] 為止。
+ * @param stepMs 兩次比對開始的最小間隔；0 表示每張新影格都比對。
  * @return 命中的 request 索引，沒有就回傳 -1。
  */
 int matchUntil(lua_State *L, ScriptRuntime *runtime, const std::vector<VisionRequest> &requests,
-               long timeoutMs) {
+               long timeoutMs, long stepMs) {
     long deadline = nowMs() + std::max(0L, timeoutMs);
-    uint64_t seen = 0;
 
     while (true) {
         if (!runtime->isRunning()) raiseStopped(L);
 
-        seen = runtime->vision().frameCounter();
-        std::vector<VisionHit> hits = runtime->vision().match(requests);
-        reportHits(runtime, requests, hits);
-
-        for (size_t i = 0; i < hits.size(); i++) {
-            if (hits[i].found) {
-                pushHit(L, hits[i]);
-                return static_cast<int>(i);
-            }
-        }
+        long attemptStart = nowMs();
+        uint64_t seen = runtime->vision().frameCounter();
+        int index = matchOnce(L, runtime, requests);
+        if (index >= 0) return index;
 
         long remaining = deadline - nowMs();
         if (remaining <= 0) return -1;
 
+        if (stepMs > 0) {
+            long pause = std::min(attemptStart + stepMs - nowMs(), remaining);
+            if (pause > 0 && !runtime->interruptibleSleep(pause)) raiseStopped(L);
+            remaining = deadline - nowMs();
+            // 睡到 deadline 就直接回迴圈頂端做最後一次比對，與不帶 step 時逾時前的最後一次一致。
+            if (remaining <= 0) continue;
+        }
+
         // 等新影格；逾時就回到迴圈頂端重新檢查 deadline 與停止旗標。
         runtime->vision().waitForFrameAfter(seen, std::min(remaining, kWaitPollMs));
     }
+}
+
+/** 讀出 `requests` 陣列；空陣列直接報錯，錯誤訊息帶上呼叫的函式名。 */
+std::vector<VisionRequest> readRequestList(lua_State *L, int index, ScriptRuntime *runtime,
+                                           const char *function) {
+    luaL_checktype(L, index, LUA_TTABLE);
+
+    std::vector<VisionRequest> requests;
+    auto count = static_cast<int>(lua_rawlen(L, index));
+    for (int i = 1; i <= count; i++) {
+        lua_rawgeti(L, index, i);
+        requests.push_back(readRequest(L, lua_gettop(L), runtime));
+        lua_pop(L, 1);
+    }
+    if (requests.empty()) {
+        luaL_error(L, "%s needs at least one request", function);
+    }
+    return requests;
+}
+
+long readTimeout(lua_State *L, int index) {
+    return static_cast<long>(luaL_optinteger(L, index, kDefaultWaitTimeoutMs));
+}
+
+long readStep(lua_State *L, int index) {
+    auto step = static_cast<long>(luaL_optinteger(L, index, 0));
+    luaL_argcheck(L, step >= 0, index, "step_ms must not be negative");
+    return step;
+}
+
+/** matchOnce／matchUntil 已把命中的 table 推上堆疊；索引放前面，回傳 index, hit。 */
+int pushIndexedHit(lua_State *L, int index) {
+    if (index < 0) {
+        lua_pushnil(L);
+        return 1;
+    }
+    lua_pushinteger(L, index + 1);
+    lua_insert(L, -2);
+    return 2;
 }
 
 // --- 全域 ------------------------------------------------------------------
@@ -273,15 +328,18 @@ int lua_vision_find(lua_State *L) {
     requireVision(L, runtime);
 
     std::vector<VisionRequest> requests{readRequest(L, 1, runtime)};
-    std::vector<VisionHit> hits = runtime->vision().match(requests);
-    reportHits(runtime, requests, hits);
-
-    if (hits[0].found) {
-        pushHit(L, hits[0]);
-    } else {
+    if (matchOnce(L, runtime, requests) < 0) {
         lua_pushnil(L);
     }
     return 1;
+}
+
+int lua_vision_find_any(lua_State *L) {
+    ScriptRuntime *runtime = self(L);
+    requireVision(L, runtime);
+
+    std::vector<VisionRequest> requests = readRequestList(L, 1, runtime, "vision.find_any");
+    return pushIndexedHit(L, matchOnce(L, runtime, requests));
 }
 
 int lua_vision_wait(lua_State *L) {
@@ -289,9 +347,7 @@ int lua_vision_wait(lua_State *L) {
     requireVision(L, runtime);
 
     std::vector<VisionRequest> requests{readRequest(L, 1, runtime)};
-    auto timeout = static_cast<long>(luaL_optinteger(L, 2, kDefaultWaitTimeoutMs));
-
-    if (matchUntil(L, runtime, requests, timeout) < 0) {
+    if (matchUntil(L, runtime, requests, readTimeout(L, 2), readStep(L, 3)) < 0) {
         lua_pushnil(L);
     }
     return 1;
@@ -300,30 +356,9 @@ int lua_vision_wait(lua_State *L) {
 int lua_vision_wait_any(lua_State *L) {
     ScriptRuntime *runtime = self(L);
     requireVision(L, runtime);
-    luaL_checktype(L, 1, LUA_TTABLE);
 
-    std::vector<VisionRequest> requests;
-    auto count = static_cast<int>(lua_rawlen(L, 1));
-    for (int i = 1; i <= count; i++) {
-        lua_rawgeti(L, 1, i);
-        requests.push_back(readRequest(L, lua_gettop(L), runtime));
-        lua_pop(L, 1);
-    }
-    if (requests.empty()) {
-        luaL_error(L, "vision.wait_any needs at least one request");
-    }
-
-    auto timeout = static_cast<long>(luaL_optinteger(L, 2, kDefaultWaitTimeoutMs));
-
-    int index = matchUntil(L, runtime, requests, timeout);
-    if (index < 0) {
-        lua_pushnil(L);
-        return 1;
-    }
-    // matchUntil 已經把命中的 table 推上堆疊；索引放前面，回傳 index, result。
-    lua_pushinteger(L, index + 1);
-    lua_insert(L, -2);
-    return 2;
+    std::vector<VisionRequest> requests = readRequestList(L, 1, runtime, "vision.wait_any");
+    return pushIndexedHit(L, matchUntil(L, runtime, requests, readTimeout(L, 2), readStep(L, 3)));
 }
 
 // --- input -----------------------------------------------------------------
@@ -541,6 +576,7 @@ void registerModule(lua_State *L, ScriptRuntime *runtime, const char *name,
 
 const luaL_Reg kVision[] = {
         {"find",     lua_vision_find},
+        {"find_any", lua_vision_find_any},
         {"wait",     lua_vision_wait},
         {"wait_any", lua_vision_wait_any},
         {nullptr, nullptr},

@@ -59,7 +59,7 @@ duration 插值。所以 Tier 0 能說「引擎送出了什麼」，不能說「
 | `DisplayBringUpTest` | 特權旗標跟權限一致、distributor 送出影格、puppet 啟動並鋪滿顯示器 |
 | `VisionCoordinatesTest` | 三個方向下，腳本看到的尺寸、`vision` 比中的位置、`roi` 的範圍 |
 | `InputCoordinatesTest` | 三個方向下，注入的觸控落在瞄準的位置 |
-| `VisionWaitTest` | `vision.wait`／`wait_any` 的等待語意 |
+| `VisionWaitTest` | `vision.wait`／`wait_any` 的等待語意與 `step_ms`、`find_any` 的 index |
 | `VirtualDisplayIdleDeadlockTest` | issue #6：注入的輸入喚醒睡著的 own display group |
 
 ```bash
@@ -143,6 +143,8 @@ puppet 同時畫**旋轉對稱**的同心方框與**不對稱**的 Γ 字形，�
 | `vision_wait_blocks_until_the_marker_appears` | `wait` 真的會等嗎 | 標記延後 2 秒才畫 |
 | `vision_wait_returns_nil_on_timeout_without_erroring` | 逾時回 `nil` 還是拋錯 | 標記永遠不畫 |
 | `vision_wait_any_reports_which_one_appeared` | `wait_any` 的 index 指的是出現的那一個嗎 | 只顯示兩個候選中的一個 |
+| `vision_wait_with_step_matches_only_on_step_boundaries` | `step_ms` 真的拉開比對間隔嗎 | 標記 2 秒後出現、step 3 秒，命中不得早於 3 秒 |
+| `vision_find_any_reports_which_one_is_on_screen` | `find_any` 的 index 與全部未命中時的 `nil` | 只顯示兩個候選中的一個 |
 
 逾時回 `nil` 是 `docs/lua-api.md` 明寫的承諾，腳本作者的錯誤處理全建立在它上面。`wait_any`
 刻意只顯示一個——兩個同時出現的話 index 只反映呼叫順序。
