@@ -18,7 +18,6 @@ import com.xaxaxax.moonclicker.permission.PermissionManager
 import com.xaxaxax.moonclicker.script.ScriptSession
 import com.xaxaxax.moonclicker.shizuku.ShizukuConnectionStatus
 import com.xaxaxax.moonclicker.shizuku.ShizukuManager
-import com.xaxaxax.moonclicker.shizuku.UserServiceLifecycle
 import com.xaxaxax.moonclicker.workbench.WorkbenchAuthStore
 import com.xaxaxax.moonclicker.workbench.WorkbenchServer
 import com.xaxaxax.moonclicker.workbench.WorkbenchService
@@ -46,7 +45,6 @@ data class SettingsUiState(
     val defaultStartPage: TopLevelDestination = TopLevelDestination.SCRIPTS,
     /** 空字串代表跟隨系統語言。 */
     val appLanguage: String = "",
-    val autoStartUserService: Boolean = true,
     val workbenchEnabled: Boolean = false,
     /** Server 目前監聽的 "ip:port"，供 QR code 配對顯示；未啟動或還沒 bind 完成時是 null。 */
     val workbenchAddress: String? = null,
@@ -62,10 +60,7 @@ data class SettingsUiState(
     val isDeveloperOptionsUnlocked: Boolean = false,
     val showExternalDisplays: Boolean = false,
 ) {
-    val canStartUserService: Boolean
-        get() = shizukuStatus == ShizukuConnectionStatus.DISCONNECTED
-
-    /** 停止與重啟都會銷毀所有虛擬顯示，執行中的腳本更是直接陪葬。 */
+    /** 停止會銷毀所有虛擬顯示，執行中的腳本更是直接陪葬。 */
     val canStopUserService: Boolean
         get() = shizukuStatus == ShizukuConnectionStatus.CONNECTED && !isScriptRunning
 }
@@ -82,7 +77,6 @@ class SettingsViewModel @Inject constructor(
     private val permissionManager: PermissionManager,
     private val shizukuManager: ShizukuManager,
     private val appSettings: AppSettings,
-    private val userServiceLifecycle: UserServiceLifecycle,
     private val scriptSession: ScriptSession,
     private val workbenchServer: WorkbenchServer,
     val authStore: WorkbenchAuthStore,
@@ -102,9 +96,9 @@ class SettingsViewModel @Inject constructor(
 
     /** 先併成一份，是為了讓外層 combine 停在小於等於 5 個具名參數上。 */
     private val userServiceState = combine(
-        userServiceLifecycle.snapshot,
+        shizukuManager.statusFlow,
         scriptSession.state,
-    ) { snapshot, session -> Triple(snapshot.connection, snapshot.autoStartEnabled, session.isRunning) }
+    ) { status, session -> status to session.isRunning }
 
     private val permissionCombinedState = combine(
         permissionManager.hasNotificationPermission,
@@ -146,7 +140,7 @@ class SettingsViewModel @Inject constructor(
         isRefreshing,
         generalSettingsState,
         workbenchCombinedState,
-    ) { (status, autoStart, scriptRunning), permissions, refreshing, general, (workbenchEnabled, workbenchAddress, auth) ->
+    ) { (status, scriptRunning), permissions, refreshing, general, (workbenchEnabled, workbenchAddress, auth) ->
         SettingsUiState(
             shizukuStatus = status,
             hasNotificationPermission = permissions.hasNotification,
@@ -158,7 +152,6 @@ class SettingsViewModel @Inject constructor(
             appLanguage = general.appLanguage,
             isDeveloperOptionsUnlocked = general.developerOptionsUnlocked,
             showExternalDisplays = general.showExternalDisplays,
-            autoStartUserService = autoStart,
             isScriptRunning = scriptRunning,
             workbenchEnabled = workbenchEnabled,
             workbenchAddress = workbenchAddress,
@@ -226,8 +219,6 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun setAutoStartUserService(enabled: Boolean) = appSettings.setAutoStartUserService(enabled)
-
     fun setWorkbenchEnabled(enabled: Boolean) {
         val intent = Intent(context, WorkbenchService::class.java)
         if(enabled && !permissionManager.hasLocalNetworkPermission.value) {
@@ -246,11 +237,8 @@ class SettingsViewModel @Inject constructor(
         appSettings.setWorkbenchEnabled(enabled)
     }
 
-    fun startUserService() = shizukuManager.startUserService()
-
+    /** 開發人員選項用：停掉後下一次用到服務時會啟動新的行程，等同重新啟動。 */
     fun stopUserService() = shizukuManager.stopUserService()
-
-    fun restartUserService() = shizukuManager.restartUserService()
 
     fun getOpenShizukuIntent() = shizukuManager.getOpenShizukuIntent()
     fun requestShizukuPermission() = shizukuManager.requestPermission()

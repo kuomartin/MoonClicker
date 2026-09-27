@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -24,10 +23,8 @@ import com.xaxaxax.moonclicker.ui.theme.MoonClickerTheme
 import androidx.compose.ui.res.stringResource
 
 /**
- * 顯示在 Displays / Scripts 畫面最上方的一小條 Shizuku 狀態列：
- * 授權狀態 + UserService 連線狀態，並附一顆「取得授權 / 啟動 UserService」按鈕。
- *
- * 連線是自動的，按鈕只在自動連線沒能把狀態推到 CONNECTED 時才需要。
+ * 顯示在 Displays / Scripts 畫面最上方的一小條 Shizuku 狀態列，只在還不能用的時候出現
+ * （Shizuku 沒在跑或還沒授權）。授權之後 UserService 由 App 自動啟停，使用者不需要知道它連上了沒。
  */
 @Composable
 fun ShizukuStatusBar(
@@ -35,11 +32,12 @@ fun ShizukuStatusBar(
     onActionClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    if (status.isAuthorized) return
+
     val (label, tint) = shizukuStatusAppearance(status)
     val actionLabel = when (status) {
         ShizukuConnectionStatus.NEED_PERMISSION -> stringResource(R.string.shizuku_action_grant)
-        ShizukuConnectionStatus.NOT_AVAILABLE, ShizukuConnectionStatus.DISCONNECTED -> stringResource(R.string.shizuku_action_connect)
-        ShizukuConnectionStatus.CONNECTING, ShizukuConnectionStatus.CONNECTED -> null
+        else -> null
     }
 
     Surface(
@@ -68,13 +66,7 @@ fun ShizukuStatusBar(
                     color = tint,
                 )
             }
-            if (status == ShizukuConnectionStatus.CONNECTING) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(16.dp),
-                    strokeWidth = 2.dp,
-                    color = tint,
-                )
-            } else if (actionLabel != null) {
+            if (actionLabel != null) {
                 TextButton(onClick = onActionClick) {
                     Text(actionLabel)
                 }
@@ -100,28 +92,6 @@ private fun ShizukuStatusBarPreviewNeedPermission() {
     MoonClickerTheme {
         ShizukuStatusBar(
             status = ShizukuConnectionStatus.NEED_PERMISSION,
-            onActionClick = {},
-        )
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-private fun ShizukuStatusBarPreviewConnecting() {
-    MoonClickerTheme {
-        ShizukuStatusBar(
-            status = ShizukuConnectionStatus.CONNECTING,
-            onActionClick = {},
-        )
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-private fun ShizukuStatusBarPreviewConnected() {
-    MoonClickerTheme {
-        ShizukuStatusBar(
-            status = ShizukuConnectionStatus.CONNECTED,
             onActionClick = {},
         )
     }

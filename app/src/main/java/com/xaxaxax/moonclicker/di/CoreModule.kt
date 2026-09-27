@@ -1,11 +1,11 @@
 package com.xaxaxax.moonclicker.di
 
 import android.content.Context
-import com.xaxaxax.moonclicker.core.AppSettings
 import com.xaxaxax.moonclicker.permission.PermissionManager
 import com.xaxaxax.moonclicker.shizuku.ShizukuManager
-import com.xaxaxax.moonclicker.shizuku.UserServiceLifecycle
-import com.xaxaxax.moonclicker.workbench.WorkbenchServer
+import com.xaxaxax.moonclicker.shizuku.UserServiceAutoStopper
+import com.xaxaxax.moonclicker.shizuku.UserServiceForegroundLease
+import com.xaxaxax.moonclicker.shizuku.displayInfoList
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -23,8 +23,17 @@ object CoreModule {
 
     @Provides
     @Singleton
-    fun provideUserServiceLifecycle(shizukuManager: ShizukuManager, appSettings: AppSettings) =
-        UserServiceLifecycle(shizukuManager, appSettings)
+    fun provideUserServiceAutoStopper(shizukuManager: ShizukuManager) = UserServiceAutoStopper(
+        leases = shizukuManager.leases,
+        serviceFlow = shizukuManager.serviceFlow,
+        hasActiveDisplays = { service -> service.displayInfoList().any { it.isManaged || it.isMirrorActive } },
+        stop = shizukuManager::stopUserService,
+    )
+
+    @Provides
+    @Singleton
+    fun provideUserServiceForegroundLease(shizukuManager: ShizukuManager) =
+        UserServiceForegroundLease(shizukuManager.leases)
 
     @Provides
     @Singleton

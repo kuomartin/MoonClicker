@@ -21,7 +21,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -90,6 +92,17 @@ class ScriptSession @Inject constructor(
                 if (current.script != null && current.runState.isTerminal) {
                     ScriptEngine.stop()
                 }
+            }
+        }
+
+        // 執行期間持有 UserService 的租約：引擎直接拿著 service 用，不經過 withService，
+        // 跑在實體螢幕上時也沒有 VD 能讓服務端知道有人在用。
+        scope.launch {
+            var holding = false
+            state.map { it.isRunning }.distinctUntilChanged().collect { running ->
+                if (running && !holding) shizukuManager.leases.acquire()
+                if (!running && holding) shizukuManager.leases.release()
+                holding = running
             }
         }
     }
