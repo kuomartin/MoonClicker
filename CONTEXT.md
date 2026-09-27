@@ -88,6 +88,10 @@ _Avoid_: JNI callbacks, native bridge.
 The native OpenCV-backed component that performs on-demand template matching on virtual display frames in logical coordinates ([ADR-0003](docs/adr/0003-opencv-for-vision-matching.md), [ADR-0013](docs/adr/0013-templates-are-logical-space.md)).
 _Avoid_: VisionEngine, image recognizer, matcher.
 
+**OCR Pack**:
+The per-ABI download (`libonnxruntime.so`, PP-OCRv6 small detection and recognition models, dictionary) published by `kuomartin/MoonClicker-ocr-pack` and installed on first use into `filesDir/ocr/v<version>/`, where the engine `dlopen`s ONNX Runtime; each file is verified against SHA-256 hashes pinned in `OcrPack` ([ADR-0018](docs/adr/0018-onnx-runtime-ppocrv6-downloaded-on-first-use.md)).
+_Avoid_: OCR model, OCR plugin, OCR assets.
+
 **MoonClickerService**:
 The Shizuku-hosted AIDL service (`IMoonClickerService`) providing virtual display management, native input injection, and app launching ([ADR-0001](docs/adr/0001-v2-service-supersedes-v1.md)).
 _Avoid_: Shizuku service, backend service.

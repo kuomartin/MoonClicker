@@ -132,6 +132,28 @@
     <string name="settings_language_english">English</string>
     <string name="settings_language_chinese_tw">繁體中文</string>
     <string name="settings_language_restart_required">Saved. Restart the app to apply the new language.</string>
+    <string name="settings_ocr">Text recognition (OCR)</string>
+    <string name="settings_ocr_desc">Lets scripts read and wait for on-screen text. The OCR component is downloaded separately (about 39 MB).</string>
+    <string name="settings_ocr_unsupported">Not available on this device (%1$s)</string>
+    <string name="settings_ocr_not_installed">Not installed</string>
+    <string name="settings_ocr_download">Download</string>
+    <string name="settings_ocr_downloading">Downloading… %1$s</string>
+    <string name="settings_ocr_downloading_of">Downloading… %1$s / %2$s</string>
+    <string name="settings_ocr_verifying">Verifying…</string>
+    <string name="settings_ocr_installed">Installed (version %1$d)</string>
+    <string name="settings_ocr_failed">Download failed: %1$s</string>
+    <string name="settings_ocr_retry">Retry</string>
+    <string name="settings_ocr_uninstall">Remove</string>
+    <string name="settings_ocr_uninstall_title">Remove the OCR component?</string>
+    <string name="settings_ocr_uninstall_desc">Scripts that read text will stop working until it is downloaded again.</string>
+    <string name="settings_ocr_threads">Threads</string>
+    <string name="settings_ocr_threads_auto">Automatic</string>
+    <string name="settings_ocr_threads_auto_value">Automatic (%1$d)</string>
+    <string name="settings_ocr_recalibrate">Test speed again</string>
+    <string name="settings_ocr_calibrating">Measuring 1, 2 and 4 threads…</string>
+    <string name="settings_ocr_calibration_result">Threads %1$d: %2$d ms</string>
+    <string name="settings_ocr_calibration_failed">Speed test failed: %1$s</string>
+    <string name="settings_ocr_calibration_script_running">Stop the running script to test speed.</string>
     <string name="settings_about">About</string>
 
     <!-- About page -->

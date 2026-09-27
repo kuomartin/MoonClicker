@@ -127,6 +127,28 @@
     <string name="settings_language_english">English</string>
     <string name="settings_language_chinese_tw">繁體中文</string>
     <string name="settings_language_restart_required">已儲存，重新啟動 App 後套用新語言。</string>
+    <string name="settings_ocr">文字辨識（OCR）</string>
+    <string name="settings_ocr_desc">讓腳本讀取與等待畫面上的文字。OCR 元件需另外下載（約 39 MB）。</string>
+    <string name="settings_ocr_unsupported">此裝置不支援（%1$s）</string>
+    <string name="settings_ocr_not_installed">未安裝</string>
+    <string name="settings_ocr_download">下載</string>
+    <string name="settings_ocr_downloading">下載中… %1$s</string>
+    <string name="settings_ocr_downloading_of">下載中… %1$s / %2$s</string>
+    <string name="settings_ocr_verifying">驗證中…</string>
+    <string name="settings_ocr_installed">已安裝（版本 %1$d）</string>
+    <string name="settings_ocr_failed">下載失敗：%1$s</string>
+    <string name="settings_ocr_retry">重試</string>
+    <string name="settings_ocr_uninstall">刪除</string>
+    <string name="settings_ocr_uninstall_title">刪除 OCR 元件？</string>
+    <string name="settings_ocr_uninstall_desc">重新下載之前，讀取文字的腳本都無法執行。</string>
+    <string name="settings_ocr_threads">執行緒數</string>
+    <string name="settings_ocr_threads_auto">自動</string>
+    <string name="settings_ocr_threads_auto_value">自動（%1$d 條）</string>
+    <string name="settings_ocr_recalibrate">重新測試速度</string>
+    <string name="settings_ocr_calibrating">正在測試 1、2、4 條執行緒…</string>
+    <string name="settings_ocr_calibration_result">%1$d 條：%2$d ms</string>
+    <string name="settings_ocr_calibration_failed">速度測試失敗：%1$s</string>
+    <string name="settings_ocr_calibration_script_running">停止執行中的腳本後才能測試速度。</string>
     <string name="settings_about">關於</string>
 
     <!-- About page -->

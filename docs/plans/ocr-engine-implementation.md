@@ -63,5 +63,4 @@
 | # | 檔案 | 改動 |
 |---|---|---|
 | F1 | `CONTEXT.md` | 新增 **OCR Pack** 詞條 |
-| F2 | `docs/research/ocr-engine-selection.md` | 若 C4 的軸對齊框改變準確率，補上數字 |
-| F3 | About 頁的開源授權 | 列出 ONNX Runtime、PP-OCRv6 |
+| F2 | `docs/research/ocr-engine-selection.md` | 補上軸對齊框的準確率 |

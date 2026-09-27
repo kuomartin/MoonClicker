@@ -197,6 +197,7 @@ fun SettingsScreen(
         onRestartUserService = viewModel::restartUserService,
         onNavigateToAbout = onNavigateToAbout,
         onNavigateToDeveloperOptions = onNavigateToDeveloperOptions,
+        ocrSection = { OcrSettingsSection() },
     )
 }
 
@@ -217,6 +218,8 @@ private fun SettingsScreenContent(
     onRestartUserService: () -> Unit = {},
     onNavigateToAbout: () -> Unit = {},
     onNavigateToDeveloperOptions: () -> Unit = {},
+    /** 自帶 ViewModel 的區塊以 slot 傳入，預覽不需要 Hilt。 */
+    ocrSection: @Composable () -> Unit = {},
 ) {
     // 關閉與重啟都會連帶銷毀虛擬顯示，值得先問一句。
     var pendingAction by remember { mutableStateOf<UserServiceAction?>(null) }
@@ -375,6 +378,8 @@ private fun SettingsScreenContent(
                         )
                     }
                 }
+
+                item { ocrSection() }
 
                 item {
                     Row(

@@ -26,6 +26,8 @@
 
 Pixel 7a 上的 ROI 讀數實測為 23/28；差的 3 筆來自當時的補邊錯誤（取了 ROI 外的卡片邊框），把裝置端存下的裁切圖拿回電腦跑，輸出逐字相同，確認推論一致。補邊改為 `BORDER_REPLICATE | BORDER_ISOLATED` 後，A21s 上三個 runtime 皆為 26/28，與電腦端相同。
 
+正式實作（`engine/src/main/cpp/Ocr.cpp`）的偵測框改為軸對齊框，省掉 OpenCV 5 的 `geometry` 模組；以 `OcrAccuracyTest` 在 x86_64 模擬器（API 36）上量得整行 73/79、ROI 讀數 26/28，不低於上表。錯的兩筆 ROI 讀數與上表相同（`375元`→`375完`、`750元`→`C750元`）。
+
 ML Kit 的典型錯誤：漏掉按鈕上的 `OK`、`關`→`開`、七段式數字 `7602`→`1602-`、`13500`→`1B500`。unbundled 版（B2）與 bundled 版用同一模型，只差交付方式，未另測。
 
 ## 延遲與大小
