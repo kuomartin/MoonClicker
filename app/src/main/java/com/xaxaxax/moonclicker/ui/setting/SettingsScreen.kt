@@ -193,6 +193,7 @@ fun SettingsScreen(
         onAppLanguageChange = viewModel::setAppLanguage,
         onNavigateToAbout = onNavigateToAbout,
         onNavigateToDeveloperOptions = onNavigateToDeveloperOptions,
+        ocrSection = { OcrSettingsSection() },
     )
 }
 
@@ -209,6 +210,8 @@ private fun SettingsScreenContent(
     onAppLanguageChange: (String) -> Unit = {},
     onNavigateToAbout: () -> Unit = {},
     onNavigateToDeveloperOptions: () -> Unit = {},
+    /** 自帶 ViewModel 的區塊以 slot 傳入，預覽不需要 Hilt。 */
+    ocrSection: @Composable () -> Unit = {},
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val pullRefreshState = rememberPullToRefreshState()
@@ -351,6 +354,8 @@ private fun SettingsScreenContent(
                         )
                     }
                 }
+
+                item { ocrSection() }
 
                 item {
                     Row(

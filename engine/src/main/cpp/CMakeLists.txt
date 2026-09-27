@@ -63,6 +63,8 @@ add_library(moonclicker_native SHARED
         VisionMatcher.cpp
         LuaBindings.cpp
         GlesDistributor.cpp
+        Ocr.cpp
+        OrtLoader.cpp
         ${LUA_SRC}
         ${LUA_CJSON_SRC}
 )
@@ -70,6 +72,11 @@ add_library(moonclicker_native SHARED
 # Suppress warnings for Lua source files
 set_source_files_properties(${LUA_SRC} PROPERTIES COMPILE_FLAGS "-Wno-deprecated-declarations")
 set_source_files_properties(${LUA_CJSON_SRC} PROPERTIES COMPILE_FLAGS "-Wno-deprecated-declarations")
+
+# ONNX Runtime 只用標頭：libonnxruntime.so 隨 OCR 套件在執行期下載後 dlopen（ADR-0018），
+# C++ API 由 OrtLoader 以 Ort::InitApi 手動初始化。
+target_include_directories(moonclicker_native PRIVATE third_party/onnxruntime)
+target_compile_definitions(moonclicker_native PRIVATE ORT_API_MANUAL_INIT)
 
 find_library(android-lib android)
 find_library(log-lib log)

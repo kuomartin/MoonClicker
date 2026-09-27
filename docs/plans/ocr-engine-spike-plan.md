@@ -1,6 +1,6 @@
 # OCR 引擎選型 spike
 
-回答 0.3 路線圖 #4：在 OpenCV dnn 與 ML Kit 之間選定 OCR 引擎，結論寫成 ADR。spike 的程式碼只為了量測，留在 `spike/ocr-engine` 分支，不 merge；#5 依 ADR-0018 重新實作。結果見 `docs/research/ocr-engine-selection.md`。
+在 OpenCV dnn 與 ML Kit 之間選定 OCR 引擎，結論寫成 ADR。spike 的程式碼只為了量測，留在 `spike/ocr-engine` 分支，不 merge；正式實作（issue #118）依 ADR-0018 重新寫。結果見 `docs/research/ocr-engine-selection.md`。
 
 ## A. 要回答的問題
 
@@ -9,7 +9,7 @@
 | Q1 | 能否在腳本引擎所在行程執行 | `ScriptEngine` 在 app 行程，只有影格來自 UserService；在腳本內實際跑一次辨識，成功回傳文字即通過 |
 | Q2 | 能否直接吃 native 影格 | 記錄影格從 `VisionMatcher` 到引擎輸入的路徑與每次複製的成本（ms） |
 | Q3 | 中文（含繁體）與英數字辨識品質 | 固定樣本集上的整行正確率與字元錯誤率 |
-| Q4 | 回傳格式 | 粒度（區塊／行／字）、每一項是否有位置框與信心度；對照路線圖 #6 的三個腳本需求：找文字取位置、讀 ROI 數值、信心度過濾 |
+| Q4 | 回傳格式 | 粒度（區塊／行／字）、每一項是否有位置框與信心度；對照 OCR Lua API（issue #119）的三個腳本需求：找文字取位置、讀 ROI 數值、信心度過濾 |
 | Q5 | 延遲 | 單一 ROI（例如 400×80 的數值區）與整張影格的辨識延遲，暖機後取 p50／p95，高階與低階機各一台 |
 | Q6 | 大小 | APK 增量（.so 與依賴）＋模型檔大小；模型能否不進 APK、首次使用時下載 |
 
@@ -53,7 +53,7 @@ Android 階段：
 |---|---|
 | `docs/research/ocr-engine-selection.md` | Q1–Q6 的量測數據與比較表 |
 | `docs/adr/0018-ocr-engine.md` | 選定的引擎、支援語言、模型交付方式；取代 ADR-0003 中「OCR 未承諾」的部分 |
-| 路線圖 #6 | 依 Q4 補上 Lua API 的命中結果欄位 |
+| issue #119 | 依 Q4 補上 Lua API 的命中結果欄位 |
 
 ## E. 測試環境與樣本
 
