@@ -873,6 +873,82 @@ class WorkbenchServerTest {
     }
 
     @Test
+    fun `ocr-test find materializes a text search loop and starts it on the given display`() = runTest {
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays, ocrAvailable = { true }) }
+
+            val response = client.post("/ocr-test") {
+                setBody("""{"displayId":7,"mode":"find","text":"開始\"\n","exact":true,"threshold":0.9,"roi":{"x":1,"y":2,"w":3,"h":4}}""")
+            }
+
+            assertEquals(HttpStatusCode.Accepted, response.status)
+            assertEquals(7, fakeRunner.startedOnDisplayId)
+            assertEquals(".__ocr_test__", fakeRunner.startedOnDisplayScript?.id)
+            val lua = File(temp.root, ".__ocr_test__/main.lua").readText()
+            assertTrue(lua.contains("""data.set("ocrTest", { started = true })"""))
+            // 引號跳脫、換行寫成 \010：一個字元都不能讓 Lua 字串提早結束或斷行。
+            assertTrue(lua, lua.contains("""text = "開始\"\010","""))
+            assertTrue(lua.contains("exact = true"))
+            assertTrue(lua.contains("threshold = 0.9"))
+            assertTrue(lua.contains("roi = { x = 1, y = 2, w = 3, h = 4 }"))
+            assertTrue(lua.contains("sleep(500)"))
+        }
+    }
+
+    @Test
+    fun `ocr-test read and read_lines call the matching read api`() = runTest {
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays, ocrAvailable = { true }) }
+
+            client.post("/ocr-test") { setBody("""{"displayId":7,"mode":"read","roi":{"x":1,"y":2,"w":3,"h":4}}""") }
+            val read = File(temp.root, ".__ocr_test__/main.lua").readText()
+            assertTrue(read, read.contains("vision.read({ x = 1, y = 2, w = 3, h = 4 })"))
+
+            client.post("/ocr-test") { setBody("""{"displayId":7,"mode":"read_lines","intervalMs":800}""") }
+            val lines = File(temp.root, ".__ocr_test__/main.lua").readText()
+            assertTrue(lines, lines.contains("vision.read_lines()"))
+            assertTrue(lines.contains("sleep(800)"))
+        }
+    }
+
+    @Test
+    fun `ocr-test rejects requests missing what their mode needs`() = runTest {
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays, ocrAvailable = { true }) }
+
+            assertEquals(HttpStatusCode.BadRequest, client.post("/ocr-test") { setBody("""{"displayId":7,"mode":"read"}""") }.status)
+            assertEquals(HttpStatusCode.BadRequest, client.post("/ocr-test") { setBody("""{"displayId":7,"mode":"find"}""") }.status)
+            assertEquals(HttpStatusCode.BadRequest, client.post("/ocr-test") { setBody("""{"displayId":7,"mode":"guess"}""") }.status)
+            assertEquals(null, fakeRunner.startedOnDisplayScript)
+        }
+    }
+
+    @Test
+    fun `ocr-test 412s when the OCR pack is not installed`() = runTest {
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays, ocrAvailable = { false }) }
+
+            val response = client.post("/ocr-test") { setBody("""{"displayId":7,"mode":"read_lines"}""") }
+
+            assertEquals(HttpStatusCode.PreconditionFailed, response.status)
+            assertTrue(response.bodyAsText().contains("OCR is not installed"))
+            assertEquals(null, fakeRunner.startedOnDisplayScript)
+        }
+    }
+
+    @Test
+    fun `ocr-test 409s when a script is already running`() = runTest {
+        fakeRunner.running = true
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays, ocrAvailable = { true }) }
+
+            val response = client.post("/ocr-test") { setBody("""{"displayId":7,"mode":"read_lines"}""") }
+
+            assertEquals(HttpStatusCode.Conflict, response.status)
+        }
+    }
+
+    @Test
     fun `vision-test route 409s when a script is already running`() = runTest {
         scriptFolder("hello", "log('hi')")
         fakeRunner.running = true

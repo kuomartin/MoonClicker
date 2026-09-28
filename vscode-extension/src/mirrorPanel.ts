@@ -4,7 +4,8 @@ import * as vscode from "vscode";
 import { MirrorConnection, type MirrorConnectionState } from "./mirrorConnection";
 import { FrameStalenessTracker, type StalenessState } from "./frameStaleness";
 import { saveTemplate, listTemplates, deleteTemplate, type TemplateRoi } from "./templateSync";
-import { startVisionTest, stopRun } from "./visionTest";
+import { startOcrTest, startVisionTest, stopRun } from "./visionTest";
+import type { OcrTestMode } from "./visionTest";
 import { listScripts, createScript, type ScriptSummary } from "./scriptSync";
 import { listDisplays, toggleDisplayMirror } from "./displaySync";
 
@@ -20,7 +21,7 @@ let connection: MirrorConnection | undefined;
 const mirrorOutputChannel = vscode.window.createOutputChannel("MoonClicker Mirror");
 
 /**
- * 目前是不是有一個「我們自己啟動的」vision-test 迴圈在裝置端跑——只追蹤這個，不是
+ * 目前是不是有一個「我們自己啟動的」測試迴圈（模板或 OCR）在裝置端跑——只追蹤這個，不是
  * `scriptRunner.isRunning()` 的鏡像。刻意不追蹤「裝置上是不是有東西在跑」，因為那可能是
  * 使用者自己另外啟動的真實腳本（例如從 Explorer 樹狀圖按 Run）：面板關閉時只該清掉我們
  * 自己留下的東西，不能連使用者的真實腳本一起停掉。
@@ -89,6 +90,9 @@ export function openMirrorPanel(extensionUri: vscode.Uri, address: string, displ
       threshold?: number;
       intervalMs?: number;
       scriptName?: string;
+      mode?: string;
+      text?: string;
+      exact?: boolean;
     }) => {
       if (message?.type === "stop") {
         connection?.stop();
@@ -180,6 +184,27 @@ export function openMirrorPanel(extensionUri: vscode.Uri, address: string, displ
           const errMsg = (err as Error).message;
           safePostMessage({ type: "visionTestResult", success: false, error: errMsg });
           mirrorOutputChannel.appendLine(`[MoonClicker Vision Test Error] ${errMsg}`);
+          mirrorOutputChannel.show(true);
+        }
+      } else if (message?.type === "startOcrTest") {
+        const { displayId, mode, roi, text, exact, threshold, intervalMs } = message;
+        if (typeof displayId !== "number" || !mode || !["read", "read_lines", "find"].includes(mode)) {
+          safePostMessage({ type: "visionTestResult", success: false, error: "OCR 測試參數不完整" });
+          return;
+        }
+        try {
+          await startOcrTest(
+            address,
+            { displayId, mode: mode as OcrTestMode, roi, text, exact, threshold, intervalMs },
+            token,
+          );
+          visionTestActive = true;
+          // 與模板測試共用同一組 start／stop 狀態機，所以回同一種訊息。
+          safePostMessage({ type: "visionTestResult", success: true });
+        } catch (err) {
+          const errMsg = (err as Error).message;
+          safePostMessage({ type: "visionTestResult", success: false, error: errMsg });
+          mirrorOutputChannel.appendLine(`[MoonClicker OCR Test Error] ${errMsg}`);
           mirrorOutputChannel.show(true);
         }
       } else if (message?.type === "stopRun") {

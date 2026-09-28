@@ -2,6 +2,7 @@ package com.xaxaxax.moonclicker.workbench
 
 import com.xaxaxax.moonclicker.IMoonClickerService
 import com.xaxaxax.moonclicker.core.AppSettings
+import com.xaxaxax.moonclicker.core.OcrManager
 import com.xaxaxax.moonclicker.engine.ScriptEngine
 import com.xaxaxax.moonclicker.script.Script
 import com.xaxaxax.moonclicker.script.ScriptSession
@@ -44,6 +45,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import timber.log.Timber
@@ -118,6 +120,7 @@ class WorkbenchServer @Inject constructor(
     private val shizukuManager: ShizukuManager,
     private val thumbnailCache: DisplayThumbnailCache,
     private val appSettings: AppSettings,
+    private val ocrManager: OcrManager,
     val authStore: WorkbenchAuthStore,
 ) {
     private val scriptRunner = object : ScriptRunner {
@@ -180,7 +183,12 @@ class WorkbenchServer @Inject constructor(
                 CIO,
                 port = PORT,
                 host = host,
-                module = { workbenchModule(scriptsRoot, scriptRunner, scriptStream, displaySource, shizukuManager, authStore) },
+                module = {
+                    workbenchModule(
+                        scriptsRoot, scriptRunner, scriptStream, displaySource, shizukuManager, authStore,
+                        ocrAvailable = { ocrManager.runtime() != null },
+                    )
+                },
             ).start(wait = false)
             _address.value = "${localIpv4Address()}:$PORT" // UI 顯示仍保留實際區網 IP 供參考
             true
@@ -264,6 +272,32 @@ data class VisionTestRequest(
 )
 
 @Serializable
+enum class OcrTestMode {
+    @SerialName("read") READ,
+    @SerialName("read_lines") READ_LINES,
+    @SerialName("find") FIND,
+}
+
+/** `POST /ocr-test` 的 request body。`read` 必須給 [roi]，`find` 必須給 [text]。 */
+@Serializable
+data class OcrTestRequest(
+    val displayId: Int,
+    val mode: OcrTestMode,
+    val roi: TemplateRoi? = null,
+    val text: String? = null,
+    val exact: Boolean = false,
+    val threshold: Double = 0.8,
+    val intervalMs: Long = 500,
+) {
+    val isValid: Boolean
+        get() = when (mode) {
+            OcrTestMode.READ -> roi != null
+            OcrTestMode.READ_LINES -> true
+            OcrTestMode.FIND -> !text.isNullOrEmpty()
+        }
+}
+
+@Serializable
 data class PairResponse(val token: String)
 
 /**
@@ -279,6 +313,8 @@ fun Application.workbenchModule(
     },
     shizukuManager: ShizukuManager? = null,
     authStore: WorkbenchAuthStore? = null,
+    /** OCR 套件是否已安裝；未安裝時 `/ocr-test` 回 412。 */
+    ocrAvailable: () -> Boolean = { false },
 ) {
     install(WebSockets)
     // 誰透過 HTTP 單檔案 API 寫入，都要推給每個開著的 WebSocket——一個 VS Code client
@@ -376,6 +412,6 @@ fun Application.workbenchModule(
 
         displayRoutes(displaySource, shizukuManager)
         scriptRoutes(scriptsRoot, scriptRunner, fileChanges)
-        visionRoutes(scriptsRoot, scriptRunner, fileChanges)
+        visionRoutes(scriptsRoot, scriptRunner, fileChanges, ocrAvailable)
     }
 }
