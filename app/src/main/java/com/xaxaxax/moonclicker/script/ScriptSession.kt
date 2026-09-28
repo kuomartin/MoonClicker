@@ -180,7 +180,7 @@ class ScriptSession @Inject constructor(
      *
      * [ScriptTarget.NewVirtual] 會先照 [DisplayConfig.name]（腳本的 `uniqueId`）找現有虛擬顯示
      * 再沿用——腳本存的是「要一個屬於自己、長這樣的顯示器」，不是某個必然會過期的 id，
-     * 也不該跟另一個剛好同尺寸的腳本共用（見 docs/plans/virtual-display-identity-by-uniqueid-plan.md）。
+     * 也不該跟另一個剛好同尺寸的腳本共用。
      * 名稱對得上但尺寸/densityDpi 不同（腳本改了 `script.json`）時，resize 既有的那個，
      * 不銷毀重建——保留 displayId，正在依附它的 consumer 才不會斷線。
      */
