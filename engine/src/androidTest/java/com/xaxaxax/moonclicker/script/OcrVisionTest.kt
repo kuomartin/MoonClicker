@@ -74,6 +74,36 @@ class OcrVisionTest {
         )
     }
 
+    /**
+     * 命中框要蓋住整個字，不是只有字的中央。CTC 每個字只在中央亮一兩個時間步，直接拿來當
+     * 邊界的話，兩個字的 `OK` 會只剩約一個字寬——寬度比例是這條測試的鑑別力。
+     */
+    @Test
+    fun find_text_box_covers_the_whole_word() {
+        val displayId = stage(LINE)
+        val outcome = env.runScript(
+            displayId,
+            """
+            local hit = vision.wait({ text = "OK" }, 20000)
+            data.set("found", hit ~= nil)
+            if hit then data.set("x", hit.x); data.set("w", hit.w) end
+            """.trimIndent(),
+            ocr = ocr,
+        )
+
+        assertEquals(EngineRunState.Finished, outcome.runState)
+        if (outcome.data["found"] != true) env.assumeFramesHaveContent(displayId)
+        assertEquals(true, outcome.data["found"])
+        val drawn = word("OK")
+        val x = (outcome.data["x"] as Double).toInt()
+        val w = (outcome.data["w"] as Double).toInt()
+        val ratio = w.toDouble() / drawn.width()
+        assertTrue(
+            "OK was drawn $drawn (width ${drawn.width()}) but the hit box spans x=$x, w=$w (ratio ${"%.2f".format(ratio)})",
+            ratio in 0.75..1.35 && x < drawn.centerX() && x + w > drawn.centerX(),
+        )
+    }
+
     @Test
     fun read_returns_the_number_inside_a_roi() {
         val displayId = stage(LINE)
