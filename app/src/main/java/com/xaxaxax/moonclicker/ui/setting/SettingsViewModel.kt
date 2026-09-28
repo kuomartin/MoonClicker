@@ -237,8 +237,8 @@ class SettingsViewModel @Inject constructor(
         appSettings.setWorkbenchEnabled(enabled)
     }
 
-    /** 開發人員選項用：停掉後下一次用到服務時會啟動新的行程，等同重新啟動。 */
-    fun stopUserService() = shizukuManager.stopUserService()
+    /** 開發人員選項用：載入重新建置的服務。 */
+    fun restartUserService() = shizukuManager.restartUserService()
 
     fun getOpenShizukuIntent() = shizukuManager.getOpenShizukuIntent()
     fun requestShizukuPermission() = shizukuManager.requestPermission()
