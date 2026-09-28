@@ -30,7 +30,7 @@ export class RemoteScriptItem extends MoonClickerTreeItem {
 
 /**
  * 只列裝置上的腳本——沒有 local 分支了：點一個腳本會整份 pull 到本機隱藏鏡像資料夾再
- * 掛進 workspace（見 `extension.ts` 的 `openScriptCommand`／`vscode-local-mirror-plan.md`），
+ * 掛進 workspace（見 `extension.ts` 的 `openScriptCommand`），
  * VS Code 自己的 Explorer 接手顯示內容，這裡不用重複畫一份檔案樹。保留「Remote Scripts」這個根節點
  * （而不是直接把腳本攤平到樹的最上層），單純是為了讓 Open Mirror／Disconnect 這些跟
  * 「整條連線」有關的動作有地方掛 context menu。
