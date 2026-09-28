@@ -31,7 +31,9 @@ class H264EncoderSink(
 
         try {
             codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
-            val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, width, height).apply {
+            // H.264 encoder 普遍不收奇數寬高（例如 Qualcomm OMX 回 ERROR_UNSUPPORTED），向下取偶數；
+            // GlesDistributor 會把畫面縮放到 sink surface 的大小，差一像素不影響內容。
+            val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, width and 1.inv(), height and 1.inv()).apply {
                 setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
                 setInteger(MediaFormat.KEY_BIT_RATE, bitrate)
                 setInteger(MediaFormat.KEY_FRAME_RATE, frameRate)
@@ -41,7 +43,11 @@ class H264EncoderSink(
                 setInteger("max-bframes", 0) // Disable B-frames for real-time
                 setInteger("priority", 0)    // Real-time priority
                 setInteger("operating-rate", frameRate.toShort().toInt())
-                if (android.os.Build.VERSION.SDK_INT >= 30) {
+                // 不支援的 encoder（例如部分 Qualcomm OMX）遇到這個 key 會讓 configure() 直接 BAD_VALUE。
+                if (android.os.Build.VERSION.SDK_INT >= 30 &&
+                    codec.codecInfo.getCapabilitiesForType(MediaFormat.MIMETYPE_VIDEO_AVC)
+                        .isFeatureSupported(MediaCodecInfo.CodecCapabilities.FEATURE_LowLatency)
+                ) {
                     setInteger(MediaFormat.KEY_LOW_LATENCY, 1)
                 }
             }
@@ -97,6 +103,8 @@ class H264EncoderSink(
             }
         } catch (e: Exception) {
             Timber.e(e, "H264EncoderSink error")
+            // 讓 collector 收到失敗而結束；否則下面的 awaitClose 會永遠等下去，串流端只看到連線卻沒有畫面。
+            close(e)
         } finally {
             if (surfaceHandle >= 0) {
                 try {
