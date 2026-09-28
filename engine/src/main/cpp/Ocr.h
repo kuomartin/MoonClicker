@@ -13,8 +13,9 @@ struct OcrLine {
     float confidence = 0;  // CTC 解碼時每個輸出字元機率的平均
     cv::Rect box;
     /**
-     * `text` 每個 codepoint 的水平範圍 [x0, x1)，輸入影像座標；由 CTC 輸出該字元的時間步換算，
-     * 約準到正負一個字寬。直書（辨識前旋轉過）的行沒有這項資料，為空。
+     * `text` 每個 codepoint 的水平範圍 [x0, x1)，輸入影像座標。字的中心取自 CTC 輸出該字元的
+     * 時間步，邊界是相鄰兩字中心的中點（見 Ocr.cpp 的 widenSpans）。直書（辨識前旋轉過）的行
+     * 沒有這項資料，為空。
      */
     std::vector<std::pair<float, float>> spans;
 

@@ -81,6 +81,25 @@ std::vector<cv::Rect2f> dbPostprocess(const cv::Mat &prob) {
     return boxes;
 }
 
+/**
+ * CTC 的輸出很尖：每個字只在字形中央亮一兩個時間步，字與字之間都是 blank，所以解碼得到的
+ * 範圍只是字的中央。中心是可靠的，邊界改取相鄰兩字中心的中點；行首與行尾的字往外延伸半個
+ * 平均字距（只有一個字時用行高，字大致是方的）。
+ */
+void widenSpans(std::vector<std::pair<float, float>> &spans, float width, float height) {
+    if (spans.empty()) return;
+    std::vector<float> centers;
+    centers.reserve(spans.size());
+    for (const auto &span: spans) centers.push_back((span.first + span.second) / 2);
+    const size_t n = centers.size();
+    const float pitch = n > 1 ? (centers.back() - centers.front()) / static_cast<float>(n - 1) : height;
+    for (size_t i = 0; i < n; i++) {
+        float left = i > 0 ? (centers[i - 1] + centers[i]) / 2 : centers[i] - pitch / 2;
+        float right = i + 1 < n ? (centers[i] + centers[i + 1]) / 2 : centers[i] + pitch / 2;
+        spans[i] = {std::clamp(left, 0.f, width), std::clamp(right, 0.f, width)};
+    }
+}
+
 }  // namespace
 
 Ocr::Model Ocr::load(const std::string &path, int threads) {
@@ -165,6 +184,7 @@ OcrLine Ocr::recognizeCrop(const cv::Mat &crop) {
         previous = best;
     }
     line.confidence = count ? static_cast<float>(sum / count) : 0.f;
+    widenSpans(line.spans, static_cast<float>(crop.cols), static_cast<float>(crop.rows));
     return line;
 }
 

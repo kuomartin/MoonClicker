@@ -24,7 +24,34 @@ fun Route.visionRoutes(
     scriptsRoot: File,
     scriptRunner: ScriptRunner,
     fileChanges: MutableSharedFlow<ScriptFileChange>,
+    ocrAvailable: () -> Boolean,
 ) {
+    // OCR 測試：對虛擬顯示跑一次性的 vision.read／read_lines／find{text} 迴圈。狀態碼比照
+    // vision-test；OCR 未安裝回 412，面板直接提示到裝置設定頁下載，不必等腳本報錯。
+    post("/ocr-test") {
+        val request = runCatching { Json.decodeFromString<OcrTestRequest>(call.receiveText()) }.getOrNull()
+        if (request == null || !request.isValid) {
+            call.respondText(
+                "Invalid request body (read needs roi, find needs text)",
+                status = HttpStatusCode.BadRequest,
+            )
+            return@post
+        }
+        if (!ocrAvailable()) {
+            call.respondText(
+                "OCR is not installed: download it in Settings > Text recognition (OCR) on the device",
+                status = HttpStatusCode.PreconditionFailed,
+            )
+            return@post
+        }
+        if (scriptRunner.isRunning()) {
+            call.respondText("A script is already running", status = HttpStatusCode.Conflict)
+            return@post
+        }
+        scriptRunner.startOnDisplay(OcrTestScript.materialize(scriptsRoot, request), request.displayId)
+        call.respondText("Started", status = HttpStatusCode.Accepted)
+    }
+
     // 拿既有模板去對虛擬顯示做一次性 vision.find 迴圈（見 vision-test 合約）：{id} 只用來
     // 解出模板圖片的絕對路徑，實際執行的目標顯示器是 body 裡的 displayId，不是這份腳本的
     // script.json——所以不能走 scriptRunner.start(script)，得用 startOnDisplay。
