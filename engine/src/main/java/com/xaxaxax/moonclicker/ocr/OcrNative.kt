@@ -30,4 +30,10 @@ internal object OcrNative {
      * 給 androidTest 量準確率與延遲用；腳本走的是影格，不經過這裡。
      */
     external fun nativeReadImage(handle: Long, imagePath: String, roi: IntArray?, detect: Boolean): ByteArray
+
+    /**
+     * `vision.*` 的文字比對（`TextMatch.h`），回傳 `[相似度, 起點, 終點]`，起訖是 [line] 的 codepoint 索引。
+     * 給 androidTest 驗比對規則用；不需要 OCR 套件。
+     */
+    external fun nativeMatchText(target: String, line: String, exact: Boolean): DoubleArray
 }

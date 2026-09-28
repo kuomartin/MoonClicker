@@ -21,6 +21,8 @@ internal data class PuppetState(
     val markerRect: Rect? = null,
     /** [PuppetGlyph]（不對稱）被畫在哪裡。 */
     val glyphRect: Rect? = null,
+    /** [PuppetControl.text] 每個字實際畫在哪；沒畫文字時為空。 */
+    val wordRects: Map<String, Rect> = emptyMap(),
     val touches: List<PuppetRecorder.Touch> = emptyList(),
 )
 

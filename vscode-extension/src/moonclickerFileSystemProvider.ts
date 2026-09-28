@@ -13,7 +13,7 @@ import { FileChangeEvent, FileChangeEvent_Kind } from "./generated/workbench_str
 
 /**
  * `moonclicker://<address>/<scriptId>/<relative/path>` 直接對著裝置上的 Script Folder
- * 讀寫，取代整包 zip 的 pull/push（見 docs/plans/vscode-fsprovider-plan.md）。address 放
+ * 讀寫，取代整包 zip 的 pull/push。address 放
  * 在 authority 而不是外部狀態——一個 provider 實例天生就能服務多個裝置／多個已開啟的
  * virtual workspace folder，不用綁死「目前連線」這個全域假設。
  */

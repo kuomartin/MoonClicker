@@ -88,7 +88,8 @@ object ScriptArchive {
      * 跟 [import] 一樣把 zip 解開驗證，但目的地是**指定的既有 id**，整份覆蓋掉，不像
      * [import] 那樣在 id 衝突時退讓成 `-2`。這是 VS Code push 回裝置（見 #58）要的語意：
      * 「這就是這份腳本現在該有的內容」，不是「多一份新腳本」。不經過 `uniqueId` 撞號檢查——
-     * 那條檢查只守 [import] 這個入口，見 docs/plans 對這個已知缺口的記錄。
+     * 那條檢查只守 [import] 這個入口。這裡與 Workbench 的單檔寫入（`PUT .../files/script.json`）
+     * 都能寫進重複的 `uniqueId`，是已知缺口。
      */
     fun replace(input: InputStream, root: File, id: String): ImportResult {
         val safeId = sanitizeId(id)

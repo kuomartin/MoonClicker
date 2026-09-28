@@ -87,7 +87,7 @@ interface ScriptStream {
  * VS Code FileSystemProvider 的 `onDidChangeFile` 要推播的單一檔案變動。只涵蓋透過 HTTP
  * 單檔案 API 寫入的改動（self-write）——外部（檔案管理員、USB 接電腦）直接動到 Script
  * Folder 不會被偵測到：inotify／`FileObserver` 不遞迴，要涵蓋外部改動得對每個腳本資料夾
- * （與其子目錄）各自維護一個 watch，決定不做這件事（見 vscode-fsprovider-plan.md E3）。
+ * （與其子目錄）各自維護一個 watch，決定不做這件事。
  */
 enum class ScriptFileChangeKind { CREATED, CHANGED, DELETED }
 

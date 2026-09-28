@@ -4,7 +4,9 @@ import android.app.Activity
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
 import android.graphics.Rect
+import android.graphics.Typeface
 import android.os.Bundle
 import android.view.MotionEvent
 import android.view.View
@@ -49,6 +51,24 @@ class PuppetActivity : Activity() {
                 activity.markerView.postDelayed({
                     PuppetControl.markerVisible = marker
                     PuppetControl.glyphVisible = glyph
+                    activity.markerView.invalidate()
+                }, delayMs)
+            }
+        }
+
+        /** 立刻改變畫的文字；`null` 不畫。 */
+        fun setText(text: String?) {
+            PuppetControl.text = text
+            val activity = instance ?: return
+            activity.runOnUiThread { activity.markerView.invalidate() }
+        }
+
+        /** [delayMs] 之後才把文字畫出來，讓 `vision.wait{text=…}` 的等待真的被執行到。 */
+        fun showTextAfter(delayMs: Long, text: String) {
+            val activity = instance ?: return
+            activity.runOnUiThread {
+                activity.markerView.postDelayed({
+                    PuppetControl.text = text
                     activity.markerView.invalidate()
                 }, delayMs)
             }
@@ -114,8 +134,18 @@ class PuppetActivity : Activity() {
      * 「找到了」與「座標換算全錯但剛好對稱」看起來一模一樣。
      */
     private class MarkerView(context: Context) : View(context) {
+        private companion object {
+            /** 夠大才讓 OCR 穩定（研究中失準的多半是小字），又要讓 OCR 測試的整行放得進 720 寬的顯示器。 */
+            const val TEXT_SIZE = 48f
+        }
+
         private val marker = PuppetMarker.bitmap()
         private val glyph = PuppetGlyph.bitmap()
+        private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            textSize = TEXT_SIZE
+            typeface = Typeface.DEFAULT_BOLD
+        }
 
         override fun onDraw(canvas: Canvas) {
             canvas.drawColor(Color.DKGRAY)
@@ -140,10 +170,29 @@ class PuppetActivity : Activity() {
             if (PuppetControl.markerVisible) canvas.drawBitmap(marker, null, markerAt, null)
             if (PuppetControl.glyphVisible) canvas.drawBitmap(glyph, null, glyphAt, null)
 
+            // 文字放在左上，離標記與 glyph 都遠：OCR 測試框住文字的 roi 不該含到它們。
+            val words = mutableMapOf<String, Rect>()
+            PuppetControl.text?.let { text ->
+                val baseline = height / 8f
+                var x = width / 16f
+                val metrics = textPaint.fontMetrics
+                for (word in text.split(" ")) {
+                    val w = textPaint.measureText(word)
+                    if (word.isNotEmpty()) {
+                        canvas.drawText(word, x, baseline, textPaint)
+                        words[word] = Rect(
+                            x.toInt(), (baseline + metrics.ascent).toInt(),
+                            (x + w).toInt(), (baseline + metrics.descent).toInt(),
+                        )
+                    }
+                    x += w + textPaint.measureText(" ")
+                }
+            }
+
             // 即使這一輪沒畫也照樣發佈：矩形描述的是「會被畫在哪」，awaitReady 靠它判斷
             // 版面完成了沒。
             PuppetRecorder.update {
-                it.copy(contentSize = width to height, markerRect = markerAt, glyphRect = glyphAt)
+                it.copy(contentSize = width to height, markerRect = markerAt, glyphRect = glyphAt, wordRects = words)
             }
         }
     }

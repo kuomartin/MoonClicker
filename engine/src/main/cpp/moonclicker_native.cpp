@@ -10,6 +10,7 @@
 #include "GlesDistributor.h"
 #include "Ocr.h"
 #include "ScriptRuntime.h"
+#include "TextMatch.h"
 
 /**
  * 一次只跑一個腳本。這不是偷懶——UI 也是以「執行中的那一個」來表達的
@@ -107,7 +108,9 @@ Java_com_xaxaxax_moonclicker_lua_LuaNative_nativeStart(
         jint surfaceWidth,
         jint surfaceHeight,
         jint initialRotation,
-        jstring scriptDir) {
+        jstring scriptDir,
+        jstring ocrPackDir,
+        jint ocrThreads) {
     std::lock_guard<std::mutex> lock(gRuntimeMutex);
     if (gRuntime != nullptr) {
         LOGE("nativeStart rejected: a script is already running");
@@ -121,7 +124,7 @@ Java_com_xaxaxax_moonclicker_lua_LuaNative_nativeStart(
 
     auto *runtime = new ScriptRuntime(env, host, service);
     if (!runtime->start(displayId, isPhysical, withVision, surfaceWidth, surfaceHeight, initialRotation,
-                        dirCopy)) {
+                        dirCopy, toString(env, ocrPackDir), ocrThreads)) {
         delete runtime;
         return JNI_FALSE;
     }
@@ -217,6 +220,16 @@ Java_com_xaxaxax_moonclicker_ocr_OcrNative_nativeReadImage(JNIEnv *env, jobject 
         throwIllegalState(env, e.what());
         return nullptr;
     }
+}
+
+JNIEXPORT jdoubleArray JNICALL
+Java_com_xaxaxax_moonclicker_ocr_OcrNative_nativeMatchText(JNIEnv *env, jobject thiz, jstring target,
+                                                           jstring line, jboolean exact) {
+    TextMatch match = matchText(toString(env, target), toString(env, line), exact);
+    jdouble values[] = {match.similarity, static_cast<jdouble>(match.start), static_cast<jdouble>(match.end)};
+    jdoubleArray result = env->NewDoubleArray(3);
+    env->SetDoubleArrayRegion(result, 0, 3, values);
+    return result;
 }
 
 }

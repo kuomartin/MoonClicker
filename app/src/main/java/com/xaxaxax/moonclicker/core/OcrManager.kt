@@ -5,6 +5,7 @@ import com.xaxaxax.moonclicker.ocr.OcrCalibration
 import com.xaxaxax.moonclicker.ocr.OcrCalibrator
 import com.xaxaxax.moonclicker.ocr.OcrPackInstaller
 import com.xaxaxax.moonclicker.ocr.OcrPackState
+import com.xaxaxax.moonclicker.ocr.OcrRuntime
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -47,6 +48,9 @@ class OcrManager @Inject constructor(
         get() = appSettings.ocrThreads.value.takeIf { it > 0 }
             ?: appSettings.ocrCalibratedThreads.value.takeIf { it > 0 }
             ?: DEFAULT_THREADS
+
+    /** 給腳本執行用的設定；未安裝回傳 `null`。 */
+    fun runtime(): OcrRuntime? = installer.installedDir?.let { OcrRuntime(it, effectiveThreads) }
 
     fun download() {
         if (download?.isActive == true) return
