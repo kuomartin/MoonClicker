@@ -45,12 +45,15 @@ function screen.stop_mirror() end
 --- 限制搜尋範圍（邏輯座標）。接受具名欄位 `{ x = .., y = .., w = .., h = .. }` 或陣列 `{ x, y, w, h }`。
 ---@alias moonclicker.VisionRoi moonclicker.VisionRoiRect | [integer, integer, integer, integer] | integer[]
 
+--- `image` 與 `text` 擇一。
 ---@class moonclicker.VisionRequest
----@field image string 必填，相對腳本資料夾的圖片路徑（也接受絕對路徑）
----@field threshold number? 選填，預設 0.8（`TM_CCOEFF_NORMED`）
----@field scale number? 選填，`0 < scale <= 1`，比對前把影格與模板一起縮小；不是拿來配不同大小的目標
----@field gray boolean? 選填，轉灰階後比對，預設 false
----@field roi moonclicker.VisionRoi? 選填，限制搜尋範圍（邏輯座標）
+---@field image string? 相對腳本資料夾的圖片路徑（也接受絕對路徑）
+---@field text string? 要找的文字；需要先在設定頁下載 OCR 元件
+---@field threshold number? 選填，預設 0.8；模板是 `TM_CCOEFF_NORMED` 分數，文字是 Levenshtein 相似度
+---@field scale number? 選填，只用於 image，`0 < scale <= 1`，比對前把影格與模板一起縮小；不是拿來配不同大小的目標
+---@field gray boolean? 選填，只用於 image，轉灰階後比對，預設 false
+---@field exact boolean? 選填，只用於 text，與整行比對而不是找子字串，預設 false；`123` 預設會命中 `1234`
+---@field roi moonclicker.VisionRoi? 選填，限制搜尋範圍（邏輯座標）；文字請求強烈建議給，整張辨識很慢
 
 ---@class moonclicker.VisionHit
 ---@field x number 外框左上角 x
@@ -59,7 +62,19 @@ function screen.stop_mirror() end
 ---@field h number 外框高
 ---@field cx number 中心點 x，餵給 `input.tap`
 ---@field cy number 中心點 y，餵給 `input.tap`
----@field confidence number 比對信心度
+---@field confidence number 與要找的東西有多像（0～1）：模板是比對分數，文字是相似度；`threshold` 比較的就是它
+---@field text string? 只有文字請求才有：命中的那一整行
+
+--- `vision.read`／`read_lines` 的一行辨識結果。
+---@class moonclicker.TextLine
+---@field text string 辨識出的文字
+---@field confidence number OCR 對這段文字的信心度（0～1），不是相似度
+---@field x number 外框左上角 x
+---@field y number 外框左上角 y
+---@field w number 外框寬
+---@field h number 外框高
+---@field cx number 中心點 x
+---@field cy number 中心點 y
 
 ---@class moonclicker.Vision
 vision = {}
@@ -91,6 +106,16 @@ function vision.wait(request, timeout_ms, step_ms) end
 ---@return integer? index 1-based 索引，逾時為 `nil`
 ---@return moonclicker.VisionHit? hit 命中結果，逾時為 `nil`
 function vision.wait_any(requests, timeout_ms, step_ms) end
+
+--- 把 `roi` 當成單一文字行直接辨識（不經偵測），讀數值用；辨識不出任何字回傳 `nil`。只看最新影格，不等待。
+---@param roi moonclicker.VisionRoi 要讀的區域（邏輯座標），框緊一點，避免把邊框讀成字
+---@return moonclicker.TextLine? line
+function vision.read(roi) end
+
+--- 偵測 `roi`（省略為整張）內的每一行後逐行辨識，依由上而下、由左而右排序；沒有字回傳空陣列。比 `read` 慢。
+---@param roi moonclicker.VisionRoi? 要讀的區域（邏輯座標）
+---@return moonclicker.TextLine[] lines
+function vision.read_lines(roi) end
 
 ---@alias moonclicker.InputPoints (number[])|(number[][]) 攤平的 `{x1,y1,x2,y2,...}` 或巢狀的 `{{x1,y1},{x2,y2},...}`
 

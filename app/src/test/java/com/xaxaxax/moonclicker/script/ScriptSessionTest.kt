@@ -4,6 +4,7 @@ import com.xaxaxax.moonclicker.IMoonClickerService
 import com.xaxaxax.moonclicker.MoonClickerDisplayInfo
 import com.xaxaxax.moonclicker.core.AppSettings
 import com.xaxaxax.moonclicker.core.DisplayConfig
+import com.xaxaxax.moonclicker.core.OcrManager
 import com.xaxaxax.moonclicker.notification.ScriptStatusNotifier
 import com.xaxaxax.moonclicker.shizuku.ShizukuManager
 import io.mockk.every
@@ -53,6 +54,7 @@ class ScriptSessionTest {
         shizukuManager = mockk(relaxed = true),
         notifier = mockk<ScriptStatusNotifier>(relaxed = true),
         settings = mockk<AppSettings>(relaxed = true),
+        ocrManager = mockk<OcrManager>(relaxed = true),
     )
 
     private fun info(id: Int, name: String, width: Int, height: Int, densityDpi: Int) =

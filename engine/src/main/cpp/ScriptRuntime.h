@@ -2,6 +2,7 @@
 #define MOONCLICKER_SCRIPT_RUNTIME_H
 
 #include "LuaEngine.h"
+#include "Ocr.h"
 #include "NativeImageReader.h"
 #include "VisionMatcher.h"
 
@@ -58,9 +59,12 @@ public:
      * @param surfaceWidth  顯示器**建立時**的尺寸（surface 空間），不是旋轉後的邏輯尺寸。
      * @param initialRotation 啟動當下的 rotation，在腳本執行緒起跑前就設好。
      * @param scriptDir     腳本資料夾，必須以 '/' 結尾，內含 main.lua。
+     * @param ocrPackDir    OCR 套件目錄；空字串表示未安裝或不支援，腳本用到 OCR 時報錯。
+     * @param ocrThreads    OCR 的執行緒數（校準或使用者設定的值）。
      */
     bool start(int displayId, bool isPhysical, bool withVision, int surfaceWidth, int surfaceHeight,
-               int initialRotation, const std::string &scriptDir);
+               int initialRotation, const std::string &scriptDir, const std::string &ocrPackDir,
+               int ocrThreads);
 
     /** 要求停止並等執行緒結束。可重入。 */
     void stop();
@@ -78,6 +82,12 @@ public:
     VisionMatcher &vision() { return *visionMatcher; }
 
     bool hasVision() const { return visionEnabled; }
+
+    /**
+     * 腳本第一次用到 OCR 時才載入（A21s 約 0.6 秒），腳本結束時釋放。
+     * @return 失敗時為 null，原因寫進 [error]。
+     */
+    Ocr *ocr(std::string &error);
 
     bool isPhysicalDisplay() const { return isPhysical; }
 
@@ -109,6 +119,9 @@ private:
     std::unique_ptr<LuaEngine> luaEngine;
     std::unique_ptr<NativeImageReader> imageReader;
     std::unique_ptr<VisionMatcher> visionMatcher;
+    std::unique_ptr<Ocr> ocrEngine;
+    std::string ocrPackDir;
+    int ocrThreads = 4;
 
     JavaVM *javaVM = nullptr;
     JNIEnv *luaEnv = nullptr;     // 只在 Lua 執行緒上有效

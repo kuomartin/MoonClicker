@@ -12,6 +12,14 @@ struct OcrLine {
     std::string text;
     float confidence = 0;  // CTC 解碼時每個輸出字元機率的平均
     cv::Rect box;
+    /**
+     * `text` 每個 codepoint 的水平範圍 [x0, x1)，輸入影像座標；由 CTC 輸出該字元的時間步換算，
+     * 約準到正負一個字寬。直書（辨識前旋轉過）的行沒有這項資料，為空。
+     */
+    std::vector<std::pair<float, float>> spans;
+
+    /** codepoint 範圍 [start, end) 在影像中的框；沒有 spans 時回傳整行的框。 */
+    cv::Rect spanBox(int start, int end) const;
 };
 
 /** 一次呼叫各階段的耗時，給延遲量測用。 */
@@ -65,6 +73,7 @@ private:
     /** 推論一次：輸入 NCHW float blob（N=1），輸出複製成 N 維 float Mat。 */
     static cv::Mat run(Model &model, const cv::Mat &blob);
 
+    /** 辨識一行；spans 是 [crop] 的座標。 */
     OcrLine recognizeCrop(const cv::Mat &crop);
 
     Model det;

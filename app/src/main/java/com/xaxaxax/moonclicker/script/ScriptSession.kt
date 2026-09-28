@@ -8,6 +8,7 @@ import com.xaxaxax.moonclicker.engine.ScriptRun
 import com.xaxaxax.moonclicker.engine.state.EngineRunState
 import com.xaxaxax.moonclicker.engine.state.EngineStateRepository
 import com.xaxaxax.moonclicker.core.AppSettings
+import com.xaxaxax.moonclicker.core.OcrManager
 import com.xaxaxax.moonclicker.core.DisplayConfig
 import com.xaxaxax.moonclicker.notification.ScriptStatusNotifier
 import com.xaxaxax.moonclicker.ui.displaydetail.FullscreenDisplayActivity
@@ -57,6 +58,7 @@ class ScriptSession @Inject constructor(
     private val shizukuManager: ShizukuManager,
     private val notifier: ScriptStatusNotifier,
     private val settings: AppSettings,
+    private val ocrManager: OcrManager,
 ) {
     private data class RunInfo(val script: Script, val displayId: Int)
 
@@ -136,6 +138,7 @@ class ScriptSession @Inject constructor(
                         scriptDir = script.dir,
                         displayId = displayId,
                         hasVision = target.hasVision,
+                        ocr = ocrManager.runtime(),
                     ),
                     onNotify = { title, text -> notifier.showScriptMessage(title, text) },
                     onOpenUri = ::openUri,
@@ -177,7 +180,7 @@ class ScriptSession @Inject constructor(
      *
      * [ScriptTarget.NewVirtual] 會先照 [DisplayConfig.name]（腳本的 `uniqueId`）找現有虛擬顯示
      * 再沿用——腳本存的是「要一個屬於自己、長這樣的顯示器」，不是某個必然會過期的 id，
-     * 也不該跟另一個剛好同尺寸的腳本共用（見 docs/plans/virtual-display-identity-by-uniqueid-plan.md）。
+     * 也不該跟另一個剛好同尺寸的腳本共用。
      * 名稱對得上但尺寸/densityDpi 不同（腳本改了 `script.json`）時，resize 既有的那個，
      * 不銷毀重建——保留 displayId，正在依附它的 consumer 才不會斷線。
      */

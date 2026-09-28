@@ -1,6 +1,5 @@
 package com.xaxaxax.moonclicker.ocr
 
-import android.os.ParcelFileDescriptor
 import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -18,16 +17,7 @@ import java.text.Normalizer
  * OCR 在裝置上的準確率與延遲，對照 `docs/research/ocr-engine-selection.md` 的選型量測。
  *
  * 樣本是選型研究用的 16 張 2400×1080 遊戲截圖，不進 repo；標準答案在 androidTest assets。
- * 套件與樣本要先手動推到 `/data/local/tmp/ocr/`，沒有就跳過：
- *
- * ```
- * adb shell mkdir -p /data/local/tmp/ocr
- * adb push ocr-pack-<abi>.zip /data/local/tmp/ocr/
- * adb push <樣本目錄> /data/local/tmp/ocr/samples
- * ```
- *
- * app 讀不到 `/data/local/tmp`，測試以 shell 身分（`UiAutomation.executeShellCommand`）讀出來
- * 複製到自己的 cache。推到 app 的外部檔案目錄行不通：shell 建立的子目錄 app 沒有權限進入。
+ * 套件與樣本的推送方式見 [OcrTestPack]，沒有就跳過。
  *
  * 準確率有斷言（不得低於研究的 72/79 行、26/28 讀數）；延遲只印在 logcat（tag `OcrAccuracyTest`），
  * 因為它取決於機型，要人和研究的表對照。
@@ -39,20 +29,12 @@ class OcrAccuracyTest {
 
     @Test
     fun accuracy_and_latency_match_the_engine_selection_research() = runBlocking {
-        val pack = OcrPack.forThisProcess()
-        assumeTrue("no OCR pack for ${OcrPack.processAbi()}", pack != null)
-        val zip = copyFromShell("$SHELL_DIR/ocr-pack-${pack!!.abi}.zip")
-        assumeTrue("push ocr-pack-${pack.abi}.zip into $SHELL_DIR to run this test", zip != null)
-        val sampleNames = shell("ls $SHELL_DIR/samples").lines().map { it.trim() }.filter { it.endsWith(".png") }.toSet()
-        assumeTrue("push the samples into $SHELL_DIR/samples to run this test", sampleNames.isNotEmpty())
+        val packDir = OcrTestPack.install()
+        assumeTrue("push ocr-pack-<abi>.zip into ${OcrTestPack.SHELL_DIR} to run this test", packDir != null)
+        val sampleNames = OcrTestPack.sampleNames()
+        assumeTrue("push the samples into ${OcrTestPack.SHELL_DIR}/samples to run this test", sampleNames.isNotEmpty())
 
-        val installer = OcrPackInstaller(File(context.filesDir, "ocr"), context.cacheDir, pack, OcrPack.processAbi())
-        installer.installFromZip(zip!!)
-        val state = installer.state.value
-        assertTrue("installing $zip failed: $state", state is OcrPackState.Installed)
-        val packDir = (state as OcrPackState.Installed).dir
-
-        val calibration = OcrCalibrator.measure(packDir)
+        val calibration = OcrCalibrator.measure(packDir!!)
         val threads = OcrCalibrator.fastest(calibration)!!
         log("calibration ${calibration.joinToString { "${it.threads}=${"%.0f".format(it.millis)}ms" }} -> $threads threads")
 
@@ -70,7 +52,7 @@ class OcrAccuracyTest {
             for (name in truth.keys()) {
                 if (name.startsWith("_")) continue
                 assumeTrue("missing sample $name", name in sampleNames)
-                val image = copyFromShell("$SHELL_DIR/samples/$name")!!
+                val image = OcrTestPack.copyFromShell("${OcrTestPack.SHELL_DIR}/samples/$name")!!
                 val expected = truth.getJSONObject(name)
 
                 val full = read(handle, image, roi = null, detect = true)
@@ -110,29 +92,8 @@ class OcrAccuracyTest {
         }
     }
 
-    /** 以 shell 身分執行指令並回傳 stdout。 */
-    private fun shell(command: String): String =
-        ParcelFileDescriptor.AutoCloseInputStream(
-            InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand(command)
-        ).use { it.readBytes().toString(Charsets.UTF_8) }
-
-    /** 以 shell 身分讀出 [path] 複製到 cache；檔案不存在回傳 `null`。 */
-    private fun copyFromShell(path: String): File? {
-        if (shell("ls $path").trim() != path) return null
-        val target = File(context.cacheDir, "ocr-test/${path.substringAfterLast('/')}")
-        target.parentFile!!.mkdirs()
-        ParcelFileDescriptor.AutoCloseInputStream(
-            InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand("cat $path")
-        ).use { input -> target.outputStream().use { input.copyTo(it) } }
-        return target
-    }
-
     private fun read(handle: Long, image: File, roi: IntArray?, detect: Boolean) =
         JSONObject(String(OcrNative.nativeReadImage(handle, image.absolutePath, roi, detect), Charsets.UTF_8))
-
-    private companion object {
-        const val SHELL_DIR = "/data/local/tmp/ocr"
-    }
 
     private fun log(message: String) {
         Log.i("OcrAccuracyTest", message)

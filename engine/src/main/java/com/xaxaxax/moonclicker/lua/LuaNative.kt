@@ -27,6 +27,8 @@ internal object LuaNative {
      * @param initialRotation 啟動當下的 rotation，純粹是給 Lua `screen.rotation` 讀的中繼資料，
      *   不影響任何座標換算——影格已經是邏輯空間。
      * @param scriptDir 腳本資料夾，內含 main.lua。
+     * @param ocrPackDir OCR 套件目錄；空字串表示未安裝或不支援。OCR 在腳本第一次用到時才載入。
+     * @param ocrThreads OCR 的執行緒數。
      */
     external fun nativeStart(
         host: ScriptHost,
@@ -38,6 +40,8 @@ internal object LuaNative {
         surfaceHeight: Int,
         initialRotation: Int,
         scriptDir: String,
+        ocrPackDir: String,
+        ocrThreads: Int,
     ): Boolean
 
     external fun nativeStop()

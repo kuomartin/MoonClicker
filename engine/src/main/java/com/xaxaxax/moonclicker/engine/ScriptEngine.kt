@@ -4,6 +4,7 @@ import android.content.Context
 import com.xaxaxax.moonclicker.IMoonClickerService
 import com.xaxaxax.moonclicker.engine.state.EngineStateRepository
 import com.xaxaxax.moonclicker.lua.LuaNative
+import com.xaxaxax.moonclicker.ocr.OcrRuntime
 import com.xaxaxax.moonclicker.script.ScriptHost
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -28,6 +29,8 @@ data class ScriptRun(
      * 實體螢幕必須是 false——那時 `vision.*` 會在 Lua 端明確報錯。
      */
     val hasVision: Boolean,
+    /** 已安裝的 OCR 套件；`null` 表示未安裝或不支援，腳本用到 OCR 時報錯。 */
+    val ocr: OcrRuntime? = null,
 )
 
 /**
@@ -125,6 +128,8 @@ object ScriptEngine {
             // 純粹給 Lua screen.rotation 讀的中繼資料，不影響任何座標換算，見 nativeStart 的文件。
             rotation,
             run.scriptDir.absolutePath,
+            run.ocr?.packDir?.absolutePath.orEmpty(),
+            run.ocr?.threads ?: 0,
         )
         if (!started) {
             host = null
