@@ -47,16 +47,16 @@ fun DeveloperOptionsScreen(
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    // 停止會連帶銷毀虛擬顯示，值得先問一句。
-    var confirmStop by remember { mutableStateOf(false) }
+    // 重啟會連帶銷毀虛擬顯示，值得先問一句。
+    var confirmRestart by remember { mutableStateOf(false) }
 
-    if (confirmStop) {
-        StopUserServiceDialog(
+    if (confirmRestart) {
+        RestartUserServiceDialog(
             onConfirm = {
-                confirmStop = false
-                viewModel.stopUserService()
+                confirmRestart = false
+                viewModel.restartUserService()
             },
-            onDismiss = { confirmStop = false },
+            onDismiss = { confirmRestart = false },
         )
     }
 
@@ -115,7 +115,7 @@ fun DeveloperOptionsScreen(
                 Section(name = stringResource(R.string.developer_options_user_service)) {
                     UserServiceRow(
                         uiState = uiState,
-                        onRequestStop = { confirmStop = true },
+                        onRequestRestart = { confirmRestart = true },
                     )
                 }
             }
@@ -261,7 +261,7 @@ private fun WorkbenchTokensRow(
 @Composable
 private fun UserServiceRow(
     uiState: SettingsUiState,
-    onRequestStop: () -> Unit,
+    onRequestRestart: () -> Unit,
 ) {
     val statusText = stringResource(
         when (uiState.shizukuStatus) {
@@ -282,10 +282,10 @@ private fun UserServiceRow(
         ) {
             Text(text = statusText, style = MaterialTheme.typography.bodyLarge)
             OutlinedButton(
-                onClick = onRequestStop,
+                onClick = onRequestRestart,
                 enabled = uiState.canStopUserService,
             ) {
-                Text(stringResource(R.string.settings_user_service_stop))
+                Text(stringResource(R.string.settings_user_service_restart))
             }
         }
         Text(
@@ -300,14 +300,14 @@ private fun UserServiceRow(
 }
 
 @Composable
-private fun StopUserServiceDialog(
+private fun RestartUserServiceDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.settings_user_service_stop_title)) },
-        text = { Text(stringResource(R.string.settings_user_service_stop_message)) },
+        title = { Text(stringResource(R.string.settings_user_service_restart_title)) },
+        text = { Text(stringResource(R.string.settings_user_service_restart_message)) },
         confirmButton = {
             TextButton(onClick = onConfirm) {
                 Text(stringResource(R.string.settings_user_service_confirm))

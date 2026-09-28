@@ -35,6 +35,9 @@ import kotlin.time.Duration.Companion.seconds
 /** 放棄等待 bind 的時限，逾時後狀態退回 [ShizukuConnectionStatus.DISCONNECTED]。 */
 val BIND_TIMEOUT = 10.seconds
 
+/** 重啟時等舊行程退場的時限。 */
+private val STOP_TIMEOUT = 5.seconds
+
 /**
  * Shizuku 的可用程度：一條階梯，後面的必然蘊含前面的。
  *
@@ -198,6 +201,23 @@ class ShizukuManager(private val context: Context) {
             Shizuku.unbindUserService(serviceArgs, serviceConnection, true)
         } catch (e: Exception) {
             Timber.e(e, "Failed to stop UserService")
+        }
+    }
+
+    /**
+     * 停止後立即啟動新行程，用來載入重新建置的服務：debug build 沿用同一個 versionCode 時
+     * Shizuku 不會自己重載。副作用同 [stopUserService]。
+     *
+     * 不能只停止等租約帶它起來：呼叫端在 App 前景，前景租約一直持有，租約數沒有變化就不會觸發啟動。
+     */
+    fun restartUserService() {
+        scope.launch {
+            stopUserService()
+            // 等舊行程真的退場再啟動，否則新的請求可能接到還沒死透的那一個。
+            // first 回傳的元素本身就是 null，不補一個非 null 的值會跟逾時分不出來。
+            withTimeoutOrNull(STOP_TIMEOUT) { serviceFlow.first { it == null }; Unit }
+                ?: Timber.w("Timed out waiting for MoonClickerService to stop")
+            startUserService()
         }
     }
 
