@@ -51,10 +51,15 @@ export class MirrorConnection {
       }
     });
 
-    ws.on("close", () => {
+    ws.on("close", (code, reason) => {
       if (this.ws !== ws) return;
-      this.setState({ status: "disconnected" });
       this.ws = undefined;
+      // 裝置端主動以非正常代碼關閉（例如 encoder 啟動失敗）時帶著原因，要讓使用者看到而不是只顯示「已停止」。
+      if (code !== 1000 && code !== 1005 && reason.length > 0) {
+        this.setState({ status: "error", address, displayId, message: reason.toString() });
+      } else {
+        this.setState({ status: "disconnected" });
+      }
     });
 
     ws.on("error", (err) => {
