@@ -69,18 +69,33 @@
   </div>
 </section>
 
-<!-- ========== 3 測試模板（模板清單來自裝置；ROI 拖曳為真實互動；比對結果為裝置端 vision.find 實際回報） ========== -->
+<!-- ========== 3 測試模板與文字（模板清單來自裝置；ROI 拖曳為真實互動；結果為裝置端 vision.find／vision.read 實際回報） ========== -->
 <section id="panel-test" class="modePanel" hidden>
   <div class="subToolbar">
-    <span>腳本</span>
-    <select id="testScriptSelect"></select>
+    <span>目標</span>
+    <select id="testTargetSelect">
+      <option value="template">模板</option>
+      <option value="read">文字 · 讀取單行</option>
+      <option value="read_lines">文字 · 讀取多行</option>
+      <option value="find">文字 · 找文字</option>
+    </select>
     <div class="vDivider"></div>
-    <span>模板</span>
-    <select id="testTemplateSelect"></select>
-    <div class="vDivider"></div>
-    <span>閾值</span>
-    <input id="testThreshold" type="range" min="0" max="100" value="85" />
-    <span id="testThresholdVal">0.85</span>
+    <span id="testTemplateControls">
+      <span>腳本</span>
+      <select id="testScriptSelect"></select>
+      <span>模板</span>
+      <select id="testTemplateSelect"></select>
+    </span>
+    <span id="testTextControls" hidden>
+      <span>文字</span>
+      <input id="testTextInput" type="text" placeholder="要找的文字" style="width: 110px;" />
+      <label><input id="testExactCheckbox" type="checkbox" /> 整行比對</label>
+    </span>
+    <span id="testThresholdControls">
+      <span>閾值</span>
+      <input id="testThreshold" type="range" min="0" max="100" value="85" />
+      <span id="testThresholdVal">0.85</span>
+    </span>
     <div class="vDivider"></div>
     <span>間隔</span>
     <input id="testIntervalInput" type="number" min="50" max="5000" step="50" value="300" style="width: 62px;" />

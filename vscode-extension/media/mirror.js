@@ -211,6 +211,9 @@
       if (currentMode === "test" && testRunning && Object.prototype.hasOwnProperty.call(data, "visionTest")) {
         renderVisionTestResult(data.visionTest);
       }
+      if (currentMode === "test" && testRunning && Object.prototype.hasOwnProperty.call(data, "ocrTest")) {
+        renderOcrTestResult(data.ocrTest);
+      }
     }
   }
 
@@ -248,6 +251,58 @@
       testMatchIcon.textContent = "✕";
       testMatchIcon.className = "matchIcon miss";
       lastHitBox = null;
+    }
+    if (currentMode === "test" && !testRoiCanvas.hidden) drawRoiOverlay();
+  }
+
+  // 裝置端 `data.set("ocrTest", ...)` 回報的結果（見 OcrTestScript.kt）。跟 visionTest 一樣是
+  // JSON 字串；空陣列在 Lua 端會被序列化成 {}，所以 lines 不是陣列時當成沒有字。
+  function renderOcrTestResult(v) {
+    if (typeof v === "string") {
+      try {
+        v = JSON.parse(v);
+      } catch {
+        return;
+      }
+    }
+    if (!v || typeof v !== "object") return;
+    if (v.started) {
+      testMatchText.textContent = "辨識中…（第一次會先載入 OCR）";
+      return;
+    }
+    const now = Date.now();
+    if (lastOcrResultAt) testLatency.textContent = "更新間隔 " + (now - lastOcrResultAt) + " ms";
+    lastOcrResultAt = now;
+
+    const isBox = (b) => b && ["x", "y", "w", "h"].every((k) => typeof b[k] === "number");
+    if (testTarget() === "find") {
+      lastOcrLines = [];
+      if (v.hit) {
+        const similarity = typeof v.confidence === "number" ? v.confidence.toFixed(2) : "?";
+        testMatchText.textContent = "命中 · 相似度 " + similarity + "\n整行：" + (v.line || "");
+        testMatchIcon.textContent = "✓";
+        testMatchIcon.className = "matchIcon hit";
+        lastHitBox = isBox(v) ? { x: v.x, y: v.y, w: v.w, h: v.h, confidence: v.confidence } : null;
+      } else {
+        testMatchText.textContent = "未命中";
+        testMatchIcon.textContent = "✕";
+        testMatchIcon.className = "matchIcon miss";
+        lastHitBox = null;
+      }
+    } else {
+      lastHitBox = null;
+      lastOcrLines = Array.isArray(v.lines) ? v.lines.filter(isBox) : [];
+      if (lastOcrLines.length === 0) {
+        testMatchText.textContent = "沒有辨識出文字";
+        testMatchIcon.textContent = "✕";
+        testMatchIcon.className = "matchIcon miss";
+      } else {
+        testMatchText.textContent = lastOcrLines
+          .map((l) => l.text + "（" + (typeof l.confidence === "number" ? l.confidence.toFixed(2) : "?") + "）")
+          .join("\n");
+        testMatchIcon.textContent = "✓";
+        testMatchIcon.className = "matchIcon hit";
+      }
     }
     if (currentMode === "test" && !testRoiCanvas.hidden) drawRoiOverlay();
   }
@@ -361,6 +416,7 @@
         setTestStatusPill("running");
         testLatency.textContent = "輪詢間隔 " + currentIntervalMs() + " ms";
         testMatchText.textContent = "等待結果…";
+        lastOcrResultAt = 0;
         updateRoiCanvasVisibility();
       } else {
         testRunning = false;
@@ -864,6 +920,12 @@
   // 模板來源是 deviceTemplates（跟「2 · 建立模板」共用，見該區塊開頭的說明），選了
   // 哪個腳本就拉那個腳本的清單
   // ==================================================================
+  const testTargetSelect = document.getElementById("testTargetSelect");
+  const testTemplateControls = document.getElementById("testTemplateControls");
+  const testTextControls = document.getElementById("testTextControls");
+  const testTextInput = document.getElementById("testTextInput");
+  const testExactCheckbox = document.getElementById("testExactCheckbox");
+  const testThresholdControls = document.getElementById("testThresholdControls");
   const testScriptSelect = document.getElementById("testScriptSelect");
   const testTemplateSelect = document.getElementById("testTemplateSelect");
   const testThreshold = document.getElementById("testThreshold");
@@ -886,10 +948,23 @@
   let testPending = false; // start/stop RPC 進行中
   let testRestartTimer = null;
   let lastHitBox = null; // 裝置回報的命中區域（邏輯座標 {x,y,w,h,confidence}），畫在 testRoiCanvas 上
+  let lastOcrLines = []; // vision.read／read_lines 回報的每一行（邏輯座標 {text,confidence,x,y,w,h}）
+  let lastOcrResultAt = 0; // 上一次收到 OCR 結果的時間，用來顯示更新間隔
+  // OCR 每輪本身要等辨識完成，間隔是辨識完之後再睡的時間，預設比模板長。
+  const DEFAULT_INTERVAL_MS = { template: 300, ocr: 500 };
+
+  /** "template" 或 OCR 模式（"read"／"read_lines"／"find"，對應裝置端 /ocr-test 的 mode）。 */
+  function testTarget() {
+    return testTargetSelect.value;
+  }
+
+  function isOcrTarget() {
+    return testTarget() !== "template";
+  }
 
   function currentIntervalMs() {
     const v = parseInt(testIntervalInput.value, 10);
-    return Number.isFinite(v) && v > 0 ? v : 300;
+    return Number.isFinite(v) && v > 0 ? v : DEFAULT_INTERVAL_MS[isOcrTarget() ? "ocr" : "template"];
   }
 
   let roiEditing = false;
@@ -931,6 +1006,32 @@
     updateSnippet();
   }
 
+  testTargetSelect.addEventListener("change", () => {
+    const ocr = isOcrTarget();
+    testTemplateControls.hidden = ocr;
+    testTextControls.hidden = testTarget() !== "find";
+    // 讀取沒有「要找的東西」，門檻只對模板與找文字有意義。
+    testThresholdControls.hidden = testTarget() === "read" || testTarget() === "read_lines";
+    // 間隔還是另一種目標的預設值時跟著換；使用者改過就不動。
+    const other = DEFAULT_INTERVAL_MS[ocr ? "template" : "ocr"];
+    if (parseInt(testIntervalInput.value, 10) === other) {
+      testIntervalInput.value = String(DEFAULT_INTERVAL_MS[ocr ? "ocr" : "template"]);
+    }
+    resetTestMatchUi();
+    updateSnippet();
+    scheduleTestRestartIfRunning();
+  });
+
+  testTextInput.addEventListener("input", () => {
+    updateSnippet();
+    scheduleTestRestartIfRunning();
+  });
+
+  testExactCheckbox.addEventListener("change", () => {
+    updateSnippet();
+    scheduleTestRestartIfRunning();
+  });
+
   testScriptSelect.addEventListener("change", () => {
     requestTemplatesFor(testScriptSelect.value);
     renderTestTemplateOptions();
@@ -959,7 +1060,13 @@
     testMatchIcon.textContent = "?";
     testMatchIcon.className = "matchIcon";
     lastHitBox = null;
+    lastOcrLines = [];
+    lastOcrResultAt = 0;
     if (currentMode === "test" && !testRoiCanvas.hidden) drawRoiOverlay();
+    if (isOcrTarget()) {
+      testMatchText.textContent = testRunning ? "等待結果…" : "尚未開始測試";
+      return;
+    }
     const t = currentTestTemplate();
     if (!t) {
       testMatchText.textContent = "尚無模板可比對";
@@ -978,7 +1085,51 @@
   }
 
   // 對應真正的 Lua API（見 docs/lua-api.md 的 `vision` / `input`），不是隨便編的介面。
+  function luaRoi(roi) {
+    return "{ x = " + roi.x + ", y = " + roi.y + ", w = " + roi.w + ", h = " + roi.h + " }";
+  }
+
+  function luaString(text) {
+    return JSON.stringify(text); // Lua 的雙引號字串跳脫規則對一般文字與 JSON 相容
+  }
+
+  function ocrSnippet() {
+    const roi = calculateTestRoi();
+    const threshold = (testThreshold.value / 100).toFixed(2);
+    switch (testTarget()) {
+      case "read":
+        return (
+          "local line = vision.read(" + luaRoi(roi || { x: 96, y: 420, w: 130, h: 40 }) + ")\n" +
+          "if line then\n" +
+          "  log(line.text, line.confidence)\n" +
+          "end"
+        );
+      case "read_lines":
+        return (
+          "for _, line in ipairs(vision.read_lines(" + (roi ? luaRoi(roi) : "") + ")) do\n" +
+          "  log(line.text, line.confidence)\n" +
+          "end"
+        );
+      default:
+        return (
+          "local hit = vision.wait({\n" +
+          "  text = " + luaString(testTextInput.value || "開始") + ",\n" +
+          (testExactCheckbox.checked ? "  exact = true,\n" : "") +
+          (roi ? "  roi = " + luaRoi(roi) + ",\n" : "") +
+          "  threshold = " + threshold + ",\n" +
+          "}, 10000)\n" +
+          "if hit then\n" +
+          "  input.tap(hit.cx, hit.cy)\n" +
+          "end"
+        );
+    }
+  }
+
   function updateSnippet() {
+    if (isOcrTarget()) {
+      testSnippet.textContent = ocrSnippet();
+      return;
+    }
     const roi = calculateTestRoi() || { x: 96, y: 420, w: 130, h: 40 };
     const name = currentTestTemplateName();
     const threshold = (testThreshold.value / 100).toFixed(2);
@@ -1051,7 +1202,41 @@
     }
   }
 
+  function requestStartOcrTest() {
+    if (currentDisplayId === null) {
+      setTestStatusPill("error", "尚未選擇顯示器");
+      return;
+    }
+    const mode = testTarget();
+    const roi = calculateTestRoi();
+    if (mode === "read" && !roi) {
+      setTestStatusPill("error", "讀取單行需要 ROI：先按「調整 ROI」框出要讀的那一行");
+      return;
+    }
+    if (mode === "find" && !testTextInput.value) {
+      setTestStatusPill("error", "請輸入要找的文字");
+      return;
+    }
+    testPending = true;
+    updateTestStartStopBtn();
+    setTestStatusPill("starting");
+    vscode?.postMessage({
+      type: "startOcrTest",
+      displayId: currentDisplayId,
+      mode,
+      roi,
+      text: testTextInput.value,
+      exact: testExactCheckbox.checked,
+      threshold: testThreshold.value / 100,
+      intervalMs: currentIntervalMs(),
+    });
+  }
+
   function requestStartVisionTest() {
+    if (isOcrTarget()) {
+      requestStartOcrTest();
+      return;
+    }
     const t = currentTestTemplate();
     if (!t) {
       setTestStatusPill("error", "尚無模板可測試");
@@ -1267,6 +1452,24 @@
           testCtx.strokeRect(hx - 4, hy - 4, 8, 8);
         }
       }
+    }
+    for (const line of lastOcrLines) {
+      const lr = logicalToCanvasRect(line);
+      if (!lr) continue;
+      testCtx.strokeStyle = "#d29922";
+      testCtx.lineWidth = 2;
+      testCtx.strokeRect(lr.left, lr.top, lr.right - lr.left, lr.bottom - lr.top);
+      const label = line.text + " " + (typeof line.confidence === "number" ? line.confidence.toFixed(2) : "");
+      testCtx.font = "11px -apple-system, BlinkMacSystemFont, sans-serif";
+      const labelW = testCtx.measureText(label).width + 10;
+      const labelH = 16;
+      // 貼左上角，框太靠近 canvas 頂端時往框內塞。
+      const ly = lr.top - labelH - 2 >= 0 ? lr.top - labelH - 2 : lr.top + 2;
+      testCtx.fillStyle = "#1e1e1e";
+      testCtx.fillRect(lr.left, ly, labelW, labelH);
+      testCtx.fillStyle = "#d29922";
+      testCtx.textBaseline = "middle";
+      testCtx.fillText(label, lr.left + 5, ly + labelH / 2 + 1);
     }
     if (lastHitBox) {
       const hr = logicalToCanvasRect(lastHitBox);
