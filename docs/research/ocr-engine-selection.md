@@ -1,6 +1,6 @@
 # OCR 引擎選型
 
-對應計畫 `docs/plans/ocr-engine-spike-plan.md`。文中引用的量測程式（`tools/ocr-spike/`、`engine/src/main/cpp/OcrSpike.cpp`、`NativeOcrSpikeTest`、`MlKitOcrSpikeTest`）只存在於 `spike/ocr-engine` 分支，不進 master。已完成電腦端、Pixel 7a（Tensor G2）、Galaxy Note20 Ultra（Snapdragon 865）與 Galaxy A21s（低階，Exynos 850）。
+文中引用的量測程式（`tools/ocr-spike/`、`engine/src/main/cpp/OcrSpike.cpp`、`NativeOcrSpikeTest`、`MlKitOcrSpikeTest`）只存在於 `spike/ocr-engine` 分支，不進 master。已完成電腦端、Pixel 7a（Tensor G2）、Galaxy Note20 Ultra（Snapdragon 865）與 Galaxy A21s（低階，Exynos 850）。
 
 ## 結論
 
