@@ -77,6 +77,7 @@ fun Route.displayRoutes(displaySource: DisplaySource, shizukuManager: ShizukuMan
                 }
             } catch (e: Exception) {
                 Timber.e(e, "H264 WebSocket error")
+                close(CloseReason(CloseReason.Codes.INTERNAL_ERROR, "H.264 encoder failed: ${e.message ?: e.javaClass.simpleName}"))
             }
         }
     }
