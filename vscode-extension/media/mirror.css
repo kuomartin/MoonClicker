@@ -331,6 +331,8 @@ input:focus, select:focus { outline: 1px solid var(--vscode-focusBorder); }
   border-left: 1px solid var(--vscode-panel-border);
 }
 #testMatchResult { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+/* OCR 結果一行一個，換行要照原樣顯示。 */
+#testMatchText { white-space: pre-line; }
 .matchIcon { color: var(--vscode-descriptionForeground); font-weight: bold; }
 .matchIcon.hit { color: var(--moon-success); }
 .matchIcon.miss { color: var(--vscode-errorForeground); }
