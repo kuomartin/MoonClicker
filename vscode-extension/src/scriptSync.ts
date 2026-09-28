@@ -26,7 +26,7 @@ export class ScriptHttpError extends Error {
 }
 
 /**
- * 裝置端 Script Folder 同步的純邏輯（見 #58、vscode-local-mirror-plan.md），不依賴 vscode
+ * 裝置端 Script Folder 同步的純邏輯（見 #58），不依賴 vscode
  * API——單元測試對著一個本機起的假 HTTP server 跑，`scriptMirror.ts` 拿這層去驅動本機
  * 鏡像資料夾的背景同步。
  */

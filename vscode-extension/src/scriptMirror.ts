@@ -7,7 +7,11 @@ export function sha256Hex(content: Uint8Array | Buffer): string {
   return createHash("sha256").update(content).digest("hex");
 }
 
-/** `context.globalStorageUri.fsPath` 底下這顆腳本的隱藏鏡像資料夾路徑（見 vscode-local-mirror-plan.md）。 */
+/**
+ * `context.globalStorageUri.fsPath` 底下這顆腳本的隱藏鏡像資料夾路徑。腳本鏡像到本機磁碟而不是
+ * 直接開 `moonclicker:` virtual scheme：LuaLS 是原生行程、直接 `io.open` 磁碟路徑，讀不到
+ * virtual scheme，型別提示就會失效。
+ */
 export function mirrorDir(globalStorageDir: string, address: string, scriptId: string): string {
   const safeAddress = address.replace(/[^a-zA-Z0-9.-]/g, "_");
   return path.join(globalStorageDir, "mirrors", safeAddress, scriptId);
