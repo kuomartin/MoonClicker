@@ -180,6 +180,15 @@ app = {}
 ---@return boolean ok 是否成功發送啟動請求
 function app.launch(package_name) end
 
+---@class moonclicker.AppTask
+---@field package string task 根 activity 的套件名稱
+---@field display_id integer task 所在的顯示器
+
+--- 列出所有顯示器上有 task 的 app，與目標顯示器無關。同一 app 在同一顯示器只列一筆；不過濾 launcher 等系統元件；不保證順序。
+--- 查詢失敗時拋錯；空表代表確實沒有 app 在執行。
+---@return moonclicker.AppTask[] tasks
+function app.list() end
+
 ---@class moonclicker.Device
 device = {}
 

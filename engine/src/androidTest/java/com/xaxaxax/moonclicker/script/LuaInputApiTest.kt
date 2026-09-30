@@ -150,4 +150,35 @@ class LuaInputApiTest {
         )
         assertEquals(true, outcome.data["ok"])
     }
+
+    @Test
+    fun app_list_returns_every_display_regardless_of_the_target() = withRunner { runner ->
+        runner.recorded.appTasks = listOf("com.example.game" to 7, "com.android.launcher" to 0)
+        val outcome = runner.run(
+            """
+            local apps = app.list()
+            data.set("count", #apps)
+            data.set("first", apps[1].package .. "@" .. apps[1].display_id)
+            data.set("second", apps[2].package .. "@" .. apps[2].display_id)
+            data.set("integer", math.type(apps[1].display_id))
+            """.trimIndent()
+        )
+
+        assertEquals(EngineRunState.Finished, outcome.runState)
+        assertEquals(2.0, outcome.data["count"])
+        assertEquals("com.example.game@7", outcome.data["first"])
+        assertEquals("com.android.launcher@0", outcome.data["second"])
+        assertEquals("integer", outcome.data["integer"])
+    }
+
+    /** 空表代表「沒有 app 在跑」，所以查詢失敗不能也回空表。 */
+    @Test
+    fun app_list_raises_when_the_service_cannot_answer() = withRunner { runner ->
+        runner.recorded.appTasks = null
+        val outcome = runner.run("app.list()")
+
+        val error = outcome.error
+        assertTrue("expected an Error, got ${outcome.runState}", error != null)
+        assertTrue("unhelpful message: $error", error!!.contains("app.list"))
+    }
 }
