@@ -31,11 +31,18 @@ struct HostMethods {
     jmethodID pointerUp = nullptr;  // (I)Z
     jmethodID key = nullptr;        // (I)Z
     jmethodID launch = nullptr;     // (Ljava/lang/String;)Z
+    jmethodID listApps = nullptr;   // ()[Lcom/xaxaxax/moonclicker/MoonClickerAppTask;
     jmethodID notify = nullptr;     // (Ljava/lang/String;Ljava/lang/String;)V
     jmethodID openUri = nullptr;    // (Ljava/lang/String;)V
     jmethodID setData = nullptr;    // (Ljava/lang/String;Ljava/lang/Object;)V
     jmethodID onEvent = nullptr;    // (ILjava/lang/String;)V
     jmethodID log = nullptr;        // (Ljava/lang/String;)V
+};
+
+/** MoonClickerAppTask（AIDL parcelable）的欄位。 */
+struct AppTaskFields {
+    jfieldID packageName = nullptr;  // Ljava/lang/String;
+    jfieldID displayId = nullptr;    // I
 };
 
 /**
@@ -78,6 +85,8 @@ public:
     jobject hostObject() const { return hostObj; }
 
     const HostMethods &host() const { return hostMethods; }
+
+    const AppTaskFields &appTaskFields() const { return appTask; }
 
     VisionMatcher &vision() { return *visionMatcher; }
 
@@ -128,6 +137,7 @@ private:
     jobject hostObj = nullptr;
     jobject serviceObj = nullptr;
     HostMethods hostMethods;
+    AppTaskFields appTask;
 
     jclass doubleClass = nullptr;
     jmethodID doubleConstructor = nullptr;

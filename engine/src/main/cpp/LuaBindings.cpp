@@ -629,6 +629,37 @@ int lua_app_launch(lua_State *L) {
     return 1;
 }
 
+int lua_app_list(lua_State *L) {
+    ScriptRuntime *runtime = self(L);
+    JNIEnv *env = runtime->env();
+    if (env == nullptr) return luaL_error(L, "app.list: no JNI environment");
+
+    auto tasks = (jobjectArray) env->CallObjectMethod(runtime->hostObject(), runtime->host().listApps);
+    if (tasks == nullptr) return luaL_error(L, "app.list: could not query running apps");
+
+    const AppTaskFields &fields = runtime->appTaskFields();
+    jsize count = env->GetArrayLength(tasks);
+    lua_createtable(L, count, 0);
+    for (jsize i = 0; i < count; i++) {
+        jobject task = env->GetObjectArrayElement(tasks, i);
+        auto jPackage = (jstring) env->GetObjectField(task, fields.packageName);
+        const char *package = env->GetStringUTFChars(jPackage, nullptr);
+
+        lua_createtable(L, 0, 2);
+        lua_pushstring(L, package);
+        lua_setfield(L, -2, "package");
+        lua_pushinteger(L, env->GetIntField(task, fields.displayId));
+        lua_setfield(L, -2, "display_id");
+        lua_rawseti(L, -2, static_cast<lua_Integer>(i + 1));
+
+        env->ReleaseStringUTFChars(jPackage, package);
+        env->DeleteLocalRef(jPackage);
+        env->DeleteLocalRef(task);
+    }
+    env->DeleteLocalRef(tasks);
+    return 1;
+}
+
 int lua_device_notify(lua_State *L) {
     ScriptRuntime *runtime = self(L);
     const char *title = luaL_checkstring(L, 1);
@@ -710,6 +741,7 @@ const luaL_Reg kInput[] = {
 
 const luaL_Reg kApp[] = {
         {"launch", lua_app_launch},
+        {"list",   lua_app_list},
         {nullptr, nullptr},
 };
 

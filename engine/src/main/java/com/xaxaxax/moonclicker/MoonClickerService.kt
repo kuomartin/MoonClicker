@@ -13,6 +13,7 @@ import com.xaxaxax.moonclicker.service.InputInjector
 import com.xaxaxax.moonclicker.service.LauncherAppsCache
 import com.xaxaxax.moonclicker.service.PermissionGrants
 import com.xaxaxax.moonclicker.service.PlatformHandles
+import com.xaxaxax.moonclicker.service.TaskQuery
 import com.xaxaxax.moonclicker.service.VirtualDisplayLifecycle
 import org.lsposed.hiddenapibypass.LSPass
 import timber.log.Timber
@@ -72,6 +73,7 @@ class MoonClickerService @JvmOverloads constructor(
         platformHandles.appOpsManagerHidden,
     )
     private val displayQuery = DisplayQuery(platformHandles.displayManager, virtualDisplayLifecycle, displayMirroring)
+    private val taskQuery = TaskQuery()
 
     // launcherAppsCache 的建構本身有副作用（重掃套件、API 35+ 註冊套件變動回呼），得排在
     // LSPass exemption 生效之後，所以放進 init 區塊，不跟上面幾個模組一起在宣告時建構。
@@ -83,7 +85,7 @@ class MoonClickerService @JvmOverloads constructor(
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             LSPass.addHiddenApiExemptions(
-                "Landroid/app/ActivityManager",        // ActivityLauncher
+                "Landroid/app/ActivityManager",        // ActivityLauncher, TaskQuery
                 "Landroid/app/ActivityOptions",         // ActivityLauncher
                 "Landroid/app/ActivityTaskManager",     // ActivityLauncher
                 "Landroid/app/AppOpsManager",            // PermissionGrants
@@ -160,6 +162,8 @@ class MoonClickerService @JvmOverloads constructor(
     override fun getLauncherApps(): List<String> = launcherAppsCache.getLauncherApps()
 
     override fun refreshLauncherApps(): List<String> = launcherAppsCache.refreshLauncherApps()
+
+    override fun getAppTasks(): Array<MoonClickerAppTask> = taskQuery.getAppTasks()
 
     override fun multiTouchSwipe(pointerId: Int, displayId: Int, points: IntArray, duration: Long, keep: Boolean) =
         inputInjector.multiTouchSwipe(pointerId, displayId, points, duration, keep)
