@@ -12,7 +12,7 @@ internal sealed interface Member {
 
 /**
  * @param parameters source-form type names, e.g. `"int"`, `"java.lang.String"`,
- *   `"android.app.ActivityManager\$RunningTaskInfo"`.
+ *   `"android.app.ActivityManager\$RunningTaskInfo"`, `"java.lang.String[]"`.
  * @param returns source-form return type, or null to leave the return type unchecked —
  *   use null where the framework's generic signature is not something we depend on.
  */

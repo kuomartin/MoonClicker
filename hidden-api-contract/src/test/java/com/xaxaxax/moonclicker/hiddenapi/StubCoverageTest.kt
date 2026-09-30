@@ -127,6 +127,7 @@ class StubCoverageTest {
 
         /** What `@RefineAs` turns a stub type name into; unregistered names pass through. */
         fun platformName(type: Class<*>): String {
+            type.componentType?.let { return platformName(it) + "[]" }
             val name = type.name
             refines[name]?.let { return it }
             return refines.entries

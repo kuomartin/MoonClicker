@@ -46,4 +46,9 @@ public interface IActivityManager {
 
     @DeprecatedSinceApi(api = Build.VERSION_CODES.P)
     List<ActivityManager.RunningTaskInfo> getTasks(int maxNum, int flags);
+
+    // RunningTaskInfo has no displayId before API 29; only stacks say which display they are on.
+    // The platform kept it through API 30 (apiMatrix) and removed it by API 31.
+    @DeprecatedSinceApi(api = Build.VERSION_CODES.S)
+    List<ActivityManager$StackInfo> getAllStackInfos();
 }
