@@ -64,5 +64,12 @@ internal val I_ACTIVITY_MANAGER = StubContracts(
             ),
             untilApi = Build.VERSION_CODES.O_MR1,
         ),
+        MemberContract(
+            owner = "android.app.IActivityManager",
+            member = MethodMember(name = "getAllStackInfos", returns = "java.util.List"),
+            untilApi = Build.VERSION_CODES.R,
+            note = "Used by production on API 27–28 only; the platform kept it through API 30 " +
+                "(apiMatrix) and removed it by API 31.",
+        ),
     ),
 )

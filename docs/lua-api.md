@@ -163,6 +163,20 @@ end
 
 * **`app.launch(package_name)` -> `boolean`**
   在目標顯示器啟動指定 Package Name 之 App。成功送出啟動請求回傳 `true`。
+* **`app.list()` -> `table`**
+  列出所有顯示器上正在執行的 App，與目標顯示器無關。回傳陣列，每筆為 `{ package = "com.example.game", display_id = 2 }`。
+  * 「正在執行」指該 App 在某個顯示器上有 task；只有背景 service、沒有畫面的 process 不列入。
+  * `package` 取 task 的根 activity：App 在自己的 task 裡開啟其他 App 的畫面（分享、瀏覽器）時，仍算原本的 App。
+  * 同一個 App 在同一顯示器上有多個 task 只列一筆；在多個顯示器上則各列一筆。
+  * 不過濾系統元件：主螢幕會列出 launcher，也可能列出 SystemUI 等。
+  * 不保證順序。
+  * 查詢失敗（UserService 異常）時拋錯；回傳空表代表確實沒有 App 在執行。
+
+```lua
+for _, task in ipairs(app.list()) do
+    log(task.package, task.display_id)
+end
+```
 
 ---
 

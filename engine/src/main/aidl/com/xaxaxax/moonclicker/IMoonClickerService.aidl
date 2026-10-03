@@ -2,6 +2,7 @@ package com.xaxaxax.moonclicker;
 
 import android.view.MotionEvent;
 import android.view.KeyEvent;
+import com.xaxaxax.moonclicker.MoonClickerAppTask;
 import com.xaxaxax.moonclicker.MoonClickerDisplayInfo;
 
 interface IMoonClickerService {
@@ -54,6 +55,12 @@ interface IMoonClickerService {
     List<String> getLauncherApps() = 107;
     /** 強制重新查一次 PackageManager 並更新快取，回傳結果同 [getLauncherApps]。手動刷新用。 */
     List<String> refreshLauncherApps() = 305;
+
+    /**
+     * 所有顯示器上有 task 的 app，每個 (package, displayId) 一筆，不保證順序。
+     * 只有 service、沒有 activity 的 process 不在任何顯示器上，不列入。
+     */
+    MoonClickerAppTask[] getAppTasks() = 306;
 
     /**
      * points: flattened [x1, y1, x2, y2, ...]

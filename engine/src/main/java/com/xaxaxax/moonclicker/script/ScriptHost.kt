@@ -2,6 +2,7 @@ package com.xaxaxax.moonclicker.script
 
 import androidx.annotation.Keep
 import com.xaxaxax.moonclicker.IMoonClickerService
+import com.xaxaxax.moonclicker.MoonClickerAppTask
 import com.xaxaxax.moonclicker.engine.state.EngineStateRepository
 import timber.log.Timber
 
@@ -85,6 +86,15 @@ internal class ScriptHost(
     } catch (t: Throwable) {
         Timber.e(t, "launch($packageName) failed")
         false
+    }
+
+    /** null 代表列不出來（UserService 異常），由 native 端轉成 Lua error；空陣列是真的沒有 app。 */
+    @Keep
+    fun listApps(): Array<MoonClickerAppTask>? = try {
+        service.appTasks
+    } catch (t: Throwable) {
+        Timber.e(t, "listApps failed")
+        null
     }
 
     @Keep
