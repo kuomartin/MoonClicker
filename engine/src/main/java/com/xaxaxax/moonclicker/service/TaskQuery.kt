@@ -4,6 +4,7 @@ import android.app.ActivityManagerHidden
 import android.app.RunningTaskInfoHidden
 import android.content.ComponentName
 import android.os.Build
+import androidx.annotation.RequiresApi
 import com.xaxaxax.moonclicker.MoonClickerAppTask
 import dev.rikka.tools.refine.Refine
 
@@ -26,6 +27,7 @@ internal class TaskQuery {
     }
 
     /** 單參數的 getTasks 在 API 29+ 轉給 ActivityTaskManager，涵蓋所有顯示器。 */
+    @RequiresApi(Build.VERSION_CODES.Q)
     private fun fromTasks(): List<Pair<String, Int>> =
         ActivityManagerHidden.getService().getTasks(Int.MAX_VALUE).mapNotNull { task ->
             val packageName = task.baseActivity?.packageName ?: return@mapNotNull null
