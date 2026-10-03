@@ -12,6 +12,7 @@ import android.view.Display
 import android.view.DisplayHidden
 import android.view.DisplayInfo
 import android.view.Surface
+import androidx.annotation.ChecksSdkIntAtLeast
 import com.xaxaxax.moonclicker.MoonClickerService
 import dev.rikka.tools.refine.Refine
 import java.util.concurrent.ConcurrentHashMap
@@ -202,7 +203,8 @@ internal class VirtualDisplayLifecycle(
         }
     }
 
-    /** [sleepVirtualDisplay] 會不會接受：UI 據此決定要不要給「關電源」。 */
+    /** [sleepVirtualDisplay] 會不會接受：UI 據此決定要不要給「關電源」。回 true 蘊含 API 34+，標註讓 lint 認得這個守衛。 */
+    @ChecksSdkIntAtLeast(api = Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
     fun canSleep(displayId: Int): Boolean =
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && ownsDisplayGroup(displayId)
 
