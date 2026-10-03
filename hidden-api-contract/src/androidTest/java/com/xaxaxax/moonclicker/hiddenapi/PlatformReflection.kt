@@ -53,7 +53,12 @@ internal object PlatformReflection {
         }
 
     /** A parameter/return type by source name, or null when this API level lacks it. */
-    fun typeOrNull(name: String): Class<*>? = PRIMITIVES[name] ?: classOrNull(name)
+    fun typeOrNull(name: String): Class<*>? =
+        if (name.endsWith("[]")) {
+            typeOrNull(name.removeSuffix("[]"))?.let { java.lang.reflect.Array.newInstance(it, 0).javaClass }
+        } else {
+            PRIMITIVES[name] ?: classOrNull(name)
+        }
 
     /**
      * Methods are searched across the whole hierarchy: the framework routinely pulls a member

@@ -4,6 +4,7 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.Surface
 import com.xaxaxax.moonclicker.IMoonClickerService
+import com.xaxaxax.moonclicker.MoonClickerAppTask
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
@@ -68,6 +69,19 @@ internal class RecordingMoonClickerService(
     override fun launchInDisplay(packageName: String, displayId: Int): Boolean {
         calls += Launch(packageName, displayId)
         return true
+    }
+
+    /** `app.list()` 的來源；null 模擬服務端查詢失敗。 */
+    var appTasks: List<Pair<String, Int>>? = emptyList()
+
+    override fun getAppTasks(): Array<MoonClickerAppTask> {
+        val tasks = appTasks ?: throw IllegalStateException("getAppTasks failed")
+        return tasks.map { (packageName, displayId) ->
+            MoonClickerAppTask().apply {
+                this.packageName = packageName
+                this.displayId = displayId
+            }
+        }.toTypedArray()
     }
 
     override fun getDisplaySurfaceSize(displayId: Int): IntArray = size

@@ -13,6 +13,8 @@ ScriptRuntime::ScriptRuntime(JNIEnv *env, jobject host, jobject service) {
     hostMethods.pointerUp = env->GetMethodID(hostClass, "pointerUp", "(I)Z");
     hostMethods.key = env->GetMethodID(hostClass, "key", "(I)Z");
     hostMethods.launch = env->GetMethodID(hostClass, "launch", "(Ljava/lang/String;)Z");
+    hostMethods.listApps = env->GetMethodID(hostClass, "listApps",
+                                            "()[Lcom/xaxaxax/moonclicker/MoonClickerAppTask;");
     hostMethods.notify = env->GetMethodID(hostClass, "notify",
                                           "(Ljava/lang/String;Ljava/lang/String;)V");
     hostMethods.openUri = env->GetMethodID(hostClass, "openUri", "(Ljava/lang/String;)V");
@@ -20,6 +22,12 @@ ScriptRuntime::ScriptRuntime(JNIEnv *env, jobject host, jobject service) {
                                            "(Ljava/lang/String;Ljava/lang/Object;)V");
     hostMethods.onEvent = env->GetMethodID(hostClass, "onEngineEvent", "(ILjava/lang/String;)V");
     hostMethods.log = env->GetMethodID(hostClass, "log", "(Ljava/lang/String;)V");
+
+    // 在呼叫端（有 app class loader 的 Java 執行緒）解析；Lua 執行緒是 attach 進來的，FindClass 找不到 app 的類別。
+    jclass appTaskClass = env->FindClass("com/xaxaxax/moonclicker/MoonClickerAppTask");
+    appTask.packageName = env->GetFieldID(appTaskClass, "packageName", "Ljava/lang/String;");
+    appTask.displayId = env->GetFieldID(appTaskClass, "displayId", "I");
+    env->DeleteLocalRef(appTaskClass);
 
     jclass serviceClass = env->GetObjectClass(serviceObj);
     addSurfaceMethodId = env->GetMethodID(serviceClass, "addVirtualDisplaySurface",
