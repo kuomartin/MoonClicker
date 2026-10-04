@@ -37,7 +37,7 @@ main.lua → LuaBindings.cpp（參數解析、座標攤平）
 
 第一個管道是關鍵：**新增一個 Lua API 不需要新的測試管線**，讓腳本 `data.set` 出來就好。
 
-涵蓋範圍：`input.*` 全部、`app.launch`、`app.list` 的回傳格式與失敗時報錯、`device.*`、`data.set` 的每種型別、`screen.*`
+涵蓋範圍：`input.*` 全部、`app.launch`、`app.list` 的回傳格式與失敗時報錯、`app.mute` 的參數與必填的 `muted`、`device.*`、`data.set` 的每種型別、`screen.*`
 （含旋轉時的長寬互換）、`require`、錯誤與 traceback、停止語意、`vision.*` 請求的參數檢查（含文字請求，`LuaOcrApiTest`）。
 文字比對規則本身（`TextMatch.h`）由 `OcrTextMatchTest` 經 JNI 直接驗，不需要 OCR 套件。
 
@@ -62,6 +62,7 @@ duration 插值。所以 Tier 0 能說「引擎送出了什麼」，不能說「
 | `InputCoordinatesTest` | 三個方向下，注入的觸控落在瞄準的位置 |
 | `OcrVisionTest` | 文字請求點到行內的那個字、`read` 讀出 ROI 的數字、`read_lines`、`wait` 等到延後出現的文字、未安裝 OCR 的錯誤；需要 OCR 套件（推送方式見 `OcrTestPack`），沒有就跳過 |
 | `LuaAppApiTest` | `app.list()` 列出 puppet 所在的虛擬顯示，目標是該顯示器或主螢幕時結果相同 |
+| `AppMutingTest` | `app.mute` 對測試 APK 自己：package 層 mode 讀回 deny／ignore、焦點請求被拒，解除後回到原值；重複靜音、未安裝的 package、行程停止與異常結束後的還原 |
 | `VisionWaitTest` | `vision.wait`／`wait_any` 的等待語意與 `step_ms`、`find_any` 的 index |
 | `VirtualDisplayIdleDeadlockTest` | issue #6：注入的輸入喚醒睡著的 own display group |
 

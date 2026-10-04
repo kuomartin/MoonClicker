@@ -189,6 +189,13 @@ function app.launch(package_name) end
 ---@return moonclicker.AppTask[] tasks
 function app.list() end
 
+--- 讓 app 不出聲、不搶音訊焦點；`muted = false` 時還原。與目標顯示器無關，整個 app 都會靜音（主螢幕也是）。
+--- 狀態由 UserService 持有：腳本結束仍維持，直到解除或 UserService 停止。已取得的音訊焦點不會被收回，要在 `app.launch` 之前呼叫。
+---@param package_name string 應用程式套件名稱（Package Name）
+---@param muted boolean 是否靜音（必填）
+---@return boolean ok app 未安裝或系統拒絕設定時為 false
+function app.mute(package_name, muted) end
+
 ---@class moonclicker.Device
 device = {}
 

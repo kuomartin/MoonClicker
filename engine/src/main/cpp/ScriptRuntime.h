@@ -32,6 +32,7 @@ struct HostMethods {
     jmethodID key = nullptr;        // (I)Z
     jmethodID launch = nullptr;     // (Ljava/lang/String;)Z
     jmethodID listApps = nullptr;   // ()[Lcom/xaxaxax/moonclicker/MoonClickerAppTask;
+    jmethodID mute = nullptr;       // (Ljava/lang/String;Z)Z
     jmethodID notify = nullptr;     // (Ljava/lang/String;Ljava/lang/String;)V
     jmethodID openUri = nullptr;    // (Ljava/lang/String;)V
     jmethodID setData = nullptr;    // (Ljava/lang/String;Ljava/lang/Object;)V
