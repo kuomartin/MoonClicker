@@ -181,7 +181,8 @@ app = {}
 function app.launch(package_name) end
 
 ---@class moonclicker.AppTask
----@field package string task 根 activity 的套件名稱
+-- `package` 也是 LuaLS 的可見性修飾字，不先寫 `public` 會被吃掉，欄位名變成 `string`。
+---@field public package string task 根 activity 的套件名稱
 ---@field display_id integer task 所在的顯示器
 
 --- 列出所有顯示器上有 task 的 app，與目標顯示器無關。同一 app 在同一顯示器只列一筆；不過濾 launcher 等系統元件；不保證順序。
