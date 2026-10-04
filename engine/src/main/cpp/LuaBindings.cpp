@@ -597,6 +597,39 @@ int lua_input_key(lua_State *L) {
     return 1;
 }
 
+/**
+ * 整串先檢查完才注入：含不支援的字元時拋錯，一個字都不打。允許的集合就是 VIRTUAL_KEYBOARD
+ * 的 KeyCharacterMap 對得到的部分；UTF-8 的多 byte 字元每個 byte 都 ≥ 0x80，會在第一個 byte 被擋下。
+ */
+int lua_input_text(lua_State *L) {
+    ScriptRuntime *runtime = self(L);
+    size_t length = 0;
+    const char *text = luaL_checklstring(L, 1, &length);
+    requireInput(L, runtime);
+    for (size_t i = 0; i < length; ++i) {
+        auto c = static_cast<unsigned char>(text[i]);
+        if ((c < 0x20 || c > 0x7E) && c != '\n' && c != '\t') {
+            return luaL_error(L, "input.text: unsupported character at position %d (0x%02X); "
+                                 "only printable ASCII, \\n and \\t are supported",
+                              static_cast<int>(i + 1), c);
+        }
+    }
+    if (length == 0) {
+        lua_pushboolean(L, true);
+        return 1;
+    }
+    JNIEnv *env = runtime->env();
+    if (env == nullptr) {
+        lua_pushboolean(L, false);
+        return 1;
+    }
+    jstring jText = env->NewStringUTF(text);
+    jboolean ok = env->CallBooleanMethod(runtime->hostObject(), runtime->host().text, jText);
+    env->DeleteLocalRef(jText);
+    lua_pushboolean(L, ok);
+    return 1;
+}
+
 int lua_input_back(lua_State *L) {
     lua_pushboolean(L, callKey(L, self(L), AKEYCODE_BACK));
     return 1;
@@ -751,6 +784,7 @@ const luaL_Reg kInput[] = {
         {"move",        lua_input_move},
         {"up",          lua_input_up},
         {"key",         lua_input_key},
+        {"text",        lua_input_text},
         {"back",        lua_input_back},
         {"home",        lua_input_home},
         {"recents",     lua_input_recents},

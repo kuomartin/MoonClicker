@@ -12,6 +12,7 @@ ScriptRuntime::ScriptRuntime(JNIEnv *env, jobject host, jobject service) {
     hostMethods.swipe = env->GetMethodID(hostClass, "swipe", "(I[IJZ)Z");
     hostMethods.pointerUp = env->GetMethodID(hostClass, "pointerUp", "(I)Z");
     hostMethods.key = env->GetMethodID(hostClass, "key", "(I)Z");
+    hostMethods.text = env->GetMethodID(hostClass, "text", "(Ljava/lang/String;)Z");
     hostMethods.launch = env->GetMethodID(hostClass, "launch", "(Ljava/lang/String;)Z");
     hostMethods.listApps = env->GetMethodID(hostClass, "listApps",
                                             "()[Lcom/xaxaxax/moonclicker/MoonClickerAppTask;");

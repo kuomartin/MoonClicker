@@ -38,7 +38,7 @@ internal class RecordingMoonClickerService(
         val keep: Boolean,
     ) : Call
 
-    data class Key(val keyCode: Int, val action: Int, val displayId: Int) : Call
+    data class Key(val keyCode: Int, val action: Int, val displayId: Int, val metaState: Int) : Call
 
     data class Launch(val packageName: String, val displayId: Int) : Call
 
@@ -49,6 +49,8 @@ internal class RecordingMoonClickerService(
     val swipes: List<Swipe> get() = calls.filterIsInstance<Swipe>()
     val launches: List<Launch> get() = calls.filterIsInstance<Launch>()
     val mutes: List<Mute> get() = calls.filterIsInstance<Mute>()
+
+    val keys: List<Key> get() = calls.filterIsInstance<Key>()
 
     /** 只看 ACTION_DOWN——`ScriptHost.key` 每個按鍵都送 down + up 一對。 */
     val keyDowns: List<Key>
@@ -65,7 +67,7 @@ internal class RecordingMoonClickerService(
     }
 
     override fun injectKeyEvent(event: KeyEvent, displayId: Int): Boolean {
-        calls += Key(event.keyCode, event.action, displayId)
+        calls += Key(event.keyCode, event.action, displayId, event.metaState)
         return true
     }
 
