@@ -29,6 +29,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.rules.ExternalResource
 import org.lsposed.hiddenapibypass.LSPass
+import java.io.File
 import java.nio.ByteBuffer
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -58,6 +59,9 @@ class Tier1Env : ExternalResource() {
     lateinit var service: MoonClickerService
         private set
 
+    /** production 的預設位置 `/data/local/tmp` 測試 APK 的 uid 寫不了。 */
+    val mutedAppsFile = File(context.cacheDir, "muted-apps.json")
+
     private var displayId: Int = -1
 
     override fun before() {
@@ -79,7 +83,7 @@ class Tier1Env : ExternalResource() {
             // 條件，驗哪些隱藏 API 拿得到是 `:hidden-api-contract` 的事。
             LSPass.addHiddenApiExemptions("L")
             // 呼叫者要宣稱成測試 APK 自己的套件名——system_server 會拿它跟 calling uid 對。
-            service = MoonClickerService(context, callerPackage = context.packageName)
+            service = MoonClickerService(context, callerPackage = context.packageName, mutedAppsFile = mutedAppsFile)
         } catch (t: Throwable) {
             // before() 失敗時 after() 不會跑。
             uiAutomation.dropShellPermissionIdentity()
