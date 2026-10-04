@@ -629,6 +629,24 @@ int lua_app_launch(lua_State *L) {
     return 1;
 }
 
+// muted 必填：變數打錯字傳進 nil 時若預設為靜音，狀態又活得比腳本久，很難察覺。
+int lua_app_mute(lua_State *L) {
+    ScriptRuntime *runtime = self(L);
+    const char *package = luaL_checkstring(L, 1);
+    luaL_checktype(L, 2, LUA_TBOOLEAN);
+    bool muted = lua_toboolean(L, 2);
+    JNIEnv *env = runtime->env();
+    if (env == nullptr) {
+        lua_pushboolean(L, false);
+        return 1;
+    }
+    jstring jPackage = env->NewStringUTF(package);
+    jboolean ok = env->CallBooleanMethod(runtime->hostObject(), runtime->host().mute, jPackage, (jboolean) muted);
+    env->DeleteLocalRef(jPackage);
+    lua_pushboolean(L, ok);
+    return 1;
+}
+
 int lua_app_list(lua_State *L) {
     ScriptRuntime *runtime = self(L);
     JNIEnv *env = runtime->env();
@@ -742,6 +760,7 @@ const luaL_Reg kInput[] = {
 const luaL_Reg kApp[] = {
         {"launch", lua_app_launch},
         {"list",   lua_app_list},
+        {"mute",   lua_app_mute},
         {nullptr, nullptr},
 };
 

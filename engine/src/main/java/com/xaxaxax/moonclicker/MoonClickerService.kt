@@ -6,6 +6,7 @@ import android.view.MotionEvent
 import android.view.Surface
 import androidx.annotation.Keep
 import com.xaxaxax.moonclicker.service.ActivityLauncher
+import com.xaxaxax.moonclicker.service.AppMuting
 import com.xaxaxax.moonclicker.service.DisplayMirroring
 import com.xaxaxax.moonclicker.service.DisplayQuery
 import com.xaxaxax.moonclicker.service.GlesDistributor
@@ -17,6 +18,7 @@ import com.xaxaxax.moonclicker.service.TaskQuery
 import com.xaxaxax.moonclicker.service.VirtualDisplayLifecycle
 import org.lsposed.hiddenapibypass.LSPass
 import timber.log.Timber
+import java.io.File
 import kotlin.system.exitProcess
 
 /**
@@ -35,6 +37,11 @@ class MoonClickerService @JvmOverloads constructor(
      * 的 uid 真的擁有的套件名。換宿主進程就得換這個值。
      */
     private val callerPackage: String = "com.android.shell",
+    /**
+     * 靜音前的 appops 紀錄，見 [AppMuting]。這個行程是 shell uid，寫不了 app 的 filesDir；
+     * `/data/local/tmp` 是 shell 可寫、重開機不清的位置。
+     */
+    private val mutedAppsFile: File = File("/data/local/tmp/moonclicker/muted-apps.json"),
 ) : IMoonClickerService.Stub() {
     companion object {
         init {
@@ -79,6 +86,9 @@ class MoonClickerService @JvmOverloads constructor(
     // LSPass exemption 生效之後，所以放進 init 區塊，不跟上面幾個模組一起在宣告時建構。
     private val launcherAppsCache: LauncherAppsCache
 
+    // 建構時就照紀錄還原上一個行程留下的靜音，同樣要排在 LSPass exemption 之後。
+    private val appMuting: AppMuting
+
     init {
         Timber.plant(Timber.DebugTree())
         Timber.d("MoonClickerService V2 (Flattened) started")
@@ -88,7 +98,7 @@ class MoonClickerService @JvmOverloads constructor(
                 "Landroid/app/ActivityManager",        // ActivityLauncher, TaskQuery
                 "Landroid/app/ActivityOptions",         // ActivityLauncher
                 "Landroid/app/ActivityTaskManager",     // ActivityLauncher
-                "Landroid/app/AppOpsManager",            // PermissionGrants
+                "Landroid/app/AppOpsManager",            // AppMuting, PermissionGrants
                 "Landroid/content/pm/PackageManager",    // LauncherAppsCache, PermissionGrants
                 "Landroid/hardware/input/InputManager",  // InputInjector
                 "Landroid/os/IPowerManager",             // DisplayGroupWakeLocks
@@ -99,6 +109,7 @@ class MoonClickerService @JvmOverloads constructor(
         }
 
         launcherAppsCache = LauncherAppsCache(context, platformHandles.packageManager)
+        appMuting = AppMuting(platformHandles.packageManager, platformHandles.appOpsManagerHidden, mutedAppsFile)
     }
 
     // ─── IMoonClickerService.Stub — 路由到對應模組 ───
@@ -165,6 +176,9 @@ class MoonClickerService @JvmOverloads constructor(
 
     override fun getAppTasks(): Array<MoonClickerAppTask> = taskQuery.getAppTasks()
 
+    override fun setAppMuted(packageName: String, muted: Boolean): Boolean =
+        appMuting.setMuted(packageName, muted)
+
     override fun multiTouchSwipe(pointerId: Int, displayId: Int, points: IntArray, duration: Long, keep: Boolean) =
         inputInjector.multiTouchSwipe(pointerId, displayId, points, duration, keep)
 
@@ -190,6 +204,7 @@ class MoonClickerService @JvmOverloads constructor(
     override fun debug(input: String?): String = "MoonClickerService Active"
 
     override fun destroy() {
+        appMuting.restoreAll()
         virtualDisplayLifecycle.releaseAll()
         exitProcess(0)
     }

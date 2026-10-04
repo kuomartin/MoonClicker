@@ -15,6 +15,7 @@ ScriptRuntime::ScriptRuntime(JNIEnv *env, jobject host, jobject service) {
     hostMethods.launch = env->GetMethodID(hostClass, "launch", "(Ljava/lang/String;)Z");
     hostMethods.listApps = env->GetMethodID(hostClass, "listApps",
                                             "()[Lcom/xaxaxax/moonclicker/MoonClickerAppTask;");
+    hostMethods.mute = env->GetMethodID(hostClass, "mute", "(Ljava/lang/String;Z)Z");
     hostMethods.notify = env->GetMethodID(hostClass, "notify",
                                           "(Ljava/lang/String;Ljava/lang/String;)V");
     hostMethods.openUri = env->GetMethodID(hostClass, "openUri", "(Ljava/lang/String;)V");

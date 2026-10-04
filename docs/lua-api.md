@@ -178,6 +178,19 @@ for _, task in ipairs(app.list()) do
 end
 ```
 
+* **`app.mute(package_name, muted)` -> `boolean`**
+  讓指定 App 不出聲，也不搶走其他 App 的音訊焦點（不會打斷主螢幕正在播放的媒體）；`muted` 為 `false` 時還原。與目標顯示器無關。`muted` 必須是 boolean。App 未安裝或系統拒絕設定時回傳 `false`。
+  * 靜音狀態由 UserService 持有，不屬於腳本：腳本結束後仍維持，直到呼叫 `app.mute(package_name, false)` 或 UserService 停止。UserService 停止時還原所有靜音；異常結束時，下次啟動時還原。
+  * 沒有虛擬顯示器、也沒有腳本或畫面在使用時，UserService 會在 App 退到背景約 30 秒後自動停止，靜音也隨之還原。
+  * 實作是對該 App 設定 appops（`PLAY_AUDIO`、`TAKE_AUDIO_FOCUS`），是整個 App 的系統設定、不分顯示器：同一個 App 在主螢幕開啟時也是靜音。
+  * 只擋得住之後的音訊焦點請求，App 已經取得的焦點不會被收回，所以要在 `app.launch` 之前呼叫。
+  * 靜音期間解除安裝 MoonClicker 不會還原，需自行在系統設定或以 `adb shell appops reset <package>` 處理。
+
+```lua
+app.mute("com.example.game", true)
+app.launch("com.example.game")
+```
+
 ---
 
 ## `device` 系統互動

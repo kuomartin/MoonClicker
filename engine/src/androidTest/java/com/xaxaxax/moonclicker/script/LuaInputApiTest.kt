@@ -181,4 +181,35 @@ class LuaInputApiTest {
         assertTrue("expected an Error, got ${outcome.runState}", error != null)
         assertTrue("unhelpful message: $error", error!!.contains("app.list"))
     }
+
+    @Test
+    fun app_mute_passes_package_and_flag_and_returns_the_result() = withRunner { runner ->
+        runner.recorded.muteResult = false
+        val outcome = runner.run(
+            """
+            data.set("on", app.mute("com.example.game", true))
+            data.set("off", app.mute("com.example.game", false))
+            """.trimIndent()
+        )
+
+        assertEquals(EngineRunState.Finished, outcome.runState)
+        assertEquals(
+            listOf(
+                RecordingMoonClickerService.Mute("com.example.game", true),
+                RecordingMoonClickerService.Mute("com.example.game", false),
+            ),
+            runner.recorded.mutes,
+        )
+        assertEquals(false, outcome.data["on"])
+        assertEquals(false, outcome.data["off"])
+    }
+
+    /** 省略 muted 不能被當成靜音：狀態活得比腳本久，打錯字時很難察覺。 */
+    @Test
+    fun app_mute_requires_a_boolean_flag() = withRunner { runner ->
+        val outcome = runner.run("app.mute(\"com.example.game\")")
+
+        assertTrue("expected an Error, got ${outcome.runState}", outcome.error != null)
+        assertTrue(runner.recorded.mutes.isEmpty())
+    }
 }

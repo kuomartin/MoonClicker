@@ -63,6 +63,13 @@ interface IMoonClickerService {
     MoonClickerAppTask[] getAppTasks() = 306;
 
     /**
+     * 以 appops 靜音單一 package（PLAY_AUDIO deny、TAKE_AUDIO_FOCUS ignore），與顯示器無關。
+     * 靜音前的 mode 由服務持有並持久化：muted = false 時還原，服務停止時全部還原，
+     * 服務異常結束則在下次啟動時還原。package 未安裝或 appops 呼叫失敗時回 false。
+     */
+    boolean setAppMuted(String packageName, boolean muted) = 307;
+
+    /**
      * points: flattened [x1, y1, x2, y2, ...]
      */
     oneway void multiTouchSwipe(int pointerId, int displayId, in int[] points, long duration, boolean keep) = 201;

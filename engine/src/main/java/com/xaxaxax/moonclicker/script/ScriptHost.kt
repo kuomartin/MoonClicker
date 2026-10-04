@@ -98,6 +98,14 @@ internal class ScriptHost(
     }
 
     @Keep
+    fun mute(packageName: String, muted: Boolean): Boolean = try {
+        service.setAppMuted(packageName, muted)
+    } catch (t: Throwable) {
+        Timber.e(t, "mute($packageName, $muted) failed")
+        false
+    }
+
+    @Keep
     fun notify(title: String, text: String) = onNotify(title, text)
 
     @Keep

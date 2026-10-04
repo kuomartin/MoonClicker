@@ -42,10 +42,13 @@ internal class RecordingMoonClickerService(
 
     data class Launch(val packageName: String, val displayId: Int) : Call
 
+    data class Mute(val packageName: String, val muted: Boolean) : Call
+
     val calls = CopyOnWriteArrayList<Call>()
 
     val swipes: List<Swipe> get() = calls.filterIsInstance<Swipe>()
     val launches: List<Launch> get() = calls.filterIsInstance<Launch>()
+    val mutes: List<Mute> get() = calls.filterIsInstance<Mute>()
 
     /** 只看 ACTION_DOWN——`ScriptHost.key` 每個按鍵都送 down + up 一對。 */
     val keyDowns: List<Key>
@@ -69,6 +72,14 @@ internal class RecordingMoonClickerService(
     override fun launchInDisplay(packageName: String, displayId: Int): Boolean {
         calls += Launch(packageName, displayId)
         return true
+    }
+
+    /** `app.mute` 的回傳值。 */
+    var muteResult: Boolean = true
+
+    override fun setAppMuted(packageName: String, muted: Boolean): Boolean {
+        calls += Mute(packageName, muted)
+        return muteResult
     }
 
     /** `app.list()` 的來源；null 模擬服務端查詢失敗。 */

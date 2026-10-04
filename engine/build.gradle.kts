@@ -141,4 +141,6 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     // AndroidJUnitRunner 本身；androidx.test.ext:junit 不會帶進來。
     androidTestImplementation(libs.androidx.test.runner)
+    // AppMutingTest 直接建 AppMuting，要跟 production 一樣拿 AppOpsManagerHidden。
+    androidTestCompileOnly(project(":hidden-api"))
 }
