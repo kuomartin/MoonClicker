@@ -80,6 +80,25 @@ internal class ScriptHost(
         false
     }
 
+    /**
+     * 字元已在 native 端檢查過（可印 ASCII、`\n`、`\t`），VIRTUAL_KEYBOARD 都對得到；`getEvents`
+     * 回 null 只是防呆。事件自帶 Shift 的 down/up。中途注入失敗時前面的字已經送出，無法回滾。
+     */
+    @Keep
+    fun text(text: String): Boolean = try {
+        val events = android.view.KeyCharacterMap.load(android.view.KeyCharacterMap.VIRTUAL_KEYBOARD)
+            .getEvents(text.toCharArray())
+        if (events == null) {
+            Timber.e("text: no key events for \"$text\"")
+            false
+        } else {
+            events.all { service.injectKeyEvent(it, displayId) }
+        }
+    } catch (t: Throwable) {
+        Timber.e(t, "text failed")
+        false
+    }
+
     @Keep
     fun launch(packageName: String): Boolean = try {
         service.launchInDisplay(packageName, displayId)

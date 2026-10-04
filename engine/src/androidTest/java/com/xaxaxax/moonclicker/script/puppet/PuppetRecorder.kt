@@ -24,6 +24,8 @@ internal data class PuppetState(
     /** [PuppetControl.text] 每個字實際畫在哪；沒畫文字時為空。 */
     val wordRects: Map<String, Rect> = emptyMap(),
     val touches: List<PuppetRecorder.Touch> = emptyList(),
+    /** 收到的按鍵依序還原成的字元；沒有對應字元的鍵（Shift 等）不列入。 */
+    val typed: String = "",
 )
 
 /**

@@ -153,6 +153,7 @@ end
 | `input.move(id, x, y)` | 移動觸控點 `id` 至新座標 |
 | `input.up(id)` | 釋放觸控點 `id` |
 | `input.key(keycode)` | 注入 Android 系統 KeyCode |
+| `input.text(text)` | 對目標顯示器上目前有焦點的輸入框輸入文字，回傳是否成功注入；呼叫前要先點選輸入框。只支援可印 ASCII、`\n`（Enter）與 `\t`（Tab），含其他字元（例如中文）時拋錯，一個字都不輸入；注入途中失敗時前面的字已經送出。`\n` 在單行搜尋框是送出，在多行輸入框是換行，依 app 而定 |
 | `input.back()` | 注入返回鍵（`AKEYCODE_BACK`） |
 | `input.home()` | 注入 Home 鍵（`AKEYCODE_HOME`） |
 | `input.recents()` | 注入多工任務鍵（`AKEYCODE_APP_SWITCH`） |
