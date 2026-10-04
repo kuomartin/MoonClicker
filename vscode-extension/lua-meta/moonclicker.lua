@@ -160,6 +160,13 @@ function input.up(id) end
 ---@return boolean ok 是否成功注入
 function input.key(keycode) end
 
+--- 對目標顯示器上目前有焦點的輸入框輸入文字；呼叫前要先點選輸入框。
+--- 只支援可印 ASCII、`\n`（Enter）與 `\t`（Tab），含其他字元（例如中文）時拋錯，一個字都不輸入。
+--- 注入途中失敗時前面的字已經送出。`\n` 在單行搜尋框是送出，在多行輸入框是換行，依 app 而定。
+---@param text string 要輸入的文字
+---@return boolean ok 是否成功注入
+function input.text(text) end
+
 --- 模擬按下返回鍵（`AKEYCODE_BACK`）。
 ---@return boolean ok 是否成功注入
 function input.back() end

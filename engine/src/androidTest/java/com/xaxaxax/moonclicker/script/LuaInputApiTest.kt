@@ -1,5 +1,6 @@
 package com.xaxaxax.moonclicker.script
 
+import android.view.KeyCharacterMap
 import android.view.KeyEvent
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.xaxaxax.moonclicker.engine.state.EngineRunState
@@ -133,6 +134,61 @@ class LuaInputApiTest {
             ),
             runner.recorded.keyDowns.map { it.keyCode },
         )
+    }
+
+    /** 把錄到的 down 事件依 VIRTUAL_KEYBOARD 還原成字元——驗的是「打出來的字」，不是事件序列的細節。 */
+    private fun RecordingMoonClickerService.typedText(): String {
+        val map = KeyCharacterMap.load(KeyCharacterMap.VIRTUAL_KEYBOARD)
+        return keyDowns
+            .map { map.get(it.keyCode, it.metaState) }
+            .filter { it != 0 }
+            .joinToString("") { it.toChar().toString() }
+    }
+
+    @Test
+    fun text_types_ascii_with_shift_on_the_target_display() = withRunner { runner ->
+        val outcome = runner.run(
+            """
+            data.set("ok", input.text("Hello, World!\t\n"))
+            """.trimIndent()
+        )
+
+        assertEquals(EngineRunState.Finished, outcome.runState)
+        assertEquals(true, outcome.data["ok"])
+        assertEquals("Hello, World!\t\n", runner.recorded.typedText())
+        assertTrue(runner.recorded.keys.all { it.displayId == 0 })
+    }
+
+    @Test
+    fun text_rejects_unsupported_characters_before_typing_anything() {
+        for ((script, position) in listOf(
+            "input.text(\"a中\")" to "position 2",
+            "input.text(\"ab\\1\")" to "position 3",
+        )) {
+            LuaScriptRunner().use { runner ->
+                val outcome = runner.run(script)
+
+                val error = outcome.error
+                assertTrue("$script: expected an Error, got ${outcome.runState}", error != null)
+                assertTrue("$script: unhelpful message: $error", error!!.contains(position))
+                assertTrue("$script: typed ${runner.recorded.keys}", runner.recorded.keys.isEmpty())
+            }
+        }
+    }
+
+    @Test
+    fun text_of_an_empty_string_succeeds_without_events() = withRunner { runner ->
+        val outcome = runner.run("""data.set("ok", input.text(""))""")
+
+        assertEquals(true, outcome.data["ok"])
+        assertTrue(runner.recorded.keys.isEmpty())
+    }
+
+    @Test
+    fun text_coerces_numbers_like_other_string_parameters() = withRunner { runner ->
+        runner.run("input.text(123)")
+
+        assertEquals("123", runner.recorded.typedText())
     }
 
     @Test
