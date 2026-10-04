@@ -8,13 +8,14 @@ import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.Typeface
 import android.os.Bundle
+import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 
 /**
  * 被腳本操作的那個 app：把 [PuppetMarker] 與 [PuppetGlyph] 畫在已知位置，並把收到的每一個
- * 觸控記進 [PuppetRecorder]，讓「vision 找到的位置」與「tap 真的打到的位置」都有獨立的對照。
+ * 觸控與按鍵記進 [PuppetRecorder]，讓「vision 找到的位置」與「tap 真的打到的位置」都有獨立的對照。
  *
  * 宣告在 `engine/src/androidTest/AndroidManifest.xml`，套件名即測試 APK 的
  * `com.xaxaxax.moonclicker.engine.test`。
@@ -127,6 +128,14 @@ class PuppetActivity : Activity() {
         )
         PuppetRecorder.update { it.copy(touches = it.touches + touch) }
         return super.dispatchTouchEvent(event)
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        val char = event.unicodeChar
+        if (event.action == KeyEvent.ACTION_DOWN && char != 0) {
+            PuppetRecorder.update { it.copy(typed = it.typed + char.toChar()) }
+        }
+        return super.dispatchKeyEvent(event)
     }
 
     /**

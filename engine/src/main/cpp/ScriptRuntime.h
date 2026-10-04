@@ -30,6 +30,7 @@ struct HostMethods {
     jmethodID swipe = nullptr;      // (I[IJZ)Z   pointerId, points, durationMs, keep
     jmethodID pointerUp = nullptr;  // (I)Z
     jmethodID key = nullptr;        // (I)Z
+    jmethodID text = nullptr;       // (Ljava/lang/String;)Z
     jmethodID launch = nullptr;     // (Ljava/lang/String;)Z
     jmethodID listApps = nullptr;   // ()[Lcom/xaxaxax/moonclicker/MoonClickerAppTask;
     jmethodID mute = nullptr;       // (Ljava/lang/String;Z)Z
