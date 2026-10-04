@@ -15,6 +15,23 @@ internal val APP_OPS_MANAGER_HIDDEN = StubContracts(
         MemberContract(
             owner = "android.app.AppOpsManager",
             member = MethodMember(
+                name = "opToDefaultMode",
+                parameters = listOf("int"),
+                returns = "int",
+                static = true,
+            ),
+        ),
+        MemberContract(
+            owner = "android.app.AppOpsManager",
+            member = MethodMember(
+                name = "getOpsForPackage",
+                parameters = listOf("int", "java.lang.String", "int[]"),
+                returns = "java.util.List",
+            ),
+        ),
+        MemberContract(
+            owner = "android.app.AppOpsManager",
+            member = MethodMember(
                 name = "setMode",
                 parameters = listOf("int", "int", "java.lang.String", "int"),
                 returns = "void",

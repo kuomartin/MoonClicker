@@ -17,6 +17,8 @@ internal val ALL_STUB_CONTRACTS: List<StubContracts> = listOf(
     ACTIVITY_OPTIONS_HIDDEN,
     ACTIVITY_TASK_MANAGER,
     APP_OPS_MANAGER_HIDDEN,
+    APP_OPS_MANAGER_PACKAGE_OPS,
+    APP_OPS_MANAGER_OP_ENTRY,
     I_ACTIVITY_MANAGER,
     I_ACTIVITY_TASK_MANAGER,
     // Does not need to check IApplicationThread, ProfilerInfo
