@@ -57,6 +57,8 @@
     <string name="fullscreen_menu_power_off">Power Off Display</string>
     <string name="fullscreen_menu_home">Home</string>
     <string name="fullscreen_select_app_title">Select App to Start</string>
+    <string name="fullscreen_launch_failed">Couldn\'t start the app.</string>
+    <string name="fullscreen_launch_unsupported">This device doesn\'t support running apps on virtual displays.</string>
 
     <!-- Script status notification -->
     <string name="script_status_channel_label">Script Run Status</string>
