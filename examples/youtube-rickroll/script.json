@@ -1,0 +1,6 @@
+{
+  "uniqueId": "youtube-rickroll",
+  "name": "YouTube Rickroll",
+  "description": "搜尋並播放 Never Gonna Give You Up，略過廣告，拖曳進度條快轉到一半",
+  "display": { "width": 720, "height": 1280, "densityDpi": 320 }
+}
