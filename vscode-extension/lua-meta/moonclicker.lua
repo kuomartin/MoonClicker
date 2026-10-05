@@ -182,7 +182,7 @@ function input.recents() end
 ---@class moonclicker.App
 app = {}
 
---- 在目標顯示器上啟動 app。
+--- 在目標顯示器上啟動 app。目標是虛擬顯示器、但裝置不支援在次要顯示器上執行 app 時拋錯。
 ---@param package_name string 應用程式套件名稱（Package Name）
 ---@return boolean ok 是否成功發送啟動請求
 function app.launch(package_name) end

@@ -8,6 +8,7 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.view.Display
 import com.xaxaxax.moonclicker.Workaround
 import dev.rikka.tools.refine.Refine
 import timber.log.Timber
@@ -18,7 +19,18 @@ internal class ActivityLauncher(
     private val callerPackage: String,
     private val virtualDisplayLifecycle: VirtualDisplayLifecycle,
 ) {
+    /**
+     * @throws UnsupportedOperationException 裝置沒有宣告 [PackageManager.FEATURE_ACTIVITIES_ON_SECONDARY_DISPLAYS]。
+     *   框架開機時就依這個 feature 決定能不能把 activity 放到次要顯示器，shell 權限改不了：
+     *   `moveTaskToStack` 會直接拋錯，`startActivity` 則悄悄改開在主螢幕並回報成功。
+     *   與「package 名打錯」不同，這不是腳本重試能解決的情況，所以拋錯而非回 false。
+     */
     fun launchInDisplay(packageName: String, displayId: Int): Boolean {
+        if (displayId != Display.DEFAULT_DISPLAY &&
+            !packageManager.hasSystemFeature(PackageManager.FEATURE_ACTIVITIES_ON_SECONDARY_DISPLAYS)
+        ) {
+            throw UnsupportedOperationException("this device doesn't support launching apps on virtual displays")
+        }
         virtualDisplayLifecycle.wakeDisplayGroupIfOwned(displayId)
         // IActivityManager 的 startActivity/createStackOnDisplay/moveTaskToStack 只到 API 28
         // 為止（見 hidden-api-contract），API 29 起一律走 ActivityTaskManager。
