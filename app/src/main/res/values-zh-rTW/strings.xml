@@ -57,6 +57,8 @@
     <string name="fullscreen_menu_power_off">關閉螢幕電源</string>
     <string name="fullscreen_menu_home">Home 鍵</string>
     <string name="fullscreen_select_app_title">選擇要啟動的應用程式</string>
+    <string name="fullscreen_launch_failed">無法啟動應用程式。</string>
+    <string name="fullscreen_launch_unsupported">此裝置不支援在虛擬顯示器上執行應用程式。</string>
 
     <!-- Script status notification -->
     <string name="script_status_channel_label">腳本執行狀態</string>

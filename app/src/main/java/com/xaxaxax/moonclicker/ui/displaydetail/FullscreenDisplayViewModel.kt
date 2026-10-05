@@ -6,7 +6,9 @@ import android.view.Surface
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.annotation.StringRes
 import com.xaxaxax.moonclicker.IMoonClickerService
+import com.xaxaxax.moonclicker.R
 import com.xaxaxax.moonclicker.core.AppSettings
 import com.xaxaxax.moonclicker.shizuku.ShizukuManager
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -57,6 +59,10 @@ class FullscreenDisplayViewModel @Inject constructor(
     /** 退出全螢幕（[FullscreenAction.Exit]／[FullscreenAction.CloseDisplay]）的一次性事件；畫面收到就 `finish()`。 */
     private val _finishEvents = Channel<Unit>(Channel.BUFFERED)
     val finishEvents: Flow<Unit> = _finishEvents.receiveAsFlow()
+
+    /** 啟動 app 失敗的一次性提示，值是字串資源 id；畫面收到就顯示 Toast。 */
+    private val _launchErrors = Channel<Int>(Channel.BUFFERED)
+    val launchErrors: Flow<Int> = _launchErrors.receiveAsFlow()
 
     /**
      * 綁好的服務，也是 UI 判斷「可以顯示鏡像了沒」的依據——服務在，鏡像才有東西可映。
@@ -163,10 +169,20 @@ class FullscreenDisplayViewModel @Inject constructor(
         viewModelScope.launch {
             shizukuManager.withService { service ->
                 service.launchInDisplay(packageName, displayId)
+            }.onSuccess { launched ->
+                if (!launched) _launchErrors.trySend(R.string.fullscreen_launch_failed)
+            }.onFailure {
+                _launchErrors.trySend(launchErrorMessage(it))
             }
             closeAppList()
         }
     }
+
+    /** 服務端以 UnsupportedOperationException 表示裝置不支援在次要顯示器上執行 app。 */
+    @StringRes
+    private fun launchErrorMessage(error: Throwable): Int =
+        if (error is UnsupportedOperationException) R.string.fullscreen_launch_unsupported
+        else R.string.fullscreen_launch_failed
 
     private fun destroyDisplay(displayId: Int, thenFinish: Boolean) {
         viewModelScope.launch {
