@@ -9,6 +9,7 @@ import android.os.Looper
 import android.view.PixelCopy
 import android.view.SurfaceView
 import android.view.WindowManager
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
@@ -53,6 +54,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
@@ -127,8 +129,13 @@ fun FullscreenDisplayScreen(
     val service by viewModel.service.collectAsState()
     val surfaceViewRef = remember { mutableStateOf<SurfaceView?>(null) }
 
+    val context = LocalContext.current
+
     LaunchedEffect(Unit) {
         viewModel.finishEvents.collect { activity?.finish() }
+    }
+    LaunchedEffect(Unit) {
+        viewModel.launchErrors.collect { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
     }
     LaunchedEffect(targetDisplayId) { viewModel.loadDisplayInfo(targetDisplayId) }
     // 單一來源：鏡像的 Viewport 讀這一份，決定 letterbox 與內容尺寸。

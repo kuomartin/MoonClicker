@@ -238,6 +238,26 @@ class LuaInputApiTest {
         assertTrue("unhelpful message: $error", error!!.contains("app.list"))
     }
 
+    /** 裝置不支援次要顯示器不是重試能解決的事，所以拋錯而非回 false。 */
+    @Test
+    fun app_launch_raises_when_the_device_does_not_support_secondary_displays() = withRunner { runner ->
+        runner.recorded.launchError = UnsupportedOperationException("not supported here")
+        val outcome = runner.run("app.launch(\"com.example.game\")")
+
+        val error = outcome.error
+        assertTrue("expected an Error, got ${outcome.runState}", error != null)
+        assertTrue("unhelpful message: $error", error!!.contains("app.launch: not supported here"))
+    }
+
+    @Test
+    fun app_launch_returns_false_on_other_service_failures() = withRunner { runner ->
+        runner.recorded.launchError = IllegalStateException("binder hiccup")
+        val outcome = runner.run("data.set(\"ok\", app.launch(\"com.example.game\"))")
+
+        assertEquals(EngineRunState.Finished, outcome.runState)
+        assertEquals(false, outcome.data["ok"])
+    }
+
     @Test
     fun app_mute_passes_package_and_flag_and_returns_the_result() = withRunner { runner ->
         runner.recorded.muteResult = false

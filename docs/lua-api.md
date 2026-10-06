@@ -164,6 +164,7 @@ end
 
 * **`app.launch(package_name)` -> `boolean`**
   在目標顯示器啟動指定 Package Name 之 App。成功送出啟動請求回傳 `true`。
+  * 目標是虛擬顯示器、但裝置不支援在次要顯示器上執行 App（沒有宣告 `android.software.activities_on_secondary_displays`，部分 Android 8.x/9 裝置）時拋錯。這是系統開機時決定的，無法以設定或 shell 權限開啟。
 * **`app.list()` -> `table`**
   列出所有顯示器上正在執行的 App，與目標顯示器無關。回傳陣列，每筆為 `{ package = "com.example.game", display_id = 2 }`。
   * 「正在執行」指該 App 在某個顯示器上有 task；只有背景 service、沒有畫面的 process 不列入。

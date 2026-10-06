@@ -50,6 +50,10 @@ interface IMoonClickerService {
      * only when the call itself could not be made. See issue #16.
      */
     boolean setDisplayRotation(int displayId, int rotation) = 108;
+    /**
+     * Throws UnsupportedOperationException for a non-default display when the device lacks
+     * FEATURE_ACTIVITIES_ON_SECONDARY_DISPLAYS; returns false for other launch failures.
+     */
     boolean launchInDisplay(String packageName, int displayId) = 106;
     /** 讀暖快取，見 [refreshLauncherApps] 與服務啟動時的初次查詢；不會即時重掃 PackageManager。 */
     List<String> getLauncherApps() = 107;

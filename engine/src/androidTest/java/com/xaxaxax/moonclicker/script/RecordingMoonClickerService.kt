@@ -71,8 +71,12 @@ internal class RecordingMoonClickerService(
         return true
     }
 
+    /** 非 null 時 `launchInDisplay` 拋出它，模擬服務端的例外。 */
+    var launchError: RuntimeException? = null
+
     override fun launchInDisplay(packageName: String, displayId: Int): Boolean {
         calls += Launch(packageName, displayId)
+        launchError?.let { throw it }
         return true
     }
 

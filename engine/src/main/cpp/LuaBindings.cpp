@@ -658,6 +658,24 @@ int lua_app_launch(lua_State *L) {
     jstring jPackage = env->NewStringUTF(package);
     jboolean ok = env->CallBooleanMethod(runtime->hostObject(), runtime->host().launch, jPackage);
     env->DeleteLocalRef(jPackage);
+    // ScriptHost.launch 只讓「裝置不支援」的例外穿出來；訊息先推上 Lua 堆疊、釋放 JNI 參照後才 lua_error。
+    if (jthrowable thrown = env->ExceptionOccurred()) {
+        env->ExceptionClear();
+        jclass throwableClass = env->FindClass("java/lang/Throwable");
+        jmethodID getMessage = env->GetMethodID(throwableClass, "getMessage", "()Ljava/lang/String;");
+        auto jMessage = (jstring) env->CallObjectMethod(thrown, getMessage);
+        if (jMessage != nullptr) {
+            const char *message = env->GetStringUTFChars(jMessage, nullptr);
+            lua_pushfstring(L, "app.launch: %s", message);
+            env->ReleaseStringUTFChars(jMessage, message);
+            env->DeleteLocalRef(jMessage);
+        } else {
+            lua_pushstring(L, "app.launch: failed");
+        }
+        env->DeleteLocalRef(throwableClass);
+        env->DeleteLocalRef(thrown);
+        return lua_error(L);
+    }
     lua_pushboolean(L, ok);
     return 1;
 }
