@@ -15,7 +15,15 @@ message StreamEvent {
     // 已經 JSON 字串化）；Struct 是剛好對應這種動態小型 map 的標準型別。
     google.protobuf.Struct data = 2;
     FileChangeEvent file_change = 3;
+    RunStateEvent run_state = 4;
   }
+}
+
+// 裝置上執行中的腳本變動時推播。連線當下若有腳本在跑會先送一筆；沒有就不送，
+// client 連上時一律假設沒有腳本在跑。
+message RunStateEvent {
+  // 執行中腳本的資料夾名稱（Script Folder 的 id）；空字串代表沒有腳本在跑。
+  string script_id = 1;
 }
 
 // Script Folder 底下的檔案被寫入/刪除時推播（VS Code FileSystemProvider 的
