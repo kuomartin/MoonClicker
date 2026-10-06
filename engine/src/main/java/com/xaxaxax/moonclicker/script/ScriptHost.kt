@@ -99,9 +99,12 @@ internal class ScriptHost(
         false
     }
 
+    /** 裝置不支援時讓 [UnsupportedOperationException] 穿出去，由 native 端轉成 Lua error。 */
     @Keep
     fun launch(packageName: String): Boolean = try {
         service.launchInDisplay(packageName, displayId)
+    } catch (e: UnsupportedOperationException) {
+        throw e
     } catch (t: Throwable) {
         Timber.e(t, "launch($packageName) failed")
         false

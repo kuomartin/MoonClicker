@@ -272,14 +272,18 @@ class ShizukuManager(private val context: Context) {
         timeout: Duration = BIND_TIMEOUT,
         block: suspend (IMoonClickerService) -> R
     ): Result<R> = leases.hold {
+        // 分開記錄「連不上」與「連上了但呼叫本身拋錯」：後者多半是服務端刻意回報的錯誤，不是連線問題。
+        var connected = false
         runCatching {
             if (service == null) startUserService()
             val svc = withTimeout(timeout) {
                 serviceFlow.filterNotNull().first()
             }
+            connected = true
             block(svc)
         }.onFailure {
-            Timber.e(it, "Call to MoonClickerService timed out or service unavailable")
+            if (connected) Timber.e(it, "MoonClickerService call failed")
+            else Timber.e(it, "Could not connect to MoonClickerService")
         }
     }
 
