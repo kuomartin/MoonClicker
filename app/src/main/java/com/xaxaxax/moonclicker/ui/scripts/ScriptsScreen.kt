@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.PlayArrow
@@ -27,9 +28,13 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -69,6 +74,7 @@ fun ScriptsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val message by viewModel.message.collectAsState()
+    val addedScriptId by viewModel.addedScriptId.collectAsState()
     val context = LocalContext.current
 
     // 使用者可能剛從檔案管理員丟了資料夾進來，回到這頁時重掃一次才看得到。
@@ -111,6 +117,11 @@ fun ScriptsScreen(
         onStop = viewModel::stop,
         onOpen = { onNavigateToDetail(it.id) },
         onResolveImportConflict = viewModel::resolveImportConflict,
+        onShowExamples = viewModel::showExamples,
+        onDismissExamples = viewModel::dismissExamples,
+        onAddExample = { viewModel.addExample(it.example) },
+        addedScriptId = addedScriptId,
+        onAddedScriptShown = viewModel::consumeAddedScript,
     )
 }
 
@@ -125,14 +136,33 @@ fun ScriptsScreenContent(
     onStop: () -> Unit = {},
     onOpen: (Script) -> Unit = {},
     onResolveImportConflict: (overwrite: Boolean) -> Unit = {},
+    onShowExamples: () -> Unit = {},
+    onDismissExamples: () -> Unit = {},
+    onAddExample: (ExampleItem) -> Unit = {},
+    addedScriptId: String? = null,
+    onAddedScriptShown: () -> Unit = {},
 ) {
     uiState.importConflict?.let { conflict ->
         ImportConflictDialog(
             existingName = conflict.existingDir.name,
+            isExample = uiState.importConflictIsExample,
             onOverwrite = { onResolveImportConflict(true) },
             onCancel = { onResolveImportConflict(false) },
         )
     }
+    uiState.examples?.let { examples ->
+        ExamplesDialog(examples = examples, onAdd = onAddExample, onDismiss = onDismissExamples)
+    }
+
+    val listState = rememberLazyListState()
+    LaunchedEffect(addedScriptId, uiState.scripts) {
+        val id = addedScriptId ?: return@LaunchedEffect
+        val index = uiState.scripts.indexOfFirst { it.id == id }
+        if (index < 0) return@LaunchedEffect
+        listState.animateScrollToItem(index)
+        onAddedScriptShown()
+    }
+    var addMenuOpen by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -149,8 +179,26 @@ fun ScriptsScreenContent(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = onImport) {
-                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.scripts_import))
+            Box {
+                FloatingActionButton(onClick = { addMenuOpen = true }) {
+                    Icon(Icons.Default.Add, contentDescription = stringResource(R.string.scripts_add))
+                }
+                DropdownMenu(expanded = addMenuOpen, onDismissRequest = { addMenuOpen = false }) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.scripts_import)) },
+                        onClick = {
+                            addMenuOpen = false
+                            onImport()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.scripts_examples_title)) },
+                        onClick = {
+                            addMenuOpen = false
+                            onShowExamples()
+                        },
+                    )
+                }
             }
         },
     ) { padding ->
@@ -162,9 +210,9 @@ fun ScriptsScreenContent(
             ShizukuStatusBar(status = uiState.shizukuStatus, onActionClick = onShizukuAction)
 
             if (uiState.scripts.isEmpty()) {
-                EmptyState(uiState.scriptsPath)
+                EmptyState(uiState.scriptsPath, onShowExamples)
             } else {
-                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                LazyColumn(modifier = Modifier.fillMaxSize(), state = listState) {
                     items(uiState.scripts, key = { it.id }) { script ->
                         ScriptItem(
                             script = script,
@@ -185,7 +233,7 @@ fun ScriptsScreenContent(
  * 知道的事，路徑必須直接寫在這裡而且可以複製。
  */
 @Composable
-private fun EmptyState(scriptsPath: String) {
+private fun EmptyState(scriptsPath: String, onShowExamples: () -> Unit) {
     val context = LocalContext.current
     Column(
         modifier = Modifier
@@ -214,7 +262,61 @@ private fun EmptyState(scriptsPath: String) {
         OutlinedButton(onClick = { copyPath(context, scriptsPath) }) {
             Text(stringResource(R.string.scripts_copy_path))
         }
+        Spacer(modifier = Modifier.size(12.dp))
+        Button(onClick = onShowExamples) {
+            Text(stringResource(R.string.scripts_add_example))
+        }
     }
+}
+
+@Composable
+private fun ExamplesDialog(examples: List<ExampleItem>, onAdd: (ExampleItem) -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.scripts_examples_title)) },
+        text = {
+            if (examples.isEmpty()) {
+                Text(stringResource(R.string.scripts_examples_empty))
+            } else {
+                LazyColumn {
+                    items(examples, key = { it.example.assetName }) { item ->
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onAdd(item) }
+                                .padding(vertical = 12.dp),
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = item.example.name,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                if (item.installed) {
+                                    Text(
+                                        text = stringResource(R.string.scripts_examples_added),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                    )
+                                }
+                            }
+                            item.example.description?.let {
+                                Text(
+                                    text = it,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                        HorizontalDivider()
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }
+        },
+    )
 }
 
 private fun copyPath(context: Context, path: String) {
@@ -345,13 +447,24 @@ private fun RunningBadge() {
 }
 
 @Composable
-private fun ImportConflictDialog(existingName: String, onOverwrite: () -> Unit, onCancel: () -> Unit) {
+private fun ImportConflictDialog(existingName: String, isExample: Boolean, onOverwrite: () -> Unit, onCancel: () -> Unit) {
     AlertDialog(
         onDismissRequest = onCancel,
-        title = { Text(stringResource(R.string.scripts_import_conflict_title)) },
-        text = { Text(stringResource(R.string.scripts_import_conflict_message, existingName)) },
+        title = {
+            Text(stringResource(if (isExample) R.string.scripts_example_conflict_title else R.string.scripts_import_conflict_title))
+        },
+        text = {
+            Text(
+                stringResource(
+                    if (isExample) R.string.scripts_example_conflict_message else R.string.scripts_import_conflict_message,
+                    existingName,
+                )
+            )
+        },
         confirmButton = {
-            TextButton(onClick = onOverwrite) { Text(stringResource(R.string.scripts_import_conflict_overwrite)) }
+            TextButton(onClick = onOverwrite) {
+                Text(stringResource(if (isExample) R.string.scripts_example_conflict_overwrite else R.string.scripts_import_conflict_overwrite))
+            }
         },
         dismissButton = {
             TextButton(onClick = onCancel) { Text(stringResource(R.string.scripts_import_conflict_cancel)) }

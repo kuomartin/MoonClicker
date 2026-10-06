@@ -2,6 +2,8 @@ import com.android.build.api.variant.BuildConfigField
 import java.io.File
 import java.io.FileInputStream
 import java.util.Properties
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 plugins {
     alias(libs.plugins.android.application)
@@ -102,8 +104,51 @@ android {
     }
 }
 
+/**
+ * 把 `examples/` 底下每個腳本資料夾打成 `examples/<資料夾名>.zip` 放進 assets，讓 App 不用
+ * 下載就能加入範例。`.` 開頭的檔案（編輯器設定、`.luarc.json`）不打包；entry 時間固定，
+ * 內容沒變時輸出也不變。
+ */
+abstract class BundleExamplesTask : DefaultTask() {
+    @get:InputDirectory
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val examplesDir: DirectoryProperty
+
+    @get:OutputDirectory
+    abstract val outputDir: DirectoryProperty
+
+    @TaskAction
+    fun bundle() {
+        val outRoot = outputDir.get().asFile.resolve("examples")
+        outRoot.deleteRecursively()
+        outRoot.mkdirs()
+        val scriptDirs = examplesDir.get().asFile.listFiles()
+            ?.filter { it.isDirectory && !it.name.startsWith(".") && it.resolve("main.lua").isFile }
+            .orEmpty()
+        for (dir in scriptDirs) {
+            ZipOutputStream(outRoot.resolve("${dir.name}.zip").outputStream()).use { zip ->
+                dir.walkTopDown()
+                    .onEnter { it == dir || !it.name.startsWith(".") }
+                    .filter { it.isFile && !it.name.startsWith(".") }
+                    .sortedBy { it.relativeTo(dir).invariantSeparatorsPath }
+                    .forEach { file ->
+                        zip.putNextEntry(ZipEntry(file.relativeTo(dir).invariantSeparatorsPath).apply { time = 0L })
+                        file.inputStream().use { it.copyTo(zip) }
+                        zip.closeEntry()
+                    }
+            }
+        }
+    }
+}
+
+val bundleExamples = tasks.register<BundleExamplesTask>("bundleExamples") {
+    examplesDir.set(rootProject.layout.projectDirectory.dir("examples"))
+    outputDir.set(layout.buildDirectory.dir("generated/examples"))
+}
+
 androidComponents {
     onVariants { variant ->
+        variant.sources.assets?.addGeneratedSourceDirectory(bundleExamples, BundleExamplesTask::outputDir)
         val currentTimestamp = System.currentTimeMillis().toString()
         variant.buildConfigFields?.put(
             "BUILD_TIME",

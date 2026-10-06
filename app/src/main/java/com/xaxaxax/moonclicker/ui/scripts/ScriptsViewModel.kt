@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.xaxaxax.moonclicker.R
+import com.xaxaxax.moonclicker.script.BundledExamples
 import com.xaxaxax.moonclicker.script.Script
 import com.xaxaxax.moonclicker.script.ScriptArchive
 import com.xaxaxax.moonclicker.script.ScriptSession
@@ -34,7 +35,13 @@ data class ScriptsUiState(
     val scriptsPath: String = "",
     /** 匯入的 zip 撞了裝置上既有腳本的 uniqueId，等使用者選覆蓋還是取消。 */
     val importConflict: ScriptArchive.ImportResult.Conflict? = null,
+    /** [importConflict] 來自加入內建範例而不是匯入 zip：對話框要說明覆蓋會蓋掉使用者的修改。 */
+    val importConflictIsExample: Boolean = false,
+    /** null 代表範例清單沒開。 */
+    val examples: List<ExampleItem>? = null,
 )
+
+data class ExampleItem(val example: BundledExamples.Example, val installed: Boolean)
 
 @HiltViewModel
 class ScriptsViewModel @Inject constructor(
@@ -42,26 +49,39 @@ class ScriptsViewModel @Inject constructor(
     private val store: ScriptStore,
     private val session: ScriptSession,
     private val shizukuManager: ShizukuManager,
+    private val bundledExamples: BundledExamples,
 ) : ViewModel() {
 
     /** 匯入結果之類的一次性訊息。 */
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
 
-    private val _importConflict = MutableStateFlow<ScriptArchive.ImportResult.Conflict?>(null)
+    private data class PendingConflict(val conflict: ScriptArchive.ImportResult.Conflict, val isExample: Boolean)
+
+    private val _importConflict = MutableStateFlow<PendingConflict?>(null)
+
+    private val _examples = MutableStateFlow<List<BundledExamples.Example>?>(null)
+
+    /** 剛加入或匯入的腳本資料夾名，畫面捲到它之後呼叫 [consumeAddedScript]。 */
+    private val _addedScriptId = MutableStateFlow<String?>(null)
+    val addedScriptId: StateFlow<String?> = _addedScriptId.asStateFlow()
 
     val uiState: StateFlow<ScriptsUiState> = combine(
         store.scripts,
         session.state,
         shizukuManager.statusFlow,
         _importConflict,
-    ) { scripts, sessionState, shizuku, importConflict ->
+        _examples,
+    ) { scripts, sessionState, shizuku, pending, examples ->
+        val installedIds = scripts.mapNotNullTo(HashSet()) { it.uniqueId }
         ScriptsUiState(
             scripts = scripts,
             session = sessionState,
             shizukuStatus = shizuku,
             scriptsPath = store.root.absolutePath,
-            importConflict = importConflict,
+            importConflict = pending?.conflict,
+            importConflictIsExample = pending?.isExample == true,
+            examples = examples?.map { ExampleItem(it, it.uniqueId != null && it.uniqueId in installedIds) },
         )
     }.stateIn(
         scope = viewModelScope,
@@ -92,33 +112,61 @@ class ScriptsViewModel @Inject constructor(
                     ScriptArchive.ImportResult.Failed(it.message ?: context.getString(R.string.scripts_imported_failed, ""))
                 }
             }
-            applyImportResult(result)
+            applyImportResult(result, isExample = false)
+        }
+    }
+
+    fun showExamples() {
+        viewModelScope.launch {
+            _examples.value = withContext(Dispatchers.IO) { bundledExamples.list() }
+        }
+    }
+
+    fun dismissExamples() {
+        _examples.value = null
+    }
+
+    fun addExample(example: BundledExamples.Example) {
+        _examples.value = null
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching { bundledExamples.install(example, store.root) }.getOrElse {
+                    Timber.e(it, "installing example %s failed", example.assetName)
+                    ScriptArchive.ImportResult.Failed(it.message ?: example.assetName)
+                }
+            }
+            applyImportResult(result, isExample = true)
         }
     }
 
     /** 使用者對 [ScriptsUiState.importConflict] 的決定。 */
     fun resolveImportConflict(overwrite: Boolean) {
-        val conflict = uiState.value.importConflict ?: return
+        val pending = _importConflict.value ?: return
         _importConflict.value = null
         viewModelScope.launch {
             val result = withContext(Dispatchers.IO) {
-                ScriptArchive.resolveConflict(conflict, overwrite)
+                ScriptArchive.resolveConflict(pending.conflict, overwrite)
             }
-            applyImportResult(result)
+            applyImportResult(result, pending.isExample)
         }
     }
 
-    private fun applyImportResult(result: ScriptArchive.ImportResult) {
+    private fun applyImportResult(result: ScriptArchive.ImportResult, isExample: Boolean) {
         when (result) {
             is ScriptArchive.ImportResult.Imported -> {
                 store.refresh()
+                _addedScriptId.value = result.dir.name
                 _message.value = context.getString(R.string.scripts_imported_success, result.dir.name)
             }
             is ScriptArchive.ImportResult.Failed ->
                 _message.value = context.getString(R.string.scripts_imported_failed, result.reason)
             is ScriptArchive.ImportResult.Conflict ->
-                _importConflict.value = result
+                _importConflict.value = PendingConflict(result, isExample)
         }
+    }
+
+    fun consumeAddedScript() {
+        _addedScriptId.value = null
     }
 
     fun consumeMessage() {

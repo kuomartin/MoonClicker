@@ -97,6 +97,19 @@
     <string name="scripts_running_cannot_operate">腳本執行中，請先停止</string>
     <string name="scripts_cannot_read_file">讀不到選取的檔案</string>
     <string name="scripts_cannot_write_target">無法寫入選取的位置</string>
+    <string name="scripts_missing_unique_id_badge">缺少 ID</string>
+    <string name="scripts_import_conflict_title">腳本 ID 重複</string>
+    <string name="scripts_import_conflict_message">另一份腳本（「%1$s」）已經使用這個 uniqueId。要用匯入的內容覆蓋它嗎？</string>
+    <string name="scripts_import_conflict_overwrite">覆蓋</string>
+    <string name="scripts_import_conflict_cancel">取消</string>
+    <string name="scripts_add">新增腳本</string>
+    <string name="scripts_add_example">加入範例腳本</string>
+    <string name="scripts_examples_title">範例腳本</string>
+    <string name="scripts_examples_added">已加入</string>
+    <string name="scripts_examples_empty">沒有內建範例</string>
+    <string name="scripts_example_conflict_title">範例已加入過</string>
+    <string name="scripts_example_conflict_message">「%1$s」已經在裝置上了。要換成 App 內建的版本嗎？您對它做的修改會遺失。</string>
+    <string name="scripts_example_conflict_overwrite">取代</string>
 
     <!-- Script detail -->
     <string name="script_detail_run">執行</string>

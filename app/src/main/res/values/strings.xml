@@ -102,6 +102,14 @@
     <string name="scripts_import_conflict_message">Another script (\"%1$s\") already uses this uniqueId. Overwrite it with the imported content?</string>
     <string name="scripts_import_conflict_overwrite">Overwrite</string>
     <string name="scripts_import_conflict_cancel">Cancel</string>
+    <string name="scripts_add">Add Script</string>
+    <string name="scripts_add_example">Add Example Script</string>
+    <string name="scripts_examples_title">Example Scripts</string>
+    <string name="scripts_examples_added">Added</string>
+    <string name="scripts_examples_empty">No bundled examples</string>
+    <string name="scripts_example_conflict_title">Example Already Added</string>
+    <string name="scripts_example_conflict_message">\"%1$s\" is already on this device. Replace it with the version bundled in the app? Your changes to it will be lost.</string>
+    <string name="scripts_example_conflict_overwrite">Replace</string>
 
     <!-- Script detail -->
     <string name="script_detail_run">Run</string>
