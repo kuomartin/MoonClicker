@@ -16,7 +16,7 @@ MoonClicker 是一款專為 Android 設計的遠端 Lua 控制與背景自動化
   * 原生 C++ 整合 OpenCV 模板比對。
   * 支援多目標與局部比對。
 
-* **VS Code Workbench 遠端開發**：
+* **VS Code 腳本工作台遠端開發**：
   * 低延遲 H.264 即時螢幕鏡射預覽。
   * F5 一鍵 Push & Run，直接在裝置上執行並即時查看日誌。
   * PIN 碼配對的安全連線認證。
