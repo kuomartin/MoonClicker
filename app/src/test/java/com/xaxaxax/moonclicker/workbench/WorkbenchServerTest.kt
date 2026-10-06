@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -513,6 +514,59 @@ class WorkbenchServerTest {
             val response = client.delete("/scripts/hello/files/nope.lua")
 
             assertEquals(HttpStatusCode.NotFound, response.status)
+        }
+    }
+
+    @Test
+    fun `DELETE scripts removes the whole script folder`() = runTest {
+        scriptFolder("hello", "log('hi')")
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+
+            val response = client.delete("/scripts/hello")
+
+            assertEquals(HttpStatusCode.OK, response.status)
+            assertFalse(File(temp.root, "hello").exists())
+        }
+    }
+
+    @Test
+    fun `DELETE scripts refuses while a script is running`() = runTest {
+        scriptFolder("hello", "log('hi')")
+        fakeRunner.running = true
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+
+            val response = client.delete("/scripts/hello")
+
+            assertEquals(HttpStatusCode.Conflict, response.status)
+            assertTrue(File(temp.root, "hello/main.lua").isFile)
+        }
+    }
+
+    @Test
+    fun `DELETE scripts 404s for an unknown script`() = runTest {
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+
+            assertEquals(HttpStatusCode.NotFound, client.delete("/scripts/nope").status)
+        }
+    }
+
+    @Test
+    fun `device route returns the instance id and name`() = runTest {
+        testApplication {
+            application {
+                workbenchModule(
+                    temp.root, fakeRunner, fakeStream, fakeDisplays,
+                    deviceInfo = { WorkbenchDeviceInfo(id = "abc", name = "Pixel") },
+                )
+            }
+
+            val body = client.get("/device").bodyAsText()
+
+            assertTrue(body.contains("\"id\":\"abc\""))
+            assertTrue(body.contains("\"name\":\"Pixel\""))
         }
     }
 

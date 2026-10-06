@@ -43,6 +43,17 @@ class WorkbenchAuthStore @Inject constructor(
     private val _authorizedTokens = MutableStateFlow(loadTokens())
     val authorizedTokens: StateFlow<Set<String>> = _authorizedTokens.asStateFlow()
 
+    /**
+     * 這台裝置上這份安裝的穩定識別，VS Code 拿它對應本機的腳本資料夾。位址會隨 DHCP 變動、
+     * mDNS 名稱只是型號，都不能拿來判斷「是不是同一台」；認錯裝置會讓同步把另一台的腳本當成
+     * 被刪除。清除 App 資料或重裝時會換新，這時本機資料夾要重新選擇。
+     */
+    val instanceId: String by lazy {
+        prefs.getString(KEY_INSTANCE_ID, null) ?: UUID.randomUUID().toString().also {
+            prefs.edit().putString(KEY_INSTANCE_ID, it).apply()
+        }
+    }
+
     private var failedAttempts = 0
     private var lockoutUntilMs = 0L
 
@@ -137,6 +148,7 @@ class WorkbenchAuthStore @Inject constructor(
     companion object {
         private const val KEY_BRUTE_FORCE_PROTECTION = "brute_force_protection"
         private const val KEY_AUTHORIZED_TOKENS = "authorized_tokens"
+        private const val KEY_INSTANCE_ID = "instance_id"
         private const val PAIRING_TIMEOUT_MS = 5 * 60 * 1000L // 5 minutes
         private const val MAX_FAILED_ATTEMPTS = 3
         private const val LOCKOUT_DURATION_MS = 60 * 1000L // 60 seconds
