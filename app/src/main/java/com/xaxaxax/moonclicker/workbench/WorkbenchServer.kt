@@ -44,6 +44,10 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.withIndex
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.SerialName
@@ -84,6 +88,8 @@ interface ScriptRunner {
 interface ScriptStream {
     val logLines: Flow<String>
     val sharedData: StateFlow<Map<String, Any>>
+    /** 執行中腳本的資料夾名稱，沒有腳本在跑時是 null；訂閱時要先送出目前的值。 */
+    val runningScriptId: Flow<String?>
 }
 
 /**
@@ -135,6 +141,8 @@ class WorkbenchServer @Inject constructor(
     private val scriptStream = object : ScriptStream {
         override val logLines: Flow<String> get() = ScriptEngine.logLines
         override val sharedData: StateFlow<Map<String, Any>> get() = ScriptEngine.sharedData
+        override val runningScriptId: Flow<String?>
+            get() = scriptSession.state.map { state -> state.script?.id.takeIf { state.isRunning } }
     }
 
     private val displaySource = object : DisplaySource {
@@ -408,6 +416,13 @@ fun Application.workbenchModule(
             val fileChangeJob = launch {
                 fileChanges.collect { send(fileChangeFrame(it)) }
             }
+            val runStateJob = launch {
+                scriptStream.runningScriptId
+                    .distinctUntilChanged()
+                    .withIndex()
+                    .filter { (index, scriptId) -> index > 0 || scriptId != null }
+                    .collect { (_, scriptId) -> send(runStateFrame(scriptId)) }
+            }
             try {
                 for (frame in incoming) {
                     if (frame is Frame.Text) {
@@ -418,6 +433,7 @@ fun Application.workbenchModule(
                 dataJob.cancel()
                 logJob.cancel()
                 fileChangeJob.cancel()
+                runStateJob.cancel()
             }
         }
 

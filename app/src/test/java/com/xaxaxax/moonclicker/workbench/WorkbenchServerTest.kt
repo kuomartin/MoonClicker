@@ -59,6 +59,8 @@ private class FakeScriptStream : ScriptStream {
     override val sharedData: StateFlow<Map<String, Any>> = _sharedData
     override val logLines: Flow<String> get() = _logLines
     private val _logLines = MutableSharedFlow<String>(extraBufferCapacity = 64)
+    val running = MutableStateFlow<String?>(null)
+    override val runningScriptId: Flow<String?> get() = running
 
     fun setData(data: Map<String, Any>) {
         _sharedData.value = data
@@ -197,6 +199,24 @@ class WorkbenchServerTest {
                 val event = receiveStreamEvent()
 
                 assertEquals("claimed", event.data_?.get("status"))
+            }
+        }
+    }
+
+    @Test
+    fun `websocket sends the running script on connect and when it changes`() = runTest {
+        fakeStream.running.value = "demo"
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+            val client = createClient { install(ClientWebSockets) }
+
+            client.webSocket("/") {
+                val first = listOf(receiveStreamEvent(), receiveStreamEvent())
+                assertEquals("demo", first.firstNotNullOf { it.run_state }.script_id)
+
+                fakeStream.running.value = null
+
+                assertEquals("", receiveStreamEvent().run_state?.script_id)
             }
         }
     }

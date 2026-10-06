@@ -3,6 +3,7 @@ package com.xaxaxax.moonclicker.workbench
 import io.ktor.websocket.Frame
 import java.io.File
 import moonclicker.workbench.FileChangeEvent
+import moonclicker.workbench.RunStateEvent
 import moonclicker.workbench.StreamEvent
 
 /**
@@ -44,6 +45,9 @@ internal fun fileChangeFrame(change: ScriptFileChange): Frame =
             )
         )
     )
+
+internal fun runStateFrame(scriptId: String?): Frame =
+    Frame.Binary(true, StreamEvent.ADAPTER.encode(StreamEvent(run_state = RunStateEvent(script_id = scriptId.orEmpty()))))
 
 internal fun File.sha256Hex(): String {
     val digest = java.security.MessageDigest.getInstance("SHA-256")
