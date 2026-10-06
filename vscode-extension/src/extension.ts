@@ -2,23 +2,10 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { ConnectionState, WorkbenchConnection } from "./workbenchConnection";
-import { mergeLuarc } from "./luarc";
 import { listDisplays } from "./displaySync";
-import { listScripts, runScript, ScriptHttpError, type ScriptSummary } from "./scriptSync";
-import {
-  createDirectoryOnDevice,
-  deleteFileOnDevice,
-  mirrorDir,
-  pullScriptToMirror,
-  pushFileToDevice,
-  pushTreeToDevice,
-  removeMirroredFile,
-  renameFileOnDevice,
-  syncChangedFileToMirror,
-  toRelativePath,
-} from "./scriptMirror";
-import { loadSyncFilter } from "./syncIgnore";
-import { FileChangeEvent, FileChangeEvent_Kind } from "./generated/workbench_stream_event_pb";
+import { mergeLuarc } from "./luarc";
+import { listScripts, runScript } from "./scriptSync";
+import { FolderSyncController } from "./folderSyncController";
 import { disposeMirrorPanel, openMirrorPanel, postStreamEventToMirror } from "./mirrorPanel";
 import { WorkspaceTreeProvider, RemoteScriptItem } from "./treeViews";
 import { startMdnsDaemon, getCachedDevices, mdnsEvents, checkDeviceHealth, refreshMdns } from "./mdnsDiscovery";
@@ -30,66 +17,14 @@ let statusBarItem: vscode.StatusBarItem | undefined;
 let extensionContext: vscode.ExtensionContext | undefined;
 let workspaceProvider: WorkspaceTreeProvider;
 let activeToken: string | undefined;
-/** 同時可能有好幾個已開啟的鏡像資料夾——可能來自不同裝置——所以每個 address 各自記自己
- *  的 token，不能只靠 [activeToken] 這個「目前連線」。 */
+let folderSync: FolderSyncController;
+/** 使用者按下 Connect 之後的第一次連上才算互動式：可以跳出選擇資料夾。自動重連不跳。 */
+let interactiveConnect = false;
+/** 每個 address 各自的 token：自動重連時從 secrets 撈回來。 */
 const tokensByAddress = new Map<string, string>();
 
-interface OpenMirror {
-  address: string;
-  scriptId: string;
-  watcher: vscode.FileSystemWatcher;
-}
-/** key 是鏡像資料夾的 fsPath（`mirrorDir()` 算出來的那個隱藏路徑）。 */
-const openMirrors = new Map<string, OpenMirror>();
-
-function findMirrorForLocalPath(fsPath: string): (OpenMirror & { destDir: string }) | undefined {
-  for (const [destDir, mirror] of openMirrors) {
-    if (fsPath === destDir || fsPath.startsWith(destDir + path.sep)) {
-      return { ...mirror, destDir };
-    }
-  }
-  return undefined;
-}
-
-interface MirrorRecord {
-  address: string;
-  scriptId: string;
-  destDir: string;
-}
-
-/** 持久記錄「這個本機資料夾對應裝置上哪一顆腳本」——跨 activate 存活，見 [rehydrateOpenMirrors]。 */
-function loadMirrorRegistry(): MirrorRecord[] {
-  return extensionContext?.globalState.get<MirrorRecord[]>("moonclicker.mirrors", []) ?? [];
-}
-
-function rememberMirror(record: MirrorRecord): void {
-  const records = loadMirrorRegistry().filter((r) => r.destDir !== record.destDir);
-  records.push(record);
-  extensionContext?.globalState.update("moonclicker.mirrors", records);
-}
-
-/**
- * `vscode.workspace.updateWorkspaceFolders` 官方文件明講：第一次加入 workspace folder、或
- * 從空/單一資料夾轉成多資料夾時，擴充套件會被終止重啟——`tokensByAddress`／`activeToken`／
- * `connection`／`openMirrors` 這些純記憶體狀態全部歸零，但已經掛上的鏡像資料夾會被 VS Code
- * 保留下來。重新 activate 時得把這些資料夾對應的 token 從 secrets 撈回來、watcher 重新掛上，
- * 不能只靠「使用者按過一次 Connect」這個一次性動作。
- */
-async function rehydrateOpenMirrors(): Promise<void> {
-  if (!extensionContext) return;
-  const openFolderPaths = new Set((vscode.workspace.workspaceFolders ?? []).map((f) => f.uri.fsPath));
-  for (const record of loadMirrorRegistry()) {
-    if (!openFolderPaths.has(record.destDir) || openMirrors.has(record.destDir)) continue;
-    if (!tokensByAddress.has(record.address)) {
-      const token = await extensionContext.secrets.get(`moonclicker_token_${record.address}`);
-      if (token) tokensByAddress.set(record.address, token);
-    }
-    registerMirror(record.address, record.scriptId, record.destDir);
-  }
-}
-
-/** 記錄「使用者上次手動連線的裝置」，讓 [reconnectLastDevice] 在 [rehydrateOpenMirrors] 同一輪
- *  extension 重啟後，能把使用者剛按過的連線接回去，而不只是把鏡像資料夾的 watcher 接回去。 */
+/** 記錄「使用者上次手動連線的裝置」，讓 [reconnectLastDevice] 在視窗重新載入（例如開啟腳本資料夾）
+ *  之後把連線接回去。 */
 function rememberLastAddress(address: string): void {
   extensionContext?.globalState.update("moonclicker.lastAddress", address);
 }
@@ -98,9 +33,8 @@ function forgetLastAddress(): void {
   extensionContext?.globalState.update("moonclicker.lastAddress", undefined);
 }
 
-/** `openScript()` 掛新 workspace folder 時會觸發文件註明的 extension 重啟，把 [connection] 砍成
- *  全新的 disconnected 實例——使用者剛連上的裝置因此無聲斷線，得靠自己按一次 Connect 才會發現。
- *  這裡用 [rememberLastAddress] 記下的位址，在重啟後自動接回去。 */
+/** 開啟腳本資料夾會重新載入視窗，[connection] 變成全新的 disconnected 實例；這裡用
+ *  [rememberLastAddress] 記下的位址自動接回去。 */
 async function reconnectLastDevice(): Promise<void> {
   if (!extensionContext || !connection) return;
   const address = extensionContext.globalState.get<string>("moonclicker.lastAddress");
@@ -116,97 +50,6 @@ async function reconnectLastDevice(): Promise<void> {
   connection.connect(address, token);
 }
 
-/**
- * `handleRemoteFileChange` 寫新檔案到本機時，這個資料夾自己的 `FileSystemWatcher` 會看到
- * `onDidCreate`——沒有這個集合的話，會把「裝置推來的變動」當成「使用者新增的檔案」原封
- * 不動推回裝置，形成沒意義的來回。寫入前登記、觸發完清掉；delay 一小段是留給 fs event
- * 真的送達的時間，不是在猜對方到底有沒有收到。
- */
-const suppressedCreatePaths = new Set<string>();
-
-/** 對著鏡像資料夾掛 watcher：新增檔案/資料夾、刪除都同步推上裝置。存檔另外走 `onDidSaveTextDocument`。 */
-function registerMirror(address: string, scriptId: string, destDir: string): void {
-  if (openMirrors.has(destDir)) return;
-  rememberMirror({ address, scriptId, destDir });
-  const watcher = vscode.workspace.createFileSystemWatcher(
-    new vscode.RelativePattern(vscode.Uri.file(destDir), "**/*")
-  );
-  watcher.onDidCreate(async (uri) => {
-    if (suppressedCreatePaths.has(uri.fsPath)) return;
-    try {
-      const stat = fs.statSync(uri.fsPath);
-      if (loadSyncFilter(destDir)(toRelativePath(destDir, uri.fsPath), stat.isDirectory())) return;
-      const token = tokensByAddress.get(address);
-      if (stat.isDirectory()) {
-        await createDirectoryOnDevice(address, scriptId, destDir, uri.fsPath, token);
-      } else {
-        await pushFileToDevice(address, scriptId, destDir, uri.fsPath, token);
-      }
-    } catch (err) {
-      vscode.window.showErrorMessage(`MoonClicker: 同步新增失敗 - ${(err as Error).message}`);
-    }
-  });
-  watcher.onDidDelete(async (uri) => {
-    // 路徑已經不在了，分不出是檔案還是目錄；兩種解讀都被排除才略過。只符合其中一種時照樣送出
-    // 刪除，被排除的路徑本來就不在裝置上，頂多得到下面會吞掉的 404。
-    const isIgnored = loadSyncFilter(destDir);
-    const relPath = toRelativePath(destDir, uri.fsPath);
-    if (isIgnored(relPath, false) && isIgnored(relPath, true)) return;
-    try {
-      await deleteFileOnDevice(address, scriptId, destDir, uri.fsPath, tokensByAddress.get(address));
-    } catch (err) {
-      // 改名會先觸發 onDidRenameFiles（已經呼叫裝置端的 rename，原路徑在裝置上已經不存在），
-      // 系統層級的 fs watcher 隨後才看到「舊路徑消失」再補一次 delete——404 是這個競態的
-      // 正常結果，不是真的失敗，不用跳錯誤訊息。
-      if (err instanceof ScriptHttpError && err.status === 404) return;
-      vscode.window.showErrorMessage(`MoonClicker: 同步刪除失敗 - ${(err as Error).message}`);
-    }
-  });
-  extensionContext?.subscriptions.push(watcher);
-  openMirrors.set(destDir, { address, scriptId, watcher });
-}
-
-async function handleRemoteFileChange(address: string, change: FileChangeEvent, destDir: string): Promise<void> {
-  if (change.kind === FileChangeEvent_Kind.DELETED) {
-    removeMirroredFile(destDir, change.path);
-    return;
-  }
-  const localPath = path.join(destDir, ...change.path.split("/"));
-  suppressedCreatePaths.add(localPath);
-  try {
-    // 寫回本機磁碟後，VS Code 原生的 file:// 檔案監控會自己偵測到、reload 開著的 buffer——
-    // 不用像 virtual FS 那樣手動 fire onDidChangeFile。
-    await syncChangedFileToMirror(address, change.scriptId, destDir, change.path, tokensByAddress.get(address));
-  } finally {
-    setTimeout(() => suppressedCreatePaths.delete(localPath), 2000);
-  }
-}
-
-/** 改名可能讓路徑進出排除範圍：依新舊路徑是否被排除，決定在裝置上改名、刪除或補推。 */
-async function syncRename(address: string, scriptId: string, destDir: string, oldPath: string, newPath: string): Promise<void> {
-  const token = tokensByAddress.get(address);
-  const isIgnored = loadSyncFilter(destDir);
-  const isDirectory = fs.statSync(newPath).isDirectory();
-  const oldIgnored = isIgnored(toRelativePath(destDir, oldPath), isDirectory);
-  const newIgnored = isIgnored(toRelativePath(destDir, newPath), isDirectory);
-  if (oldIgnored && newIgnored) return;
-  if (newIgnored) {
-    try {
-      await deleteFileOnDevice(address, scriptId, destDir, oldPath, token);
-    } catch (err) {
-      if (!(err instanceof ScriptHttpError && err.status === 404)) throw err;
-    }
-  } else if (oldIgnored) {
-    if (isDirectory) {
-      await pushTreeToDevice(address, scriptId, destDir, newPath, isIgnored, token);
-    } else {
-      await pushFileToDevice(address, scriptId, destDir, newPath, token);
-    }
-  } else {
-    await renameFileOnDevice(address, scriptId, destDir, oldPath, newPath, token);
-  }
-}
-
 export function activate(context: vscode.ExtensionContext): void {
   startMdnsDaemon();
   extensionContext = context;
@@ -217,34 +60,15 @@ export function activate(context: vscode.ExtensionContext): void {
 
   workspaceProvider = new WorkspaceTreeProvider();
   vscode.window.registerTreeDataProvider("moonclicker.workspace", workspaceProvider);
+  folderSync = new FolderSyncController(context);
+  context.subscriptions.push(folderSync);
 
-  rehydrateOpenMirrors().then(() => reconnectLastDevice());
+  removeLegacyMirrorFolders(context);
+  reconnectLastDevice();
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeWorkspaceFolders(() => {
       workspaceProvider.refresh();
-      rehydrateOpenMirrors().then(() => reconnectLastDevice());
-    }),
-    vscode.workspace.onDidSaveTextDocument(async (doc) => {
-      const mirror = findMirrorForLocalPath(doc.uri.fsPath);
-      if (!mirror) return;
-      if (loadSyncFilter(mirror.destDir)(toRelativePath(mirror.destDir, doc.uri.fsPath), false)) return;
-      try {
-        await pushFileToDevice(mirror.address, mirror.scriptId, mirror.destDir, doc.uri.fsPath, tokensByAddress.get(mirror.address));
-      } catch (err) {
-        vscode.window.showErrorMessage(`MoonClicker: 同步存檔失敗 - ${(err as Error).message}`);
-      }
-    }),
-    vscode.workspace.onDidRenameFiles(async (event) => {
-      for (const { oldUri, newUri } of event.files) {
-        const mirror = findMirrorForLocalPath(oldUri.fsPath);
-        if (!mirror) continue;
-        try {
-          await syncRename(mirror.address, mirror.scriptId, mirror.destDir, oldUri.fsPath, newUri.fsPath);
-        } catch (err) {
-          vscode.window.showErrorMessage(`MoonClicker: 同步改名失敗 - ${(err as Error).message}`);
-        }
-      }
     })
   );
 
@@ -255,6 +79,13 @@ export function activate(context: vscode.ExtensionContext): void {
     renderStatusBar(state);
     vscode.commands.executeCommand("setContext", "moonclicker.connected", state.status === "connected");
     workspaceProvider.updateState(state, activeToken);
+    if (state.status === "connected") {
+      const interactive = interactiveConnect;
+      interactiveConnect = false;
+      folderSync.start(state.address, activeToken, interactive).then(() => workspaceProvider.refresh());
+    } else if (state.status !== "connecting") {
+      folderSync.stop();
+    }
     if (state.status === "error") {
       vscode.window.showErrorMessage(`MoonClicker: 連線到 ${state.address} 失敗——${state.message}`);
     }
@@ -267,17 +98,8 @@ export function activate(context: vscode.ExtensionContext): void {
       dataChannel.clear();
       dataChannel.appendLine(JSON.stringify(event.event.value, null, 2));
     } else if (event.event.case === "fileChange") {
-      const state = connection?.state;
-      if (state?.status === "connected") {
-        const address = state.address;
-        const change = event.event.value;
-        const destDir = extensionContext ? mirrorDir(extensionContext.globalStorageUri.fsPath, address, change.scriptId) : undefined;
-        if (destDir && openMirrors.has(destDir)) {
-          handleRemoteFileChange(address, change, destDir).catch((err) => {
-            vscode.window.showErrorMessage(`MoonClicker: 同步裝置變更失敗 - ${(err as Error).message}`);
-          });
-        }
-      }
+      folderSync.handleRemoteChange(event.event.value);
+      if (!event.event.value.path) workspaceProvider.refresh();
     }
     postStreamEventToMirror(event.event);
   });
@@ -295,6 +117,10 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("moonclicker.run", runCommand),
     vscode.commands.registerCommand("moonclicker.runRemote", runRemoteCommand),
     vscode.commands.registerCommand("moonclicker.stop", stopCommand),
+    vscode.commands.registerCommand("moonclicker.newScript", () => {
+      const address = connectedAddress();
+      if (address) folderSync.newScript(address, activeToken);
+    }),
     vscode.commands.registerCommand("moonclicker.openWorkbench", openWorkbenchCommand),
     vscode.commands.registerCommand("moonclicker.setupStubs", setupStubsCommand),
   );
@@ -428,6 +254,7 @@ async function connectCommand(): Promise<void> {
     activeToken = token;
     if (token) tokensByAddress.set(address, token);
     rememberLastAddress(address);
+    interactiveConnect = true;
     connection?.connect(address, token);
   });
 
@@ -460,72 +287,53 @@ async function pickScript(address: string): Promise<string | undefined> {
   return picked?.id;
 }
 
-/** 整份 pull 到本機隱藏鏡像資料夾、掛 watcher、配好 Lua 型別提示，再掛成 workspace folder。 */
-async function openScript(address: string, summary: ScriptSummary): Promise<void> {
-  if (!extensionContext) return;
-  const destDir = mirrorDir(extensionContext.globalStorageUri.fsPath, address, summary.id);
-  if ((vscode.workspace.workspaceFolders ?? []).some((f) => f.uri.fsPath === destDir)) return;
-
-  try {
-    await vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Notification, title: `MoonClicker: 下載「${summary.name || summary.id}」...` },
-      () => pullScriptToMirror(address, summary.id, destDir, tokensByAddress.get(address)),
+/** 開啟腳本在本機資料夾裡的 main.lua；沒帶 item 時先選腳本。 */
+async function openScriptCommand(item?: RemoteScriptItem): Promise<void> {
+  const scriptId = item?.summary.id ?? (connectedAddress() ? await pickScript(connectedAddress()!) : undefined);
+  if (!scriptId) return;
+  const uri = folderSync.mainLuaUri(scriptId);
+  if (!uri) {
+    vscode.window.showErrorMessage(
+      folderSync.root ? `MoonClicker: 本機資料夾裡沒有「${scriptId}」的 main.lua` : "MoonClicker: 請先連線並選擇腳本資料夾",
     );
-  } catch (err) {
-    vscode.window.showErrorMessage(`MoonClicker: ${(err as Error).message}`);
     return;
   }
-
-  registerMirror(address, summary.id, destDir);
-  // 盡力而為：Lua 型別提示失敗不該擋掉「腳本已經下載好、可以開始編輯」這件事。
-  try {
-    ensureLuarcConfigured(destDir);
-  } catch {}
-
-  vscode.workspace.updateWorkspaceFolders(vscode.workspace.workspaceFolders?.length ?? 0, 0, {
-    uri: vscode.Uri.file(destDir),
-    name: summary.name || summary.id,
-  });
+  await vscode.window.showTextDocument(uri);
 }
 
-/** 依 tree item 或（沒帶 item 時）先選裝置、再選腳本。 */
-async function openScriptCommand(item?: RemoteScriptItem): Promise<void> {
-  if (item) {
-    await openScript(item.address, item.summary);
-    return;
-  }
+/** F5：存檔、等同步完成，再在裝置上執行目前編輯器所在的腳本。 */
+async function runCommand(): Promise<void> {
+  const editor = vscode.window.activeTextEditor;
+  const scriptId = editor ? folderSync.scriptIdFor(editor.document.uri.fsPath) : undefined;
   const address = connectedAddress();
   if (!address) return;
-  const scripts = await listScripts(address, activeToken).catch((err) => {
-    vscode.window.showErrorMessage(`MoonClicker: ${(err as Error).message}`);
-    return undefined;
-  });
-  if (!scripts || scripts.length === 0) {
-    if (scripts) vscode.window.showInformationMessage("MoonClicker: 裝置上還沒有任何腳本");
-    return;
-  }
-  const picked = await vscode.window.showQuickPick(
-    scripts.map((s) => ({ label: s.name, description: s.id, script: s })),
-    { placeHolder: "選擇要開啟的 Script Folder" },
-  );
-  if (picked) await openScript(address, picked.script);
-}
-
-/** F5／「Run Current Script」：對著目前作用中編輯器所在的鏡像資料夾觸發執行。 */
-async function runCommand(): Promise<void> {
-  const fsPath = vscode.window.activeTextEditor?.document.uri.fsPath;
-  const mirror = fsPath ? findMirrorForLocalPath(fsPath) : undefined;
-  if (!mirror) {
-    vscode.window.showErrorMessage("MoonClicker: 請先透過側邊欄開啟一個裝置上的腳本");
+  if (!editor || !scriptId) {
+    vscode.window.showErrorMessage("MoonClicker: 請在同步的腳本資料夾中開啟要執行的腳本");
     return;
   }
   try {
+    if (editor.document.isDirty) await editor.document.save();
+    await folderSync.flush(editor.document.uri.fsPath);
     insertRunDivider();
-    await runScript(mirror.address, mirror.scriptId, tokensByAddress.get(mirror.address));
-    vscode.window.showInformationMessage(`MoonClicker: 已在裝置上觸發「${mirror.scriptId}」執行`);
+    await runScript(address, scriptId, activeToken);
+    vscode.window.showInformationMessage(`MoonClicker: 已在裝置上觸發「${scriptId}」執行`);
   } catch (err) {
     vscode.window.showErrorMessage(`MoonClicker: ${(err as Error).message}`);
   }
+}
+
+/**
+ * 舊版把每支腳本各自鏡像到 globalStorage 並加成 workspace folder；改成同步整個資料夾後，
+ * 這些資料夾留在 workspace 裡只會造成混淆。內容早已同步在裝置上，這裡只把它們移出
+ * workspace，不刪除檔案。
+ */
+function removeLegacyMirrorFolders(context: vscode.ExtensionContext): void {
+  const mirrorsRoot = path.join(context.globalStorageUri.fsPath, "mirrors") + path.sep;
+  const folders = vscode.workspace.workspaceFolders ?? [];
+  const kept = folders.filter((f) => !f.uri.fsPath.startsWith(mirrorsRoot));
+  context.globalState.update("moonclicker.mirrors", undefined);
+  if (kept.length === folders.length) return;
+  vscode.workspace.updateWorkspaceFolders(0, folders.length, ...kept.map((f) => ({ uri: f.uri, name: f.name })));
 }
 
 async function setupStubsCommand(): Promise<void> {

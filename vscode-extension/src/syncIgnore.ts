@@ -4,12 +4,15 @@ import ignore from "ignore";
 
 export const IGNORE_FILE_NAME = ".moonclickerignore";
 
+/** 同步衝突時，裝置版本另存成 `<檔名>.device` 放在本機檔案旁邊；它只給使用者合併用，不推回裝置。 */
+export const CONFLICT_SUFFIX = ".device";
+
 /**
- * 永遠先套用的規則，使用者可以在 ignorefile 裡用 `!` 否定。`.luarc.json` 是
- * `ensureLuarcConfigured` 寫進鏡像資料夾的，`workspace.library` 指向本機 extension 目錄，
- * 推上裝置沒有意義；ignorefile 本身也只對本機推送有意義。
+ * 永遠先套用的規則，使用者可以在 ignorefile 裡用 `!` 否定。`.luarc.json` 的
+ * `workspace.library` 指向本機 extension 目錄，推上裝置沒有意義；ignorefile 本身與衝突時
+ * 另存的裝置版本也只對本機有意義。
  */
-export const DEFAULT_IGNORE_RULES = [".git/", ".vscode/", ".luarc.json", IGNORE_FILE_NAME];
+export const DEFAULT_IGNORE_RULES = [".git/", ".vscode/", ".luarc.json", IGNORE_FILE_NAME, `*${CONFLICT_SUFFIX}`];
 
 /** `relPath` 是相對於 Script Folder、以 `/` 分隔的路徑；回傳 `true` 代表不要推上裝置。 */
 export type SyncFilter = (relPath: string, isDirectory: boolean) => boolean;

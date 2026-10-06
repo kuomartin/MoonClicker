@@ -127,12 +127,16 @@ export async function renameEntry(
  */
 const SCRIPT_ID_PATTERN = /^[a-z0-9._-]+$/;
 
+export function isValidScriptId(id: string): boolean {
+  return !!id && !id.startsWith(".") && SCRIPT_ID_PATTERN.test(id);
+}
+
 /**
  * 新增一個空的、可執行的腳本資料夾（見 vision-test 計畫第 4 階段：「編寫」的新增腳本）。
  * 呼叫 POST /scripts/{id}，裝置端會給一份最小的 main.lua 骨架跟帶 uniqueId 的 script.json。
  */
 export async function createScript(address: string, id: string, token?: string): Promise<void> {
-  if (!id || id.startsWith(".") || !SCRIPT_ID_PATTERN.test(id)) {
+  if (!isValidScriptId(id)) {
     throw new Error("腳本名稱只能是小寫英數字、「.」「_」「-」，且不能以「.」開頭");
   }
   const response = await fetch(`http://${address}/scripts/${encodeURIComponent(id)}`, {
@@ -161,4 +165,30 @@ export async function runScript(address: string, id: string, token?: string): Pr
     const reason = await response.text();
     throw new Error(`執行失敗（HTTP ${response.status}）：${reason}`);
   }
+}
+
+/** 刪除整個腳本資料夾。腳本執行中時裝置端回 409。 */
+export async function deleteScript(address: string, id: string, token?: string): Promise<void> {
+  const response = await fetch(`http://${address}/scripts/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+  if (!response.ok) {
+    const reason = await response.text();
+    throw new ScriptHttpError(reason || `刪除腳本失敗（HTTP ${response.status}）`, response.status);
+  }
+}
+
+export interface DeviceInfo {
+  /** 這份 App 安裝的穩定識別，用來對應本機的腳本資料夾；位址會變，這個不會。 */
+  id: string;
+  name: string;
+}
+
+export async function getDeviceInfo(address: string, token?: string): Promise<DeviceInfo> {
+  const response = await fetch(`http://${address}/device`, { headers: authHeaders(token) });
+  if (!response.ok) {
+    throw new ScriptHttpError(`讀取裝置資訊失敗（HTTP ${response.status}）`, response.status);
+  }
+  return (await response.json()) as DeviceInfo;
 }
