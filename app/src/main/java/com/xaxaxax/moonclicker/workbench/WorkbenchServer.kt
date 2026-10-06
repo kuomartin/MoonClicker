@@ -1,5 +1,6 @@
 package com.xaxaxax.moonclicker.workbench
 
+import android.os.Build
 import com.xaxaxax.moonclicker.IMoonClickerService
 import com.xaxaxax.moonclicker.core.AppSettings
 import com.xaxaxax.moonclicker.core.OcrManager
@@ -187,6 +188,7 @@ class WorkbenchServer @Inject constructor(
                     workbenchModule(
                         scriptsRoot, scriptRunner, scriptStream, displaySource, shizukuManager, authStore,
                         ocrAvailable = { ocrManager.runtime() != null },
+                        deviceInfo = { WorkbenchDeviceInfo(id = authStore.instanceId, name = Build.MODEL) },
                     )
                 },
             ).start(wait = false)
@@ -300,6 +302,10 @@ data class OcrTestRequest(
 @Serializable
 data class PairResponse(val token: String)
 
+/** `GET /device`：[id] 是 [WorkbenchAuthStore.instanceId]，[name] 給人看。 */
+@Serializable
+data class WorkbenchDeviceInfo(val id: String, val name: String)
+
 /**
  * [scriptsRoot] 拆成參數而不是內部自己算，是為了比照 [ScriptStore.scan] 的作法，讓
  * `WorkbenchServerTest` 能直接餵一個暫存目錄進來，不需要 Hilt 或真的 Android Context。
@@ -315,6 +321,7 @@ fun Application.workbenchModule(
     authStore: WorkbenchAuthStore? = null,
     /** OCR 套件是否已安裝；未安裝時 `/ocr-test` 回 412。 */
     ocrAvailable: () -> Boolean = { false },
+    deviceInfo: () -> WorkbenchDeviceInfo = { WorkbenchDeviceInfo(id = "test-device", name = "Test Device") },
 ) {
     install(WebSockets)
     // 誰透過 HTTP 單檔案 API 寫入，都要推給每個開著的 WebSocket——一個 VS Code client
@@ -348,6 +355,10 @@ fun Application.workbenchModule(
     routing {
         get("/health") {
             call.respondText("OK")
+        }
+
+        get("/device") {
+            call.respondText(Json.encodeToString(deviceInfo()), ContentType.Application.Json)
         }
 
         post("/pair") {
