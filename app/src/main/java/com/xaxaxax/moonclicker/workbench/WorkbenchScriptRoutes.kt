@@ -71,6 +71,27 @@ fun Route.scriptRoutes(
         }
     }
 
+    // 刪除整個腳本：VS Code 那邊整個腳本資料夾被刪掉時用。單檔案的 DELETE 不接受空路徑，
+    // 刪不到資料夾本身。執行中一律拒絕——ScriptRunner 只知道「有沒有東西在跑」，不知道是哪一支。
+    delete("/scripts/{id}") {
+        val script = call.parameters["id"]?.let { id -> ScriptStore.scan(scriptsRoot).find { it.id == id } }
+        if (script == null) {
+            call.respondText("Script not found", status = HttpStatusCode.NotFound)
+            return@delete
+        }
+        if (scriptRunner.isRunning()) {
+            call.respondText("A script is running", status = HttpStatusCode.Conflict)
+            return@delete
+        }
+        if (!script.dir.deleteRecursively()) {
+            call.respondText("Failed to delete", status = HttpStatusCode.InternalServerError)
+            return@delete
+        }
+        // 空路徑代表整個腳本。
+        fileChanges.tryEmit(ScriptFileChange(script.id, "", ScriptFileChangeKind.DELETED))
+        call.respondText("OK")
+    }
+
     // Script Folder 單檔案讀寫（見 vscode-local-mirror-plan）：VS Code 端維護一份本機
     // 鏡像資料夾，靠這幾個路由跟裝置做背景同步——取代整包 zip 的 export/import，
     // 也取代直接把這份 API 接成 vscode.FileSystemProvider 的做法（LuaLS 讀不到
