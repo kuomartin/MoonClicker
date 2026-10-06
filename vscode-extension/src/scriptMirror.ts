@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { deleteEntry, getTree, mkdir as mkdirRemote, readFile, renameEntry, writeFile } from "./scriptSync";
+import type { SyncFilter } from "./syncIgnore";
 
 export function sha256Hex(content: Uint8Array | Buffer): string {
   return createHash("sha256").update(content).digest("hex");
@@ -21,7 +22,7 @@ function toLocalPath(destDir: string, relativePath: string): string {
   return path.join(destDir, ...relativePath.split("/"));
 }
 
-function toRelativePath(destDir: string, localPath: string): string {
+export function toRelativePath(destDir: string, localPath: string): string {
   return path.relative(destDir, localPath).split(path.sep).join("/");
 }
 
@@ -105,6 +106,31 @@ export async function renameFileOnDevice(
     true,
     token,
   );
+}
+
+/**
+ * 把本機一整個目錄（含底下所有沒被排除的子目錄與檔案）推上裝置。用在目錄從排除範圍
+ * 改名出來的時候：fs watcher 不保證會對目錄裡的檔案個別送 create。
+ */
+export async function pushTreeToDevice(
+  address: string,
+  scriptId: string,
+  destDir: string,
+  localDir: string,
+  isIgnored: SyncFilter,
+  token?: string,
+): Promise<void> {
+  await mkdirRemote(address, scriptId, toRelativePath(destDir, localDir), token);
+  for (const entry of fs.readdirSync(localDir, { withFileTypes: true })) {
+    const localPath = path.join(localDir, entry.name);
+    const isDirectory = entry.isDirectory();
+    if (isIgnored(toRelativePath(destDir, localPath), isDirectory)) continue;
+    if (isDirectory) {
+      await pushTreeToDevice(address, scriptId, destDir, localPath, isIgnored, token);
+    } else if (entry.isFile()) {
+      await pushFileToDevice(address, scriptId, destDir, localPath, token);
+    }
+  }
 }
 
 /**

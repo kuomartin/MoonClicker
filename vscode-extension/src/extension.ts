@@ -11,10 +11,13 @@ import {
   mirrorDir,
   pullScriptToMirror,
   pushFileToDevice,
+  pushTreeToDevice,
   removeMirroredFile,
   renameFileOnDevice,
   syncChangedFileToMirror,
+  toRelativePath,
 } from "./scriptMirror";
+import { loadSyncFilter } from "./syncIgnore";
 import { FileChangeEvent, FileChangeEvent_Kind } from "./generated/workbench_stream_event_pb";
 import { disposeMirrorPanel, openMirrorPanel, postStreamEventToMirror } from "./mirrorPanel";
 import { WorkspaceTreeProvider, RemoteScriptItem } from "./treeViews";
@@ -131,6 +134,7 @@ function registerMirror(address: string, scriptId: string, destDir: string): voi
     if (suppressedCreatePaths.has(uri.fsPath)) return;
     try {
       const stat = fs.statSync(uri.fsPath);
+      if (loadSyncFilter(destDir)(toRelativePath(destDir, uri.fsPath), stat.isDirectory())) return;
       const token = tokensByAddress.get(address);
       if (stat.isDirectory()) {
         await createDirectoryOnDevice(address, scriptId, destDir, uri.fsPath, token);
@@ -142,6 +146,11 @@ function registerMirror(address: string, scriptId: string, destDir: string): voi
     }
   });
   watcher.onDidDelete(async (uri) => {
+    // 路徑已經不在了，分不出是檔案還是目錄；兩種解讀都被排除才略過。只符合其中一種時照樣送出
+    // 刪除，被排除的路徑本來就不在裝置上，頂多得到下面會吞掉的 404。
+    const isIgnored = loadSyncFilter(destDir);
+    const relPath = toRelativePath(destDir, uri.fsPath);
+    if (isIgnored(relPath, false) && isIgnored(relPath, true)) return;
     try {
       await deleteFileOnDevice(address, scriptId, destDir, uri.fsPath, tokensByAddress.get(address));
     } catch (err) {
@@ -172,6 +181,31 @@ async function handleRemoteFileChange(address: string, change: FileChangeEvent, 
   }
 }
 
+/** 改名可能讓路徑進出排除範圍：依新舊路徑是否被排除，決定在裝置上改名、刪除或補推。 */
+async function syncRename(address: string, scriptId: string, destDir: string, oldPath: string, newPath: string): Promise<void> {
+  const token = tokensByAddress.get(address);
+  const isIgnored = loadSyncFilter(destDir);
+  const isDirectory = fs.statSync(newPath).isDirectory();
+  const oldIgnored = isIgnored(toRelativePath(destDir, oldPath), isDirectory);
+  const newIgnored = isIgnored(toRelativePath(destDir, newPath), isDirectory);
+  if (oldIgnored && newIgnored) return;
+  if (newIgnored) {
+    try {
+      await deleteFileOnDevice(address, scriptId, destDir, oldPath, token);
+    } catch (err) {
+      if (!(err instanceof ScriptHttpError && err.status === 404)) throw err;
+    }
+  } else if (oldIgnored) {
+    if (isDirectory) {
+      await pushTreeToDevice(address, scriptId, destDir, newPath, isIgnored, token);
+    } else {
+      await pushFileToDevice(address, scriptId, destDir, newPath, token);
+    }
+  } else {
+    await renameFileOnDevice(address, scriptId, destDir, oldPath, newPath, token);
+  }
+}
+
 export function activate(context: vscode.ExtensionContext): void {
   startMdnsDaemon();
   extensionContext = context;
@@ -193,6 +227,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.workspace.onDidSaveTextDocument(async (doc) => {
       const mirror = findMirrorForLocalPath(doc.uri.fsPath);
       if (!mirror) return;
+      if (loadSyncFilter(mirror.destDir)(toRelativePath(mirror.destDir, doc.uri.fsPath), false)) return;
       try {
         await pushFileToDevice(mirror.address, mirror.scriptId, mirror.destDir, doc.uri.fsPath, tokensByAddress.get(mirror.address));
       } catch (err) {
@@ -204,7 +239,7 @@ export function activate(context: vscode.ExtensionContext): void {
         const mirror = findMirrorForLocalPath(oldUri.fsPath);
         if (!mirror) continue;
         try {
-          await renameFileOnDevice(mirror.address, mirror.scriptId, mirror.destDir, oldUri.fsPath, newUri.fsPath, tokensByAddress.get(mirror.address));
+          await syncRename(mirror.address, mirror.scriptId, mirror.destDir, oldUri.fsPath, newUri.fsPath);
         } catch (err) {
           vscode.window.showErrorMessage(`MoonClicker: 同步改名失敗 - ${(err as Error).message}`);
         }
