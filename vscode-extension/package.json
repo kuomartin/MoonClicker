@@ -31,7 +31,12 @@
       },
       {
         "command": "moonclicker.openScript",
-        "title": "MoonClicker: Open Script from Device"
+        "title": "MoonClicker: Open Script"
+      },
+      {
+        "command": "moonclicker.newScript",
+        "title": "MoonClicker: New Script",
+        "icon": "$(new-file)"
       },
       {
         "command": "moonclicker.run",
@@ -59,6 +64,11 @@
     ],
     "menus": {
       "view/title": [
+        {
+          "command": "moonclicker.newScript",
+          "when": "view == moonclicker.workspace && moonclicker.connected",
+          "group": "navigation"
+        },
         {
           "command": "moonclicker.connect",
           "when": "view == moonclicker.workspace",
