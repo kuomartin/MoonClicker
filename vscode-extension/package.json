@@ -27,7 +27,8 @@
       },
       {
         "command": "moonclicker.disconnect",
-        "title": "MoonClicker: Disconnect from Device"
+        "title": "MoonClicker: Disconnect from Device",
+        "icon": "$(debug-disconnect)"
       },
       {
         "command": "moonclicker.openScript",
@@ -54,54 +55,61 @@
       },
       {
         "command": "moonclicker.runRemote",
-        "title": "MoonClicker: Run Remote Script"
+        "title": "MoonClicker: Run Remote Script",
+        "icon": "$(play)"
       },
       {
-        "command": "moonclicker.setupStubs",
-        "title": "MoonClicker: Setup Lua Stubs",
-        "icon": "$(lightbulb)"
+        "command": "moonclicker.refresh",
+        "title": "MoonClicker: Refresh and Sync",
+        "icon": "$(refresh)"
       }
     ],
     "menus": {
       "view/title": [
         {
+          "command": "moonclicker.connect",
+          "when": "view == moonclicker.workspace && !moonclicker.connected",
+          "group": "navigation"
+        },
+        {
           "command": "moonclicker.newScript",
           "when": "view == moonclicker.workspace && moonclicker.connected",
-          "group": "navigation"
-        },
-        {
-          "command": "moonclicker.connect",
-          "when": "view == moonclicker.workspace",
-          "group": "navigation"
-        },
-        {
-          "command": "moonclicker.setupStubs",
-          "when": "view == moonclicker.workspace",
-          "group": "navigation"
+          "group": "navigation@1"
         },
         {
           "command": "moonclicker.openWorkbench",
           "when": "view == moonclicker.workspace && moonclicker.connected",
-          "group": "navigation"
+          "group": "navigation@2"
         },
         {
-          "command": "moonclicker.stop",
+          "command": "moonclicker.refresh",
           "when": "view == moonclicker.workspace && moonclicker.connected",
-          "group": "navigation"
+          "group": "navigation@3"
+        },
+        {
+          "command": "moonclicker.disconnect",
+          "when": "view == moonclicker.workspace && moonclicker.connected",
+          "group": "navigation@4"
         }
       ],
       "view/item/context": [
         {
           "command": "moonclicker.runRemote",
-          "when": "viewItem == remoteScript"
+          "when": "viewItem == remoteScript",
+          "group": "inline"
+        },
+        {
+          "command": "moonclicker.stop",
+          "when": "viewItem == remoteScriptRunning",
+          "group": "inline"
         },
         {
           "command": "moonclicker.openWorkbench",
-          "when": "viewItem == remoteRoot"
+          "when": "viewItem == device"
         },
         {
           "command": "moonclicker.disconnect",
-          "when": "viewItem == remoteRoot"
+          "when": "viewItem == device"
         }
       ]
     },
@@ -133,7 +141,14 @@
           "name": "Workspace"
         }
       ]
-    }
+    },
+    "viewsWelcome": [
+      {
+        "view": "moonclicker.workspace",
+        "contents": "尚未連線到裝置。\n[連線到裝置](command:moonclicker.connect)\n在 App 的開發人員選項開啟腳本工作台後，VS Code 會自動搜尋同一個網路上的裝置。",
+        "when": "!moonclicker.connected"
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run package-build",

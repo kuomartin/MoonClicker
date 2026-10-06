@@ -1,9 +1,7 @@
-import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { ConnectionState, WorkbenchConnection } from "./workbenchConnection";
 import { listDisplays } from "./displaySync";
-import { mergeLuarc } from "./luarc";
 import { listScripts, runScript } from "./scriptSync";
 import { FolderSyncController } from "./folderSyncController";
 import { disposeMirrorPanel, openMirrorPanel, postStreamEventToMirror } from "./mirrorPanel";
@@ -14,6 +12,8 @@ import { stopRun } from "./visionTest";
 
 let connection: WorkbenchConnection | undefined;
 let statusBarItem: vscode.StatusBarItem | undefined;
+/** 腳本執行中才出現，點擊即停止。 */
+let runStatusItem: vscode.StatusBarItem | undefined;
 let extensionContext: vscode.ExtensionContext | undefined;
 let workspaceProvider: WorkspaceTreeProvider;
 let activeToken: string | undefined;
@@ -57,6 +57,10 @@ export function activate(context: vscode.ExtensionContext): void {
   statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
   statusBarItem.show();
   renderStatusBar({ status: "disconnected" });
+  runStatusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 99);
+  runStatusItem.command = "moonclicker.stop";
+  runStatusItem.tooltip = "停止裝置上的腳本";
+  context.subscriptions.push(runStatusItem);
 
   workspaceProvider = new WorkspaceTreeProvider();
   vscode.window.registerTreeDataProvider("moonclicker.workspace", workspaceProvider);
@@ -82,9 +86,12 @@ export function activate(context: vscode.ExtensionContext): void {
     if (state.status === "connected") {
       const interactive = interactiveConnect;
       interactiveConnect = false;
-      folderSync.start(state.address, activeToken, interactive).then(() => workspaceProvider.refresh());
+      folderSync
+        .start(state.address, activeToken, interactive, (device) => workspaceProvider.setDeviceName(device.name))
+        .then(() => workspaceProvider.refresh());
     } else if (state.status !== "connecting") {
       folderSync.stop();
+      setRunningScript(undefined);
     }
     if (state.status === "error") {
       vscode.window.showErrorMessage(`MoonClicker: 連線到 ${state.address} 失敗——${state.message}`);
@@ -97,9 +104,13 @@ export function activate(context: vscode.ExtensionContext): void {
     } else if (event.event.case === "data") {
       dataChannel.clear();
       dataChannel.appendLine(JSON.stringify(event.event.value, null, 2));
+    } else if (event.event.case === "runState") {
+      setRunningScript(event.event.value.scriptId || undefined);
     } else if (event.event.case === "fileChange") {
       folderSync.handleRemoteChange(event.event.value);
-      if (!event.event.value.path) workspaceProvider.refresh();
+      // 整支腳本新增／刪除，或名稱可能改了，側邊欄的清單要跟著更新。
+      const changedPath = event.event.value.path;
+      if (!changedPath || changedPath === "main.lua" || changedPath === "script.json") workspaceProvider.refresh();
     }
     postStreamEventToMirror(event.event);
   });
@@ -122,7 +133,10 @@ export function activate(context: vscode.ExtensionContext): void {
       if (address) folderSync.newScript(address, activeToken);
     }),
     vscode.commands.registerCommand("moonclicker.openWorkbench", openWorkbenchCommand),
-    vscode.commands.registerCommand("moonclicker.setupStubs", setupStubsCommand),
+    vscode.commands.registerCommand("moonclicker.refresh", () => {
+      workspaceProvider.refresh();
+      folderSync.resync();
+    }),
   );
 }
 
@@ -336,28 +350,14 @@ function removeLegacyMirrorFolders(context: vscode.ExtensionContext): void {
   vscode.workspace.updateWorkspaceFolders(0, folders.length, ...kept.map((f) => ({ uri: f.uri, name: f.name })));
 }
 
-async function setupStubsCommand(): Promise<void> {
-  const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-  if (!workspaceFolder) {
-    vscode.window.showErrorMessage("MoonClicker: 請先開啟專案資料夾");
-    return;
-  }
-
-  try {
-    const rootPath = workspaceFolder.uri.fsPath;
-    ensureLuarcConfigured(rootPath);
-    vscode.window.showInformationMessage(`MoonClicker: 已在工作區根目錄設定 Lua API 提示 (.luarc.json)`);
-  } catch (err) {
-    vscode.window.showErrorMessage(`MoonClicker: 設定 Lua 提示失敗 - ${(err as Error).message}`);
-  }
-}
-
 async function runRemoteCommand(item?: RemoteScriptItem): Promise<void> {
   const address = connectedAddress();
   if (!address) return;
   try {
     const id = item?.summary.id || await pickScript(address);
     if (!id) return;
+    const mainLua = folderSync.mainLuaUri(id);
+    if (mainLua) await folderSync.flush(mainLua.fsPath);
     insertRunDivider();
     await runScript(address, id, activeToken);
     vscode.window.showInformationMessage(`MoonClicker: 已在裝置上觸發「${id}」執行`);
@@ -366,22 +366,15 @@ async function runRemoteCommand(item?: RemoteScriptItem): Promise<void> {
   }
 }
 
-function ensureLuarcConfigured(projectDir: string): void {
-  if (!extensionContext) return;
-  const stubPath = path.join(extensionContext.extensionPath, "lua-meta");
-  const luarcPath = path.join(projectDir, ".luarc.json");
-
-  let existing: Record<string, unknown> = {};
-  if (fs.existsSync(luarcPath)) {
-    try {
-      existing = JSON.parse(fs.readFileSync(luarcPath, "utf8"));
-    } catch {
-      return;
-    }
+function setRunningScript(scriptId: string | undefined): void {
+  workspaceProvider.setRunningScript(scriptId);
+  if (!runStatusItem) return;
+  if (scriptId) {
+    runStatusItem.text = `$(debug-stop) 執行中：${scriptId}`;
+    runStatusItem.show();
+  } else {
+    runStatusItem.hide();
   }
-
-  const merged = mergeLuarc(existing, stubPath);
-  fs.writeFileSync(luarcPath, JSON.stringify(merged, null, 2) + "\n");
 }
 
 const LAST_DISPLAY_KEY = "moonclicker.lastDisplayId";

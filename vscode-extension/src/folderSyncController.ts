@@ -29,7 +29,7 @@ export class FolderSyncController implements vscode.Disposable {
    * 連線成功後呼叫。[interactive] 為 false（重新載入後自動重連）時不跳任何選擇，只在目前
    * workspace 已經是這台裝置的資料夾時同步，避免每個 VS Code 視窗都來問一次。
    */
-  async start(address: string, token: string | undefined, interactive: boolean): Promise<void> {
+  async start(address: string, token: string | undefined, interactive: boolean, onDevice: (device: DeviceInfo) => void): Promise<void> {
     this.stop();
     let device: DeviceInfo;
     try {
@@ -42,6 +42,7 @@ export class FolderSyncController implements vscode.Disposable {
       }
       return;
     }
+    onDevice(device);
     const root = await this.resolveRoot(device, interactive);
     if (!root) return;
 
@@ -80,6 +81,20 @@ export class FolderSyncController implements vscode.Disposable {
     watcher.onDidChange(onChange);
     watcher.onDidDelete((uri) => this.run(sync.localDeleted(uri.fsPath)));
     this.watcher = watcher;
+  }
+
+  /**
+   * 重新做一次完整同步。直接在手機上（App、檔案管理員）做的改動不會推送事件，要靠這個或
+   * 重新連線才會同步。
+   */
+  async resync(): Promise<void> {
+    const sync = this.sync;
+    if (!sync) return;
+    try {
+      this.showReport(await sync.fullSync(), true);
+    } catch (err) {
+      vscode.window.showErrorMessage(`MoonClicker: 同步失敗——${(err as Error).message}`);
+    }
   }
 
   stop(): void {

@@ -2,24 +2,17 @@ import * as vscode from "vscode";
 import { listScripts, type ScriptSummary } from "./scriptSync";
 import type { ConnectionState } from "./workbenchConnection";
 
-export class MoonClickerTreeItem extends vscode.TreeItem {
+export class RemoteScriptItem extends vscode.TreeItem {
   constructor(
-    public readonly label: string,
-    public readonly collapsibleState: vscode.TreeItemCollapsibleState,
-    public readonly contextValue?: string
+    public readonly address: string,
+    public readonly summary: ScriptSummary,
+    running: boolean,
   ) {
-    super(label, collapsibleState);
-    if (contextValue) {
-      this.contextValue = contextValue;
-    }
-  }
-}
-
-export class RemoteScriptItem extends MoonClickerTreeItem {
-  constructor(public readonly address: string, public readonly summary: ScriptSummary) {
-    super(summary.name || summary.id, vscode.TreeItemCollapsibleState.None, "remoteScript");
-    this.iconPath = new vscode.ThemeIcon("cloud");
-    this.description = summary.id;
+    super(summary.name || summary.id, vscode.TreeItemCollapsibleState.None);
+    // contextValue 決定行內按鈕：沒在跑時顯示執行，在跑時顯示停止。
+    this.contextValue = running ? "remoteScriptRunning" : "remoteScript";
+    this.iconPath = new vscode.ThemeIcon(running ? "debug-start" : "file-code");
+    this.description = running ? `${summary.id} · 執行中` : summary.id;
     this.command = {
       command: "moonclicker.openScript",
       title: "Open Script",
@@ -28,23 +21,44 @@ export class RemoteScriptItem extends MoonClickerTreeItem {
   }
 }
 
+class DeviceItem extends vscode.TreeItem {
+  constructor(label: string, address: string) {
+    super(label, vscode.TreeItemCollapsibleState.Expanded);
+    this.contextValue = "device";
+    this.description = address;
+    this.iconPath = new vscode.ThemeIcon("device-mobile");
+  }
+}
+
+type Item = DeviceItem | RemoteScriptItem;
+
 /**
- * 只列裝置上的腳本——沒有 local 分支了：點一個腳本會整份 pull 到本機隱藏鏡像資料夾再
- * 掛進 workspace（見 `extension.ts` 的 `openScriptCommand`），
- * VS Code 自己的 Explorer 接手顯示內容，這裡不用重複畫一份檔案樹。保留「Remote Scripts」這個根節點
- * （而不是直接把腳本攤平到樹的最上層），單純是為了讓 Open Mirror／Disconnect 這些跟
- * 「整條連線」有關的動作有地方掛 context menu。
+ * 已連線時：裝置節點底下直接列出裝置上的腳本。未連線時不回傳任何節點，由 package.json 的
+ * `viewsWelcome` 顯示連線按鈕。檔案內容交給 VS Code 的 Explorer 顯示本機資料夾，這裡不重畫檔案樹。
  */
-export class WorkspaceTreeProvider implements vscode.TreeDataProvider<MoonClickerTreeItem> {
-  private _onDidChangeTreeData = new vscode.EventEmitter<MoonClickerTreeItem | undefined | void>();
+export class WorkspaceTreeProvider implements vscode.TreeDataProvider<Item> {
+  private _onDidChangeTreeData = new vscode.EventEmitter<Item | undefined | void>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
   private state: ConnectionState = { status: "disconnected" };
   private token?: string;
+  private deviceName?: string;
+  private runningScriptId?: string;
 
   updateState(state: ConnectionState, token?: string) {
     this.state = state;
     this.token = token;
+    if (state.status !== "connected") this.deviceName = undefined;
+    this.refresh();
+  }
+
+  setDeviceName(name: string | undefined) {
+    this.deviceName = name;
+    this.refresh();
+  }
+
+  setRunningScript(scriptId: string | undefined) {
+    this.runningScriptId = scriptId;
     this.refresh();
   }
 
@@ -52,34 +66,18 @@ export class WorkspaceTreeProvider implements vscode.TreeDataProvider<MoonClicke
     this._onDidChangeTreeData.fire();
   }
 
-  getTreeItem(element: MoonClickerTreeItem): vscode.TreeItem {
+  getTreeItem(element: Item): vscode.TreeItem {
     return element;
   }
 
-  async getChildren(element?: MoonClickerTreeItem): Promise<MoonClickerTreeItem[]> {
-    if (!element) {
-      if (this.state.status === "connected") {
-        const remoteRoot = new MoonClickerTreeItem(
-          `Remote Scripts (${this.state.address})`,
-          vscode.TreeItemCollapsibleState.Expanded,
-          "remoteRoot"
-        );
-        remoteRoot.iconPath = new vscode.ThemeIcon("server");
-        return [remoteRoot];
-      }
-      const remoteRoot = new MoonClickerTreeItem(
-        "Remote Scripts (Disconnected)",
-        vscode.TreeItemCollapsibleState.None,
-        "remoteRootDisconnected"
-      );
-      remoteRoot.iconPath = new vscode.ThemeIcon("server");
-      return [remoteRoot];
-    }
-
-    if (element.contextValue !== "remoteRoot" || this.state.status !== "connected") return [];
+  async getChildren(element?: Item): Promise<Item[]> {
+    if (this.state.status !== "connected") return [];
+    const address = this.state.address;
+    if (!element) return [new DeviceItem(this.deviceName ?? address, address)];
+    if (!(element instanceof DeviceItem)) return [];
     try {
-      const scripts = await listScripts(this.state.address, this.token);
-      return scripts.map((s) => new RemoteScriptItem(this.state.status === "connected" ? this.state.address : "", s));
+      const scripts = await listScripts(address, this.token);
+      return scripts.map((s) => new RemoteScriptItem(address, s, s.id === this.runningScriptId));
     } catch {
       return [];
     }
