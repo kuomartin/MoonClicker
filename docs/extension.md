@@ -1,4 +1,4 @@
-# 使用 VS Code Workbench 遠端開發
+# 使用 VS Code 腳本工作台遠端開發
 
 ## 安裝擴充套件
 
@@ -7,7 +7,7 @@
 
 ## 連線裝置
 
-1. 在 App `設定` 頁面開啟 `Script Workbench`，並開啟配對模式。
+1. 在 App 的 `設定` → `關於` 連按版本號 7 下開啟開發人員選項，再到 `開發人員選項` 開啟 `腳本工作台`，並開啟配對模式。
 2. 點擊側邊欄 **MoonClicker Scripts** -> **Connect to Device**：VS Code 會透過 mDNS 自動搜尋同網段內的裝置，選取即可配對；找不到裝置時也可以手動輸入裝置 IP 與 PIN 碼。
 
 ## 連線後可以做什麼
