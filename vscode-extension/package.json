@@ -38,8 +38,14 @@
         "title": "MoonClicker: Run Current Script on Device"
       },
       {
-        "command": "moonclicker.openMirror",
-        "title": "MoonClicker: Open Realtime Mirror"
+        "command": "moonclicker.stop",
+        "title": "MoonClicker: Stop Script on Device",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "moonclicker.openWorkbench",
+        "title": "MoonClicker: Open Workbench",
+        "icon": "$(device-camera-video)"
       },
       {
         "command": "moonclicker.runRemote",
@@ -49,10 +55,6 @@
         "command": "moonclicker.setupStubs",
         "title": "MoonClicker: Setup Lua Stubs",
         "icon": "$(lightbulb)"
-      },
-      {
-        "command": "moonclicker.toggleMirror",
-        "title": "MoonClicker: Toggle Display Mirror"
       }
     ],
     "menus": {
@@ -66,6 +68,16 @@
           "command": "moonclicker.setupStubs",
           "when": "view == moonclicker.workspace",
           "group": "navigation"
+        },
+        {
+          "command": "moonclicker.openWorkbench",
+          "when": "view == moonclicker.workspace && moonclicker.connected",
+          "group": "navigation"
+        },
+        {
+          "command": "moonclicker.stop",
+          "when": "view == moonclicker.workspace && moonclicker.connected",
+          "group": "navigation"
         }
       ],
       "view/item/context": [
@@ -74,7 +86,7 @@
           "when": "viewItem == remoteScript"
         },
         {
-          "command": "moonclicker.openMirror",
+          "command": "moonclicker.openWorkbench",
           "when": "viewItem == remoteRoot"
         },
         {
@@ -87,6 +99,11 @@
       {
         "command": "moonclicker.run",
         "key": "F5",
+        "when": "editorFocus && resourceLangId == lua && resourceFilename == main.lua"
+      },
+      {
+        "command": "moonclicker.stop",
+        "key": "shift+F5",
         "when": "editorFocus && resourceLangId == lua && resourceFilename == main.lua"
       }
     ],

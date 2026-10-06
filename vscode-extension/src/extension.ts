@@ -3,7 +3,7 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { ConnectionState, WorkbenchConnection } from "./workbenchConnection";
 import { mergeLuarc } from "./luarc";
-import { listDisplays, toggleDisplayMirror, type DisplaySummary } from "./displaySync";
+import { listDisplays } from "./displaySync";
 import { listScripts, runScript, ScriptHttpError, type ScriptSummary } from "./scriptSync";
 import {
   createDirectoryOnDevice,
@@ -23,6 +23,7 @@ import { disposeMirrorPanel, openMirrorPanel, postStreamEventToMirror } from "./
 import { WorkspaceTreeProvider, RemoteScriptItem } from "./treeViews";
 import { startMdnsDaemon, getCachedDevices, mdnsEvents, checkDeviceHealth, refreshMdns } from "./mdnsDiscovery";
 import { pairWithPin } from "./authSync";
+import { stopRun } from "./visionTest";
 
 let connection: WorkbenchConnection | undefined;
 let statusBarItem: vscode.StatusBarItem | undefined;
@@ -252,6 +253,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   connection.onDidChangeState((state) => {
     renderStatusBar(state);
+    vscode.commands.executeCommand("setContext", "moonclicker.connected", state.status === "connected");
     workspaceProvider.updateState(state, activeToken);
     if (state.status === "error") {
       vscode.window.showErrorMessage(`MoonClicker: 連線到 ${state.address} 失敗——${state.message}`);
@@ -292,9 +294,9 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("moonclicker.openScript", openScriptCommand),
     vscode.commands.registerCommand("moonclicker.run", runCommand),
     vscode.commands.registerCommand("moonclicker.runRemote", runRemoteCommand),
-    vscode.commands.registerCommand("moonclicker.openMirror", openMirrorCommand),
+    vscode.commands.registerCommand("moonclicker.stop", stopCommand),
+    vscode.commands.registerCommand("moonclicker.openWorkbench", openWorkbenchCommand),
     vscode.commands.registerCommand("moonclicker.setupStubs", setupStubsCommand),
-    vscode.commands.registerCommand("moonclicker.toggleMirror", toggleMirrorCommand),
   );
 }
 
@@ -574,106 +576,41 @@ function ensureLuarcConfigured(projectDir: string): void {
   fs.writeFileSync(luarcPath, JSON.stringify(merged, null, 2) + "\n");
 }
 
-async function openMirrorCommand(): Promise<void> {
+const LAST_DISPLAY_KEY = "moonclicker.lastDisplayId";
+
+/**
+ * 不先問要開哪個 display：面板內本來就能切換。優先用上次在面板看的 display，其次是第一個
+ * 虛擬顯示器（腳本通常跑在那裡），都沒有才是 display 0。實體螢幕還沒啟動鏡像時，面板
+ * 自己會在畫面上顯示啟動按鈕。
+ */
+async function openWorkbenchCommand(): Promise<void> {
   const address = connectedAddress();
-  if (!address) return;
-  
+  if (!address || !extensionContext) return;
+  let displayId = 0;
   try {
     const displays = await listDisplays(address, activeToken);
-    
-    if (displays.length === 0) {
-      vscode.window.showErrorMessage("MoonClicker: 裝置上沒有可用的 display");
-      return;
-    }
-    
-    let displayId = 0;
-    let pickedDisplay: DisplaySummary = displays[0];
-    if (displays.length > 1) {
-      const items = displays.map(d => {
-        let desc = `${d.width}x${d.height}`;
-        if (d.isVirtual === false) {
-          desc += d.isMirrorActive ? " (實體螢幕 · 鏡像中)" : " (實體螢幕 · 鏡像未啟動)";
-        }
-        return {
-          label: d.name,
-          description: desc,
-          display: d,
-        };
-      });
-      const picked = await vscode.window.showQuickPick(items, {
-        placeHolder: "選擇要鏡像的 display",
-      });
-      if (!picked) return;
-      displayId = picked.display.id;
-      pickedDisplay = picked.display;
-    } else {
-      displayId = displays[0].id;
-      pickedDisplay = displays[0];
-    }
-
-    if (pickedDisplay.isVirtual === false && !pickedDisplay.isMirrorActive) {
-      const choice = await vscode.window.showWarningMessage(
-        `實體螢幕 (Display ${displayId}) 尚未啟動鏡像管線。是否立即啟動？`,
-        "啟動鏡像",
-        "直接開啟面板"
-      );
-      if (!choice) return;
-      if (choice === "啟動鏡像") {
-        try {
-          await toggleDisplayMirror(address, displayId, true, activeToken);
-          vscode.window.showInformationMessage(`MoonClicker: 實體螢幕 (Display ${displayId}) 鏡像管線已啟動`);
-        } catch (e) {
-          vscode.window.showErrorMessage(`MoonClicker: 啟動鏡像失敗: ${(e as Error).message}`);
-        }
-      }
-    }
-    if (extensionContext) {
-      openMirrorPanel(extensionContext.extensionUri, address, displayId, activeToken);
-    }
+    const last = extensionContext.globalState.get<number>(LAST_DISPLAY_KEY);
+    displayId =
+      displays.find((d) => d.id === last)?.id ??
+      displays.find((d) => d.isVirtual)?.id ??
+      displays[0]?.id ??
+      0;
   } catch (err) {
-    const input = await vscode.window.showInputBox({
-      prompt: "要鏡像哪個 displayId？",
-      value: "0",
-      validateInput: (value) => (/^\d+$/.test(value) ? undefined : "displayId 需要是非負整數"),
-    });
-    if (input === undefined || !extensionContext) return;
-    openMirrorPanel(extensionContext.extensionUri, address, Number(input), activeToken);
+    vscode.window.showWarningMessage(`MoonClicker: 讀不到顯示器清單，先開啟 display 0——${(err as Error).message}`);
   }
+  openMirrorPanel(extensionContext.extensionUri, address, displayId, activeToken, (id) => {
+    extensionContext?.globalState.update(LAST_DISPLAY_KEY, id);
+  });
 }
 
-async function toggleMirrorCommand(): Promise<void> {
+/** 停止裝置上正在執行的腳本；沒有腳本在跑時裝置端是 no-op。 */
+async function stopCommand(): Promise<void> {
   const address = connectedAddress();
   if (!address) return;
-
   try {
-    const displays = await listDisplays(address, activeToken);
-    const target = displays.find(d => !d.isVirtual) || displays[0];
-    if (!target) {
-      vscode.window.showErrorMessage("MoonClicker: 裝置上沒有找到顯示器");
-      return;
-    }
-
-    let targetDisplay = target;
-    if (displays.length > 1) {
-      const items = displays.map(d => ({
-        label: d.name,
-        description: `${d.width}x${d.height} [${d.isVirtual ? "虛擬" : (d.isMirrorActive ? "實體·鏡像中" : "實體·未啟動")}]`,
-        display: d,
-      }));
-      const picked = await vscode.window.showQuickPick(items, {
-        placeHolder: "選擇要切換鏡像狀態的顯示器",
-      });
-      if (!picked) return;
-      targetDisplay = picked.display;
-    }
-
-    const nextState = !targetDisplay.isMirrorActive;
-    await toggleDisplayMirror(address, targetDisplay.id, nextState, activeToken);
-    vscode.window.showInformationMessage(
-      `MoonClicker: 顯示器 ${targetDisplay.id} (${targetDisplay.name}) 鏡像已${nextState ? "開啟" : "關閉"}`
-    );
+    await stopRun(address, activeToken);
   } catch (err) {
-    vscode.window.showErrorMessage(`MoonClicker: 切換鏡像失敗 - ${(err as Error).message}`);
+    vscode.window.showErrorMessage(`MoonClicker: ${(err as Error).message}`);
   }
 }
 
@@ -682,18 +619,22 @@ function renderStatusBar(state: ConnectionState): void {
   switch (state.status) {
     case "disconnected":
       statusBarItem.text = "$(circle-slash) MoonClicker: 未連線";
+      statusBarItem.tooltip = "連線到裝置";
       statusBarItem.command = "moonclicker.connect";
       break;
     case "connecting":
       statusBarItem.text = `$(sync~spin) MoonClicker: 連線中 ${state.address}`;
+      statusBarItem.tooltip = undefined;
       statusBarItem.command = undefined;
       break;
     case "connected":
       statusBarItem.text = `$(check) MoonClicker: 已連線 ${state.address}`;
-      statusBarItem.command = undefined;
+      statusBarItem.tooltip = "開啟 Workbench 面板";
+      statusBarItem.command = "moonclicker.openWorkbench";
       break;
     case "error":
       statusBarItem.text = `$(error) MoonClicker: 連線失敗`;
+      statusBarItem.tooltip = "重新連線";
       statusBarItem.command = "moonclicker.connect";
       break;
   }

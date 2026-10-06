@@ -29,7 +29,7 @@ const mirrorOutputChannel = vscode.window.createOutputChannel("MoonClicker Mirro
 let visionTestActive = false;
 
 /**
- * `moonclicker.openMirror` 的面板邏輯（見 #77、#78）。跟 `extension.ts` 的 [WorkbenchConnection] 是完全
+ * `moonclicker.openWorkbench` 的面板邏輯（見 #77、#78）。跟 `extension.ts` 的 [WorkbenchConnection] 是完全
  * 分開的一份連線與狀態——再次呼叫這個指令只會重啟 mirror 自己的連線，不影響 log/data.set
  * 那條 WebSocket，反之亦然。
  */
@@ -37,7 +37,18 @@ export function postStreamEventToMirror(event: any): void {
   safePostMessage({ type: "streamEvent", event });
 }
 
-export function openMirrorPanel(extensionUri: vscode.Uri, address: string, displayId: number, token?: string): void {
+/** 面板改看另一個 display 時通知呼叫端，讓下次開面板時沿用。 */
+let onDisplayOpened: ((displayId: number) => void) | undefined;
+
+export function openMirrorPanel(
+  extensionUri: vscode.Uri,
+  address: string,
+  displayId: number,
+  token?: string,
+  displayOpenedListener?: (displayId: number) => void,
+): void {
+  if (displayOpenedListener) onDisplayOpened = displayOpenedListener;
+  onDisplayOpened?.(displayId);
   connection?.stop();
   connection = undefined;
 
@@ -52,7 +63,7 @@ export function openMirrorPanel(extensionUri: vscode.Uri, address: string, displ
 
   if (!panel) {
     const newPanel = vscode.window.createWebviewPanel(
-      "moonclicker.mirror",
+      "moonclicker.workbench",
       mirrorTitle(displayId),
       vscode.ViewColumn.Beside,
       { enableScripts: true, retainContextWhenHidden: true },
@@ -296,7 +307,7 @@ export function disposeMirrorPanel(): void {
 }
 
 function mirrorTitle(displayId: number): string {
-  return `MoonClicker Mirror — display ${displayId}`;
+  return `MoonClicker Workbench — display ${displayId}`;
 }
 
 function safePostMessage(message: unknown): void {
