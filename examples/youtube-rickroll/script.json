@@ -1,6 +1,6 @@
 {
   "uniqueId": "youtube-rickroll",
   "name": "YouTube Rickroll",
-  "description": "搜尋並播放 Never Gonna Give You Up，略過廣告，拖曳進度條快轉到一半",
+  "description": "搜尋並播放 Never Gonna Give You Up，略過廣告，拖曳進度條快轉到一半。需先下載 OCR 元件；YouTube 要先手動開過一次並完成登入，介面為中文或英文。",
   "display": { "width": 720, "height": 1280, "densityDpi": 320 }
 }
