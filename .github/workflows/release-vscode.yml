@@ -60,8 +60,8 @@ jobs:
           path: dist/*.vsix
           retention-days: 7
 
-  create-draft-release:
-    name: Create Draft Release
+  create-release:
+    name: Create Release
     needs: [build-vscode-extension]
     runs-on: ubuntu-latest
 
@@ -85,12 +85,14 @@ jobs:
           name: moonclicker-vscode-extension
           path: release-assets
 
-      - name: Create GitHub Release Draft
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
           name: MoonClicker VS Code Extension ${{ steps.version.outputs.tag }}
-          draft: true
-          prerelease: true
+          draft: false
+          prerelease: false
+          # 「Latest」留給 App 的 release，讓 /releases/latest 一直指向 APK。
+          make_latest: false
           generate_release_notes: true
           files: release-assets/*
