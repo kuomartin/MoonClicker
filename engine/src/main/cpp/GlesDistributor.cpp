@@ -410,7 +410,7 @@ void GlesDistributor::renderLoop() {
  */
 int GlesDistributor::drawFrame(long long timestamp) {
     std::lock_guard<std::mutex> lock(sinksMutex);
-    if (sinks.empty() || timestamp == 0) return 0;
+    if (sinks.empty()) return 0;
 
     if (redrawAll.exchange(false)) {
         for (auto &sink: sinks) sink.deliveredTimestamp = -1;
