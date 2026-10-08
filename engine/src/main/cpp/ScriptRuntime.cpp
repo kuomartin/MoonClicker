@@ -92,6 +92,8 @@ bool ScriptRuntime::start(int displayId, bool isPhysical, bool withVision, int s
             return false;
         }
         visionEnabled = true;
+        firstFramePending = true;
+        firstFrameAfter = 0;
     } else {
         visionEnabled = false;
     }
@@ -245,13 +247,25 @@ bool ScriptRuntime::startMirror() {
     }
     heldMirrorRef = true;
 
+    uint64_t framesBefore = visionMatcher->frameCounter();
     if (!attachImageReader()) {
         LOGE("attachImageReader failed after acquireDisplayMirror");
         stopMirror();
         return false;
     }
     visionEnabled = true;
+    firstFramePending = true;
+    firstFrameAfter = framesBefore;
     return true;
+}
+
+void ScriptRuntime::awaitFirstFrameIfPending() {
+    if (!firstFramePending || !visionEnabled) return;
+    firstFramePending = false;
+    if (!visionMatcher->waitForFrameAfter(firstFrameAfter, kFirstFrameTimeoutMs) && running.load()) {
+        LOGE("no frame within %ld ms on display %d; vision calls will see nothing until one arrives",
+             kFirstFrameTimeoutMs, displayId);
+    }
 }
 
 bool ScriptRuntime::stopMirror() {
