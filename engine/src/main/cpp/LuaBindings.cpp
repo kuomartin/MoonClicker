@@ -250,14 +250,21 @@ int matchUntil(lua_State *L, ScriptRuntime *runtime, const std::vector<VisionReq
                long timeoutMs, long stepMs) {
     Ocr *ocr = ocrFor(L, runtime, requests);
     long deadline = nowMs() + std::max(0L, timeoutMs);
+    // 同一張影格比對過就不再比：畫面靜止時 distributor 不送新影格，重比只會得到同樣的結果。
+    bool matchedAny = false;
+    uint64_t matched = 0;
 
     while (true) {
         if (!runtime->isRunning()) raiseStopped(L);
 
         long attemptStart = nowMs();
         uint64_t seen = runtime->vision().frameCounter();
-        int index = matchOnce(L, runtime, requests, ocr);
-        if (index >= 0) return index;
+        if (!matchedAny || seen != matched) {
+            int index = matchOnce(L, runtime, requests, ocr);
+            if (index >= 0) return index;
+            matchedAny = true;
+            matched = seen;
+        }
 
         long remaining = deadline - nowMs();
         if (remaining <= 0) return -1;
