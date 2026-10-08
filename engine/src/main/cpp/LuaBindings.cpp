@@ -191,6 +191,7 @@ void requireVision(lua_State *L, ScriptRuntime *runtime) {
     if (!runtime->hasVision()) {
         luaL_error(L, "vision is unavailable: run the script on a virtual display or call screen.start_mirror() on physical display");
     }
+    runtime->awaitFirstFrameIfPending();
 }
 
 void requireInput(lua_State *L, ScriptRuntime *runtime) {

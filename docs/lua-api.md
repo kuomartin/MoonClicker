@@ -54,6 +54,8 @@ end
 
 按需對最新畫面比對：模板以 OpenCV `TM_CCOEFF_NORMED` 比對，文字以 PP-OCRv6 辨識（ADR-0018）。文字辨識需要先在設定頁「文字辨識（OCR）」下載 OCR 元件，未安裝時呼叫會報錯。
 
+第一次呼叫 `vision.*`（腳本開始後，或 `screen.start_mirror()` 之後）時，若還沒收到畫面，引擎會先等到第一張（最多 2 秒），所以腳本第一行就可以呼叫 `vision.*`；不用辨識的腳本不受影響。
+
 ### 請求規格（`VisionRequest`）
 
 `image` 與 `text` 擇一。

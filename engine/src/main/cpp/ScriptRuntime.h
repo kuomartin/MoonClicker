@@ -108,6 +108,14 @@ public:
 
     bool stopMirror();
 
+    /**
+     * 第一次呼叫 vision.* 時等影格管線送來第一張影格，最多 [kFirstFrameTimeoutMs]；之後的呼叫
+     * 直接返回。影格管線剛接上時要 50–135 ms 才有第一張，那之前 vision.find 會拿到空影格而
+     * 回傳 nil，腳本分不出「畫面上沒有」與「還沒有畫面」（#166）。延到第一次呼叫才等，
+     * 不用 vision 的腳本就不必付這段時間。screen.start_mirror() 之後要等的是新的影格。
+     */
+    void awaitFirstFrameIfPending();
+
     /** 可被 [stop] 打斷的 sleep。回傳 false 表示被叫停，binding 應盡快收手。 */
     bool interruptibleSleep(long ms);
 
@@ -120,6 +128,10 @@ private:
     void threadMain();
 
     void runScript();
+    static constexpr long kFirstFrameTimeoutMs = 2000;
+    /** 下一次 vision.* 呼叫前要等 [firstFrameAfter] 之後的影格。只在腳本執行緒上讀寫。 */
+    bool firstFramePending = false;
+    uint64_t firstFrameAfter = 0;
 
     /** 每 1000 個指令檢查一次是否被叫停；被叫停就把腳本中斷掉。 */
     static void stopHook(lua_State *L, lua_Debug *ar);
