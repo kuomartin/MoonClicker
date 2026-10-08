@@ -50,10 +50,10 @@ function screen.stop_mirror() end
 ---@field image string? 相對腳本資料夾的圖片路徑（也接受絕對路徑）
 ---@field text string? 要找的文字；需要先在設定頁下載 OCR 元件
 ---@field threshold number? 選填，預設 0.8；模板是 `TM_CCOEFF_NORMED` 分數，文字是 Levenshtein 相似度
----@field scale number? 選填，只用於 image，`0 < scale <= 1`，比對前把影格與模板一起縮小；不是拿來配不同大小的目標
----@field gray boolean? 選填，只用於 image，轉灰階後比對，預設 false
+---@field scale number? 選填，只用於 image，`0 < scale <= 1`，比對前把影格與模板一起縮小；`0.5` 約快 4 倍，小模板可能比不到。不是拿來配不同大小的目標
+---@field gray boolean? 選填，只用於 image，轉灰階後比對，預設 false；比彩色快 3–4 倍，模板不靠顏色區分時建議開
 ---@field exact boolean? 選填，只用於 text，與整行比對而不是找子字串，預設 false；`123` 預設會命中 `1234`
----@field roi moonclicker.VisionRoi? 選填，限制搜尋範圍（邏輯座標）；文字請求強烈建議給，整張辨識很慢
+---@field roi moonclicker.VisionRoi? 選填，限制搜尋範圍（邏輯座標）。耗時與搜尋範圍成正比、與模板大小無關：低階機上全畫面彩色比對一次 1 秒以上，模板與文字請求都建議給
 
 ---@class moonclicker.VisionHit
 ---@field x number 外框左上角 x
