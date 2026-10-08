@@ -65,7 +65,7 @@ function screen.stop_mirror() end
 ---@field confidence number 與要找的東西有多像（0～1）：模板是比對分數，文字是相似度；`threshold` 比較的就是它
 ---@field text string? 只有文字請求才有：命中的那一整行
 
---- `vision.read`／`read_lines` 的一行辨識結果。
+--- `vision.read`/`read_lines` 的一行辨識結果。
 ---@class moonclicker.TextLine
 ---@field text string 辨識出的文字
 ---@field confidence number OCR 對這段文字的信心度（0～1），不是相似度

@@ -69,7 +69,7 @@ bool readRect(lua_State *L, int index, cv::Rect &out) {
 
 /**
  * 讀出一個 vision request。接受完整的 table，或只給圖片路徑的字串簡寫。
- * 路徑相對腳本資料夾解析。`image` 與 `text` 擇一；`scale`／`gray` 只用於模板。
+ * 路徑相對腳本資料夾解析。`image` 與 `text` 擇一；`scale`/`gray` 只用於模板。
  */
 VisionRequest readRequest(lua_State *L, int index, ScriptRuntime *runtime) {
     VisionRequest request;
@@ -146,7 +146,7 @@ void pushHit(lua_State *L, const VisionHit &hit) {
     }
 }
 
-/** `vision.read`／`read_lines` 的一項（TextLine）：confidence 是 OCR 的信心度。 */
+/** `vision.read`/`read_lines` 的一項（TextLine）：confidence 是 OCR 的信心度。 */
 void pushTextLine(lua_State *L, const OcrLine &line) {
     lua_newtable(L);
     lua_pushstring(L, line.text.c_str());
@@ -311,7 +311,7 @@ long readStep(lua_State *L, int index) {
     return step;
 }
 
-/** matchOnce／matchUntil 已把命中的 table 推上堆疊；索引放前面，回傳 index, hit。 */
+/** matchOnce/matchUntil 已把命中的 table 推上堆疊；索引放前面，回傳 index, hit。 */
 int pushIndexedHit(lua_State *L, int index) {
     if (index < 0) {
         lua_pushnil(L);
@@ -370,8 +370,8 @@ int lua_screen_stop_mirror(lua_State *L) {
 }
 
 /**
- * `screen` 走 __index 而不是固定值：`has_vision`／`is_mirror_active` 確實是即時算的。
- * `width`／`height`／`rotation` 這三個其實整場執行都固定（見 VisionMatcher 的建構子），
+ * `screen` 走 __index 而不是固定值：`has_vision`/`is_mirror_active` 確實是即時算的。
+ * `width`/`height`/`rotation` 這三個其實整場執行都固定（見 VisionMatcher 的建構子），
  * 用同一條路徑只是因為都是唯讀屬性，不是因為它們會變。
  */
 int lua_screen_index(lua_State *L) {
@@ -435,7 +435,7 @@ int lua_vision_wait_any(lua_State *L) {
     return pushIndexedHit(L, matchUntil(L, runtime, requests, readTimeout(L, 2), readStep(L, 3)));
 }
 
-/** read／read_lines 共用：讀最新影格的文字。[roiIndex] 沒給（nil／none）時是整張。 */
+/** read/read_lines 共用：讀最新影格的文字。[roiIndex] 沒給（nil/none）時是整張。 */
 std::vector<OcrLine> readText(lua_State *L, ScriptRuntime *runtime, int roiIndex, bool roiRequired, bool detect) {
     cv::Rect roi;
     bool hasRoi = false;

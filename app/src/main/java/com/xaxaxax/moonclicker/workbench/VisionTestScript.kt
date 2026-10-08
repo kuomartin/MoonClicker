@@ -17,8 +17,8 @@ object VisionTestScript {
     private const val UNIQUE_ID = "vision-test"
 
     /**
-     * 在 [scriptsRoot] 底下建立（或覆寫）scratch 腳本資料夾，寫入用 [imagePath]／[roi]／
-     * [threshold]／[intervalMs] 產生的 `main.lua`，回傳可以直接拿去 `startOnDisplay` 的
+     * 在 [scriptsRoot] 底下建立（或覆寫）scratch 腳本資料夾，寫入用 [imagePath]/[roi]/
+     * [threshold]/[intervalMs] 產生的 `main.lua`，回傳可以直接拿去 `startOnDisplay` 的
      * [Script]。
      */
     fun materialize(

@@ -17,7 +17,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import timber.log.Timber
 
-/** Display 清單／鏡像切換／即時鏡像串流，委派給 [DisplaySource] 與 [ShizukuManager]。 */
+/** Display 清單、鏡像切換、即時鏡像串流，委派給 [DisplaySource] 與 [ShizukuManager]。 */
 fun Route.displayRoutes(displaySource: DisplaySource, shizukuManager: ShizukuManager?) {
     get("/displays") {
         val displays = displaySource.getDisplays()

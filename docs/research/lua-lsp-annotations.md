@@ -88,7 +88,7 @@ Source: [LuaLS Wiki — Annotations](https://luals.github.io/wiki/annotations/)�
   }
   ```
   `workspace.library` 接受一個目錄路徑陣列；LuaLS 會把該目錄下所有 `.lua`
-  檔當作額外的 library 來源，供工作區內其他 `.lua` 檔案做自動完成／hover／
+  檔當作額外的 library 來源，供工作區內其他 `.lua` 檔案做自動完成、hover/
   型別檢查用，不會把這些檔案當成「要執行的腳本」列進診斷（因為它們有
   `---@meta`）。
 - 另有一套**正式的 addon 機制**（`workspace.userThirdParty` + 每個 addon 自帶

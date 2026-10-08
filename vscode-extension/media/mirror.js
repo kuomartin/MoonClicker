@@ -32,7 +32,7 @@
     modeBtns.forEach((b) => b.classList.toggle("active", b.dataset.mode === mode));
     currentMode = mode;
 
-    // #frame 是唯一一支真正接收串流的 <video>，在「運行除錯」／「測試模板」／「採集」之間搬移，
+    // #frame 是唯一一支真正接收串流的 <video>，在「運行除錯」、「測試模板」、「採集」之間搬移，
     // 而不是各建立一支——重建會讓 JMuxer 的 MediaSource 附件失效。
     if (mode === "test") {
       testStage.insertBefore(frameEl, testStage.firstChild);
@@ -560,9 +560,9 @@
 
   // ==================================================================
   // 2 · 建立模板 —— ROI 裁切是真的互動（對著選定的擷取畫面算像素座標，跟測試模板的
-  // ROI 編輯同一套幾何算法）；「儲存模板」「刪除模板」「列出模板」都真的呼叫裝置既有／
+  // ROI 編輯同一套幾何算法）；「儲存模板」「刪除模板」「列出模板」都真的呼叫裝置既有、
   // 新增的 PUT / GET / DELETE /scripts/{id}/templates(/{name})。deviceTemplates 是
-  // 裝置端清單的本地快取（key 是 scriptId），每次存檔／刪除成功都會重新拉一次，
+  // 裝置端清單的本地快取（key 是 scriptId），每次存檔、刪除成功都會重新拉一次，
   // 不維護自己的猜測——裝置端說了算。
   // ==================================================================
   const buildShotPicker = document.getElementById("buildShotPicker");
@@ -948,12 +948,12 @@
   let testPending = false; // start/stop RPC 進行中
   let testRestartTimer = null;
   let lastHitBox = null; // 裝置回報的命中區域（邏輯座標 {x,y,w,h,confidence}），畫在 testRoiCanvas 上
-  let lastOcrLines = []; // vision.read／read_lines 回報的每一行（邏輯座標 {text,confidence,x,y,w,h}）
+  let lastOcrLines = []; // vision.read/read_lines 回報的每一行（邏輯座標 {text,confidence,x,y,w,h}）
   let lastOcrResultAt = 0; // 上一次收到 OCR 結果的時間，用來顯示更新間隔
   // OCR 每輪本身要等辨識完成，間隔是辨識完之後再睡的時間，預設比模板長。
   const DEFAULT_INTERVAL_MS = { template: 300, ocr: 500 };
 
-  /** "template" 或 OCR 模式（"read"／"read_lines"／"find"，對應裝置端 /ocr-test 的 mode）。 */
+  /** "template" 或 OCR 模式（"read"/"read_lines"/"find"，對應裝置端 /ocr-test 的 mode）。 */
   function testTarget() {
     return testTargetSelect.value;
   }
@@ -1277,7 +1277,7 @@
     }
   });
 
-  // ROI 拖曳／閾值調整時，若測試正在跑，Lua 迴圈無法動態改參數——debounce 後
+  // ROI 拖曳、閾值調整時，若測試正在跑，Lua 迴圈無法動態改參數——debounce 後
   // 停止再以新參數重新啟動（同一個執行槽，必須先 stop 再 start，不可並行）。
   function scheduleTestRestartIfRunning() {
     if (!testRunning || testPending) return;
@@ -1587,7 +1587,7 @@
   });
 
   // ==================================================================
-  // 4 · 編寫 —— 全部是真的：清單（含裝置回報的模板數／上次修改）、「在編輯器開啟」
+  // 4 · 編寫 —— 全部是真的：清單（含裝置回報的模板數、上次修改）、「在編輯器開啟」
   // （既有的 moonclicker.openScript 指令，整份 pull 進本機鏡像資料夾、掛成 workspace
   // folder，跟 Explorer 樹狀圖點腳本同一條路）、「新增腳本」（POST /scripts/{id}）。
   // ==================================================================

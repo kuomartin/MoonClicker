@@ -59,7 +59,7 @@ export type OcrTestMode = "read" | "read_lines" | "find";
 export interface OcrTestOptions {
   displayId: number;
   mode: OcrTestMode;
-  /** `read` 必填；`read_lines`／`find` 省略時是整張畫面。 */
+  /** `read` 必填；`read_lines`/`find` 省略時是整張畫面。 */
   roi?: TemplateRoi | null;
   /** `find` 必填。 */
   text?: string;

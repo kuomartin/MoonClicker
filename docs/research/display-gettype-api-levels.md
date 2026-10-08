@@ -53,7 +53,7 @@ public int getType() {
 }
 ```
 
-換言之：API 29（Android 10）幫它加上 `@UnsupportedAppUsage`（掛牌為「非 SDK 介面但仍可經 reflection 存取，會有 log 警告」），API 30（Android 11）再加上 `@TestApi`（讓 CTS/測試框架可以直接連結呼叫，但 `@TestApi` 本身也不等於 public SDK）。**從頭到尾沒有任何一版把 `@hide` 拿掉、也沒有出現在 `api/current.txt`／官方 reference 頁面上**，所以「API 33 起變成 public SDK」的說法不成立。
+換言之：API 29（Android 10）幫它加上 `@UnsupportedAppUsage`（掛牌為「非 SDK 介面但仍可經 reflection 存取，會有 log 警告」），API 30（Android 11）再加上 `@TestApi`（讓 CTS/測試框架可以直接連結呼叫，但 `@TestApi` 本身也不等於 public SDK）。**從頭到尾沒有任何一版把 `@hide` 拿掉、也沒有出現在 `api/current.txt`、官方 reference 頁面上**，所以「API 33 起變成 public SDK」的說法不成立。
 
 補充驗證：直接 `curl` 下載 `developer.android.com/reference/android/view/Display` 的原始 HTML（非渲染後的 JS 內容），全文搜尋 `getType`、`TYPE_INTERNAL`、`TYPE_EXTERNAL`、`TYPE_VIRTUAL`、`TYPE_WIFI`、`TYPE_OVERLAY`、`TYPE_UNKNOWN` 皆為 0 筆命中，而同一份 HTML 裡 `getDisplayId`（一個確定是 public 的方法）能命中多次——這是「`getType()` 未被列入官方 reference / android.jar public API」最直接的佐證。
 
@@ -80,7 +80,7 @@ public int getType() {
 
 這與 `ApplicationInfo.java`（見下）中 `isAllowedToUseHiddenApis()` 的邏輯完全對應，等於是官方文件敘述在原始碼裡的具體實作。
 
-官方文件另外也說明了裝置端如何整體停用強制（僅限開發機／`userdebug`）：
+官方文件另外也說明了裝置端如何整體停用強制（僅限開發機、`userdebug`）：
 
 ```
 adb shell settings put global hidden_api_policy 1
@@ -130,9 +130,9 @@ public @HiddenApiEnforcementPolicy int getHiddenApiEnforcementPolicy() {
 
 關鍵在於：**這整段邏輯的輸入是 `ApplicationInfo`——也就是一個「已安裝、由 PackageManager 記錄的 App」才有的資料結構。** 系統要幫一個進程套用 hidden API 限制，前提是「這個進程是 Zygote 依照某個已安裝 App 的 `ApplicationInfo` fork 並 specialize 出來的」。
 
-Shizuku（以及 `adb shell` 本身執行任意 Java 程式的標準做法）並不是這樣啟動的：它是由 shell 直接呼叫 `app_process` 這個獨立可執行檔，這個路徑完全不經過 Zygote 的 `forkAndSpecialize`／`ApplicationInfo` 查詢，執行期自然沒有任何機制把 `API_ENFORCEMENT_POLICY_MASK` 設成「啟用」——ART runtime 端收到的 enforcement 政策維持在預設值（未啟用）。
+Shizuku（以及 `adb shell` 本身執行任意 Java 程式的標準做法）並不是這樣啟動的：它是由 shell 直接呼叫 `app_process` 這個獨立可執行檔，這個路徑完全不經過 Zygote 的 `forkAndSpecialize`/`ApplicationInfo` 查詢，執行期自然沒有任何機制把 `API_ENFORCEMENT_POLICY_MASK` 設成「啟用」——ART runtime 端收到的 enforcement 政策維持在預設值（未啟用）。
 
-> 說明：官方文件（`developer.android.com`／`source.android.com`）目前找不到一句話直接寫「shell/`app_process` 進程豁免 hidden API 檢查」；上述結論是本研究交叉比對 `Zygote.java` 與 `ApplicationInfo.java` 兩份原始碼、搭配「hidden API enforcement 只在 zygote fork-with-specialize 路徑上被設定」這個可驗證的程式邏輯所得出的推論，而非直接引用的官方陳述。這點請視為「原始碼推導」而非「官方文件明文保證」，日後若 AOSP 改動 zygote 啟動路徑（例如替 `app_process` 額外補上政策查詢）需要重新驗證。
+> 說明：官方文件（`developer.android.com`/`source.android.com`）目前找不到一句話直接寫「shell/`app_process` 進程豁免 hidden API 檢查」；上述結論是本研究交叉比對 `Zygote.java` 與 `ApplicationInfo.java` 兩份原始碼、搭配「hidden API enforcement 只在 zygote fork-with-specialize 路徑上被設定」這個可驗證的程式邏輯所得出的推論，而非直接引用的官方陳述。這點請視為「原始碼推導」而非「官方文件明文保證」，日後若 AOSP 改動 zygote 啟動路徑（例如替 `app_process` 額外補上政策查詢）需要重新驗證。
 
 ---
 

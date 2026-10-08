@@ -5,7 +5,7 @@ export interface ScriptSummary {
   name: string;
   /** 裝置端 templates.json 的模板數。舊版裝置韌體不帶這個欄位時是 undefined，不是 0。 */
   templateCount?: number;
-  /** `main.lua`／`templates.json` 兩者 mtime 取大的 epoch ms。理由同上，可能是 undefined。 */
+  /** `main.lua`/`templates.json` 兩者 mtime 取大的 epoch ms。理由同上，可能是 undefined。 */
   modifiedMs?: number;
 }
 

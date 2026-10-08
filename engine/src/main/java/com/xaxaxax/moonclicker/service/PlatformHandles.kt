@@ -28,7 +28,7 @@ internal class PlatformHandles(
     val callerPackage: String,
 ) {
     /**
-     * 向系統宣稱是 [callerPackage] 的假 Context，`DisplayManagerHidden`／`SurfaceControl`
+     * 向系統宣稱是 [callerPackage] 的假 Context，`DisplayManagerHidden`/`SurfaceControl`
      * 這類需要 opPackageName 的 hidden API 都得靠它才能跟真正的 calling uid 對上。
      */
     val fakeDisplayContext: Context = object : ContextWrapper(context) {

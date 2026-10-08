@@ -17,7 +17,7 @@
    `v` = VD rotation）。反轉的依據從 `v` 改成 `d`，它就恆為 0。
 2. 光在 view 階層反轉不夠——系統預設會截圖整個畫面做旋轉動畫。
    `ROTATION_ANIMATION_SEAMLESS` 才能避開，它的 javadoc 逐字就是這個情境。
-3. seamless 是 hint，系統每次旋轉自行評估八項前提並自動退回 CROSSFADE／ROTATE。
+3. seamless 是 hint，系統每次旋轉自行評估八項前提並自動退回 CROSSFADE/ROTATE。
    **不需要寫 fallback**，但也**查不到走了哪條路**。
 4. SurfaceView 吃不到旋轉的前提到 Android 15 仍然成立：它的 surface 矩陣把切變項寫死為
    `0f`。TextureView 必須留著。

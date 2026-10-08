@@ -11,7 +11,7 @@ import com.xaxaxax.moonclicker.script.DisplayGeometry
 import dev.rikka.tools.refine.Refine
 import timber.log.Timber
 
-/** 顯示器查詢：尺寸（邏輯／surface 空間）、旋轉、以及彙整給呼叫端的 [MoonClickerDisplayInfo]。 */
+/** 顯示器查詢：尺寸（邏輯、surface 空間）、旋轉、以及彙整給呼叫端的 [MoonClickerDisplayInfo]。 */
 internal class DisplayQuery(
     private val displayManager: DisplayManager,
     private val virtualDisplayLifecycle: VirtualDisplayLifecycle,

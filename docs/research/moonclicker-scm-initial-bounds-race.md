@@ -7,10 +7,10 @@ TL;DR 第 6 點留下的缺口——MoonClicker（與 scrcpy）都是「建完 V
 `AppCompatDisplayInsets`，見前一份筆記 Q3）發生在 VD 真正轉到目標方向
 （例如 landscape）**之前**，會不會凍結到錯的尺寸，之後才需要使用者手動點
 restart 按鈕修正。本文查 AOSP `android-15.0.0_r20` 的
-`RootWindowContainer.java`／`TaskLaunchParamsModifier.java`／
+`RootWindowContainer.java`/`TaskLaunchParamsModifier.java`/
 `ActivityStarter.java`，與 scrcpy 同一批筆記共用的 commit
 `19c1261d2e2cbf2b5e6a71a8b64cc1dd3ede06ac` 的
-`NewDisplayCapture.java`／`Device.java`／`Server.java`／`Controller.java`，
+`NewDisplayCapture.java`/`Device.java`/`Server.java`/`Controller.java`，
 比對 MoonClicker `MoonClickerService.kt`（`createVirtualDisplay()`、
 `launchViaActivityTaskManager()`）與
 `FullscreenDisplayViewModel.kt`（`launchApp()`）。
@@ -23,7 +23,7 @@ commit——它只是既有筆記固定引用的 tag/commit，本文延續同一
 不代表這個 commit 的 diff 本身跟本題有關（已用 `git show --stat` 核對，
 只改了一個檔案、三行）。
 
-**沒有驗證的部分**：`TaskLaunchParamsModifier`／`ActivityStarter`
+**沒有驗證的部分**：`TaskLaunchParamsModifier`/`ActivityStarter`
 的原始碼是透過 WebFetch 對 googlesource `?format=TEXT` 的 base64 內容做摘要式
 提問取得，這個管道在複雜方法（`onCalculate()` 這種數百行、多分支的函式）上
 給出的摘要在本次查證中出現至少一次自我矛盾（見 Q2 但書），**沒有辦法在本次
@@ -42,7 +42,7 @@ commit——它只是既有筆記固定引用的 tag/commit，本文延續同一
    `virtualDisplayId` 之後才把它交給 `Device.startApp()`。**這個等待存在的
    原因是「control channel 收到 `TYPE_START_APP` 訊息的執行緒」跟「建立 VD
    的 capture 執行緒」是兩條不同執行緒，而 VD 建立本身要等
-   `SurfaceEncoder`／`MediaCodec` 的輸入 surface 準備好才會發生
+   `SurfaceEncoder`/`MediaCodec` 的輸入 surface 準備好才會發生
    （`NewDisplayCapture.start()` 只有在拿到 `surface` 參數後才呼叫
    `startNew()`），不是瞬間完成的**——等的是「displayId 存不存在」，
    不是「displayId 存在之後，WMS 有沒有把它的 bounds/orientation 算完」。
@@ -71,8 +71,8 @@ commit——它只是既有筆記固定引用的 tag/commit，本文延續同一
 4. **本文沒有確認、也沒有推翻「`TaskLaunchParamsModifier` 算 bounds 時讀到的
    `orientation` 是不是 VD 剛建立時的 `ROTATION_0`，而不是 app 宣告後才會有的
    `landscape`」這個假說。** 這是前一份筆記留下的缺口，本文嘗試查
-   `TaskLaunchParamsModifier.java`／`ActivityStarter.java`，但透過 WebFetch
-   取得的摘要在描述 `onCalculate()`／`getTaskBounds()` 的分支條件時出現自我
+   `TaskLaunchParamsModifier.java`/`ActivityStarter.java`，但透過 WebFetch
+   取得的摘要在描述 `onCalculate()`/`getTaskBounds()` 的分支條件時出現自我
    矛盾（先说「resolvedMode 不是 FREEFORM 也不是 FULLSCREEN 就 return」，
    結論卻寫成「FULLSCREEN 会 explicitly return」——這兩句在邏輯上互斥，
    代表這次摘要不可靠），**本文選擇不採信這次摘要的具體結論，誠實標注為
@@ -85,7 +85,7 @@ commit——它只是既有筆記固定引用的 tag/commit，本文延續同一
    - 前一份筆記提出的「VD orientation 收斂 vs. Activity 第一次凍結
      `AppCompatDisplayInsets`」時序假說，**本文沒有找到能一鎚定音的原始碼
      證據**（見上一點）——既沒有被推翻，也沒有被證實，維持「未找到佐證」
-     的狀態，需要另一輪針對 `TaskLaunchParamsModifier.java`／
+     的狀態，需要另一輪針對 `TaskLaunchParamsModifier.java`/
      `ActivityRecord.java` 的逐行原始碼比對（不透過摘要式 WebFetch，
      改用能完整讀取原始檔案內容的方式）才能真正回答。
 
@@ -148,7 +148,7 @@ if (vdListener != null) {
 ```
 
 `start(Surface surface)` 要等 `SurfaceEncoder` 把 `MediaCodec` 的輸入
-surface 準備好才會被呼叫（`SurfaceEncoder`／`SurfaceCapture` 的生命週期，
+surface 準備好才會被呼叫（`SurfaceEncoder`/`SurfaceCapture` 的生命週期，
 `Server.java:139-159` 把 `surfaceCapture` 交給 `SurfaceEncoder` 之後才
 `asyncProcessor.start()`）——這代表「VD 什麼時候真正建立」跟「client
 何時發出 `TYPE_START_APP` 控制訊息」完全是兩條獨立時間線，`Controller`
@@ -205,7 +205,7 @@ fallback 分支。
 已經建立**——就算 `DisplayContent` 一定會被同步就地建立，它建立當下讀到的
 `orientation` 有沒有轉正,是另一個完全獨立的問題,本文沒有查到。
 
-## Q3. `TaskLaunchParamsModifier`／`ActivityStarter`：未能確認的部分
+## Q3. `TaskLaunchParamsModifier`/`ActivityStarter`：未能確認的部分
 
 本文嘗試對 `TaskLaunchParamsModifier.java` 提問「`onCalculate()` 對
 FULLSCREEN task 的 bounds 計算是不是直接讀 `TaskDisplayArea`
@@ -218,7 +218,7 @@ if 判斷式排除在外的兩個值之一，代表 `FULLSCREEN` **不會**觸�
 不採用它的任何具體結論**（包含行號、變數名、控制流程），也不會拿一個
 自己都不信任的引用去支撐「根因確定是時序競爭」這種判斷。
 
-**誠實的狀態**：`TaskLaunchParamsModifier`／`ActivityStarter`
+**誠實的狀態**：`TaskLaunchParamsModifier`/`ActivityStarter`
 對「FULLSCREEN task 的初始 bounds 到底讀哪個時間點的 `TaskDisplayArea`
 狀態」這個具體問題，本文**沒有**拿到可信賴的原始碼引用，無法確認、
 也無法推翻時序競爭假說。需要的下一步：直接用 `Read`（而非摘要式
@@ -256,7 +256,7 @@ if 判斷式排除在外的兩個值之一，代表 `FULLSCREEN` **不會**觸�
    `ROTATION_0`,Activity 第一次凍結 `AppCompatDisplayInsets`
    如果剛好發生在這個時間點,會凍結到直向尺寸」這個具體時序假說。**
    這是唯一真正切題、可能解釋 letterbox 症狀的時序候選,但
-   `TaskLaunchParamsModifier`／`ActivityStarter`
+   `TaskLaunchParamsModifier`/`ActivityStarter`
    的原始碼細節本文這次沒能可靠取得。**在有更可靠的原始碼引用之前,
    不建議往 `MoonClickerService.kt` 加任何「等待 orientation 收斂再
    startActivity」的程式碼**——前一份筆記已經指出這裡有雞生蛋問題
@@ -268,7 +268,7 @@ if 判斷式排除在外的兩個值之一，代表 `FULLSCREEN` **不會**觸�
    https://android.googlesource.com/platform/frameworks/base` 取得可以
    直接 `Read`/`grep` 的本地檔案,針對
    `TaskLaunchParamsModifier.onCalculate()`、
-   `ActivityStarter.computeLaunchingTaskFlags()`／
+   `ActivityStarter.computeLaunchingTaskFlags()`/
    `getLaunchDisplayArea()`（或同等方法,需先確認 API 15 的實際方法名）
    逐行核對,同時搭配真機 `adb shell dumpsys activity activities`
    在「剛建 VD 立刻啟動」與「等 1 秒再啟動」兩種情境下比對

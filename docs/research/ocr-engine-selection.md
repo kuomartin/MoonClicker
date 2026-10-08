@@ -38,12 +38,12 @@ ML Kit 的典型錯誤：漏掉按鈕上的 `OK`、`關`→`開`、七段式數�
 
 以 instrumented test（`NativeOcrSpikeTest#measure`）跑 3 輪，每輪獨立行程、輪換 backend 順序（cv→ort→ncnn、ncnn→cv→ort、ort→ncnn→cv）、輪間冷卻 60 秒；表中為 3 輪的中位數，各輪之間差距在 ±10% 內，排名三輪一致。
 
-| runtime | ROI 讀數 p50／p95 | 整張 p50／p95 | 偵測 p50 | 載入 | 原生函式庫增量（stripped） | 壓縮後 |
+| runtime | ROI 讀數 p50/p95 | 整張 p50/p95 | 偵測 p50 | 載入 | 原生函式庫增量（stripped） | 壓縮後 |
 |---|---|---|---|---|---|---|
-| OpenCV 5 dnn | 43／92 ms | 1164／1477 ms | 343 ms | 188 ms | +9.4 MB | +2.6 MB |
-| ONNX Runtime 1.30 | 61／113 ms | 1822／2132 ms | 591 ms | 239 ms | +33.0 MB（官方 AAR 的 `libonnxruntime.so`） | +12.4 MB |
-| NCNN 20260526 | 51／101 ms | 1561／1916 ms | 525 ms | 102 ms | +4.9 MB | +2.2 MB |
-| ML Kit（bundled） | 317／386 ms | 546／658 ms | — | 1534 ms | 未量 | 未量 |
+| OpenCV 5 dnn | 43/92 ms | 1164/1477 ms | 343 ms | 188 ms | +9.4 MB | +2.6 MB |
+| ONNX Runtime 1.30 | 61/113 ms | 1822/2132 ms | 591 ms | 239 ms | +33.0 MB（官方 AAR 的 `libonnxruntime.so`） | +12.4 MB |
+| NCNN 20260526 | 51/101 ms | 1561/1916 ms | 525 ms | 102 ms | +4.9 MB | +2.2 MB |
+| ML Kit（bundled） | 317/386 ms | 546/658 ms | — | 1534 ms | 未量 | 未量 |
 
 同一台機器在腳本引擎內（app 行程，MoonClicker UI 在前景）量得的數字與上表不同：整張 ONNX Runtime 998 ms、NCNN 1150 ms、OpenCV dnn 1166 ms，兩輪之間波動約 ±30%。高階機上三者的差距小於環境造成的變動，不足以作為選型依據。ML Kit 一列為腳本引擎外的 instrumented test 單輪結果。
 
@@ -51,21 +51,21 @@ ML Kit 的典型錯誤：漏掉按鈕上的 `OK`、`關`→`開`、七段式數�
 
 Exynos 850，條件與上表相同（3 輪中位數）；三輪之間差距在 ±3% 內。
 
-| runtime | ROI 讀數 p50／p95 | 整張 p50／p95 | 偵測 p50 | 載入 |
+| runtime | ROI 讀數 p50/p95 | 整張 p50/p95 | 偵測 p50 | 載入 |
 |---|---|---|---|---|
-| OpenCV 5 dnn | 90／196 ms | 2724／3529 ms | 740 ms | 444 ms |
-| ONNX Runtime 1.30 | 81／154 ms | 2329／2898 ms | 766 ms | 634 ms |
-| NCNN 20260526 | 74／135 ms | 1974／2514 ms | 650 ms | 138 ms |
+| OpenCV 5 dnn | 90/196 ms | 2724/3529 ms | 740 ms | 444 ms |
+| ONNX Runtime 1.30 | 81/154 ms | 2329/2898 ms | 766 ms | 634 ms |
+| NCNN 20260526 | 74/135 ms | 1974/2514 ms | 650 ms | 138 ms |
 
 ### Galaxy Note20 Ultra
 
 SM-N9810，Snapdragon 865，Android 13；條件相同（3 輪中位數）。
 
-| runtime | ROI 讀數 p50／p95 | 整張 p50／p95 | 偵測 p50 | 載入 |
+| runtime | ROI 讀數 p50/p95 | 整張 p50/p95 | 偵測 p50 | 載入 |
 |---|---|---|---|---|
-| OpenCV 5 dnn | 42／83 ms | 1068／1364 ms | 269 ms | 163 ms |
-| ONNX Runtime 1.30 | 24／49 ms | 663／796 ms | 202 ms | 204 ms |
-| NCNN 20260526 | 39／58 ms | 608／752 ms | 201 ms | 64 ms |
+| OpenCV 5 dnn | 42/83 ms | 1068/1364 ms | 269 ms | 163 ms |
+| ONNX Runtime 1.30 | 24/49 ms | 663/796 ms | 202 ms | 204 ms |
+| NCNN 20260526 | 39/58 ms | 608/752 ms | 201 ms | 64 ms |
 
 量測前定的 OpenCV dnn 採用門檻：準確率相同、ROI 讀數 p50 ≤ 100 ms、ROI 讀數不超過 NCNN 的 1.25 倍、整張不超過 NCNN 的 1.4 倍（A21s 上的落差）。前三項通過，整張為 1.76 倍，未通過。
 
@@ -79,22 +79,22 @@ SM-N9810，Snapdragon 865，Android 13；條件相同（3 輪中位數）。
 
 ## 執行緒與 fp16 掃描
 
-每台 12 組設定：OpenCV dnn、ONNX Runtime 各 1／2／4 執行緒；NCNN（`NCNN_SIMPLEOMP` 自行編譯版）1／2／4 執行緒與只用大核（`set_cpu_powersave(2)`，執行緒數為大核數）；NCNN 辨識模型 fp16 搭配 1 執行緒與只用大核。每台 3 輪、輪換順序、每輪獨立行程、輪間冷卻 60 秒；表中為中位數。A21s 的 spike 程式刻意不釋放各組實例，第 1～3 輪各有最後一兩組因記憶體不足被 lowmemorykiller 終止，缺的組另以獨立行程補跑。程式：`tools/ocr-spike/run_sweep.sh`、`sweep_summary.py`。
+每台 12 組設定：OpenCV dnn、ONNX Runtime 各 1/2/4 執行緒；NCNN（`NCNN_SIMPLEOMP` 自行編譯版）1/2/4 執行緒與只用大核（`set_cpu_powersave(2)`，執行緒數為大核數）；NCNN 辨識模型 fp16 搭配 1 執行緒與只用大核。每台 3 輪、輪換順序、每輪獨立行程、輪間冷卻 60 秒；表中為中位數。A21s 的 spike 程式刻意不釋放各組實例，第 1～3 輪各有最後一兩組因記憶體不足被 lowmemorykiller 終止，缺的組另以獨立行程補跑。程式：`tools/ocr-spike/run_sweep.sh`、`sweep_summary.py`。
 
 所有組合在三台上的準確率都是 ROI 讀數 26/28、整行 72/79，包括 fp16。
 
-各 runtime 在各機型的最佳設定（ROI 讀數 p50／整張 p50）：
+各 runtime 在各機型的最佳設定（ROI 讀數 p50、整張 p50）：
 
 | runtime | Pixel 7a | Note20 Ultra | Galaxy A21s |
 |---|---|---|---|
-| ONNX Runtime | 35 ms／1.11 s（2 條） | 31 ms／0.74 s（4 條） | 80 ms／2.33 s（4 條） |
-| OpenCV dnn | 43 ms／1.42 s（2 條） | 37 ms／0.89 s（4 條） | 108 ms／3.00 s（4 條） |
-| NCNN SIMPLEOMP fp16 | 33 ms／1.19 s（1 條） | 33 ms／1.20 s（大核） | 109 ms／2.72 s（大核） |
-| NCNN SIMPLEOMP fp32 | 69 ms／1.55 s（大核） | 60 ms／1.74 s（1 條） | 149 ms／3.43 s（大核） |
-| 參考：NCNN 官方版（libomp）4 條 fp32，前一輪量測 | 51 ms／1.56 s | 39 ms／0.61 s | 74 ms／1.97 s |
+| ONNX Runtime | 35 ms/1.11 s（2 條） | 31 ms/0.74 s（4 條） | 80 ms/2.33 s（4 條） |
+| OpenCV dnn | 43 ms/1.42 s（2 條） | 37 ms/0.89 s（4 條） | 108 ms/3.00 s（4 條） |
+| NCNN SIMPLEOMP fp16 | 33 ms/1.19 s（1 條） | 33 ms/1.20 s（大核） | 109 ms/2.72 s（大核） |
+| NCNN SIMPLEOMP fp32 | 69 ms/1.55 s（大核） | 60 ms/1.74 s（1 條） | 149 ms/3.43 s（大核） |
+| 參考：NCNN 官方版（libomp）4 條 fp32，前一輪量測 | 51 ms/1.56 s | 39 ms/0.61 s | 74 ms/1.97 s |
 
 - 最佳執行緒數因機型不同：ONNX Runtime 在 Pixel 7a 上 4 條比 2 條慢 2.1 倍，在 A21s 上 1 條比 4 條慢 3.1 倍。
-- NCNN SIMPLEOMP 多執行緒一律變慢（2～4 倍），因為它的執行緒池以 mutex／condition variable 派工、不自旋等待；只用大核在大核數大於 1 時同樣落入這條路徑。
+- NCNN SIMPLEOMP 多執行緒一律變慢（2～4 倍），因為它的執行緒池以 mutex/condition variable 派工、不自旋等待；只用大核在大核數大於 1 時同樣落入這條路徑。
 - NCNN 官方版（libomp）多執行緒在 Note20 Ultra 與 A21s 上是整張辨識最快的組合，但帶有執行緒限制；它搭配 fp16 的組合未量測。
 - Pixel 7a 各輪之間電池溫度從 38.6°C 升到 43.1°C，個別輪次的整張辨識波動較大；中位數可參考。
 
@@ -124,7 +124,7 @@ SM-N9810，Snapdragon 865，Android 13；條件相同（3 輪中位數）。
 
 ## 執行期載入
 
-不連結 ORT 的建置（APK 內沒有 `libonnxruntime.so`），把官方 `libonnxruntime.so` 1.30.0 放在不同位置後 `dlopen`，經 `OrtGetApiBase` 取 C API，載入 PP-OCRv6 偵測模型並推論一次。`libonnxruntime.so` 只依賴 libc／libm／libdl／liblog／libandroid，且以 16 KB 分頁對齊。
+不連結 ORT 的建置（APK 內沒有 `libonnxruntime.so`），把官方 `libonnxruntime.so` 1.30.0 放在不同位置後 `dlopen`，經 `OrtGetApiBase` 取 C API，載入 PP-OCRv6 偵測模型並推論一次。`libonnxruntime.so` 只依賴 libc/libm/libdl/liblog/libandroid，且以 16 KB 分頁對齊。
 
 | 位置 | Pixel 7a（Android 17 beta） | Note20 Ultra（Android 13） | A21s（LineageOS，Android 16） |
 |---|---|---|---|

@@ -11,7 +11,7 @@ import org.junit.runner.RunWith
 /**
  * `screen.*` 與「這個目標有沒有影格」的分界。
  *
- * `screen.width`／`screen.height`／`screen.rotation` 是啟動當下的快照，整場執行固定不變，
+ * `screen.width`/`screen.height`/`screen.rotation` 是啟動當下的快照，整場執行固定不變，
  * 所以不需要真的顯示器就能驗。隨旋轉互換長寬的部分在 Tier 1 的 `VisionCoordinatesTest`。
  */
 @RunWith(AndroidJUnit4::class)

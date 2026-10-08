@@ -81,7 +81,7 @@ export function openMirrorPanel(
       conn?.stop();
       // webview 一旦 dispose，裡面所有 JS（含 stopTestIfRunningOnModeExit 那套）都停了，
       // 沒有人會再送 stopRun——面板關閉前若我們自己啟動的 vision-test 還在跑，這裡補送
-      // 最後一次，不留孤兒迴圈在裝置端背景繼續耗電／佔著執行槽。
+      // 最後一次，不留孤兒迴圈在裝置端背景繼續耗電、佔著執行槽。
       if (visionTestActive) {
         visionTestActive = false;
         stopRun(address, token).catch((err) => {
@@ -210,7 +210,7 @@ export function openMirrorPanel(
             token,
           );
           visionTestActive = true;
-          // 與模板測試共用同一組 start／stop 狀態機，所以回同一種訊息。
+          // 與模板測試共用同一組 start/stop 狀態機，所以回同一種訊息。
           safePostMessage({ type: "visionTestResult", success: true });
         } catch (err) {
           const errMsg = (err as Error).message;

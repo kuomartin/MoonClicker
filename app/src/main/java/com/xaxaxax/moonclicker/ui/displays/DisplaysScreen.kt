@@ -321,7 +321,7 @@ private fun DisplayCard(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.extraLarge
     ) {
-        // 縮圖本身就是主要動作入口：本服務建立的虛擬顯示／鏡像中的顯示點下去 = Enter，
+        // 縮圖本身就是主要動作入口：本服務建立的虛擬顯示、鏡像中的顯示點下去 = Enter，
         // 需要鏡像但還沒鏡像的（實體螢幕、外部虛擬螢幕）點下去 = Start Mirror。右上角疊一顆 X
         // 做次要動作（本服務建立的虛擬顯示 = Close，鏡像中 = Stop Mirror），未鏡像時沒有次要動作可疊。
         val primaryLabel = if (info.needsMirror && !info.isMirrorActive) {

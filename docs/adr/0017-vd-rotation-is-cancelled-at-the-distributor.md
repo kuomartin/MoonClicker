@@ -6,12 +6,12 @@ VD 帶 `VIRTUAL_DISPLAY_FLAG_ROTATES_WITH_CONTENT` 時，WindowManager 會把內
 
 ## Consequences
 
-`getDisplaySurfaceSize` 的語意從「建立時的 surface 尺寸常數」改成「該 VD 目前的影格尺寸」，隨 `v` 互換長寬——仍由服務一次宣告（[ADR-0012](0012-surface-size-is-owned-not-derived.md) 的原則不變）。呼叫端（`AImageReader`、`MirrorSurface`、`H264EncoderSink`）都只在**啟動／連線當下**讀一次，VD 中途再旋轉不會自動重建，這是已知限制，三者同一個根因，沒有分開處理。
+`getDisplaySurfaceSize` 的語意從「建立時的 surface 尺寸常數」改成「該 VD 目前的影格尺寸」，隨 `v` 互換長寬——仍由服務一次宣告（[ADR-0012](0012-surface-size-is-owned-not-derived.md) 的原則不變）。呼叫端（`AImageReader`、`MirrorSurface`、`H264EncoderSink`）都只在**啟動、連線當下**讀一次，VD 中途再旋轉不會自動重建，這是已知限制，三者同一個根因，沒有分開處理。
 
-`VisionMatcher` 的 `setRotation`／`logicalToFrame`／`frameToLogical` 三組換算與模板旋轉整段拿掉：影格即邏輯空間，[ADR-0013](0013-templates-are-logical-space.md) 的對外契約不變，只是不再需要引擎轉模板去對齊。`:app` 的 `touchTransform` 同樣只剩縮放，不用反轉 `d` 或疊 `v`。`H264EncoderSink`／vscode-extension 不需要協定層面的尺寸宣告：client 走標準 MSE，解析度由瀏覽器從 H.264 SPS 直接讀。
+`VisionMatcher` 的 `setRotation`/`logicalToFrame`/`frameToLogical` 三組換算與模板旋轉整段拿掉：影格即邏輯空間，[ADR-0013](0013-templates-are-logical-space.md) 的對外契約不變，只是不再需要引擎轉模板去對齊。`:app` 的 `touchTransform` 同樣只剩縮放，不用反轉 `d` 或疊 `v`。`H264EncoderSink`/vscode-extension 不需要協定層面的尺寸宣告：client 走標準 MSE，解析度由瀏覽器從 H.264 SPS 直接讀。
 
-`TextureView` 擷取路徑（縮圖、workbench MJPEG、裁切）原本會對擷取到的 bitmap 額外轉正一次，現在來源已經是轉正後的內容，該步驟拿掉；`rotateBufferBitmap`／`quarterTurnMatrix`／`rotateQuarterTurn`／`quarterTurnCoefficients` 因此整組變成死碼，一併移除。
+`TextureView` 擷取路徑（縮圖、workbench MJPEG、裁切）原本會對擷取到的 bitmap 額外轉正一次，現在來源已經是轉正後的內容，該步驟拿掉；`rotateBufferBitmap`/`quarterTurnMatrix`/`rotateQuarterTurn`/`quarterTurnCoefficients` 因此整組變成死碼，一併移除。
 
 ## Status
 
-Accepted，已實作並在 Pixel 7a／SM-A217F 真機驗證：`GlesDistributor` 的旋轉方向、不釘面板的轉場、`Tier1SpikeTest` 15 條（含 landscape／reverse-landscape 下的 vision/tap/ROI round trip）、vscode-extension 端對端播放全部驗證過。Supersedes [ADR-0014](0014-mirror-is-pinned-to-panel-coordinates.md) as of 2026-09-19。
+Accepted，已實作並在 Pixel 7a/SM-A217F 真機驗證：`GlesDistributor` 的旋轉方向、不釘面板的轉場、`Tier1SpikeTest` 15 條（含 landscape/reverse-landscape 下的 vision/tap/ROI round trip）、vscode-extension 端對端播放全部驗證過。Supersedes [ADR-0014](0014-mirror-is-pinned-to-panel-coordinates.md) as of 2026-09-19。
