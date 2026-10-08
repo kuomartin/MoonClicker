@@ -146,6 +146,24 @@ A21s 與選型研究（`docs/research/ocr-engine-selection.md`）的 ROI 80 ms�
 
 ---
 
+## 七、#164 修正後（Pixel 7a）
+
+distributor 改為只把新影格送給還沒收過它的 sink（#164），H.264 編碼器加上 `KEY_REPEAT_PREVIOUS_FRAME_AFTER`（100 ms）與 `KEY_MAX_FPS_TO_ENCODER`（30）。同樣的量測在 Pixel 7a 上重跑一輪：
+
+| 項目 | 修正前 | 修正後 |
+|---|---|---|
+| 畫面靜止時 distributor 的重畫 | 85 次／秒 | 0 |
+| `vision.wait` 等不到，`step_ms` 不設／100／500／1000 | 236／113／54／52% | 2.9／3.0／3.0／2.8% |
+| H.264，VD 畫面靜止 | 87 fps | 約 1 fps（編碼器重送上一張） |
+| H.264，VD 30 fps 變動 | 88 fps、128 kbps | 25 fps、約 80 kbps |
+| 畫面變動時，新影格合成完成到畫出 | 平均 6.0、最大 11–12 | 平均 5.9、最大 10–11 |
+| 鏡像實體螢幕＋H.264 編碼，行程 CPU | 55.8% | 8.4% |
+| template matching（720×1280） | 見一 | 照常比對 |
+
+A21s 未重測（量測時 USB 與 Wi-Fi 都連不上）。
+
+---
+
 ## 未量測與限制
 
 - A6（影格送到 VS Code 面板顯示的時間）依計畫延後，等要做「從 VS Code 注入點擊」時再量。
