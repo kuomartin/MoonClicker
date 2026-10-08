@@ -154,6 +154,23 @@ class VisionWaitTest {
     }
 
     /** 顯示器 + puppet 就緒、標記全部藏起來、畫面已經穩定。 */
+    /**
+     * #166：腳本第一行就 `vision.find`，比的是已經在畫面上的標記。影格管線剛接上時要
+     * 50–135 ms 才有第一張，引擎不在第一次呼叫時等的話，這裡會拿到空影格而回傳 nil。重複數次，因為沒等時
+     * 是否趕上第一張影格取決於執行速度。
+     */
+    @Test
+    fun vision_find_on_the_first_line_sees_what_is_already_on_screen() {
+        val displayId = env.stage()
+
+        repeat(3) { attempt ->
+            val outcome = env.runScript(displayId, """data.set("found", vision.find("marker.png") ~= nil)""")
+
+            assertEquals(EngineRunState.Finished, outcome.runState)
+            assertEquals("attempt ${attempt + 1}: the first vision.find saw no screen", true, outcome.data["found"])
+        }
+    }
+
     private fun stageWithHiddenMarkers(): Int {
         val displayId = env.createDisplay()
         env.launchPuppet(displayId)
