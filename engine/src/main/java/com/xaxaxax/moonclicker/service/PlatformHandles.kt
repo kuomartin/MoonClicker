@@ -13,6 +13,7 @@ import android.os.IPowerManager
 import android.os.PowerManager
 import android.os.PowerManagerHidden
 import android.os.ServiceManager
+import android.view.IWindowManager
 import androidx.core.content.getSystemService
 import dev.rikka.tools.refine.Refine
 
@@ -72,6 +73,17 @@ internal class PlatformHandles(
      * 擁有的套件，`PowerManager.newWakeLock` 卻一律拿它自己 context 的套件名，所以 wake lock
      * 走這條，自己傳 [callerPackage]。
      */
+    /**
+     * window service 的 binder 介面。不能用 `WindowManagerGlobal.getWindowManagerService()`：
+     * Android 17 上它會先取 `ApplicationSharedMemory`，而 UserService 這種不是由 zygote 正常
+     * 啟動的行程沒有初始化它，直接拋 IllegalStateException。
+     */
+    val windowManagerService: IWindowManager by lazy {
+        ServiceManager.getService(Context.WINDOW_SERVICE)
+            ?.let { IWindowManager.Stub.asInterface(it) }
+            ?: throw IllegalStateException("Cannot get the window service")
+    }
+
     val powerManagerService: IPowerManager by lazy {
         ServiceManager.getService(Context.POWER_SERVICE)
             ?.let { IPowerManager.Stub.asInterface(it) }

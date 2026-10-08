@@ -1,6 +1,7 @@
 package com.xaxaxax.moonclicker.script
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -66,6 +67,17 @@ class ScriptStoreTest {
         assertEquals(1080, found.display.width)
         assertEquals(2400, found.display.height)
         assertEquals(440, found.display.densityDpi)
+        assertTrue("the keyboard stays available unless the script turns it off", found.display.keyboard)
+    }
+
+    @Test
+    fun `display keyboard can be turned off`() {
+        script(
+            "daily",
+            """{"uniqueId":"daily-checkin","display":{"width":1080,"height":2400,"keyboard":false}}"""
+        )
+
+        assertFalse(ScriptStore.scan(temp.root).single().display!!.keyboard)
     }
 
     @Test

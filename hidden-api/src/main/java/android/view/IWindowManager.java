@@ -14,6 +14,23 @@ import androidx.annotation.RequiresApi;
  */
 public interface IWindowManager extends IInterface {
 
+    abstract class Stub {
+        public static IWindowManager asInterface(android.os.IBinder obj) {
+            throw new RuntimeException("Stub!");
+        }
+    }
+
+    /**
+     * Where the IME for {@code displayId} is shown: 0 local, 1 fall back to the default
+     * display, 2 hidden (no IME is bound for windows on that display).
+     */
+    @RequiresApi(Build.VERSION_CODES.S)
+    int getDisplayImePolicy(int displayId);
+
+    /** See {@link #getDisplayImePolicy(int)}. Only affects input sessions started afterwards. */
+    @RequiresApi(Build.VERSION_CODES.S)
+    void setDisplayImePolicy(int displayId, int imePolicy);
+
     /**
      * Lock the display orientation to the specified rotation, or to the current
      * rotation if -1.
