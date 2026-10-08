@@ -129,6 +129,9 @@ internal class RecordingMoonClickerService(
 
     override fun sleepVirtualDisplay(displayId: Int): Boolean = unused("sleepVirtualDisplay")
 
+    override fun setDisplayKeyboardEnabled(displayId: Int, enabled: Boolean): Boolean =
+        unused("setDisplayKeyboardEnabled")
+
     override fun resizeVirtualDisplay(displayId: Int, width: Int, height: Int, densityDpi: Int): Boolean =
         unused("resizeVirtualDisplay")
 

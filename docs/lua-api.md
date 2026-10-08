@@ -15,6 +15,30 @@
 
 ---
 
+## `script.json` 腳本設定
+
+腳本資料夾裡的 `script.json`，只有 `uniqueId` 是必要欄位。
+
+```json
+{
+  "uniqueId": "my-script",
+  "name": "我的腳本",
+  "description": "顯示在 App 腳本清單上的說明",
+  "display": { "width": 720, "height": 1280, "densityDpi": 320, "keyboard": true }
+}
+```
+
+| 欄位 | 說明 |
+|---|---|
+| `uniqueId` | 腳本的識別，小寫英數字、`.`、`_`、`-`。缺少時腳本無法執行 |
+| `name`、`description` | 顯示在 App 與 VS Code 上；`name` 省略時用資料夾名稱 |
+| `display` | 省略時腳本預設跑在本機螢幕；給了就在執行時建立（或沿用同名的）虛擬顯示器 |
+| `display.width`、`display.height` | 虛擬顯示器的尺寸（px） |
+| `display.densityDpi` | 預設 `320` |
+| `display.keyboard` | 預設 `true`。設成 `false` 時，這個顯示器上的 app 不綁定輸入法：`input.text` 送出的按鍵不會被使用者的輸入法（例如注音）組成中文字，代價是在全螢幕畫面點輸入框也不會出現鍵盤。用到 `input.text` 的腳本應設成 `false`；只在腳本建立顯示器時生效，在既有顯示器上已經開著的 app 要重新啟動才會套用；需要 Android 12 以上 |
+
+---
+
 ## 全域函式
 
 ### `log(...)`
@@ -174,7 +198,7 @@ end
 | `input.move(id, x, y)` | 移動觸控點 `id` 至新座標 |
 | `input.up(id)` | 釋放觸控點 `id` |
 | `input.key(keycode)` | 注入 Android 系統 KeyCode |
-| `input.text(text)` | 對目標顯示器上目前有焦點的輸入框輸入文字，回傳是否成功注入；呼叫前要先點選輸入框。只支援可印 ASCII、`\n`（Enter）與 `\t`（Tab），含其他字元（例如中文）時拋錯，一個字都不輸入；注入途中失敗時前面的字已經送出。`\n` 在單行搜尋框是送出，在多行輸入框是換行，依 app 而定 |
+| `input.text(text)` | 對目標顯示器上目前有焦點的輸入框輸入文字，回傳是否成功注入；呼叫前要先點選輸入框。只支援可印 ASCII、`\n`（Enter）與 `\t`（Tab），含其他字元（例如中文）時拋錯，一個字都不輸入；注入途中失敗時前面的字已經送出。`\n` 在單行搜尋框是送出，在多行輸入框是換行，依 app 而定。送出的是按鍵，使用者的輸入法若會組字（例如注音），打出來會變成中文：在 `script.json` 設 `display.keyboard = false` |
 | `input.back()` | 注入返回鍵（`AKEYCODE_BACK`） |
 | `input.home()` | 注入 Home 鍵（`AKEYCODE_HOME`） |
 | `input.recents()` | 注入多工任務鍵（`AKEYCODE_APP_SWITCH`） |

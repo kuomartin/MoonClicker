@@ -79,7 +79,9 @@ class MoonClickerService @JvmOverloads constructor(
         platformHandles.packageManagerHidden,
         platformHandles.appOpsManagerHidden,
     )
-    private val displayQuery = DisplayQuery(platformHandles.displayManager, virtualDisplayLifecycle, displayMirroring)
+    private val displayQuery = DisplayQuery(
+        platformHandles.displayManager, virtualDisplayLifecycle, displayMirroring,
+    ) { platformHandles.windowManagerService }
     private val taskQuery = TaskQuery()
 
     // launcherAppsCache 的建構本身有副作用（重掃套件、API 35+ 註冊套件變動回呼），得排在
@@ -104,7 +106,7 @@ class MoonClickerService @JvmOverloads constructor(
                 "Landroid/os/IPowerManager",             // DisplayGroupWakeLocks
                 "Landroid/os/ServiceManager",            // PlatformHandles
                 "Landroid/view/MotionEvent",             // InputInjector
-                "Landroid/view/WindowManagerGlobal",     // DisplayQuery
+                "Landroid/view/IWindowManager",          // DisplayQuery
             )
         }
 
@@ -152,6 +154,9 @@ class MoonClickerService @JvmOverloads constructor(
 
     override fun sleepVirtualDisplay(displayId: Int): Boolean =
         virtualDisplayLifecycle.sleepVirtualDisplay(displayId)
+
+    override fun setDisplayKeyboardEnabled(displayId: Int, enabled: Boolean): Boolean =
+        displayQuery.setDisplayKeyboardEnabled(displayId, enabled)
 
     override fun getVirtualDisplays(): IntArray {
         val internalMirrorVdIds = displayMirroring.internalMirrorDisplayIds()
