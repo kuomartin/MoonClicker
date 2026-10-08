@@ -156,8 +156,8 @@ class Tier1Env : ExternalResource() {
     }
 
     /** 建一個虛擬顯示，[after] 時銷毀。 */
-    fun createDisplay(): Int {
-        displayId = service.createVirtualDisplay("moonclicker-tier1", WIDTH, HEIGHT, DENSITY_DPI, 0)
+    fun createDisplay(width: Int = WIDTH, height: Int = HEIGHT, densityDpi: Int = DENSITY_DPI): Int {
+        displayId = service.createVirtualDisplay("moonclicker-tier1", width, height, densityDpi, 0)
         assertTrue("could not create a virtual display (got $displayId)", displayId > 0)
         return displayId
     }
@@ -353,11 +353,12 @@ class Tier1Env : ExternalResource() {
         main: String,
         timeoutMs: Long = 40_000,
         ocr: OcrRuntime? = null,
+        extraAssets: Map<String, ByteArray> = emptyMap(),
     ): ScriptOutcome =
         LuaScriptRunner(service = service, displayId = displayId, hasVision = true, ocr = ocr).use {
             it.run(
                 main = main,
-                assets = mapOf("marker.png" to PuppetMarker.png(), "glyph.png" to PuppetGlyph.png()),
+                assets = mapOf("marker.png" to PuppetMarker.png(), "glyph.png" to PuppetGlyph.png()) + extraAssets,
                 timeoutMs = timeoutMs,
             )
         }

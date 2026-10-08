@@ -1,4 +1,6 @@
+#include <ctime>
 #include "GlesDistributor.h"
+#include "LatLog.h"
 #include <android/log.h>
 
 #define LOG_TAG "GlesDistributor"
@@ -302,6 +304,12 @@ void GlesDistributor::renderLoop() {
     jclass stClass = env->GetObjectClass(jSurfaceTexture);
     jmethodID updateTexImage = env->GetMethodID(stClass, "updateTexImage", "()V");
     jmethodID setDefaultBufferSize = env->GetMethodID(stClass, "setDefaultBufferSize", "(II)V");
+    // spike/latency
+    jmethodID getTimestamp = env->GetMethodID(stClass, "getTimestamp", "()J");
+    long long latLastTs = -1;
+    int latLoops = 0, latNew = 0, latStale = 0;
+    double latSum = 0, latMax = 0, drawSum = 0;
+    auto latWindow = std::chrono::steady_clock::now();
 
     env->CallVoidMethod(jSurfaceTexture, setDefaultBufferSize, width, height);
     LOGD("Render loop started, width=%d, height=%d", width, height);
@@ -332,8 +340,41 @@ void GlesDistributor::renderLoop() {
 
         eglMakeCurrent(eglDisplay, eglPbufferSurface, eglPbufferSurface, eglContext);
         env->CallVoidMethod(jSurfaceTexture, updateTexImage);
+        long long ts = env->CallLongMethod(jSurfaceTexture, getTimestamp);
+        timespec mono{};
+        clock_gettime(CLOCK_MONOTONIC, &mono);
+        long long nowNs = (long long) mono.tv_sec * 1000000000LL + mono.tv_nsec;
 
+        auto drawStart = std::chrono::steady_clock::now();
         drawFrame();
+        double drawMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - drawStart).count();
+
+        latLoops++;
+        drawSum += drawMs;
+        if (ts != latLastTs) {
+            latNew++;
+            double age = (nowNs - ts) / 1e6;
+            latSum += age;
+            if (age > latMax) latMax = age;
+            latLastTs = ts;
+        } else {
+            latStale++;
+        }
+        auto latNow = std::chrono::steady_clock::now();
+        if (latNow - latWindow >= std::chrono::seconds(2)) {
+            size_t sinkCount;
+            {
+                std::lock_guard<std::mutex> lock(sinksMutex);
+                sinkCount = sinks.size();
+            }
+            latLog(
+                                "gles size=%dx%d sinks=%zu loops=%d new=%d stale=%d ageAvg=%.2f ageMax=%.2f drawAvg=%.2f",
+                                width, height, sinkCount, latLoops, latNew, latStale,
+                                latNew ? latSum / latNew : 0.0, latMax, latLoops ? drawSum / latLoops : 0.0);
+            latLoops = latNew = latStale = 0;
+            latSum = latMax = drawSum = 0;
+            latWindow = latNow;
+        }
 
         // 只在真的有分發出去時才計數，否則閒置的顯示器也會定期印心跳，蓋掉有意義的訊息。
         if (!hasSinks) continue;
