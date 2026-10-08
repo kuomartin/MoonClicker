@@ -38,7 +38,8 @@ private:
     void renderLoop();
     void setupEGL();
     void terminateEGL();
-    void drawFrame();
+    /** 把 [timestamp] 這張影格畫到還沒收過它的 sink；回傳實際畫了幾個。 */
+    int drawFrame(long long timestamp);
 
     int width;
     int height;
@@ -61,6 +62,8 @@ private:
         jobject jSurface; // Global ref to the Java Surface
         ANativeWindow* window;
         EGLSurface eglSurface;
+        /** 這個 sink 最後收到的影格（SurfaceTexture 時間戳）；-1 表示還沒收過。 */
+        long long deliveredTimestamp;
     };
 
     std::vector<Sink> sinks;
@@ -74,6 +77,8 @@ private:
     JavaVM* javaVM;
     std::atomic<int> nextHandle;
     std::atomic<int> rotation;
+    /** rotation 改了：同一張影格要以新方向重畫給所有 sink。 */
+    std::atomic<bool> redrawAll;
 };
 
 #endif // GLES_DISTRIBUTOR_H
