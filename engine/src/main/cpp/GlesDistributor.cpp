@@ -52,13 +52,14 @@ GlesDistributor::GlesDistributor(int width, int height)
           eglPbufferSurface(EGL_NO_SURFACE), eglConfig(nullptr), textureId(0), program(0),
           vPositionHandle(0), vTextureHandle(0),
           jSurfaceTexture(nullptr), jSurface(nullptr), isRunning(false),
-          javaVM(nullptr), nextHandle(1), rotation(0) {}
+          javaVM(nullptr), nextHandle(1), rotation(0), redrawAll(false) {}
 
 void GlesDistributor::setRotation(int quarterTurns) {
     // 真機驗證過：TEX_COORDS_BY_ROTATION[k] 產生的是逆時針 k*90 的取樣結果，
     // 要抵銷的是順時針 v*90 烤進紋理的旋轉，方向相反，故取 (4-v)%4。
     int v = quarterTurns & 3;
     rotation.store((4 - v) & 3);
+    redrawAll.store(true);
 }
 
 GlesDistributor::~GlesDistributor() = default;
@@ -180,8 +181,9 @@ int GlesDistributor::addSurface(JNIEnv *env, jobject surface) {
     if (eglSurface != EGL_NO_SURFACE) {
         int handle = nextHandle++;
         jobject globalSurface = env->NewGlobalRef(surface);
-        sinks.push_back({handle, globalSurface, window, eglSurface});
-        // 從閒置節奏立刻切回來，不然新掛上的鏡像要等最多 250ms 才看到第一張。
+        sinks.push_back({handle, globalSurface, window, eglSurface, -1});
+        // 從閒置節奏立刻切回來，不然新掛上的鏡像要等最多 250ms 才看到第一張。新 sink 的
+        // deliveredTimestamp 是 -1，畫面靜止也會在下一圈收到目前這張影格。
         frameCond.notify_all();
         LOGD("Successfully added sink handle %d, window %p. Total sinks: %zu", handle, window,
              sinks.size());
@@ -302,6 +304,7 @@ void GlesDistributor::renderLoop() {
     jclass stClass = env->GetObjectClass(jSurfaceTexture);
     jmethodID updateTexImage = env->GetMethodID(stClass, "updateTexImage", "()V");
     jmethodID setDefaultBufferSize = env->GetMethodID(stClass, "setDefaultBufferSize", "(II)V");
+    jmethodID getTimestamp = env->GetMethodID(stClass, "getTimestamp", "()J");
 
     env->CallVoidMethod(jSurfaceTexture, setDefaultBufferSize, width, height);
     LOGD("Render loop started, width=%d, height=%d", width, height);
@@ -321,6 +324,9 @@ void GlesDistributor::renderLoop() {
             // 佇列滿了之後生產端（虛擬顯示）會被擋住，所以閒置時仍然定期 updateTexImage
             // 把它排空，只是把節奏從 10ms 放寬到 250ms。
             //
+            // 醒來不代表要畫：只有時間戳變了（新影格）或有 sink 還沒收過這張時才畫，
+            // 見 drawFrame。
+            //
             // **不要改成條件式等待**：frameAvailable / onFrameAvailable 這組事件驅動的骨架
             // 從來沒有接上（listener 沒註冊、旗標沒人寫、frameCond 沒人 notify），等條件會
             // 直接睡死。逾時輪詢目前是唯一的驅動力，只是不必那麼密。
@@ -332,18 +338,17 @@ void GlesDistributor::renderLoop() {
 
         eglMakeCurrent(eglDisplay, eglPbufferSurface, eglPbufferSurface, eglContext);
         env->CallVoidMethod(jSurfaceTexture, updateTexImage);
-
-        drawFrame();
+        long long timestamp = env->CallLongMethod(jSurfaceTexture, getTimestamp);
 
         // 只在真的有分發出去時才計數，否則閒置的顯示器也會定期印心跳，蓋掉有意義的訊息。
-        if (!hasSinks) continue;
+        if (drawFrame(timestamp) == 0) continue;
 
         frameCount++;
         if (frameCount >= 60) {
             auto now = std::chrono::steady_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
                     now - lastLogTime).count();
-            LOGD("Render loop heartbeat: 60 frames in %lld ms", duration);
+            LOGD("Render loop heartbeat: 60 deliveries in %lld ms", duration);
             frameCount = 0;
             lastLogTime = now;
         }
@@ -353,13 +358,30 @@ void GlesDistributor::renderLoop() {
     javaVM->DetachCurrentThread();
 }
 
-void GlesDistributor::drawFrame() {
+/**
+ * 只畫給還沒收過 [timestamp] 這張影格的 sink。
+ *
+ * 不這樣做的話，render loop 每 10 ms 醒來一次就重畫一次，畫面靜止時下游一樣每秒收到
+ * 約 85 張相同的影格：vision 當成新影格反覆比對、H.264 編碼器收到設定 fps 的 2–3 倍
+ * （docs/research/latency.md）。時間戳為 0 代表生產端還沒送過任何緩衝區（例如顯示器上還沒有
+ * app），這時畫出來的是空白畫面；照樣送一次，consumer 才知道顯示器存在、有東西可以顯示。
+ */
+int GlesDistributor::drawFrame(long long timestamp) {
     std::lock_guard<std::mutex> lock(sinksMutex);
-    if (sinks.empty()) return;
+    if (sinks.empty()) return 0;
+
+    if (redrawAll.exchange(false)) {
+        for (auto &sink: sinks) sink.deliveredTimestamp = -1;
+    }
 
     const GLfloat *texCoords = TEX_COORDS_BY_ROTATION[rotation.load()];
+    int drawn = 0;
 
     for (auto it = sinks.begin(); it != sinks.end();) {
+        if (it->deliveredTimestamp == timestamp) {
+            it++;
+            continue;
+        }
         if (!eglMakeCurrent(eglDisplay, it->eglSurface, it->eglSurface, eglContext)) {
             LOGE("eglMakeCurrent failed for sink handle %d: %x", it->handle, eglGetError());
             it++;
@@ -401,7 +423,11 @@ void GlesDistributor::drawFrame() {
                 it = sinks.erase(it);
                 continue;
             }
+        } else {
+            it->deliveredTimestamp = timestamp;
+            drawn++;
         }
         it++;
     }
+    return drawn;
 }
