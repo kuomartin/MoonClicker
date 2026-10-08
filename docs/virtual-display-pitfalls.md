@@ -49,6 +49,31 @@ MoonClicker 原本從 API 31 起無條件加上 `VIRTUAL_DISPLAY_FLAG_TRUSTED`�
 
 → `Tier1Env.wakeAndUnlock()`
 
+### 擁有獨立 display group 的虛擬顯示會自己閒置逾時
+
+API 33 起拿到 `OWN_DISPLAY_GROUP` 的虛擬顯示有自己的 power group 與逾時計時，主螢幕醒著也照樣會關。
+
+| API | group 關閉後 |
+|---|---|
+| 33–35 | `Display.state` 仍回報 ON，但系統疊上一層黑色 ColorFade；33、34 上注入的觸控被 `InputDispatcher` 當成遭遮蔽而丟棄，35 模擬器照收 |
+| 36+ | `Display.state` 變 OFF、activity 被 pause、輸入被丟棄 |
+
+之後的輸入都叫不醒它，預設 group 的 `wakeUp` 也碰不到它。帶 displayId 的 `wakeUp` 只在 API 36 與 35 QPR2 以後的 build 才有。
+
+API 33 起都能用的是綁在 displayId 上的 `SCREEN_BRIGHT_WAKE_LOCK`：持有期間該 group 不逾時，加 `ACQUIRE_CAUSES_WAKEUP` 則在 acquire 當下只喚醒它、不點亮主螢幕。wake lock 的 packageName 必須是 calling uid 擁有的套件（13 會拒絕），所以直接呼叫 `IPowerManager`，不經 `PowerManager.newWakeLock`。Note20（One UI 5.1）鎖定中，group 在最後一次輸入約 6 秒後就逾時，比 `screen_off_timeout` 短得多；持有中的 wake lock 不受影響。
+
+量測與原始碼出處見 [vd-display-group-wake-api31-35.md](research/vd-display-group-wake-api31-35.md)。
+
+→ `DisplayGroupWakeLocks`、`VirtualDisplayLifecycle.wakeDisplayGroupIfOwned`／`holdDisplayGroupAwake`、`VirtualDisplayIdleDeadlockTest`、`VirtualDisplayKeepAwakeSlowTest`
+
+### 要了 `OWN_DISPLAY_GROUP` 也可能落在預設 group
+
+Android 17 開啟各 display group 分開逾時（`isSeparateTimeoutsEnabled`）時，`LogicalDisplayMapper` 先由 `DisplayGroupAllocator` 依顯示器類型決定 group，虛擬顯示一律是 primary，也就是預設 group；`assignDisplayGroupIdLocked` 優先採用這個決定，旗標被蓋掉（[android-17.0.0_r1 LogicalDisplayMapper](https://android.googlesource.com/platform/frameworks/base/+/refs/tags/android-17.0.0_r1/services/core/java/com/android/server/display/LogicalDisplayMapper.java)）。Pixel 7a（API 37）實測：VD 帶著 `FLAG_OWN_DISPLAY_GROUP` 卻在 group 0，對它 `goToSleep(displayId)` 關掉的是整支手機的螢幕。
+
+所以「擁有獨立 display group」要看建立後實際的 `DisplayInfo.displayGroupId`，不能從送出的旗標推斷。
+
+→ `VirtualDisplayLifecycle.landedOutsideDefaultGroup`、`VirtualDisplayIdleDeadlockTest.sleepRefusesADisplayInTheDefaultGroup`
+
 ### API 27–28 注入不到虛擬顯示
 
 `MotionEvent.setDisplayId` 是 API 29 才有的隱藏 API，在那之前沒有辦法把事件標到某個顯示器
