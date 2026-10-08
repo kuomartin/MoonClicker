@@ -30,5 +30,24 @@ internal val I_WINDOW_MANAGER = StubContracts(
             ),
             sinceApi = Build.VERSION_CODES.VANILLA_ICE_CREAM,
         ),
+        MemberContract(
+            owner = "android.view.IWindowManager",
+            member = MethodMember(name = "getDisplayImePolicy", parameters = listOf("int"), returns = "int"),
+            sinceApi = Build.VERSION_CODES.S,
+        ),
+        MemberContract(
+            owner = "android.view.IWindowManager",
+            member = MethodMember(name = "setDisplayImePolicy", parameters = listOf("int", "int"), returns = "void"),
+            sinceApi = Build.VERSION_CODES.S,
+        ),
+        MemberContract(
+            owner = "android.view.IWindowManager\$Stub",
+            member = MethodMember(
+                name = "asInterface",
+                parameters = listOf("android.os.IBinder"),
+                returns = "android.view.IWindowManager",
+                static = true,
+            ),
+        ),
     ),
 )

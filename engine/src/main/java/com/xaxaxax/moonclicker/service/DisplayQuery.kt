@@ -5,17 +5,19 @@ import android.os.Build
 import android.util.DisplayMetrics
 import android.view.Display
 import android.view.DisplayHidden
-import android.view.WindowManagerGlobal
+import android.view.IWindowManager
 import com.xaxaxax.moonclicker.MoonClickerDisplayInfo
 import com.xaxaxax.moonclicker.script.DisplayGeometry
 import dev.rikka.tools.refine.Refine
 import timber.log.Timber
+import java.util.concurrent.ConcurrentHashMap
 
 /** 顯示器查詢：尺寸（邏輯、surface 空間）、旋轉、以及彙整給呼叫端的 [MoonClickerDisplayInfo]。 */
 internal class DisplayQuery(
     private val displayManager: DisplayManager,
     private val virtualDisplayLifecycle: VirtualDisplayLifecycle,
     private val displayMirroring: DisplayMirroring,
+    private val windowManager: () -> IWindowManager,
 ) {
     fun getDisplaySize(displayId: Int): IntArray {
         val display = displayManager.getDisplay(displayId) ?: return intArrayOf(0, 0)
@@ -94,7 +96,7 @@ internal class DisplayQuery(
         // API 29 起才有 freezeDisplayRotation；27–28 沒有可用的 Java 路徑，退回 command line。
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             try {
-                val wm = WindowManagerGlobal.getWindowManagerService()
+                val wm = windowManager()
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
                     wm.freezeDisplayRotation(displayId, quarterTurns, "MoonClicker")
                 } else {
@@ -109,6 +111,34 @@ internal class DisplayQuery(
             }
         }
         return setDisplayRotationViaShell(displayId, quarterTurns)
+    }
+
+    /** 被本服務關掉鍵盤的顯示器原本的 IME policy，開回來時還原成它。 */
+    private val imePolicyBeforeDisabled = ConcurrentHashMap<Int, Int>()
+
+    /**
+     * 關掉時把 IME policy 設成 HIDE：該顯示器上的視窗不綁定輸入法，按鍵直接送到有焦點的 view，
+     * 不會被使用者的輸入法組字（注音會把 `rick` 變成中文）。只影響之後才開始的輸入，所以要在
+     * 顯示器上啟動 app 之前呼叫。`setDisplayImePolicy` 從 API 31 才有，更舊的版本回傳 false。
+     */
+    fun setDisplayKeyboardEnabled(displayId: Int, enabled: Boolean): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return false
+        return try {
+            val wm = windowManager()
+            if (enabled) {
+                imePolicyBeforeDisabled.remove(displayId)?.let { wm.setDisplayImePolicy(displayId, it) }
+            } else {
+                val current = wm.getDisplayImePolicy(displayId)
+                if (current != DISPLAY_IME_POLICY_HIDE) {
+                    imePolicyBeforeDisabled.putIfAbsent(displayId, current)
+                    wm.setDisplayImePolicy(displayId, DISPLAY_IME_POLICY_HIDE)
+                }
+            }
+            true
+        } catch (t: Throwable) {
+            Timber.e(t, "setDisplayKeyboardEnabled(%d, %b) failed", displayId, enabled)
+            false
+        }
     }
 
     /**
@@ -144,3 +174,6 @@ internal class DisplayQuery(
                 .getOrNull()
     }
 }
+
+/** `WindowManager.DISPLAY_IME_POLICY_HIDE`（@hide）。 */
+private const val DISPLAY_IME_POLICY_HIDE = 2

@@ -57,70 +57,103 @@ log("點進影片", video.text)
 input.tap(video.cx, video.cy)
 
 -- 4. 處理廣告 -----------------------------------------------------------------
--- 播放器下方出現影片標題就代表正片開始了；廣告期間那裡是廣告資訊。
--- 「略過」按鈕要等廣告播幾秒才出現，可能連續兩則；不能略過的廣告就等它播完。
-local below_player = { 0, PLAYER_H, W, H // 8 }
-while true do
-    local idx, hit = vision.wait_any({
-        { text = "略過", roi = PLAYER },
-        { text = "Skip", roi = PLAYER },
-        { text = "Never Gonna Give", roi = below_player },
-    }, 60000, 500)
-    if not idx then fail("影片沒有開始播放") end
-    if idx == 3 then break end
-    log("略過廣告")
-    input.tap(hit.cx, hit.cy)
-    sleep(1000)
+-- 廣告期間播放器左下角一直有「贊助商廣告」（英文介面是 Sponsored），用它判斷而不是看影片標題：
+-- 廣告也可能在正片播了幾秒之後才插進來，那時標題早就在了。可能連續好幾則，有的不能略過。
+-- 「略過」按鈕要整行比對：倒數「您可以在 5 秒後略過廣告前往影片」與廣告本身的文字也可能含「略過」。
+-- 略過按鈕與廣告標記放在同一次 find_any，播放器只辨識一次。
+local AD_SIGNS = {
+    { text = "略過", exact = true, roi = PLAYER },
+    { text = "Skip", exact = true, roi = PLAYER },
+    { text = "Skip ad", exact = true, roi = PLAYER },
+    { text = "Skip ads", exact = true, roi = PLAYER },
+    { text = "贊助商廣告", roi = PLAYER },
+    { text = "Sponsored", roi = PLAYER },
+}
+local SKIP_BUTTONS = 4
+
+-- 等到連續 quiet 秒都沒有廣告；期間出現略過按鈕就點。
+local function skip_ads(quiet)
+    local clear = 0
+    for _ = 1, 180 do
+        local idx, hit = vision.find_any(AD_SIGNS)
+        if idx and idx <= SKIP_BUTTONS then
+            log("略過廣告")
+            input.tap(hit.cx, hit.cy)
+            clear = 0
+        elseif idx then
+            clear = 0
+        else
+            clear = clear + 1
+            if clear >= quiet then return end
+        end
+        sleep(1000)
+    end
+    fail("廣告播不完")
 end
 
 -- 5. 讀出目前時間 -------------------------------------------------------------
--- 點播放器叫出控制列（避開正中央的暫停鍵），在播放器下半部找「0:12 / 3:33」那一行
+-- 點播放器叫出控制列（避開正中央的暫停鍵），在播放器下半部找「0:12 / 3:33」那一行。
+-- 總長太短代表讀到的是廣告的時間。
 local function seconds(clock)
     local m, s = clock:match("(%d+):(%d+)")
     return tonumber(m) * 60 + tonumber(s)
 end
 
-local function find_time()
-    for _ = 1, 3 do
-        input.tap(W // 2, PLAYER_H * 3 // 4)
-        sleep(300)
-        for _, line in ipairs(vision.read_lines({ 0, PLAYER_H // 2, W, PLAYER_H // 2 })) do
-            local now, total = line.text:match("(%d+:%d+)%s*/%s*(%d+:%d+)")
-            if now then return line, seconds(now), seconds(total) end
-        end
-        sleep(1000)
+local function read_time()
+    input.tap(W // 2, PLAYER_H * 3 // 4)
+    sleep(300)
+    for _, line in ipairs(vision.read_lines({ 0, PLAYER_H // 2, W, PLAYER_H // 2 })) do
+        local now, total = line.text:match("(%d+:%d+)%s*/%s*(%d+:%d+)")
+        if now and seconds(total) >= 60 then return line, seconds(now), seconds(total) end
     end
 end
-
-local label, now, total = find_time()
-if not label then fail("讀不到播放時間") end
-log(string.format("目前 %d 秒，全長 %d 秒", now, total))
 
 -- 6. 拖曳進度條到一半 ---------------------------------------------------------
 -- YouTube 的進度條是相對拖曳：手指移動的距離決定前進多少，跟按下的位置無關。
 -- 所以從目前的位置按下，往目標的方向移「差距的比例 × 寬度」；YouTube 可能從上次的位置接著播，目標也可能在左邊。
-local target = total // 2
-local y = PLAYER_H - 4
-local from_x = W * now // total
-local to_x = W * target // total
-input.down(1, from_x, y)
-for step = 1, 10 do
-    sleep(30)
-    input.move(1, from_x + (to_x - from_x) * step // 10, y)
+local function drag(now, target, total)
+    local y = PLAYER_H - 4
+    local from_x = W * now // total
+    local to_x = W * target // total
+    input.down(1, from_x, y)
+    for step = 1, 10 do
+        sleep(30)
+        input.move(1, from_x + (to_x - from_x) * step // 10, y)
+    end
+    input.up(1)
 end
-input.up(1)
 
 -- 7. 確認快轉成功 -------------------------------------------------------------
 -- 時間標籤還在剛才那個位置；用 vision.read 只讀那一小塊，比整片偵測快。
 -- 框放寬一點，因為數字變長（0:09 → 1:46）時標籤會變寬。
-sleep(300)
-local reading = vision.read({ label.x - 8, label.y - 4, label.w + 40, label.h + 8 })
-local now_text = reading and reading.text:match("(%d+:%d+)")
-if not now_text then fail("快轉後讀不到時間") end
-local after = seconds(now_text)
-log(string.format("快轉後 %d 秒，目標 %d 秒", after, target))
+local function read_label(label)
+    sleep(300)
+    local reading = vision.read({ label.x - 8, label.y - 4, label.w + 40, label.h + 8 })
+    local now_text = reading and reading.text:match("(%d+:%d+)")
+    return now_text and seconds(now_text), now_text
+end
 
--- 影片一直在播、拖曳也有誤差，差 10 秒內都算成功
-if math.abs(after - target) > 10 then fail("快轉的位置不對：" .. now_text) end
-data.set("position", now_text)
+-- 4–7 整段可能被插進來的廣告打斷，打斷就等廣告過去再從頭來。
+local result
+for attempt = 1, 3 do
+    skip_ads(3)
+    local label, now, total = read_time()
+    if label then
+        log(string.format("目前 %d 秒，全長 %d 秒", now, total))
+        local target = total // 2
+        drag(now, target, total)
+        local after, now_text = read_label(label)
+        if after then
+            log(string.format("快轉後 %d 秒，目標 %d 秒", after, target))
+            -- 影片一直在播、拖曳也有誤差，差 10 秒內都算成功
+            if math.abs(after - target) <= 10 then
+                result = now_text
+                break
+            end
+        end
+    end
+    log("被廣告打斷或讀不到時間，重試", attempt)
+end
+if not result then fail("快轉沒有成功") end
+data.set("position", result)
 data.set("status", "never gonna give you up")

@@ -9,6 +9,7 @@ import com.xaxaxax.moonclicker.notification.ScriptStatusNotifier
 import com.xaxaxax.moonclicker.shizuku.ShizukuManager
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -89,6 +90,39 @@ class ScriptSessionTest {
         val result = session().resolveDisplay(service, ScriptTarget.NewVirtual(config))
 
         assertEquals(7, result)
+    }
+
+    @Test
+    fun `a new display without a keyboard has its keyboard disabled before the script runs`() {
+        val service = mockk<IMoonClickerService>()
+        every { service.virtualDisplays } returns intArrayOf()
+        every { service.createVirtualDisplay("daily-checkin", 1080, 2400, 440, 0) } returns 7
+        every { service.setDisplayKeyboardEnabled(7, false) } returns true
+
+        session().resolveDisplay(service, ScriptTarget.NewVirtual(config.copy(keyboard = false)))
+
+        verify { service.setDisplayKeyboardEnabled(7, false) }
+    }
+
+    @Test
+    fun `a display keeps its keyboard by default`() {
+        val service = mockk<IMoonClickerService>()
+        every { service.virtualDisplays } returns intArrayOf()
+        every { service.createVirtualDisplay("daily-checkin", 1080, 2400, 440, 0) } returns 7
+        every { service.setDisplayKeyboardEnabled(7, true) } returns true
+
+        session().resolveDisplay(service, ScriptTarget.NewVirtual(config))
+
+        verify { service.setDisplayKeyboardEnabled(7, true) }
+    }
+
+    @Test
+    fun `existing virtual targets keep whatever keyboard they have`() {
+        val service = mockk<IMoonClickerService>()
+
+        session().resolveDisplay(service, ScriptTarget.ExistingVirtual(42))
+
+        verify(exactly = 0) { service.setDisplayKeyboardEnabled(any(), any()) }
     }
 
     @Test
