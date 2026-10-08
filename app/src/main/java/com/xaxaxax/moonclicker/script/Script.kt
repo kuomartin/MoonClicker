@@ -28,6 +28,12 @@ data class ScriptMeta(
         val width: Int,
         val height: Int,
         val densityDpi: Int = 320,
+        /**
+         * 顯示器上的 app 能不能叫出輸入法。腳本用 `input.text` 輸入時設成 false：注音之類的
+         * 輸入法會把送進去的按鍵組成中文字，而那取決於執行腳本的手機，不是寫腳本的人。
+         * 設成 false 之後，在全螢幕畫面點輸入框也不會出現鍵盤。
+         */
+        val keyboard: Boolean = true,
     )
 }
 
@@ -81,6 +87,7 @@ data class Script(
                             width = displayMeta.width,
                             height = displayMeta.height,
                             densityDpi = displayMeta.densityDpi,
+                            keyboard = displayMeta.keyboard,
                         )
                     }
                 },

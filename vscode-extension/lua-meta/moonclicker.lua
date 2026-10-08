@@ -163,6 +163,7 @@ function input.key(keycode) end
 --- 對目標顯示器上目前有焦點的輸入框輸入文字；呼叫前要先點選輸入框。
 --- 只支援可印 ASCII、`\n`（Enter）與 `\t`（Tab），含其他字元（例如中文）時拋錯，一個字都不輸入。
 --- 注入途中失敗時前面的字已經送出。`\n` 在單行搜尋框是送出，在多行輸入框是換行，依 app 而定。
+--- 送出的是按鍵：使用者的輸入法若會組字（例如注音），打出來會變成中文，要在 `script.json` 設 `display.keyboard = false`。
 ---@param text string 要輸入的文字
 ---@return boolean ok 是否成功注入
 function input.text(text) end

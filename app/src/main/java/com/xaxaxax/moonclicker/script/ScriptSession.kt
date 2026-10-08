@@ -185,6 +185,16 @@ class ScriptSession @Inject constructor(
      * 不銷毀重建——保留 displayId，正在依附它的 consumer 才不會斷線。
      */
     internal fun resolveDisplay(service: IMoonClickerService, target: ScriptTarget): Int? =
+        resolveDisplayId(service, target)?.also { displayId ->
+            // 在腳本啟動 app 之前設定：IME policy 只影響之後才開始的輸入。沿用的既有顯示器上
+            // 已經開著的 app 不受影響，要重新啟動才會套用。
+            if (target is ScriptTarget.NewVirtual) {
+                runCatching { service.setDisplayKeyboardEnabled(displayId, target.config.keyboard) }
+                    .onFailure { Timber.e(it, "setDisplayKeyboardEnabled failed") }
+            }
+        }
+
+    private fun resolveDisplayId(service: IMoonClickerService, target: ScriptTarget): Int? =
         when (target) {
             is ScriptTarget.PhysicalDisplay -> 0
             is ScriptTarget.ExistingVirtual -> target.displayId

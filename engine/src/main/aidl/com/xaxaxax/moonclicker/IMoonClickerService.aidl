@@ -43,6 +43,15 @@ interface IMoonClickerService {
     boolean sleepVirtualDisplay(int displayId) = 113;
 
     /**
+     * Whether windows on [displayId] get an input method. Disabled, no IME is bound there:
+     * key events reach the focused view as typed, instead of being composed by the user's
+     * IME (e.g. Zhuyin turning "rick" into Chinese). Only input sessions started afterwards
+     * are affected, so call it before launching apps on the display. Enabling restores the
+     * policy the display had before this service disabled it. API 31+; returns false below.
+     */
+    boolean setDisplayKeyboardEnabled(int displayId, boolean enabled) = 114;
+
+    /**
      * Sets a virtual display's user rotation (Surface.ROTATION_*, 0..3).
      *
      * An app running on the display that declares its own orientation wins: WindowManager
