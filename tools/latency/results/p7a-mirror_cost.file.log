@@ -1,0 +1,194 @@
+1791443192.198 gles size=720x1280 sinks=0 loops=8 new=3 stale=5 ageAvg=55.01 ageMax=133.54 drawAvg=0.00
+1791443194.202 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443196.206 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443198.209 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443200.217 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.01
+1791443202.225 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443204.235 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.01
+1791443206.242 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443208.249 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443210.256 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443212.263 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.01
+1791443214.268 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443216.271 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443218.274 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443220.278 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443222.282 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443224.287 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443226.291 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443228.294 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443230.297 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443232.302 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443234.308 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443236.314 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443238.321 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443240.330 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443242.338 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.01
+1791443244.345 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443246.350 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443248.357 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443250.362 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443252.366 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443254.370 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443254.591 cpu state=vd-only self=0.4% system_server=5.9% surfaceflinger=0.1% temperature: 367
+1791443256.373 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443256.617 gles size=720x1280 sinks=0 loops=8 new=1 stale=7 ageAvg=194.93 ageMax=194.93 drawAvg=0.00
+1791443258.376 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443258.621 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443260.379 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443260.625 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443262.383 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443262.630 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443264.387 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443264.633 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443266.390 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443266.637 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443268.394 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443268.642 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443270.399 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443270.647 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443272.403 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443272.653 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443274.409 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443274.658 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443276.413 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443276.661 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443278.416 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443278.665 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443280.419 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443280.669 gles size=720x1280 sinks=0 loops=8 new=1 stale=7 ageAvg=129.58 ageMax=129.58 drawAvg=0.00
+1791443282.424 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443282.671 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443284.427 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443284.674 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443286.430 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443286.678 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443288.434 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443288.682 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443290.437 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443290.685 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443292.442 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443292.690 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443294.448 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443294.697 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.01
+1791443296.452 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443296.700 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443298.453 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443298.702 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443300.458 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443300.706 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443302.461 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443302.711 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443304.463 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443304.715 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443306.470 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443306.722 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443308.477 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443308.729 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443310.484 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443310.735 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443312.490 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443312.741 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443314.495 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443314.745 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443316.502 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443316.756 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443318.509 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443318.760 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443318.837 cpu state=mirror-idle self=0.3% system_server=3.1% surfaceflinger=0.1% temperature: 367
+1791443320.511 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443320.768 gles size=720x1280 sinks=1 loops=165 new=0 stale=165 ageAvg=0.00 ageMax=0.00 drawAvg=0.92
+1791443320.945 h264 display=0 frames=179 fps=89.3 encAvg=6.69 encMax=19.38 kbps=4254
+1791443322.514 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443322.778 gles size=720x1280 sinks=1 loops=174 new=0 stale=174 ageAvg=0.00 ageMax=0.00 drawAvg=1.24
+1791443322.946 h264 display=0 frames=174 fps=86.8 encAvg=8.36 encMax=17.11 kbps=6381
+1791443324.518 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443324.783 gles size=720x1280 sinks=1 loops=173 new=0 stale=173 ageAvg=0.00 ageMax=0.00 drawAvg=1.27
+1791443324.952 h264 display=0 frames=173 fps=86.2 encAvg=9.23 encMax=14.39 kbps=7615
+1791443326.521 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443326.789 gles size=720x1280 sinks=1 loops=177 new=0 stale=177 ageAvg=0.00 ageMax=0.00 drawAvg=1.07
+1791443326.963 h264 display=0 frames=177 fps=88.0 encAvg=7.26 encMax=17.12 kbps=7857
+1791443328.524 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443328.793 gles size=720x1280 sinks=1 loops=171 new=0 stale=171 ageAvg=0.00 ageMax=0.00 drawAvg=1.35
+1791443328.968 h264 display=0 frames=171 fps=85.3 encAvg=9.51 encMax=20.20 kbps=7870
+1791443330.528 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443330.804 gles size=720x1280 sinks=1 loops=173 new=0 stale=173 ageAvg=0.00 ageMax=0.00 drawAvg=1.29
+1791443330.972 h264 display=0 frames=172 fps=86.0 encAvg=9.37 encMax=14.31 kbps=6892
+1791443332.533 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443332.804 gles size=720x1280 sinks=1 loops=174 new=0 stale=174 ageAvg=0.00 ageMax=0.00 drawAvg=1.19
+1791443332.981 h264 display=0 frames=175 fps=87.1 encAvg=8.34 encMax=17.98 kbps=7858
+1791443334.536 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443334.810 gles size=720x1280 sinks=1 loops=172 new=0 stale=172 ageAvg=0.00 ageMax=0.00 drawAvg=1.31
+1791443334.987 h264 display=0 frames=172 fps=85.6 encAvg=9.73 encMax=18.02 kbps=7873
+1791443336.539 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443336.813 gles size=720x1280 sinks=1 loops=173 new=0 stale=173 ageAvg=0.00 ageMax=0.00 drawAvg=1.26
+1791443337.001 h264 display=0 frames=174 fps=86.5 encAvg=8.82 encMax=15.09 kbps=7843
+1791443338.542 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443338.815 gles size=720x1280 sinks=1 loops=171 new=0 stale=171 ageAvg=0.00 ageMax=0.00 drawAvg=1.36
+1791443339.002 h264 display=0 frames=171 fps=85.5 encAvg=9.81 encMax=17.04 kbps=6873
+1791443340.547 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443340.819 gles size=720x1280 sinks=1 loops=173 new=1 stale=172 ageAvg=3.65 ageMax=3.65 drawAvg=1.26
+1791443341.011 h264 display=0 frames=173 fps=86.2 encAvg=8.81 encMax=14.70 kbps=7877
+1791443342.550 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443342.820 gles size=720x1280 sinks=1 loops=172 new=0 stale=172 ageAvg=0.00 ageMax=0.00 drawAvg=1.30
+1791443343.007 h264 display=0 frames=172 fps=86.0 encAvg=8.95 encMax=20.51 kbps=7892
+1791443344.555 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443344.830 gles size=720x1280 sinks=1 loops=171 new=0 stale=171 ageAvg=0.00 ageMax=0.00 drawAvg=1.40
+1791443345.019 h264 display=0 frames=171 fps=85.1 encAvg=9.65 encMax=15.68 kbps=7881
+1791443346.558 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443346.835 gles size=720x1280 sinks=1 loops=172 new=0 stale=172 ageAvg=0.00 ageMax=0.00 drawAvg=1.32
+1791443347.022 h264 display=0 frames=172 fps=85.9 encAvg=9.34 encMax=15.51 kbps=6880
+1791443348.561 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443348.836 gles size=720x1280 sinks=1 loops=174 new=0 stale=174 ageAvg=0.00 ageMax=0.00 drawAvg=1.20
+1791443349.024 h264 display=0 frames=174 fps=86.8 encAvg=8.35 encMax=17.05 kbps=7878
+1791443350.564 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443350.841 gles size=720x1280 sinks=1 loops=173 new=0 stale=173 ageAvg=0.00 ageMax=0.00 drawAvg=1.28
+1791443351.028 h264 display=0 frames=173 fps=86.3 encAvg=8.45 encMax=25.06 kbps=7890
+1791443352.567 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443352.843 gles size=720x1280 sinks=1 loops=172 new=0 stale=172 ageAvg=0.00 ageMax=0.00 drawAvg=1.32
+1791443353.041 h264 display=0 frames=173 fps=86.1 encAvg=8.71 encMax=14.84 kbps=7882
+1791443354.570 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443354.854 gles size=720x1280 sinks=1 loops=174 new=0 stale=174 ageAvg=0.00 ageMax=0.00 drawAvg=1.25
+1791443355.041 h264 display=0 frames=173 fps=86.3 encAvg=8.77 encMax=26.11 kbps=6876
+1791443356.574 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443356.854 gles size=720x1280 sinks=1 loops=172 new=0 stale=172 ageAvg=0.00 ageMax=0.00 drawAvg=1.31
+1791443357.058 h264 display=0 frames=173 fps=86.0 encAvg=9.05 encMax=15.94 kbps=7877
+1791443358.577 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443358.858 gles size=720x1280 sinks=1 loops=172 new=0 stale=172 ageAvg=0.00 ageMax=0.00 drawAvg=1.28
+1791443359.058 h264 display=0 frames=172 fps=85.9 encAvg=8.90 encMax=14.03 kbps=7886
+1791443360.581 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443360.868 gles size=720x1280 sinks=1 loops=172 new=0 stale=172 ageAvg=0.00 ageMax=0.00 drawAvg=1.35
+1791443361.061 h264 display=0 frames=171 fps=85.5 encAvg=9.39 encMax=17.15 kbps=7894
+1791443362.584 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443362.869 gles size=720x1280 sinks=1 loops=172 new=0 stale=172 ageAvg=0.00 ageMax=0.00 drawAvg=1.28
+1791443363.063 h264 display=0 frames=173 fps=86.2 encAvg=8.76 encMax=16.29 kbps=6899
+1791443364.588 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443364.879 gles size=720x1280 sinks=1 loops=173 new=0 stale=173 ageAvg=0.00 ageMax=0.00 drawAvg=1.28
+1791443365.066 h264 display=0 frames=172 fps=85.9 encAvg=9.53 encMax=15.20 kbps=7883
+1791443366.592 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443366.882 gles size=720x1280 sinks=1 loops=173 new=0 stale=173 ageAvg=0.00 ageMax=0.00 drawAvg=1.27
+1791443367.075 h264 display=0 frames=173 fps=86.2 encAvg=8.68 encMax=14.24 kbps=7890
+1791443368.595 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443368.885 gles size=720x1280 sinks=1 loops=173 new=0 stale=173 ageAvg=0.00 ageMax=0.00 drawAvg=1.24
+1791443369.080 h264 display=0 frames=174 fps=86.7 encAvg=8.82 encMax=22.45 kbps=7886
+1791443370.599 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443370.888 gles size=720x1280 sinks=1 loops=172 new=0 stale=172 ageAvg=0.00 ageMax=0.00 drawAvg=1.29
+1791443371.091 h264 display=0 frames=172 fps=85.6 encAvg=9.00 encMax=14.74 kbps=6860
+1791443372.602 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443372.895 gles size=720x1280 sinks=1 loops=172 new=0 stale=172 ageAvg=0.00 ageMax=0.00 drawAvg=1.29
+1791443373.091 h264 display=0 frames=172 fps=85.9 encAvg=9.32 encMax=19.16 kbps=7896
+1791443374.606 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443374.903 gles size=720x1280 sinks=1 loops=173 new=0 stale=173 ageAvg=0.00 ageMax=0.00 drawAvg=1.29
+1791443375.097 h264 display=0 frames=173 fps=86.2 encAvg=9.51 encMax=16.78 kbps=7874
+1791443376.609 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443376.910 gles size=720x1280 sinks=1 loops=173 new=0 stale=173 ageAvg=0.00 ageMax=0.00 drawAvg=1.28
+1791443377.112 h264 display=0 frames=173 fps=86.0 encAvg=9.40 encMax=14.80 kbps=7886
+1791443378.613 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443378.916 gles size=720x1280 sinks=1 loops=174 new=0 stale=174 ageAvg=0.00 ageMax=0.00 drawAvg=1.22
+1791443379.117 h264 display=0 frames=174 fps=86.6 encAvg=8.59 encMax=18.64 kbps=7872
+1791443380.617 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443380.923 gles size=720x1280 sinks=1 loops=171 new=0 stale=171 ageAvg=0.00 ageMax=0.00 drawAvg=1.39
+1791443381.125 h264 display=0 frames=171 fps=85.3 encAvg=9.10 encMax=16.67 kbps=6864
+1791443382.620 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443382.934 gles size=720x1280 sinks=1 loops=174 new=0 stale=174 ageAvg=0.00 ageMax=0.00 drawAvg=1.23
+1791443383.051 cpu state=mirror-h264 self=55.8% system_server=3.1% surfaceflinger=0.1% temperature: 366

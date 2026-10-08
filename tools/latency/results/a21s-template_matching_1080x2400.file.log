@@ -1,0 +1,198 @@
+1791442811.573 gles size=1080x2400 sinks=0 loops=8 new=5 stale=3 ageAvg=66.66 ageMax=132.62 drawAvg=0.00
+1791442813.578 gles size=1080x2400 sinks=0 loops=8 new=2 stale=6 ageAvg=106.03 ageMax=125.19 drawAvg=0.00
+1791442814.010 begin tm display=1080x2400
+1791442815.192 tm frame=1080x2400 tpl=32x32 target=1080x2400 gray=1 snap=29.24 pre=15.07 mt=992.57 age=3132606.2
+1791442815.578 gles size=1080x2400 sinks=1 loops=117 new=1 stale=116 ageAvg=6.86 ageMax=6.86 drawAvg=2.01
+1791442815.651 copy frame=1080x2400 copyMs=5.61
+1791442816.121 tm frame=1080x2400 tpl=32x32 target=1080x2400 gray=1 snap=4.21 pre=2.93 mt=920.66 age=7.6
+1791442817.093 tm frame=1080x2400 tpl=32x32 target=1080x2400 gray=1 snap=5.71 pre=4.22 mt=960.61 age=3.7
+1791442817.119 copy frame=1080x2400 copyMs=5.06
+1791442817.587 gles size=1080x2400 sinks=1 loops=164 new=2 stale=162 ageAvg=8.58 ageMax=12.83 drawAvg=1.70
+1791442818.000 tm frame=1080x2400 tpl=32x32 target=1080x2400 gray=1 snap=7.04 pre=2.58 mt=895.92 age=11.0
+1791442818.604 copy frame=1080x2400 copyMs=4.97
+1791442818.936 tm frame=1080x2400 tpl=32x32 target=1080x2400 gray=1 snap=4.94 pre=4.05 mt=925.90 age=4.5
+1791442819.349 tm frame=1080x2400 tpl=32x32 target=540x600 gray=0 snap=5.38 pre=0.09 mt=403.50 age=4.2
+1791442819.592 gles size=1080x2400 sinks=1 loops=163 new=1 stale=162 ageAvg=6.70 ageMax=6.70 drawAvg=1.84
+1791442819.770 tm frame=1080x2400 tpl=32x32 target=540x600 gray=0 snap=4.93 pre=0.02 mt=414.71 age=5.4
+1791442820.065 copy frame=1080x2400 copyMs=4.97
+1791442820.188 tm frame=1080x2400 tpl=32x32 target=540x600 gray=0 snap=4.98 pre=0.02 mt=411.17 age=0.4
+1791442820.621 tm frame=1080x2400 tpl=32x32 target=540x600 gray=0 snap=4.92 pre=0.02 mt=426.58 age=1.0
+1791442821.044 tm frame=1080x2400 tpl=32x32 target=540x600 gray=0 snap=6.17 pre=0.02 mt=416.11 age=2.3
+1791442821.568 copy frame=1080x2400 copyMs=5.09
+1791442821.595 gles size=1080x2400 sinks=1 loops=161 new=1 stale=160 ageAvg=3.88 ageMax=3.88 drawAvg=1.87
+1791442821.880 tm frame=1080x2400 tpl=16x16 target=540x1200 gray=0 snap=5.30 pre=10.67 mt=817.16 age=4.6
+1791442822.723 tm frame=1080x2400 tpl=16x16 target=540x1200 gray=0 snap=7.34 pre=11.58 mt=822.91 age=11.2
+1791442823.069 copy frame=1080x2400 copyMs=4.97
+1791442823.563 tm frame=1080x2400 tpl=16x16 target=540x1200 gray=0 snap=4.70 pre=10.31 mt=822.85 age=6.4
+1791442823.605 gles size=1080x2400 sinks=1 loops=162 new=2 stale=160 ageAvg=6.74 ageMax=9.50 drawAvg=1.84
+1791442824.397 tm frame=1080x2400 tpl=16x16 target=540x1200 gray=0 snap=5.77 pre=12.08 mt=815.47 age=2.8
+1791442824.537 copy frame=1080x2400 copyMs=7.01
+1791442825.234 tm frame=1080x2400 tpl=16x16 target=540x1200 gray=0 snap=6.31 pre=9.47 mt=819.43 age=1.2
+1791442825.616 gles size=1080x2400 sinks=1 loops=165 new=1 stale=164 ageAvg=5.03 ageMax=5.03 drawAvg=1.70
+1791442825.998 copy frame=1080x2400 copyMs=5.35
+1791442827.498 copy frame=1080x2400 copyMs=5.69
+1791442827.627 gles size=1080x2400 sinks=1 loops=161 new=2 stale=159 ageAvg=11.98 ageMax=13.48 drawAvg=1.92
+1791442828.831 tm frame=1080x2400 tpl=64x64 target=1080x2400 gray=0 snap=4.39 pre=0.03 mt=3588.86 age=6.2
+1791442828.992 copy frame=1080x2400 copyMs=5.03
+1791442829.631 gles size=1080x2400 sinks=1 loops=162 new=2 stale=160 ageAvg=12.23 ageMax=13.97 drawAvg=1.87
+1791442830.476 copy frame=1080x2400 copyMs=5.06
+1791442831.637 gles size=1080x2400 sinks=1 loops=164 new=1 stale=163 ageAvg=4.27 ageMax=4.27 drawAvg=1.74
+1791442831.936 copy frame=1080x2400 copyMs=5.12
+1791442832.027 tm frame=1080x2400 tpl=64x64 target=1080x2400 gray=0 snap=5.68 pre=0.02 mt=3188.19 age=0.7
+1791442833.447 copy frame=1080x2400 copyMs=4.91
+1791442833.648 gles size=1080x2400 sinks=1 loops=162 new=1 stale=161 ageAvg=13.64 ageMax=13.64 drawAvg=1.90
+1791442834.928 copy frame=1080x2400 copyMs=4.86
+1791442835.322 tm frame=1080x2400 tpl=64x64 target=1080x2400 gray=0 snap=4.81 pre=0.02 mt=3288.81 age=5.5
+1791442835.652 gles size=1080x2400 sinks=1 loops=163 new=1 stale=162 ageAvg=1.08 ageMax=1.08 drawAvg=1.83
+1791442836.396 copy frame=1080x2400 copyMs=5.19
+1791442837.660 gles size=1080x2400 sinks=1 loops=163 new=2 stale=161 ageAvg=8.98 ageMax=9.24 drawAvg=1.86
+1791442837.880 copy frame=1080x2400 copyMs=6.88
+1791442838.588 tm frame=1080x2400 tpl=64x64 target=1080x2400 gray=0 snap=8.84 pre=0.02 mt=3255.20 age=8.9
+1791442839.371 copy frame=1080x2400 copyMs=6.39
+1791442839.668 gles size=1080x2400 sinks=1 loops=163 new=1 stale=162 ageAvg=8.67 ageMax=8.67 drawAvg=1.84
+1791442840.826 copy frame=1080x2400 copyMs=4.80
+1791442841.673 gles size=1080x2400 sinks=1 loops=165 new=2 stale=163 ageAvg=12.30 ageMax=12.33 drawAvg=1.69
+1791442841.882 tm frame=1080x2400 tpl=64x64 target=1080x2400 gray=0 snap=6.58 pre=0.02 mt=3285.47 age=12.3
+1791442842.283 copy frame=1080x2400 copyMs=6.38
+1791442842.918 tm frame=1080x2400 tpl=64x64 target=1080x2400 gray=1 snap=9.21 pre=2.94 mt=1021.10 age=8.0
+1791442843.681 gles size=1080x2400 sinks=1 loops=165 new=1 stale=164 ageAvg=8.49 ageMax=8.49 drawAvg=1.71
+1791442843.764 copy frame=1080x2400 copyMs=5.17
+1791442843.939 tm frame=1080x2400 tpl=64x64 target=1080x2400 gray=1 snap=4.58 pre=3.31 mt=1011.59 age=6.6
+1791442844.908 tm frame=1080x2400 tpl=64x64 target=1080x2400 gray=1 snap=6.56 pre=2.60 mt=957.71 age=12.5
+1791442845.232 copy frame=1080x2400 copyMs=4.60
+1791442845.686 gles size=1080x2400 sinks=1 loops=164 new=1 stale=163 ageAvg=13.66 ageMax=13.66 drawAvg=1.77
+1791442845.913 tm frame=1080x2400 tpl=64x64 target=1080x2400 gray=1 snap=6.56 pre=4.71 mt=992.94 age=11.0
+1791442846.699 copy frame=1080x2400 copyMs=4.76
+1791442846.925 tm frame=1080x2400 tpl=64x64 target=1080x2400 gray=1 snap=5.49 pre=3.69 mt=1001.02 age=1.4
+1791442847.326 tm frame=1080x2400 tpl=64x64 target=540x600 gray=0 snap=4.29 pre=0.02 mt=395.52 age=6.9
+1791442847.697 gles size=1080x2400 sinks=1 loops=164 new=2 stale=162 ageAvg=6.55 ageMax=10.43 drawAvg=1.79
+1791442847.743 tm frame=1080x2400 tpl=64x64 target=540x600 gray=0 snap=8.55 pre=0.02 mt=407.00 age=10.0
+1791442848.161 tm frame=1080x2400 tpl=64x64 target=540x600 gray=0 snap=4.97 pre=0.03 mt=411.86 age=2.7
+1791442848.164 copy frame=1080x2400 copyMs=5.45
+1791442848.573 tm frame=1080x2400 tpl=64x64 target=540x600 gray=0 snap=7.01 pre=0.02 mt=402.52 age=10.9
+1791442848.984 tm frame=1080x2400 tpl=64x64 target=540x600 gray=0 snap=5.00 pre=0.02 mt=404.62 age=6.3
+1791442849.665 copy frame=1080x2400 copyMs=4.73
+1791442849.704 gles size=1080x2400 sinks=1 loops=163 new=1 stale=162 ageAvg=10.33 ageMax=10.33 drawAvg=1.77
+1791442849.802 tm frame=1080x2400 tpl=32x32 target=540x1200 gray=0 snap=5.01 pre=12.31 mt=798.26 age=2.6
+1791442850.634 tm frame=1080x2400 tpl=32x32 target=540x1200 gray=0 snap=5.13 pre=11.87 mt=813.97 age=4.8
+1791442851.142 copy frame=1080x2400 copyMs=4.90
+1791442851.460 tm frame=1080x2400 tpl=32x32 target=540x1200 gray=0 snap=5.51 pre=10.82 mt=808.29 age=4.1
+1791442851.705 gles size=1080x2400 sinks=1 loops=163 new=1 stale=162 ageAvg=7.78 ageMax=7.78 drawAvg=1.77
+1791442852.321 tm frame=1080x2400 tpl=32x32 target=540x1200 gray=0 snap=9.22 pre=9.97 mt=839.29 age=9.2
+1791442852.623 copy frame=1080x2400 copyMs=5.24
+1791442853.138 tm frame=1080x2400 tpl=32x32 target=540x1200 gray=0 snap=4.79 pre=9.41 mt=801.46 age=6.2
+1791442853.707 gles size=1080x2400 sinks=1 loops=163 new=1 stale=162 ageAvg=1.89 ageMax=1.89 drawAvg=1.77
+1791442854.078 copy frame=1080x2400 copyMs=5.02
+1791442855.543 copy frame=1080x2400 copyMs=5.86
+1791442855.717 gles size=1080x2400 sinks=1 loops=165 new=1 stale=164 ageAvg=14.39 ageMax=14.39 drawAvg=1.75
+1791442857.006 copy frame=1080x2400 copyMs=5.19
+1791442857.337 tm frame=1080x2400 tpl=128x128 target=1080x2400 gray=0 snap=6.91 pre=0.02 mt=4187.62 age=10.7
+1791442857.723 gles size=1080x2400 sinks=1 loops=166 new=1 stale=165 ageAvg=2.34 ageMax=2.34 drawAvg=1.59
+1791442858.446 copy frame=1080x2400 copyMs=4.97
+1791442859.732 gles size=1080x2400 sinks=1 loops=168 new=2 stale=166 ageAvg=2.92 ageMax=4.39 drawAvg=1.54
+1791442859.876 copy frame=1080x2400 copyMs=5.21
+1791442860.928 tm frame=1080x2400 tpl=128x128 target=1080x2400 gray=0 snap=9.54 pre=0.02 mt=3579.36 age=12.0
+1791442861.361 copy frame=1080x2400 copyMs=6.25
+1791442861.741 gles size=1080x2400 sinks=1 loops=163 new=2 stale=161 ageAvg=9.67 ageMax=9.81 drawAvg=1.86
+1791442862.802 copy frame=1080x2400 copyMs=5.51
+1791442863.749 gles size=1080x2400 sinks=1 loops=167 new=1 stale=166 ageAvg=10.06 ageMax=10.06 drawAvg=1.61
+1791442864.268 copy frame=1080x2400 copyMs=5.12
+1791442864.460 tm frame=1080x2400 tpl=128x128 target=1080x2400 gray=0 snap=6.92 pre=0.02 mt=3523.11 age=10.6
+1791442865.709 copy frame=1080x2400 copyMs=5.49
+1791442865.760 gles size=1080x2400 sinks=1 loops=167 new=1 stale=166 ageAvg=2.71 ageMax=2.71 drawAvg=1.60
+1791442867.183 copy frame=1080x2400 copyMs=4.92
+1791442867.762 gles size=1080x2400 sinks=1 loops=163 new=2 stale=161 ageAvg=7.41 ageMax=11.24 drawAvg=1.80
+1791442868.086 tm frame=1080x2400 tpl=128x128 target=1080x2400 gray=0 snap=5.92 pre=0.02 mt=3618.54 age=12.2
+1791442868.646 copy frame=1080x2400 copyMs=5.47
+1791442869.776 gles size=1080x2400 sinks=1 loops=166 new=1 stale=165 ageAvg=1.45 ageMax=1.45 drawAvg=1.70
+1791442870.104 copy frame=1080x2400 copyMs=4.84
+1791442871.567 copy frame=1080x2400 copyMs=5.08
+1791442871.693 tm frame=1080x2400 tpl=128x128 target=1080x2400 gray=0 snap=7.03 pre=0.02 mt=3598.09 age=10.9
+1791442871.781 gles size=1080x2400 sinks=1 loops=165 new=2 stale=163 ageAvg=8.87 ageMax=10.96 drawAvg=1.63
+1791442872.619 tm frame=1080x2400 tpl=128x128 target=1080x2400 gray=1 snap=4.65 pre=3.64 mt=914.51 age=6.1
+1791442873.018 copy frame=1080x2400 copyMs=5.38
+1791442873.575 tm frame=1080x2400 tpl=128x128 target=1080x2400 gray=1 snap=5.26 pre=3.72 mt=946.26 age=4.5
+1791442873.784 gles size=1080x2400 sinks=1 loops=166 new=1 stale=165 ageAvg=8.74 ageMax=8.74 drawAvg=1.64
+1791442874.474 copy frame=1080x2400 copyMs=5.19
+1791442874.563 tm frame=1080x2400 tpl=128x128 target=1080x2400 gray=1 snap=8.42 pre=3.18 mt=974.34 age=8.6
+1791442875.496 tm frame=1080x2400 tpl=128x128 target=1080x2400 gray=1 snap=4.92 pre=3.15 mt=923.67 age=5.3
+1791442875.789 gles size=1080x2400 sinks=1 loops=165 new=1 stale=164 ageAvg=9.89 ageMax=9.89 drawAvg=1.70
+1791442875.930 copy frame=1080x2400 copyMs=5.20
+1791442876.510 tm frame=1080x2400 tpl=128x128 target=1080x2400 gray=1 snap=7.01 pre=3.52 mt=1001.62 age=10.4
+1791442876.883 tm frame=1080x2400 tpl=128x128 target=540x600 gray=0 snap=5.34 pre=0.02 mt=366.02 age=1.2
+1791442877.242 tm frame=1080x2400 tpl=128x128 target=540x600 gray=0 snap=6.50 pre=0.02 mt=351.06 age=11.3
+1791442877.379 copy frame=1080x2400 copyMs=5.21
+1791442877.605 tm frame=1080x2400 tpl=128x128 target=540x600 gray=0 snap=5.22 pre=0.02 mt=357.01 age=2.8
+1791442877.793 gles size=1080x2400 sinks=1 loops=166 new=2 stale=164 ageAvg=10.36 ageMax=11.87 drawAvg=1.61
+1791442877.976 tm frame=1080x2400 tpl=128x128 target=540x600 gray=0 snap=6.08 pre=0.02 mt=362.75 age=11.6
+1791442878.334 tm frame=1080x2400 tpl=128x128 target=540x600 gray=0 snap=4.55 pre=0.02 mt=351.89 age=6.0
+1791442878.848 copy frame=1080x2400 copyMs=4.72
+1791442879.227 tm frame=1080x2400 tpl=64x64 target=540x1200 gray=0 snap=5.21 pre=9.40 mt=876.08 age=4.1
+1791442879.801 gles size=1080x2400 sinks=1 loops=163 new=1 stale=162 ageAvg=1.43 ageMax=1.43 drawAvg=1.85
+1791442880.049 tm frame=1080x2400 tpl=64x64 target=540x1200 gray=0 snap=5.38 pre=13.62 mt=801.96 age=12.9
+1791442880.338 copy frame=1080x2400 copyMs=5.16
+1791442880.897 tm frame=1080x2400 tpl=64x64 target=540x1200 gray=0 snap=9.08 pre=10.64 mt=826.43 age=6.9
+1791442881.710 tm frame=1080x2400 tpl=64x64 target=540x1200 gray=0 snap=5.12 pre=11.35 mt=794.96 age=2.8
+1791442881.808 gles size=1080x2400 sinks=1 loops=160 new=1 stale=159 ageAvg=3.90 ageMax=3.90 drawAvg=1.96
+1791442881.845 copy frame=1080x2400 copyMs=5.50
+1791442882.559 tm frame=1080x2400 tpl=64x64 target=540x1200 gray=0 snap=8.68 pre=9.96 mt=828.69 age=8.7
+1791442883.287 copy frame=1080x2400 copyMs=4.71
+1791442883.812 gles size=1080x2400 sinks=1 loops=166 new=1 stale=165 ageAvg=11.44 ageMax=11.44 drawAvg=1.63
+1791442884.744 copy frame=1080x2400 copyMs=5.28
+1791442885.816 gles size=1080x2400 sinks=1 loops=165 new=1 stale=164 ageAvg=9.39 ageMax=9.39 drawAvg=1.71
+1791442886.212 copy frame=1080x2400 copyMs=6.23
+1791442887.548 tm frame=1080x2400 tpl=256x256 target=1080x2400 gray=0 snap=6.74 pre=0.06 mt=4976.05 age=3.8
+1791442887.646 copy frame=1080x2400 copyMs=5.18
+1791442887.820 gles size=1080x2400 sinks=1 loops=166 new=1 stale=165 ageAvg=8.42 ageMax=8.42 drawAvg=1.58
+1791442889.101 copy frame=1080x2400 copyMs=4.93
+1791442889.824 gles size=1080x2400 sinks=1 loops=165 new=2 stale=163 ageAvg=11.66 ageMax=12.69 drawAvg=1.70
+1791442890.568 copy frame=1080x2400 copyMs=6.50
+1791442891.825 gles size=1080x2400 sinks=1 loops=164 new=1 stale=163 ageAvg=10.57 ageMax=10.57 drawAvg=1.78
+1791442891.938 tm frame=1080x2400 tpl=256x256 target=1080x2400 gray=0 snap=6.06 pre=0.02 mt=4381.59 age=5.7
+1791442892.032 copy frame=1080x2400 copyMs=5.09
+1791442893.489 copy frame=1080x2400 copyMs=6.19
+1791442893.834 gles size=1080x2400 sinks=1 loops=166 new=1 stale=165 ageAvg=3.23 ageMax=3.23 drawAvg=1.66
+1791442894.929 copy frame=1080x2400 copyMs=7.15
+1791442895.835 gles size=1080x2400 sinks=1 loops=165 new=1 stale=164 ageAvg=12.48 ageMax=12.48 drawAvg=1.68
+1791442896.385 copy frame=1080x2400 copyMs=6.04
+1791442896.421 tm frame=1080x2400 tpl=256x256 target=1080x2400 gray=0 snap=4.70 pre=0.02 mt=4477.29 age=6.8
+1791442897.840 gles size=1080x2400 sinks=1 loops=165 new=2 stale=163 ageAvg=9.62 ageMax=9.71 drawAvg=1.68
+1791442897.850 copy frame=1080x2400 copyMs=4.84
+1791442899.299 copy frame=1080x2400 copyMs=5.08
+1791442899.844 gles size=1080x2400 sinks=1 loops=165 new=1 stale=164 ageAvg=5.23 ageMax=5.23 drawAvg=1.72
+1791442900.762 copy frame=1080x2400 copyMs=4.67
+1791442900.796 tm frame=1080x2400 tpl=256x256 target=1080x2400 gray=0 snap=6.39 pre=0.03 mt=4366.76 age=0.5
+1791442901.852 gles size=1080x2400 sinks=1 loops=166 new=1 stale=165 ageAvg=11.80 ageMax=11.80 drawAvg=1.68
+1791442902.223 copy frame=1080x2400 copyMs=4.97
+1791442903.685 copy frame=1080x2400 copyMs=6.64
+1791442903.862 gles size=1080x2400 sinks=1 loops=165 new=1 stale=164 ageAvg=3.10 ageMax=3.10 drawAvg=1.75
+1791442905.125 tm frame=1080x2400 tpl=256x256 target=1080x2400 gray=0 snap=6.75 pre=0.03 mt=4320.26 age=11.6
+1791442905.136 copy frame=1080x2400 copyMs=5.09
+1791442905.866 gles size=1080x2400 sinks=1 loops=167 new=1 stale=166 ageAvg=11.08 ageMax=11.08 drawAvg=1.58
+1791442906.145 tm frame=1080x2400 tpl=256x256 target=1080x2400 gray=1 snap=4.73 pre=3.00 mt=1004.58 age=6.2
+1791442906.575 copy frame=1080x2400 copyMs=5.20
+1791442907.158 tm frame=1080x2400 tpl=256x256 target=1080x2400 gray=1 snap=9.04 pre=3.12 mt=999.07 age=8.3
+1791442907.879 gles size=1080x2400 sinks=1 loops=167 new=2 stale=165 ageAvg=3.82 ageMax=3.94 drawAvg=1.63
+1791442908.030 copy frame=1080x2400 copyMs=4.98
+1791442908.124 tm frame=1080x2400 tpl=256x256 target=1080x2400 gray=1 snap=7.55 pre=4.16 mt=952.48 age=9.7
+1791442909.137 tm frame=1080x2400 tpl=256x256 target=1080x2400 gray=1 snap=5.28 pre=2.58 mt=1002.96 age=12.5
+1791442909.489 copy frame=1080x2400 copyMs=5.18
+1791442909.881 gles size=1080x2400 sinks=1 loops=165 new=1 stale=164 ageAvg=11.22 ageMax=11.22 drawAvg=1.71
+1791442910.123 tm frame=1080x2400 tpl=256x256 target=1080x2400 gray=1 snap=4.74 pre=3.78 mt=976.92 age=6.2
+1791442910.515 tm frame=1080x2400 tpl=256x256 target=540x600 gray=0 snap=4.94 pre=0.02 mt=385.57 age=5.6
+1791442910.904 tm frame=1080x2400 tpl=256x256 target=540x600 gray=0 snap=5.07 pre=0.02 mt=382.58 age=5.6
+1791442910.946 copy frame=1080x2400 copyMs=4.85
+1791442911.280 tm frame=1080x2400 tpl=256x256 target=540x600 gray=0 snap=4.90 pre=0.02 mt=369.95 age=4.6
+1791442911.668 tm frame=1080x2400 tpl=256x256 target=540x600 gray=0 snap=5.04 pre=0.02 mt=382.10 age=1.0
+1791442911.888 gles size=1080x2400 sinks=1 loops=166 new=1 stale=165 ageAvg=11.63 ageMax=11.63 drawAvg=1.60
+1791442912.053 tm frame=1080x2400 tpl=256x256 target=540x600 gray=0 snap=4.58 pre=0.03 mt=379.20 age=7.0
+1791442912.409 copy frame=1080x2400 copyMs=4.93
+1791442912.837 tm frame=1080x2400 tpl=128x128 target=540x1200 gray=0 snap=9.19 pre=10.95 mt=761.34 age=7.9
+1791442913.626 tm frame=1080x2400 tpl=128x128 target=540x1200 gray=0 snap=5.26 pre=9.82 mt=772.54 age=1.8
+1791442913.866 copy frame=1080x2400 copyMs=4.91
+1791442913.892 gles size=1080x2400 sinks=1 loops=164 new=2 stale=162 ageAvg=8.60 ageMax=9.15 drawAvg=1.71
+1791442914.408 tm frame=1080x2400 tpl=128x128 target=540x1200 gray=0 snap=5.29 pre=11.56 mt=764.18 age=4.1
+1791442915.176 tm frame=1080x2400 tpl=128x128 target=540x1200 gray=0 snap=7.10 pre=12.16 mt=746.33 age=10.2
+1791442915.327 copy frame=1080x2400 copyMs=6.00
+1791442915.902 gles size=1080x2400 sinks=1 loops=165 new=1 stale=164 ageAvg=9.11 ageMax=9.11 drawAvg=1.69
+1791442915.957 tm frame=1080x2400 tpl=128x128 target=540x1200 gray=0 snap=4.64 pre=10.63 mt=764.48 age=0.7

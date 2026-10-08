@@ -1,0 +1,27 @@
+1791443029.932 gles size=720x1280 sinks=0 loops=8 new=4 stale=4 ageAvg=55095932.81 ageMax=220383507.71 drawAvg=0.00
+1791443031.936 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791443032.071 begin h264 static
+1791443033.945 gles size=720x1280 sinks=1 loops=137 new=0 stale=137 ageAvg=0.00 ageMax=0.00 drawAvg=0.88
+1791443034.470 h264 display=25 frames=180 fps=89.6 encAvg=6.75 encMax=47.72 kbps=81
+1791443035.956 gles size=720x1280 sinks=1 loops=175 new=0 stale=175 ageAvg=0.00 ageMax=0.00 drawAvg=1.19
+1791443036.477 h264 display=25 frames=173 fps=86.0 encAvg=8.61 encMax=13.91 kbps=40
+1791443037.956 gles size=720x1280 sinks=1 loops=172 new=0 stale=172 ageAvg=0.00 ageMax=0.00 drawAvg=1.30
+1791443038.481 h264 display=25 frames=174 fps=86.8 encAvg=8.00 encMax=13.33 kbps=40
+1791443039.961 gles size=720x1280 sinks=1 loops=173 new=0 stale=173 ageAvg=0.00 ageMax=0.00 drawAvg=1.29
+1791443040.487 h264 display=25 frames=173 fps=86.3 encAvg=7.62 encMax=11.82 kbps=40
+1791443041.973 gles size=720x1280 sinks=1 loops=175 new=0 stale=175 ageAvg=0.00 ageMax=0.00 drawAvg=1.20
+1791443042.494 h264 display=25 frames=174 fps=86.6 encAvg=7.70 encMax=12.45 kbps=40
+1791443043.976 gles size=720x1280 sinks=1 loops=173 new=0 stale=173 ageAvg=0.00 ageMax=0.00 drawAvg=1.25
+1791443044.078 begin h264 animated
+1791443044.499 h264 display=25 frames=175 fps=87.3 encAvg=7.62 encMax=14.50 kbps=53
+1791443045.981 gles size=720x1280 sinks=1 loops=177 new=55 stale=122 ageAvg=5.61 ageMax=11.27 drawAvg=0.94
+1791443046.505 h264 display=25 frames=176 fps=87.8 encAvg=7.11 encMax=10.00 kbps=124
+1791443047.988 gles size=720x1280 sinks=1 loops=176 new=59 stale=117 ageAvg=6.59 ageMax=11.84 drawAvg=0.97
+1791443048.509 h264 display=25 frames=175 fps=87.2 encAvg=6.82 encMax=10.25 kbps=125
+1791443049.998 gles size=720x1280 sinks=1 loops=176 new=59 stale=117 ageAvg=6.08 ageMax=12.38 drawAvg=0.98
+1791443050.521 h264 display=25 frames=177 fps=88.0 encAvg=7.01 encMax=17.52 kbps=129
+1791443052.001 gles size=720x1280 sinks=1 loops=176 new=59 stale=117 ageAvg=5.28 ageMax=11.68 drawAvg=0.96
+1791443052.529 h264 display=25 frames=177 fps=88.2 encAvg=6.88 encMax=13.07 kbps=131
+1791443054.008 gles size=720x1280 sinks=1 loops=177 new=59 stale=118 ageAvg=6.28 ageMax=11.85 drawAvg=0.94
+1791443054.527 h264 display=25 frames=176 fps=88.0 encAvg=6.88 encMax=13.16 kbps=128
+1791443056.013 gles size=720x1280 sinks=1 loops=175 new=59 stale=116 ageAvg=6.13 ageMax=11.67 drawAvg=1.01
