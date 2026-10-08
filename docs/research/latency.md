@@ -146,21 +146,20 @@ A21s 與選型研究（`docs/research/ocr-engine-selection.md`）的 ROI 80 ms�
 
 ---
 
-## 七、#164 修正後（Pixel 7a）
+## 七、#164 修正後
 
-distributor 改為只把新影格送給還沒收過它的 sink（#164），H.264 編碼器加上 `KEY_REPEAT_PREVIOUS_FRAME_AFTER`（100 ms）與 `KEY_MAX_FPS_TO_ENCODER`（30）。同樣的量測在 Pixel 7a 上重跑一輪：
+distributor 改為只把新影格送給還沒收過它的 sink（#164），H.264 編碼器加上 `KEY_REPEAT_PREVIOUS_FRAME_AFTER`（100 ms）與 `KEY_MAX_FPS_TO_ENCODER`（30）。同樣的量測各重跑一輪：
 
-| 項目 | 修正前 | 修正後 |
+| 項目 | A21s 修正前 → 後 | Pixel 7a 修正前 → 後 |
 |---|---|---|
-| 畫面靜止時 distributor 的重畫 | 85 次／秒 | 0 |
-| `vision.wait` 等不到，`step_ms` 不設／100／500／1000 | 236／113／54／52% | 2.9／3.0／3.0／2.8% |
-| H.264，VD 畫面靜止 | 87 fps | 約 1 fps（編碼器重送上一張） |
-| H.264，VD 30 fps 變動 | 88 fps、128 kbps | 25 fps、約 80 kbps |
-| 畫面變動時，新影格合成完成到畫出 | 平均 6.0、最大 11–12 | 平均 5.9、最大 10–11 |
-| 鏡像實體螢幕＋H.264 編碼，行程 CPU | 55.8% | 8.4% |
-| template matching（720×1280） | 見一 | 照常比對 |
-
-A21s 未重測（量測時 USB 與 Wi-Fi 都連不上）。
+| 畫面靜止時 distributor 的重畫 | 82 → 0.5 次／秒（顯示器自己送出的新緩衝區） | 85 → 0 次／秒 |
+| `vision.wait` 等不到，`step_ms` 不設 | 263% → 6.5% | 236% → 2.9% |
+| `vision.wait` 等不到，`step_ms = 1000` | 57% → 6.6% | 52% → 2.8% |
+| H.264，VD 畫面靜止 | 71 fps → 約 1–6 fps（編碼器重送上一張） | 87 fps → 約 1 fps |
+| H.264，VD 30 fps 變動 | 71 fps、200 kbps → 25–28 fps、約 140 kbps | 88 fps、128 kbps → 25 fps、約 80 kbps |
+| 畫面變動時，新影格合成完成到畫出 | 平均 8.8 → 7.4 | 平均 6.0 → 5.9 |
+| 鏡像實體螢幕＋H.264 編碼，行程 CPU | 61.5% → 14.8% | 55.8% → 8.4% |
+| template matching（720×1280） | 照常比對 | 照常比對 |
 
 ---
 
