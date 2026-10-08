@@ -194,7 +194,8 @@ class Tier1Env : ExternalResource() {
     }
 
     /**
-     * 等到連續 [stableFrames] 張影格取樣相同，也就是畫面不再變動。
+     * 等到畫面不再變動：連續 [stableFrames] 張影格取樣相同，或收到影格後 [QUIET_MS] 內沒有新影格。
+     * distributor 只在有新影格時才送（#164），畫面靜止時不會再收到相同的影格，後者才是常見的結束條件。
      *
      * 量影格而不是聽版面回報：旋轉動畫期間 `contentSize` 已是新方向，緩衝區裡卻還是轉到
      * 一半的舊內容，`vision` 會以 confidence 1.0 命中過渡位置。這一個條件同時涵蓋啟動動畫、
@@ -203,7 +204,7 @@ class Tier1Env : ExternalResource() {
     fun awaitSettled(displayId: Int, stableFrames: Int = 8, timeoutMs: Long = 8_000) {
         var runLength = 0
         var lastHash = Long.MIN_VALUE
-        val settled = sampleFrames(displayId, timeoutMs) { buffer, rowStride ->
+        val settled = sampleFrames(displayId, timeoutMs, quietMs = QUIET_MS) { buffer, rowStride ->
             var hash = 1125899906842597L
             // 格點取樣就夠分辨「畫面有沒有動」，不必掃完整張。每一列都要橫跨整個寬度：
             // 啟動轉場會把整個畫面水平滑入，只取某一行的話那一行始終是底色，看不出在動。
@@ -235,6 +236,13 @@ class Tier1Env : ExternalResource() {
         assertTapLandsInside(displayId, PuppetRecorder.current.markerRect!!)
         PuppetRecorder.clearTouches()
         return displayId
+    }
+
+    /** 新掛一個 sink，[durationMs] 內收到幾張影格。 */
+    fun countFrames(displayId: Int, durationMs: Long): Int {
+        var count = 0
+        sampleFrames(displayId, durationMs) { _, _ -> count++; false }
+        return count
     }
 
     /** 顯示器送出至少一張影格。 */
@@ -279,8 +287,10 @@ class Tier1Env : ExternalResource() {
     private fun sampleFrames(
         displayId: Int,
         timeoutMs: Long,
+        quietMs: Long = 0,
         onFrame: (buffer: ByteBuffer, rowStride: Int) -> Boolean,
     ): Boolean {
+        var lastFrameAt = 0L
         val thread = HandlerThread("frame-sampler").apply { start() }
         val reader = ImageReader.newInstance(WIDTH, HEIGHT, PixelFormat.RGBA_8888, 2)
         val lock = Object()
@@ -291,6 +301,7 @@ class Tier1Env : ExternalResource() {
             synchronized(lock) {
                 if (closing) return@setOnImageAvailableListener
                 val image = r.acquireLatestImage() ?: return@setOnImageAvailableListener
+                lastFrameAt = SystemClock.uptimeMillis()
                 val finished = image.use { onFrame(it.planes[0].buffer, it.planes[0].rowStride) }
                 if (finished) done.countDown()
             }
@@ -299,7 +310,14 @@ class Tier1Env : ExternalResource() {
         val handle = service.addVirtualDisplaySurface(displayId, reader.surface)
         try {
             assertTrue("addVirtualDisplaySurface returned $handle", handle >= 0)
-            return done.await(timeoutMs, TimeUnit.MILLISECONDS)
+            if (quietMs <= 0) return done.await(timeoutMs, TimeUnit.MILLISECONDS)
+            val deadline = SystemClock.uptimeMillis() + timeoutMs
+            while (SystemClock.uptimeMillis() < deadline) {
+                if (done.await(50, TimeUnit.MILLISECONDS)) return true
+                val last = synchronized(lock) { lastFrameAt }
+                if (last > 0 && SystemClock.uptimeMillis() - last >= quietMs) return true
+            }
+            return false
         } finally {
             if (handle >= 0) service.removeVirtualDisplaySurface(displayId, handle)
             synchronized(lock) { closing = true }
@@ -403,5 +421,8 @@ class Tier1Env : ExternalResource() {
         const val WIDTH = 720
         const val HEIGHT = 1280
         const val DENSITY_DPI = 320
+
+        /** 收到影格後這麼久沒有新影格，就當作畫面已經靜止。 */
+        const val QUIET_MS = 500L
     }
 }

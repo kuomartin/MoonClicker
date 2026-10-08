@@ -3,6 +3,7 @@ package com.xaxaxax.moonclicker.engine.streaming
 import android.media.MediaCodec
 import android.media.MediaCodecInfo
 import android.media.MediaFormat
+import android.os.Build
 import com.xaxaxax.moonclicker.IMoonClickerService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
@@ -38,6 +39,14 @@ class H264EncoderSink(
                 setInteger(MediaFormat.KEY_BIT_RATE, bitrate)
                 setInteger(MediaFormat.KEY_FRAME_RATE, frameRate)
                 setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1) // 1 second keyframe interval
+                // distributor 只在有新影格時才送：畫面靜止時編碼器收不到影格，新連上的
+                // client 只拿得到一張就停了。每 100 ms 重送上一張，讓解碼端持續有畫面與關鍵影格。
+                setLong(MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER, REPEAT_PREVIOUS_FRAME_AFTER_US)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    // 畫面持續變動時顯示器最高 60 fps；位元率是照 frameRate 分配的，多送的影格只會讓
+                    // 實際位元率超過設定值。
+                    setFloat(MediaFormat.KEY_MAX_FPS_TO_ENCODER, frameRate.toFloat())
+                }
                 
                 // Ultra-low latency tuning (inspired by scrcpy)
                 setInteger("max-bframes", 0) // Disable B-frames for real-time
@@ -145,6 +154,10 @@ class H264EncoderSink(
         }
         awaitClose { }
     }.flowOn(Dispatchers.IO)
+
+    private companion object {
+        const val REPEAT_PREVIOUS_FRAME_AFTER_US = 100_000L
+    }
 }
 
 /** spike/latency：同 native 的 LatLog.h，寫 logcat 與 files/lat.log。 */
