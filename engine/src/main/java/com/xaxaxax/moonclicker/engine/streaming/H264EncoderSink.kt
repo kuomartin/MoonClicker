@@ -68,6 +68,12 @@ class H264EncoderSink(
             inputSurface.release()
 
             val bufferInfo = MediaCodec.BufferInfo()
+            // spike/latency：輸入 surface 的 presentationTimeUs 是 CLOCK_MONOTONIC，與 System.nanoTime 同一個時鐘。
+            var latFrames = 0
+            var latSum = 0.0
+            var latMax = 0.0
+            var latBytes = 0L
+            var latWindow = System.nanoTime()
             // dequeueOutputBuffer is blocking, runs on IO dispatcher
             while (isActive) {
                 val outputBufferId = codec.dequeueOutputBuffer(bufferInfo, 10000L)
@@ -79,6 +85,23 @@ class H264EncoderSink(
                         val bytes = ByteArray(bufferInfo.size)
                         outputBuffer.get(bytes)
                         trySend(bytes)
+                        if (bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG == 0) {
+                            val nowNs = System.nanoTime()
+                            val age = (nowNs / 1000 - bufferInfo.presentationTimeUs) / 1000.0
+                            latFrames++
+                            latSum += age
+                            if (age > latMax) latMax = age
+                            latBytes += bufferInfo.size
+                            if (nowNs - latWindow >= 2_000_000_000L) {
+                                val seconds = (nowNs - latWindow) / 1e9
+                                latLog(
+                                    "h264 display=$displayId frames=$latFrames fps=%.1f encAvg=%.2f encMax=%.2f kbps=%.0f".format(
+                                        latFrames / seconds, latSum / latFrames, latMax, latBytes * 8 / 1000 / seconds,
+                                    ),
+                                )
+                                latFrames = 0; latSum = 0.0; latMax = 0.0; latBytes = 0; latWindow = nowNs
+                            }
+                        }
                     }
                     codec.releaseOutputBuffer(outputBufferId, false)
                 } else if (outputBufferId == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
@@ -122,4 +145,14 @@ class H264EncoderSink(
         }
         awaitClose { }
     }.flowOn(Dispatchers.IO)
+}
+
+/** spike/latency：同 native 的 LatLog.h，寫 logcat 與 files/lat.log。 */
+internal fun latLog(message: String) {
+    android.util.Log.i("LAT", message)
+    val pkg = java.io.File("/proc/self/cmdline").readText().trimEnd('\u0000').substringBefore(':')
+    runCatching {
+        java.io.File("/data/user/0/$pkg/files/lat.log")
+            .appendText("%.3f %s\n".format(System.currentTimeMillis() / 1000.0, message))
+    }
 }

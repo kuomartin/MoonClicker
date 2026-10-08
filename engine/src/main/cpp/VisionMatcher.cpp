@@ -7,12 +7,25 @@
 #include <android/log.h>
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <array>
 #include <cmath>
 #include <sys/stat.h>
 
 #define VM_LOG_TAG "VisionMatcher"
 #define VMLOGE(...) __android_log_print(ANDROID_LOG_ERROR, VM_LOG_TAG, __VA_ARGS__)
+// spike/latency：量測用，tag 固定為 LAT，見 docs/research/latency.md。
+#include "LatLog.h"
+#define LAT(...) latLog(__VA_ARGS__)
+
+namespace {
+double latNowMs() {
+    return std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+std::atomic<double> latLastFrameMs{0};
+}
 
 VisionMatcher::VisionMatcher(int frameWidth, int frameHeight, int rotation, std::string scriptDir)
         : frameWidth(frameWidth), frameHeight(frameHeight), displayRotation(rotation & 3),
@@ -27,9 +40,14 @@ void VisionMatcher::onFrame(const cv::Mat &frame) {
     {
         std::lock_guard<std::mutex> lock(frameMutex);
         if (stopped) return;
+        double t0 = latNowMs();
         frame.copyTo(latestFrame);
+        double t1 = latNowMs();
+        latLastFrameMs = t1;
         frames++;
+        if (frames % 120 == 0) LAT("copy frame=%dx%d copyMs=%.2f", frame.cols, frame.rows, t1 - t0);
         if (frames == 1) {
+            LAT("firstframe frame=%dx%d", frame.cols, frame.rows);
             // 只印第一張。「vision 永遠比對不到」最常見的原因是影格根本沒進來，
             // 而那和「進來了但比不中」在 log 上長得一模一樣——這行把兩者分開。
             __android_log_print(ANDROID_LOG_DEBUG, VM_LOG_TAG,
@@ -150,15 +168,21 @@ std::vector<OcrLine> VisionMatcher::readText(Ocr &ocr, bool hasRoi, const cv::Re
     cv::Rect area = clampRoi(frame, hasRoi, roi);
     if (area.empty()) return {};
 
+    double t0 = latNowMs();
     cv::Mat bgr = toBgr(frame(area));
+    double t1 = latNowMs();
     cv::Rect whole(0, 0, bgr.cols, bgr.rows);
     std::vector<OcrLine> lines;
+    OcrTiming timing;
     if (detect) {
-        lines = ocr.detectAndRecognize(bgr, whole);
+        lines = ocr.detectAndRecognize(bgr, whole, &timing);
     } else {
-        OcrLine line = ocr.recognize(bgr, whole);
+        OcrLine line = ocr.recognize(bgr, whole, &timing);
         if (!line.text.empty()) lines.push_back(std::move(line));
     }
+    LAT("ocr mode=%s area=%dx%d bgr=%.2f det=%.1f rec=%.1f total=%.1f lines=%zu",
+        detect ? "read_lines" : "read", area.width, area.height, t1 - t0, timing.detMs, timing.recMs,
+        latNowMs() - t0, lines.size());
     for (auto &line: lines) offsetLine(line, area.tl());
     return lines;
 }
@@ -166,8 +190,14 @@ std::vector<OcrLine> VisionMatcher::readText(Ocr &ocr, bool hasRoi, const cv::Re
 std::vector<VisionHit> VisionMatcher::match(const std::vector<VisionRequest> &requests, Ocr *ocr) {
     std::vector<VisionHit> hits(requests.size());
 
+    double tSnap0 = latNowMs();
+    double frameAge = tSnap0 - latLastFrameMs.load();
     cv::Mat frame = snapshot();
-    if (frame.empty()) return hits;
+    double snapMs = latNowMs() - tSnap0;
+    if (frame.empty()) {
+        LAT("noframe requests=%zu", requests.size());
+        return hits;
+    }
 
     // 同一個 ROI 的文字辨識在這批 request 之間共用：wait_any 等多段文字時不重複推論。
     std::map<std::array<int, 4>, std::vector<OcrLine>> textCache;
@@ -179,8 +209,13 @@ std::vector<VisionHit> VisionMatcher::match(const std::vector<VisionRequest> &re
 
         std::vector<OcrLine> lines;
         if (!area.empty()) {
+            double t0 = latNowMs();
             cv::Mat bgr = toBgr(frame(area));
-            lines = ocr->detectAndRecognize(bgr, cv::Rect(0, 0, bgr.cols, bgr.rows));
+            OcrTiming timing;
+            lines = ocr->detectAndRecognize(bgr, cv::Rect(0, 0, bgr.cols, bgr.rows), &timing);
+            LAT("ocr mode=find area=%dx%d det=%.1f rec=%.1f total=%.1f lines=%zu snap=%.2f age=%.1f",
+                area.width, area.height, timing.detMs, timing.recMs, latNowMs() - t0, lines.size(),
+                snapMs, frameAge);
             for (auto &line: lines) offsetLine(line, area.tl());
         }
         return textCache.emplace(key, std::move(lines)).first->second;
@@ -249,7 +284,9 @@ std::vector<VisionHit> VisionMatcher::match(const std::vector<VisionRequest> &re
         cv::Mat templateImage = templateFor(request);
         if (templateImage.empty()) continue;
 
+        double tPre0 = latNowMs();
         const cv::Mat &base = baseFrameFor(request.scale, request.gray);
+        double preMs = latNowMs() - tPre0;
         cv::Mat target;
         int offsetX = 0;
         int offsetY = 0;
@@ -272,12 +309,16 @@ std::vector<VisionHit> VisionMatcher::match(const std::vector<VisionRequest> &re
 
         if (target.cols < templateImage.cols || target.rows < templateImage.rows) continue;
 
+        double tMt0 = latNowMs();
         cv::Mat result;
         cv::matchTemplate(target, templateImage, result, cv::TM_CCOEFF_NORMED);
 
         double minVal, maxVal;
         cv::Point minLoc, maxLoc;
         cv::minMaxLoc(result, &minVal, &maxVal, &minLoc, &maxLoc);
+        LAT("tm frame=%dx%d tpl=%dx%d target=%dx%d gray=%d snap=%.2f pre=%.2f mt=%.2f age=%.1f",
+            frame.cols, frame.rows, templateImage.cols, templateImage.rows, target.cols, target.rows,
+            request.gray ? 1 : 0, snapMs, preMs, latNowMs() - tMt0, frameAge);
         if (maxVal < request.threshold) continue;
 
         // 回到未縮放的影格空間——影格本身已經是邏輯空間，不需要再轉一次。
