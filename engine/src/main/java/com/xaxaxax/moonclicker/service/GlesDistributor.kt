@@ -11,7 +11,7 @@ import timber.log.Timber
  * 銷毀。native 呼叫本體因為 JNI 是 name-based 綁定（`Java_..._MoonClickerService_nativeXxx`），
  * 只能留在 [com.xaxaxax.moonclicker.MoonClickerService] 上，這裡用函式參考接進來。
  *
- * `register`／`registerUntracked` 對應兩種呼叫端：[VirtualDisplayLifecycle] 建立的
+ * `register`/`registerUntracked` 對應兩種呼叫端：[VirtualDisplayLifecycle] 建立的
  * `VirtualDisplay` 有自己的 `Display.rotation` 可以追蹤；[DisplayMirroring] 的 legacy
  * SurfaceControl 鏡像不是一個 `VirtualDisplay`，沒有 rotation 可追。
  */

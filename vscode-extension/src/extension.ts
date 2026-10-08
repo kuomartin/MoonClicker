@@ -108,7 +108,7 @@ export function activate(context: vscode.ExtensionContext): void {
       setRunningScript(event.event.value.scriptId || undefined);
     } else if (event.event.case === "fileChange") {
       folderSync.handleRemoteChange(event.event.value);
-      // 整支腳本新增／刪除，或名稱可能改了，側邊欄的清單要跟著更新。
+      // 整支腳本新增、刪除，或名稱可能改了，側邊欄的清單要跟著更新。
       const changedPath = event.event.value.path;
       if (!changedPath || changedPath === "main.lua" || changedPath === "script.json") workspaceProvider.refresh();
     }

@@ -115,7 +115,7 @@ export class FolderSync {
     return this.enqueue(() => this.runFullSync());
   }
 
-  /** watcher 回報本機檔案或資料夾新增／修改。資料夾會逐一處理底下的檔案。 */
+  /** watcher 回報本機檔案或資料夾新增、修改。資料夾會逐一處理底下的檔案。 */
   localChanged(fsPath: string): Promise<SyncReport> {
     return this.enqueue(async () => {
       const report = emptyReport();

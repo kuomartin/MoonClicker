@@ -83,7 +83,7 @@ fun FanFabMenu(
         var dragOffset by remember { mutableStateOf<Offset?>(null) }
         val renderOffset = dragOffset ?: settledOffset.value
 
-        // 容器尺寸一變（旋轉、分割畫面）就照目前記住的「哪一側／比例」重新落點；
+        // 容器尺寸一變（旋轉、分割畫面）就照目前記住的「哪一側、比例」重新落點；
         // 拖曳中不動 settledOffset，畫面此時看的是 dragOffset。
         LaunchedEffect(maxWidthPx, maxHeightPx) {
             if (dragOffset == null) settledOffset.snapTo(targetOffset())

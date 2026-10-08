@@ -247,7 +247,7 @@ fun rememberDisplayGeometry(displayId: Int): DisplayGeometry {
 
 /**
  * MainDisplay（display 0）目前的 rotation，即 ADR-0014 的 d。跟 [rememberDisplayGeometry]
- * 分開一個函式，因為這裡只需要 rotation，讀 surface 尺寸／`getMode()` 對 display 0
+ * 分開一個函式，因為這裡只需要 rotation，讀 surface 尺寸、`getMode()` 對 display 0
  * 沒有意義。
  */
 @Composable

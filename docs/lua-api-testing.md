@@ -62,8 +62,8 @@ duration 插值。所以 Tier 0 能說「引擎送出了什麼」，不能說「
 | `InputCoordinatesTest` | 三個方向下，注入的觸控落在瞄準的位置 |
 | `OcrVisionTest` | 文字請求點到行內的那個字、`read` 讀出 ROI 的數字、`read_lines`、`wait` 等到延後出現的文字、未安裝 OCR 的錯誤；需要 OCR 套件（推送方式見 `OcrTestPack`），沒有就跳過 |
 | `LuaAppApiTest` | `app.list()` 列出 puppet 所在的虛擬顯示，目標是該顯示器或主螢幕時結果相同 |
-| `AppMutingTest` | `app.mute` 對測試 APK 自己：package 層 mode 讀回 deny／ignore、焦點請求被拒，解除後回到原值；重複靜音、未安裝的 package、行程停止與異常結束後的還原 |
-| `VisionWaitTest` | `vision.wait`／`wait_any` 的等待語意與 `step_ms`、`find_any` 的 index |
+| `AppMutingTest` | `app.mute` 對測試 APK 自己：package 層 mode 讀回 deny/ignore、焦點請求被拒，解除後回到原值；重複靜音、未安裝的 package、行程停止與異常結束後的還原 |
+| `VisionWaitTest` | `vision.wait`/`wait_any` 的等待語意與 `step_ms`、`find_any` 的 index |
 | `InputTextTest` | `input.text` 打出的字（大小寫、符號、Enter）送到虛擬顯示上有焦點的 puppet |
 | `VirtualDisplayIdleDeadlockTest` | issue #6、#121：注入的輸入喚醒睡著的 own display group；落在預設 group 的 VD 不准被關 |
 | `VirtualDisplayKeepAwakeSlowTest` | issue #121：掛著 surface 時 own display group 不逾時，拿掉後照常逾時（慢測試，見下） |

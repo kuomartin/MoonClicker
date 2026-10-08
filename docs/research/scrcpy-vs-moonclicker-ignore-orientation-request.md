@@ -308,7 +308,7 @@ MoonClicker 與 scrcpy 的 VD 都帶了 `ROTATES_WITH_CONTENT`，所以
 per-display『忽略方向請求』語意，把它 letterbox」。查證結果是：
 `ignoreOrientationRequest` 在 MoonClicker 的 VD 上是 `false`（沒有任何
 程式碼把它設成別的值——MoonClicker 全樹搜尋
-`setIgnoreOrientationRequest`／`DisplayWindowSettings` 零命中，見 Q4），
+`setIgnoreOrientationRequest`/`DisplayWindowSettings` 零命中，見 Q4），
 `false` 代表「**不**忽略」，也就是 WindowManager **會**依 app 宣告的
 `landscape` 去轉這個 VD 的方向（這件事 `vd-rotation-aosp-semantics.md`
 Q2 已經用 `DisplayRotation.rotationForOrientation()` 的
@@ -733,7 +733,7 @@ frame → 觸發新 texture 建立；frame 尺寸的變化源頭串回
 
 ### 誠實的但書
 
-本文推翻了任務背景假說（`ignoreOrientationRequest`／
+本文推翻了任務背景假說（`ignoreOrientationRequest`/
 `DisplayWindowSettings` 是根因），並且用原始碼找到一個邏輯上更貼合症狀
 描述（letterbox + restart 按鈕修好）的機制（Size Compat Mode）。
 但本文**沒有**：
