@@ -56,7 +56,7 @@ class FullscreenDisplayViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(UiState())
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
-    /** 退出全螢幕（[FullscreenAction.Exit]／[FullscreenAction.CloseDisplay]）的一次性事件；畫面收到就 `finish()`。 */
+    /** 退出全螢幕（[FullscreenAction.Exit]/[FullscreenAction.CloseDisplay]）的一次性事件；畫面收到就 `finish()`。 */
     private val _finishEvents = Channel<Unit>(Channel.BUFFERED)
     val finishEvents: Flow<Unit> = _finishEvents.receiveAsFlow()
 

@@ -93,7 +93,7 @@ object TemplateStore {
         }
     }
 
-    /** 沒有 `templates.json` 視為空 map（第一個模板），讀不動／解不動視為壞掉（回 null）。 */
+    /** 沒有 `templates.json` 視為空 map（第一個模板），讀不動、解不動視為壞掉（回 null）。 */
     private fun readExisting(metaFile: File): Map<String, TemplateEntry>? {
         if (!metaFile.isFile) return emptyMap()
         return try {

@@ -78,7 +78,7 @@ class OcrSettingsViewModel @Inject constructor(
     fun setThreads(threads: Int) = appSettings.setOcrThreads(threads)
 }
 
-/** 設定頁的「文字辨識」區塊：OCR 套件的下載／刪除、執行緒數與重新測試。 */
+/** 設定頁的「文字辨識」區塊：OCR 套件的下載、刪除、執行緒數與重新測試。 */
 @Composable
 fun OcrSettingsSection(viewModel: OcrSettingsViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsState()

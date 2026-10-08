@@ -55,7 +55,7 @@ cv::Rect bounds(const std::vector<cv::Point> &points) {
 
 /**
  * DB 後處理，輸出軸對齊框（偵測輸入的座標，未縮放回原圖）。
- * 遊戲畫面的文字幾乎都是水平的，軸對齊框省掉 `minAreaRect`／透視變換，也就不需要 `geometry` 模組。
+ * 遊戲畫面的文字幾乎都是水平的，軸對齊框省掉 `minAreaRect`、透視變換，也就不需要 `geometry` 模組。
  */
 std::vector<cv::Rect2f> dbPostprocess(const cv::Mat &prob) {
     cv::Mat bitmap = prob > kDetThresh;

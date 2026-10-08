@@ -95,7 +95,7 @@ interface ScriptStream {
 /**
  * VS Code FileSystemProvider 的 `onDidChangeFile` 要推播的單一檔案變動。只涵蓋透過 HTTP
  * 單檔案 API 寫入的改動（self-write）——外部（檔案管理員、USB 接電腦）直接動到 Script
- * Folder 不會被偵測到：inotify／`FileObserver` 不遞迴，要涵蓋外部改動得對每個腳本資料夾
+ * Folder 不會被偵測到：inotify/`FileObserver` 不遞迴，要涵蓋外部改動得對每個腳本資料夾
  * （與其子目錄）各自維護一個 watch，決定不做這件事。
  */
 enum class ScriptFileChangeKind { CREATED, CHANGED, DELETED }
@@ -242,7 +242,7 @@ class WorkbenchServer @Inject constructor(
 }
 
 /**
- * `templateCount`／`modifiedMs` 故意不給預設值：兩者的合法值都包含 0，kotlinx.serialization
+ * `templateCount`/`modifiedMs` 故意不給預設值：兩者的合法值都包含 0，kotlinx.serialization
  * 預設 `encodeDefaults = false` 會把等於預設值的欄位整個從 JSON 省略掉，讓 VS Code 端收到
  * `undefined` 而不是 `0`——不給預設值就永遠會序列化出來，不用另外configure 一份 Json。
  */

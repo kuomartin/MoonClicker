@@ -17,7 +17,7 @@ import org.junit.runner.RunWith
 import java.io.File
 
 /**
- * `vision.*` 的文字請求與 `vision.read`／`read_lines`，對照 puppet 實際把字畫在哪。
+ * `vision.*` 的文字請求與 `vision.read`/`read_lines`，對照 puppet 實際把字畫在哪。
  *
  * 需要 OCR 套件（推送方式見 [OcrTestPack]），沒有就跳過；影格全黑（ATD 映像檔）時比照其他
  * vision 測試跳過。

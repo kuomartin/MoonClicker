@@ -64,7 +64,7 @@ API 33 起都能用的是綁在 displayId 上的 `SCREEN_BRIGHT_WAKE_LOCK`：持
 
 量測與原始碼出處見 [vd-display-group-wake-api31-35.md](research/vd-display-group-wake-api31-35.md)。
 
-→ `DisplayGroupWakeLocks`、`VirtualDisplayLifecycle.wakeDisplayGroupIfOwned`／`holdDisplayGroupAwake`、`VirtualDisplayIdleDeadlockTest`、`VirtualDisplayKeepAwakeSlowTest`
+→ `DisplayGroupWakeLocks`、`VirtualDisplayLifecycle.wakeDisplayGroupIfOwned`/`holdDisplayGroupAwake`、`VirtualDisplayIdleDeadlockTest`、`VirtualDisplayKeepAwakeSlowTest`
 
 ### 要了 `OWN_DISPLAY_GROUP` 也可能落在預設 group
 
@@ -183,7 +183,7 @@ SurfaceTexture 的佇列滿了會擋住生產端。
 |---|---|---|
 | ATD 影格全黑 | 比對不中 | `assumeFramesHaveContent` |
 | Android 12 splash 還壓在已 resume 的視窗上 | 觸控沒送達 | `assertTapLandsInside` 重試 |
-| 裝置 Dozing／鎖屏 | 觸控沒送達 | `wakeAndUnlock` |
+| 裝置 Dozing、鎖屏 | 觸控沒送達 | `wakeAndUnlock` |
 | 旋轉動畫未結束 | 座標算錯 | `awaitSettled` |
 | 轉場開始前的靜止期 | 座標算錯 | `stage` 的 tap 暖身 |
 

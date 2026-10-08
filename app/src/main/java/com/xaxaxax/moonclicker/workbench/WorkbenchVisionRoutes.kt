@@ -19,14 +19,14 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
-/** Vision-test 觸發與模板 CRUD，委派給既有的 [ScriptRunner]／[TemplateStore]。 */
+/** Vision-test 觸發與模板 CRUD，委派給既有的 [ScriptRunner]/[TemplateStore]。 */
 fun Route.visionRoutes(
     scriptsRoot: File,
     scriptRunner: ScriptRunner,
     fileChanges: MutableSharedFlow<ScriptFileChange>,
     ocrAvailable: () -> Boolean,
 ) {
-    // OCR 測試：對虛擬顯示跑一次性的 vision.read／read_lines／find{text} 迴圈。狀態碼比照
+    // OCR 測試：對虛擬顯示跑一次性的 vision.read/read_lines/find{text} 迴圈。狀態碼比照
     // vision-test；OCR 未安裝回 412，面板直接提示到裝置設定頁下載，不必等腳本報錯。
     post("/ocr-test") {
         val request = runCatching { Json.decodeFromString<OcrTestRequest>(call.receiveText()) }.getOrNull()
@@ -131,7 +131,7 @@ fun Route.visionRoutes(
 
     // 列出某腳本目前存的所有模板（VS Code 端「建立模板」的清單、「測試模板」的下拉選單都
     // 靠這個回填，不再只是本地工作階段快取）。回傳跟 templates.json 一樣的
-    // `{ 檔名: { roi } }` map，壞掉的／不存在的 templates.json 都當空清單，不是錯誤。
+    // `{ 檔名: { roi } }` map，壞掉的、不存在的 templates.json 都當空清單，不是錯誤。
     get("/scripts/{id}/templates") {
         val id = call.parameters["id"]
         val script = id?.let { i -> ScriptStore.scan(scriptsRoot).find { it.id == i } }

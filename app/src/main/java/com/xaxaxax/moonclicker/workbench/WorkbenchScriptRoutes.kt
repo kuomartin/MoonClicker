@@ -23,7 +23,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
-/** 腳本清單、Script Folder 單檔案讀寫同步、觸發執行，委派給既有的 [ScriptStore]／[ScriptRunner]。 */
+/** 腳本清單、Script Folder 單檔案讀寫同步、觸發執行，委派給既有的 [ScriptStore]/[ScriptRunner]。 */
 fun Route.scriptRoutes(
     scriptsRoot: File,
     scriptRunner: ScriptRunner,
