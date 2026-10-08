@@ -1,0 +1,84 @@
+1791444298.978 gles size=1080x2400 sinks=0 loops=8 new=3 stale=5 ageAvg=73883392.46 ageMax=221650140.07 drawAvg=0.00
+1791444300.982 gles size=1080x2400 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791444301.169 begin tm display=1080x2400
+1791444301.206 noframe requests=1
+1791444301.207 noframe requests=1
+1791444301.208 noframe requests=1
+1791444301.208 noframe requests=1
+1791444301.208 noframe requests=1
+1791444301.208 noframe requests=1
+1791444301.208 noframe requests=1
+1791444301.209 noframe requests=1
+1791444301.209 noframe requests=1
+1791444301.209 noframe requests=1
+1791444301.209 noframe requests=1
+1791444301.209 noframe requests=1
+1791444301.209 noframe requests=1
+1791444301.209 noframe requests=1
+1791444301.210 noframe requests=1
+1791444301.210 noframe requests=1
+1791444301.210 noframe requests=1
+1791444301.210 noframe requests=1
+1791444301.210 noframe requests=1
+1791444301.210 noframe requests=1
+1791444301.210 noframe requests=1
+1791444301.211 noframe requests=1
+1791444301.211 noframe requests=1
+1791444301.211 noframe requests=1
+1791444301.211 noframe requests=1
+1791444301.211 noframe requests=1
+1791444301.211 noframe requests=1
+1791444301.211 noframe requests=1
+1791444301.211 noframe requests=1
+1791444301.211 noframe requests=1
+1791444301.211 noframe requests=1
+1791444301.212 noframe requests=1
+1791444301.212 noframe requests=1
+1791444301.212 noframe requests=1
+1791444301.212 noframe requests=1
+1791444301.212 noframe requests=1
+1791444301.212 noframe requests=1
+1791444301.212 noframe requests=1
+1791444301.212 noframe requests=1
+1791444301.212 noframe requests=1
+1791444301.212 noframe requests=1
+1791444301.212 noframe requests=1
+1791444301.213 noframe requests=1
+1791444301.213 noframe requests=1
+1791444301.213 noframe requests=1
+1791444301.213 noframe requests=1
+1791444301.213 noframe requests=1
+1791444301.213 noframe requests=1
+1791444301.213 noframe requests=1
+1791444301.213 noframe requests=1
+1791444301.213 noframe requests=1
+1791444301.213 noframe requests=1
+1791444301.213 noframe requests=1
+1791444301.213 noframe requests=1
+1791444301.213 noframe requests=1
+1791444301.214 noframe requests=1
+1791444301.214 noframe requests=1
+1791444301.214 noframe requests=1
+1791444301.214 noframe requests=1
+1791444301.214 noframe requests=1
+1791444301.214 noframe requests=1
+1791444301.214 noframe requests=1
+1791444301.214 noframe requests=1
+1791444301.214 noframe requests=1
+1791444301.214 noframe requests=1
+1791444301.218 firstframe frame=1080x2400
+1791444301.331 tm frame=1080x2400 tpl=256x256 target=1080x2400 gray=1 snap=8.47 pre=2.52 mt=104.31 age=221654131.2
+1791444301.435 tm frame=1080x2400 tpl=256x256 target=1080x2400 gray=1 snap=3.26 pre=1.10 mt=98.14 age=5.2
+1791444301.538 tm frame=1080x2400 tpl=256x256 target=1080x2400 gray=1 snap=3.34 pre=1.20 mt=98.03 age=5.5
+1791444301.643 tm frame=1080x2400 tpl=256x256 target=1080x2400 gray=1 snap=3.44 pre=1.12 mt=99.29 age=6.1
+1791444301.750 tm frame=1080x2400 tpl=256x256 target=1080x2400 gray=1 snap=3.49 pre=1.54 mt=99.97 age=10.1
+1791444301.797 tm frame=1080x2400 tpl=256x256 target=540x600 gray=0 snap=3.43 pre=0.00 mt=42.24 age=5.3
+1791444301.842 tm frame=1080x2400 tpl=256x256 target=540x600 gray=0 snap=3.48 pre=0.01 mt=41.06 age=7.9
+1791444301.888 tm frame=1080x2400 tpl=256x256 target=540x600 gray=0 snap=3.57 pre=0.01 mt=41.70 age=8.6
+1791444301.936 tm frame=1080x2400 tpl=256x256 target=540x600 gray=0 snap=3.57 pre=0.01 mt=43.14 age=10.1
+1791444301.982 tm frame=1080x2400 tpl=256x256 target=540x600 gray=0 snap=3.51 pre=0.01 mt=42.05 age=1.9
+1791444302.077 tm frame=1080x2400 tpl=128x128 target=540x1200 gray=0 snap=3.57 pre=4.20 mt=85.53 age=2.9
+1791444302.173 tm frame=1080x2400 tpl=128x128 target=540x1200 gray=0 snap=3.70 pre=3.45 mt=87.90 age=9.1
+1791444302.273 tm frame=1080x2400 tpl=128x128 target=540x1200 gray=0 snap=3.85 pre=3.11 mt=91.45 age=2.1
+1791444302.367 tm frame=1080x2400 tpl=128x128 target=540x1200 gray=0 snap=3.61 pre=2.83 mt=87.43 age=1.1
+1791444302.463 tm frame=1080x2400 tpl=128x128 target=540x1200 gray=0 snap=3.74 pre=2.67 mt=88.42 age=6.9

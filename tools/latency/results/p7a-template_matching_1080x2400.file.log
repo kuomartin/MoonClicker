@@ -1,0 +1,49 @@
+1791442671.419 gles size=1080x2400 sinks=0 loops=8 new=3 stale=5 ageAvg=73342397.11 ageMax=220027114.27 drawAvg=0.00
+1791442673.423 gles size=1080x2400 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791442673.573 begin tm display=1080x2400
+1791442674.008 tm frame=1080x2400 tpl=128x128 target=1080x2400 gray=0 snap=8.48 pre=0.01 mt=387.20 age=220031062.3
+1791442674.412 tm frame=1080x2400 tpl=128x128 target=1080x2400 gray=0 snap=3.48 pre=0.01 mt=398.99 age=7.1
+1791442674.838 tm frame=1080x2400 tpl=128x128 target=1080x2400 gray=0 snap=3.82 pre=0.01 mt=421.82 age=8.6
+1791442674.938 copy frame=1080x2400 copyMs=0.96
+1791442675.265 tm frame=1080x2400 tpl=128x128 target=1080x2400 gray=0 snap=3.70 pre=0.01 mt=421.71 age=0.4
+1791442675.387 tm frame=1080x2400 tpl=128x128 target=1080x2400 gray=1 snap=3.99 pre=0.96 mt=114.23 age=9.3
+1791442675.425 gles size=1080x2400 sinks=1 loops=164 new=0 stale=164 ageAvg=0.00 ageMax=0.00 drawAvg=0.91
+1791442675.507 tm frame=1080x2400 tpl=128x128 target=1080x2400 gray=1 snap=3.83 pre=1.10 mt=113.35 age=5.5
+1791442675.628 tm frame=1080x2400 tpl=128x128 target=1080x2400 gray=1 snap=3.80 pre=1.09 mt=114.48 age=2.8
+1791442675.749 tm frame=1080x2400 tpl=128x128 target=1080x2400 gray=1 snap=3.72 pre=1.02 mt=114.10 age=1.4
+1791442675.873 tm frame=1080x2400 tpl=128x128 target=1080x2400 gray=1 snap=3.83 pre=0.99 mt=117.61 age=10.2
+1791442675.924 tm frame=1080x2400 tpl=128x128 target=540x600 gray=0 snap=3.80 pre=0.01 mt=45.83 age=1.4
+1791442675.975 tm frame=1080x2400 tpl=128x128 target=540x600 gray=0 snap=3.83 pre=0.01 mt=45.57 age=7.8
+1791442676.025 tm frame=1080x2400 tpl=128x128 target=540x600 gray=0 snap=3.87 pre=0.01 mt=44.64 age=4.9
+1791442676.076 tm frame=1080x2400 tpl=128x128 target=540x600 gray=0 snap=3.83 pre=0.01 mt=46.04 age=1.0
+1791442676.126 tm frame=1080x2400 tpl=128x128 target=540x600 gray=0 snap=3.85 pre=0.01 mt=45.30 age=8.1
+1791442676.238 tm frame=1080x2400 tpl=64x64 target=540x1200 gray=0 snap=3.83 pre=2.30 mt=103.49 age=3.6
+1791442676.266 copy frame=1080x2400 copyMs=1.00
+1791442676.347 tm frame=1080x2400 tpl=64x64 target=540x1200 gray=0 snap=4.02 pre=2.87 mt=100.59 age=5.4
+1791442676.459 tm frame=1080x2400 tpl=64x64 target=540x1200 gray=0 snap=4.08 pre=2.18 mt=104.34 age=3.6
+1791442676.571 tm frame=1080x2400 tpl=64x64 target=540x1200 gray=0 snap=4.05 pre=2.73 mt=104.54 age=4.5
+1791442676.685 tm frame=1080x2400 tpl=64x64 target=540x1200 gray=0 snap=4.13 pre=2.74 mt=105.56 age=5.9
+1791442677.119 tm frame=1080x2400 tpl=256x256 target=1080x2400 gray=0 snap=4.14 pre=0.01 mt=426.55 age=9.4
+1791442677.432 gles size=1080x2400 sinks=1 loops=181 new=0 stale=181 ageAvg=0.00 ageMax=0.00 drawAvg=0.82
+1791442677.546 tm frame=1080x2400 tpl=256x256 target=1080x2400 gray=0 snap=6.08 pre=0.01 mt=419.40 age=7.5
+1791442677.605 copy frame=1080x2400 copyMs=1.07
+1791442677.965 tm frame=1080x2400 tpl=256x256 target=1080x2400 gray=0 snap=4.07 pre=0.01 mt=412.84 age=9.3
+1791442678.388 tm frame=1080x2400 tpl=256x256 target=1080x2400 gray=0 snap=4.08 pre=0.01 mt=416.76 age=4.2
+1791442678.809 tm frame=1080x2400 tpl=256x256 target=1080x2400 gray=0 snap=4.04 pre=0.01 mt=415.14 age=9.7
+1791442678.939 tm frame=1080x2400 tpl=256x256 target=1080x2400 gray=1 snap=4.36 pre=1.38 mt=116.95 age=8.9
+1791442678.953 copy frame=1080x2400 copyMs=1.02
+1791442679.060 tm frame=1080x2400 tpl=256x256 target=1080x2400 gray=1 snap=4.14 pre=1.26 mt=113.19 age=10.3
+1791442679.185 tm frame=1080x2400 tpl=256x256 target=1080x2400 gray=1 snap=4.20 pre=1.52 mt=117.31 age=6.4
+1791442679.307 tm frame=1080x2400 tpl=256x256 target=1080x2400 gray=1 snap=4.26 pre=1.74 mt=114.50 age=7.8
+1791442679.427 tm frame=1080x2400 tpl=256x256 target=1080x2400 gray=1 snap=4.20 pre=1.75 mt=112.50 age=5.8
+1791442679.435 gles size=1080x2400 sinks=1 loops=178 new=0 stale=178 ageAvg=0.00 ageMax=0.00 drawAvg=0.94
+1791442679.480 tm frame=1080x2400 tpl=256x256 target=540x600 gray=0 snap=4.05 pre=0.01 mt=47.16 age=2.3
+1791442679.532 tm frame=1080x2400 tpl=256x256 target=540x600 gray=0 snap=3.98 pre=0.01 mt=46.40 age=0.9
+1791442679.582 tm frame=1080x2400 tpl=256x256 target=540x600 gray=0 snap=3.97 pre=0.04 mt=44.76 age=8.0
+1791442679.635 tm frame=1080x2400 tpl=256x256 target=540x600 gray=0 snap=3.82 pre=0.01 mt=47.38 age=3.7
+1791442679.686 tm frame=1080x2400 tpl=256x256 target=540x600 gray=0 snap=4.08 pre=0.01 mt=46.20 age=2.3
+1791442679.792 tm frame=1080x2400 tpl=128x128 target=540x1200 gray=0 snap=3.97 pre=2.56 mt=96.72 age=10.0
+1791442679.898 tm frame=1080x2400 tpl=128x128 target=540x1200 gray=0 snap=4.17 pre=3.22 mt=97.56 age=6.5
+1791442680.004 tm frame=1080x2400 tpl=128x128 target=540x1200 gray=0 snap=4.06 pre=2.61 mt=97.25 age=2.3
+1791442680.109 tm frame=1080x2400 tpl=128x128 target=540x1200 gray=0 snap=4.08 pre=2.75 mt=97.51 age=8.0
+1791442680.212 tm frame=1080x2400 tpl=128x128 target=540x1200 gray=0 snap=3.93 pre=2.66 mt=94.42 age=3.5

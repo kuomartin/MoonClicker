@@ -1,0 +1,42 @@
+1791442750.160 gles size=720x1280 sinks=0 loops=8 new=3 stale=5 ageAvg=57.25 ageMax=137.54 drawAvg=0.00
+1791442752.165 gles size=720x1280 sinks=0 loops=8 new=0 stale=8 ageAvg=0.00 ageMax=0.00 drawAvg=0.00
+1791442752.253 begin ocr threads=2
+1791442752.478 ocr mode=read area=720x160 bgr=0.60 det=0.0 rec=31.1 total=31.7 lines=0
+1791442752.508 ocr mode=read area=720x160 bgr=0.10 det=0.0 rec=29.0 total=29.1 lines=0
+1791442752.529 ocr mode=read area=720x160 bgr=0.10 det=0.0 rec=18.7 total=18.8 lines=0
+1791442752.549 ocr mode=read area=720x160 bgr=0.10 det=0.0 rec=18.9 total=19.0 lines=0
+1791442752.570 ocr mode=read area=720x160 bgr=0.09 det=0.0 rec=19.1 total=19.2 lines=0
+1791442752.673 ocr mode=read_lines area=720x320 bgr=0.44 det=101.0 rec=0.0 total=101.5 lines=0
+1791442752.776 ocr mode=read_lines area=720x320 bgr=0.11 det=101.0 rec=0.0 total=101.2 lines=0
+1791442752.875 ocr mode=read_lines area=720x320 bgr=0.12 det=97.2 rec=0.0 total=97.5 lines=0
+1791442752.977 ocr mode=read_lines area=720x320 bgr=0.11 det=100.5 rec=0.0 total=100.8 lines=0
+1791442753.080 ocr mode=read_lines area=720x320 bgr=0.11 det=101.3 rec=0.0 total=101.5 lines=0
+1791442753.394 ocr mode=read_lines area=720x1280 bgr=0.69 det=240.8 rec=69.9 total=311.7 lines=1
+1791442753.661 copy frame=720x1280 copyMs=0.32
+1791442753.747 ocr mode=read_lines area=720x1280 bgr=0.81 det=279.8 rec=70.0 total=350.9 lines=1
+1791442754.066 ocr mode=read_lines area=720x1280 bgr=0.81 det=247.9 rec=68.0 total=317.0 lines=1
+1791442754.167 gles size=720x1280 sinks=1 loops=165 new=0 stale=165 ageAvg=0.00 ageMax=0.00 drawAvg=1.06
+1791442754.408 ocr mode=read_lines area=720x1280 bgr=0.91 det=251.8 rec=87.9 total=341.0 lines=1
+1791442754.747 ocr mode=read_lines area=720x1280 bgr=0.63 det=247.2 rec=89.2 total=337.3 lines=1
+1791442755.019 copy frame=720x1280 copyMs=0.41
+1791442755.090 ocr mode=read_lines area=720x1280 bgr=0.85 det=251.1 rec=88.5 total=340.8 lines=1
+1791442755.439 ocr mode=read_lines area=720x1280 bgr=0.63 det=257.0 rec=89.0 total=347.0 lines=1
+1791442755.795 ocr mode=read_lines area=720x1280 bgr=0.64 det=264.0 rec=89.0 total=354.0 lines=1
+1791442756.145 ocr mode=read_lines area=720x1280 bgr=0.76 det=259.1 rec=88.0 total=348.2 lines=1
+1791442756.168 gles size=720x1280 sinks=1 loops=176 new=0 stale=176 ageAvg=0.00 ageMax=0.00 drawAvg=1.04
+1791442756.389 copy frame=720x1280 copyMs=0.93
+1791442756.495 ocr mode=read_lines area=720x1280 bgr=0.73 det=257.4 rec=89.0 total=347.4 lines=1
+1791442756.853 ocr mode=find area=720x1280 det=278.0 rec=77.3 total=356.3 lines=1 snap=1.51 age=6.6
+1791442757.235 ocr mode=find area=720x1280 det=275.4 rec=101.5 total=378.1 lines=1 snap=1.53 age=4.2
+1791442757.612 ocr mode=find area=720x1280 det=281.3 rec=88.5 total=373.9 lines=1 snap=1.64 age=1.4
+1791442757.749 copy frame=720x1280 copyMs=1.11
+1791442757.980 ocr mode=find area=720x1280 det=274.0 rec=90.3 total=365.6 lines=1 snap=1.50 age=6.5
+1791442758.179 gles size=720x1280 sinks=1 loops=177 new=0 stale=177 ageAvg=0.00 ageMax=0.00 drawAvg=1.03
+1791442758.334 ocr mode=find area=720x1280 det=281.2 rec=68.5 total=351.1 lines=1 snap=1.62 age=6.7
+1791442758.707 ocr mode=find area=720x1280 det=302.6 rec=66.9 total=370.7 lines=1 snap=1.38 age=6.5
+1791442759.096 ocr mode=find area=720x1280 det=293.5 rec=90.0 total=385.0 lines=1 snap=2.31 age=3.1
+1791442759.114 copy frame=720x1280 copyMs=0.41
+1791442759.461 ocr mode=find area=720x1280 det=272.1 rec=89.4 total=362.9 lines=1 snap=1.58 age=5.8
+1791442759.827 ocr mode=find area=720x1280 det=296.8 rec=64.7 total=362.7 lines=1 snap=1.64 age=5.1
+1791442760.186 gles size=720x1280 sinks=1 loops=176 new=0 stale=176 ageAvg=0.00 ageMax=0.00 drawAvg=1.03
+1791442760.202 ocr mode=find area=720x1280 det=279.0 rec=92.4 total=372.7 lines=1 snap=1.48 age=7.4
