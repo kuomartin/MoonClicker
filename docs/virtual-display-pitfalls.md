@@ -64,7 +64,7 @@ API 33 起都能用的是綁在 displayId 上的 `SCREEN_BRIGHT_WAKE_LOCK`：持
 
 量測與原始碼出處見 [vd-display-group-wake-api31-35.md](research/vd-display-group-wake-api31-35.md)。
 
-→ `DisplayGroupWakeLocks`、`VirtualDisplayLifecycle.wakeDisplayGroupIfOwned`/`holdDisplayGroupAwake`、`VirtualDisplayIdleDeadlockTest`、`VirtualDisplayKeepAwakeSlowTest`
+→ `DisplayGroupWakeLocks`、`VirtualDisplayLifecycle.wakeDisplayGroupIfOwned`/`holdAwake`、`DisplaySinks`、`VirtualDisplayIdleDeadlockTest`、`VirtualDisplayKeepAwakeSlowTest`
 
 ### 要了 `OWN_DISPLAY_GROUP` 也可能落在預設 group
 
