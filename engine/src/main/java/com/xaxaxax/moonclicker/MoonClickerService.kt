@@ -7,8 +7,8 @@ import android.view.Surface
 import androidx.annotation.Keep
 import com.xaxaxax.moonclicker.service.ActivityLauncher
 import com.xaxaxax.moonclicker.service.AppMuting
+import com.xaxaxax.moonclicker.service.DisplayControl
 import com.xaxaxax.moonclicker.service.DisplayMirroring
-import com.xaxaxax.moonclicker.service.DisplayQuery
 import com.xaxaxax.moonclicker.service.GlesDistributor
 import com.xaxaxax.moonclicker.service.InputInjector
 import com.xaxaxax.moonclicker.service.LauncherAppsCache
@@ -79,7 +79,7 @@ class MoonClickerService @JvmOverloads constructor(
         platformHandles.packageManagerHidden,
         platformHandles.appOpsManagerHidden,
     )
-    private val displayQuery = DisplayQuery(
+    private val displayControl = DisplayControl(
         platformHandles.displayManager, virtualDisplayLifecycle, displayMirroring,
     ) { platformHandles.windowManagerService }
     private val taskQuery = TaskQuery()
@@ -106,7 +106,7 @@ class MoonClickerService @JvmOverloads constructor(
                 "Landroid/os/IPowerManager",             // DisplayGroupWakeLocks
                 "Landroid/os/ServiceManager",            // PlatformHandles
                 "Landroid/view/MotionEvent",             // InputInjector
-                "Landroid/view/IWindowManager",          // DisplayQuery
+                "Landroid/view/IWindowManager",          // DisplayControl
             )
         }
 
@@ -156,7 +156,7 @@ class MoonClickerService @JvmOverloads constructor(
         virtualDisplayLifecycle.sleepVirtualDisplay(displayId)
 
     override fun setDisplayKeyboardEnabled(displayId: Int, enabled: Boolean): Boolean =
-        displayQuery.setDisplayKeyboardEnabled(displayId, enabled)
+        displayControl.setDisplayKeyboardEnabled(displayId, enabled)
 
     override fun getVirtualDisplays(): IntArray {
         val internalMirrorVdIds = displayMirroring.internalMirrorDisplayIds()
@@ -196,15 +196,15 @@ class MoonClickerService @JvmOverloads constructor(
         inputInjector.injectKeyEvent(event, displayId)
 
     override fun setDisplayRotation(displayId: Int, rotation: Int): Boolean =
-        displayQuery.setDisplayRotation(displayId, rotation)
+        displayControl.setDisplayRotation(displayId, rotation)
 
-    override fun getDisplaySize(displayId: Int): IntArray = displayQuery.getDisplaySize(displayId)
+    override fun getDisplaySize(displayId: Int): IntArray = displayControl.getDisplaySize(displayId)
 
-    override fun getDisplaySurfaceSize(displayId: Int): IntArray = displayQuery.getDisplaySurfaceSize(displayId)
+    override fun getDisplaySurfaceSize(displayId: Int): IntArray = displayControl.getDisplaySurfaceSize(displayId)
 
-    override fun getDisplayInfo(displayId: Int): MoonClickerDisplayInfo? = displayQuery.getDisplayInfo(displayId)
+    override fun getDisplayInfo(displayId: Int): MoonClickerDisplayInfo? = displayControl.getDisplayInfo(displayId)
 
-    override fun getDisplayInfos(): Array<MoonClickerDisplayInfo> = displayQuery.getDisplayInfos()
+    override fun getDisplayInfos(): Array<MoonClickerDisplayInfo> = displayControl.getDisplayInfos()
 
     override fun debug(input: String?): String = "MoonClickerService Active"
 
