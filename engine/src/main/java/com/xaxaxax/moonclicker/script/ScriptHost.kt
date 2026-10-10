@@ -1,6 +1,8 @@
 package com.xaxaxax.moonclicker.script
 
+import android.view.Surface
 import androidx.annotation.Keep
+import com.xaxaxax.moonclicker.DisplaySink
 import com.xaxaxax.moonclicker.IMoonClickerService
 import com.xaxaxax.moonclicker.MoonClickerAppTask
 import com.xaxaxax.moonclicker.engine.state.EngineStateRepository
@@ -138,6 +140,15 @@ internal class ScriptHost(
 
     @Keep
     fun log(line: String) = onLog(line)
+
+    /** vision 取影格用的 sink；掛不上回 null，由 native 端關掉 vision。 */
+    @Keep
+    fun attachSink(surface: Surface): DisplaySink? = try {
+        DisplaySink(displayId, surface).takeIf { it.attach(service) }
+    } catch (t: Throwable) {
+        Timber.e(t, "attachSink failed")
+        null
+    }
 
     /** 由 C++ 的 pushEvent 呼叫，型別對應 [com.xaxaxax.moonclicker.engine.state.EngineEventType]。 */
     @Keep
