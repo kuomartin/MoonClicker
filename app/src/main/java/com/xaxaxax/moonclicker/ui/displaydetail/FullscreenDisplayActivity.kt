@@ -192,7 +192,7 @@ fun FullscreenDisplayScreen(
                 targetDisplayId = targetDisplayId,
                 geometry = geometry,
                 addSurface = { viewModel.addSurface(targetDisplayId, it) },
-                removeSurface = { viewModel.removeSurface(targetDisplayId, it) },
+                removeSurface = { viewModel.removeSurface(it) },
                 service = service!!,
                 modifier = Modifier.fillMaxSize(),
                 onSurfaceViewCreated = { surfaceViewRef.value = it },

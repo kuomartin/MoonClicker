@@ -39,6 +39,7 @@ struct HostMethods {
     jmethodID setData = nullptr;    // (Ljava/lang/String;Ljava/lang/Object;)V
     jmethodID onEvent = nullptr;    // (ILjava/lang/String;)V
     jmethodID log = nullptr;        // (Ljava/lang/String;)V
+    jmethodID attachSink = nullptr; // (Landroid/view/Surface;)Lcom/xaxaxax/moonclicker/DisplaySink;
 };
 
 /** MoonClickerAppTask（AIDL parcelable）的欄位。 */
@@ -158,8 +159,7 @@ private:
     jclass booleanClass = nullptr;
     jmethodID booleanConstructor = nullptr;
 
-    jmethodID addSurfaceMethodId = nullptr;     // IMoonClickerService.addVirtualDisplaySurface
-    jmethodID removeSurfaceMethodId = nullptr;  // IMoonClickerService.removeVirtualDisplaySurface
+    jmethodID sinkCloseMethodId = nullptr;      // DisplaySink.close
     jmethodID surfaceReleaseMethodId = nullptr; // android.view.Surface.release
     jmethodID acquireMirrorMethodId = nullptr;  // IMoonClickerService.acquireDisplayMirror
     jmethodID releaseMirrorMethodId = nullptr;  // IMoonClickerService.releaseDisplayMirror
@@ -171,6 +171,8 @@ private:
      * 「A resource failed to call Surface.release.」，而且每跑一次漏一個。
      */
     jobject sinkSurface = nullptr;
+    /** 掛著時是 ScriptHost.attachSink 回傳的 DisplaySink（global ref），收尾時 close()。 */
+    jobject sink = nullptr;
 
     std::string scriptDir;
     int displayId = -1;
@@ -178,7 +180,6 @@ private:
     bool heldMirrorRef = false;
     int surfaceWidth = 0;
     int surfaceHeight = 0;
-    int sinkHandle = -1;
     bool visionEnabled = false;
 
     std::thread luaThread;

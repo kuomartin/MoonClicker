@@ -23,35 +23,14 @@ internal class DisplayGroupWakeLocks(
     private val power: () -> IPowerManager,
     private val callerPackage: String,
 ) {
-    private class Held(val token: IBinder, var holders: Int)
-
-    private val held = HashMap<Int, Held>()
-
     /**
-     * 多一個需要 [displayId] 醒著的人。第一個人進來時 acquire（順便叫醒），之後只計數。
-     * acquire 失敗就不記錄，下一次 [hold] 會再試。
+     * 持有一個綁在 [displayId] 的 wake lock（acquire 時順便叫醒），回傳它的 token，交給 [release]
+     * 放掉。每個需要顯示器醒著的人各持有一個，不在這裡計數。acquire 失敗回 null。
      */
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
-    @Synchronized
-    fun hold(displayId: Int) {
-        held[displayId]?.let { it.holders++; return }
+    fun acquire(displayId: Int): IBinder? {
         val token = Binder()
-        if (acquire(token, displayId, "MoonClicker:hold")) held[displayId] = Held(token, holders = 1)
-    }
-
-    /** 少一個人；最後一個人離開時 release，之後該 group 照常閒置逾時。 */
-    @Synchronized
-    fun drop(displayId: Int) {
-        val entry = held[displayId] ?: return
-        if (--entry.holders > 0) return
-        held.remove(displayId)
-        release(entry.token)
-    }
-
-    /** 顯示器要銷毀了：不管還有幾個人，一律 release。 */
-    @Synchronized
-    fun dropAll(displayId: Int) {
-        held.remove(displayId)?.let { release(it.token) }
+        return if (tryAcquire(token, displayId, "MoonClicker:hold")) token else null
     }
 
     /**
@@ -61,12 +40,12 @@ internal class DisplayGroupWakeLocks(
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     fun pulse(displayId: Int) {
         val token = Binder()
-        if (acquire(token, displayId, "MoonClicker:wake")) release(token)
+        if (tryAcquire(token, displayId, "MoonClicker:wake")) release(token)
     }
 
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     @Suppress("DEPRECATION") // SCREEN_BRIGHT_WAKE_LOCK：沒有別的 level 能讓 group 維持 Awake
-    private fun acquire(token: IBinder, displayId: Int, tag: String): Boolean = try {
+    private fun tryAcquire(token: IBinder, displayId: Int, tag: String): Boolean = try {
         power().acquireWakeLock(
             token,
             PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
@@ -83,7 +62,7 @@ internal class DisplayGroupWakeLocks(
         false
     }
 
-    private fun release(token: IBinder) {
+    fun release(token: IBinder) {
         try {
             power().releaseWakeLock(token, 0)
         } catch (t: Throwable) {

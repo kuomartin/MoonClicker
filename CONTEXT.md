@@ -9,8 +9,8 @@ An off-screen Android display created via Shizuku, used to run a target app in t
 _Avoid_: Hidden screen, background window.
 
 **DisplaySink**:
-A pluggable output endpoint attached to a virtual display's render surface, swappable at runtime (`NoOpSink`, `H264EncoderSink`, `DirectSink`) without tearing down the display.
-_Avoid_: Output handler, renderer.
+A consumer surface attached to a display's [[GLES Distributor]] (the fullscreen preview, `H264EncoderSink`, a vision script's frame reader), owned by the client's `IBinder` token. While attached it keeps a virtual display that owns its display group from idling off. It is released, exactly once, when the client detaches it, when the distributor goes away (resize, destroy), or when the token dies. Server side: `DisplaySinks`; client side: `DisplaySink`.
+_Avoid_: Surface handle, consumer, watcher, output handler.
 
 **VirtualDisplayController**:
 Owns the lifecycle of a virtual display — creation, sink attachment/replacement, and teardown.
