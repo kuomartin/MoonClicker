@@ -7,6 +7,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.annotation.StringRes
+import com.xaxaxax.moonclicker.DisplaySink
 import com.xaxaxax.moonclicker.IMoonClickerService
 import com.xaxaxax.moonclicker.R
 import com.xaxaxax.moonclicker.core.AppSettings
@@ -207,31 +208,25 @@ class FullscreenDisplayViewModel @Inject constructor(
         }
     }
 
-    private val surfaceHandleMap = mutableMapOf<Surface, Int>()
+    /** 只在主執行緒上讀寫（SurfaceHolder 的回呼與 [onCleared]）。 */
+    private val sinks = mutableMapOf<Surface, DisplaySink>()
 
     fun addSurface(displayId: Int, surface: Surface) {
+        val sink = DisplaySink(displayId, surface)
+        sinks[surface] = sink
         viewModelScope.launch {
-            shizukuManager.withService{ service ->
-                val handle = service.addVirtualDisplaySurface(displayId, surface)
-                if (handle != -1) {
-                    surfaceHandleMap[surface] = handle
-                }
-            }.onFailure {
-                Timber.e(it)
-            }
+            shizukuManager.withService { service -> sink.attach(service) }
         }
     }
 
-    fun removeSurface(displayId: Int, surface: Surface) {
-        viewModelScope.launch {
-            shizukuManager.withService { service ->
-                surfaceHandleMap.remove(surface)?.let { handle ->
-                    service.removeVirtualDisplaySurface(displayId, handle)
-                }
-            }.onFailure {
-                Timber.e(it)
-            }
-        }
+    /** 可以在 attach 回來之前呼叫：[DisplaySink] 自己保證之後不會再掛上去。 */
+    fun removeSurface(surface: Surface) {
+        sinks.remove(surface)?.close()
+    }
+
+    override fun onCleared() {
+        sinks.values.forEach { it.close() }
+        sinks.clear()
     }
 
 }
