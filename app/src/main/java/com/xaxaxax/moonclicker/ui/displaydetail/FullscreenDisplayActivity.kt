@@ -135,7 +135,7 @@ fun FullscreenDisplayScreen(
         viewModel.finishEvents.collect { activity?.finish() }
     }
     LaunchedEffect(Unit) {
-        viewModel.launchErrors.collect { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
+        viewModel.errorMessages.collect { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
     }
     LaunchedEffect(targetDisplayId) { viewModel.loadDisplayInfo(targetDisplayId) }
     // 單一來源：鏡像的 Viewport 讀這一份，決定 letterbox 與內容尺寸。

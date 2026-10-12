@@ -260,15 +260,21 @@ internal class InputInjector(
         }
     }
 
+    /**
+     * @return 系統拒絕注入時為 false。
+     * @throws UnsupportedOperationException API 28 以下無法把按鍵送到主螢幕以外的顯示器。
+     * @throws IllegalStateException 注入本身失敗（hidden API、權限），見 [toBinderException]。
+     */
     fun injectKeyEvent(event: KeyEvent, displayId: Int): Boolean {
+        if (displayId != 0 && !event.setDisplayId(displayId)) {
+            throw UnsupportedOperationException("this device can't send key events to display#$displayId")
+        }
         return try {
-            if (displayId != 0 && !event.setDisplayId(displayId))
-                return false
             virtualDisplayLifecycle.wakeDisplayGroupIfOwned(displayId)
             inputManager.injectInputEvent(event, 0)
         } catch (t: Throwable) {
-            Timber.d(t, "Failed to inject $event on display#$displayId.")
-            false
+            Timber.w(t, "Failed to inject $event on display#$displayId.")
+            throw t.toBinderException("injectKeyEvent")
         }
     }
 }
