@@ -9,7 +9,8 @@ import com.xaxaxax.moonclicker.engine.state.EngineStateRepository
 import timber.log.Timber
 
 /**
- * 原生引擎唯一的 upcall 對象：`input.*` / `app.*` / `device.*` / `data.*` 的實作全在這裡。
+ * 原生引擎唯一的 upcall 對象：`input.*` / `app.*` / `device.*` / `data.*` 與 `screen` 的鏡像控制
+ * 的實作全在這裡。本腳本 `screen.start_mirror()` 取得的鏡像引用也由它持有，[close] 時歸還。
  *
  * 這樣切的原因是觸控注入的幾何與狀態機已經在 [IMoonClickerService.multiTouchSwipe] 裡了
  * （每個 pointer 一條協程、插值、ACTION_POINTER_DOWN/UP 的 index 計算）。在 C++ 再寫一份
@@ -25,9 +26,12 @@ internal class ScriptHost(
     private val onOpenUri: (uri: String) -> Unit,
     private val onData: (key: String, value: Any?) -> Unit,
     private val onLog: (line: String) -> Unit,
-) {
+) : AutoCloseable {
     /** 記住每個 pointer 最後的位置，這樣 [pointerUp] 才知道要在哪裡放開。 */
     private val lastPoint = HashMap<Int, Pair<Int, Int>>()
+
+    /** 這支腳本是否持有一份鏡像引用。只歸還自己拿的那一份，別人開的鏡像不碰。 */
+    private var heldMirror = false
 
     /**
      * @param pointerId -1 代表「隨便給一個」，由服務端配一個內部 id。
@@ -156,8 +160,44 @@ internal class ScriptHost(
         EngineStateRepository.onEvent(type, payload)
     }
 
-    /** 腳本結束時清掉還按著的 pointer，避免把觸控卡在按下狀態。 */
-    fun releaseAllPointers() {
+    /** 已持有時直接回 true，不重複取引用。 */
+    @Keep
+    fun acquireMirror(): Boolean {
+        if (heldMirror) return true
+        heldMirror = try {
+            service.acquireDisplayMirror(displayId)
+        } catch (t: Throwable) {
+            Timber.e(t, "acquireMirror failed")
+            false
+        }
+        return heldMirror
+    }
+
+    /** 沒持有回 false。服務端歸還失敗也視為已歸還——引用不能留在這裡等下次再試。 */
+    @Keep
+    fun releaseMirror(): Boolean {
+        if (!heldMirror) return false
+        heldMirror = false
+        try {
+            service.releaseDisplayMirror(displayId)
+        } catch (t: Throwable) {
+            Timber.e(t, "releaseMirror failed")
+        }
+        return true
+    }
+
+    /** 持有時不必走 Binder：`input.*` 在實體螢幕上每次都會問。 */
+    @Keep
+    fun isMirrorActive(): Boolean = heldMirror || try {
+        service.isDisplayMirrorActive(displayId)
+    } catch (t: Throwable) {
+        Timber.e(t, "isMirrorActive failed")
+        false
+    }
+
+    /** 腳本結束時放開還按著的 pointer、歸還鏡像，不把觸控卡在按下狀態，也不讓鏡像一直開著。 */
+    override fun close() {
         lastPoint.keys.toList().forEach { pointerUp(it) }
+        releaseMirror()
     }
 }

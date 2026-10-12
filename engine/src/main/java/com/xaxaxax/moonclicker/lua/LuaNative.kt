@@ -1,6 +1,5 @@
 package com.xaxaxax.moonclicker.lua
 
-import com.xaxaxax.moonclicker.IMoonClickerService
 import com.xaxaxax.moonclicker.script.ScriptHost
 import timber.log.Timber
 
@@ -32,7 +31,6 @@ internal object LuaNative {
      */
     external fun nativeStart(
         host: ScriptHost,
-        service: IMoonClickerService,
         displayId: Int,
         isPhysical: Boolean,
         withVision: Boolean,
