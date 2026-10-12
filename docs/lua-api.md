@@ -12,6 +12,7 @@
 * **邏輯座標系統**：所有輸入座標（`input.*`）與影像搜尋範圍（`roi`）、命中結果（`cx`, `cy`）皆採用**邏輯空間座標**（旋轉 90°/270° 時長寬自動對調）。
 * **模板像素**：模板圖片方向自動對齊邏輯畫面；模板尺寸需與目標在螢幕上的邏輯像素大小一致。
 * **目標綁定**：腳本作用於啟動時指定的目標顯示器（虛擬顯示器或本機實體螢幕）。
+* **錯誤與失敗**：與服務溝通的函式分兩種失敗。**基礎設施失敗**（UserService 斷線或異常、裝置不支援）拋 Lua error，訊息為 `"<module.func>: <原因>"`，例如 `app.mute: android.os.DeadObjectException`；**操作本身沒成功**（例如按鍵注入被拒、找不到要啟動的 App）回傳 `false`。前者腳本無從補救，不處理就結束並顯示錯誤；需要時可以用 `pcall` 接住。參數錯誤也拋 Lua error。
 
 ---
 
@@ -69,8 +70,8 @@ end
 | `screen.rotation` | `integer` | 旋轉角度（`0`: 0°, `1`: 90°, `2`: 180°, `3`: 270°）。腳本啟動當下的快照，整場執行固定不變 |
 | `screen.has_vision` | `boolean` | 是否具備畫面辨識來源（虛擬顯示一律為 `true`；實體螢幕需啟動鏡像）。即時值 |
 | `screen.is_mirror_active` | `boolean` | 鏡像管線是否運作中。即時值 |
-| `screen.start_mirror()` | `boolean` | （實體螢幕專用）啟動鏡像管線以啟用 `vision.*` 與 `input.*` |
-| `screen.stop_mirror()` | `boolean` | （實體螢幕專用）手動停止鏡像管線 |
+| `screen.start_mirror()` | `boolean` | （實體螢幕專用）啟動鏡像管線以啟用 `vision.*` 與 `input.*`。成功或已開啟回傳 `true`；取不到鏡像時拋錯 |
+| `screen.stop_mirror()` | `boolean` | （實體螢幕專用）歸還本腳本 `start_mirror()` 取得的鏡像；沒有取得過時回傳 `false`。腳本結束時會自動歸還 |
 
 ---
 
@@ -197,18 +198,18 @@ end
 | `input.down(id, x, y)` | 在指定座標按下並保持觸控點 `id`（整數） |
 | `input.move(id, x, y)` | 移動觸控點 `id` 至新座標 |
 | `input.up(id)` | 釋放觸控點 `id` |
-| `input.key(keycode)` | 注入 Android 系統 KeyCode |
+| `input.key(keycode)` | 注入 Android 系統 KeyCode，回傳是否成功注入 |
 | `input.text(text)` | 對目標顯示器上目前有焦點的輸入框輸入文字，回傳是否成功注入；呼叫前要先點選輸入框。只支援可印 ASCII、`\n`（Enter）與 `\t`（Tab），含其他字元（例如中文）時拋錯，一個字都不輸入；注入途中失敗時前面的字已經送出。`\n` 在單行搜尋框是送出，在多行輸入框是換行，依 app 而定。送出的是按鍵，使用者的輸入法若會組字（例如注音），打出來會變成中文：在 `script.json` 設 `display.keyboard = false` |
-| `input.back()` | 注入返回鍵（`AKEYCODE_BACK`） |
-| `input.home()` | 注入 Home 鍵（`AKEYCODE_HOME`） |
-| `input.recents()` | 注入多工任務鍵（`AKEYCODE_APP_SWITCH`） |
+| `input.back()` | 注入返回鍵（`AKEYCODE_BACK`），回傳是否成功注入 |
+| `input.home()` | 注入 Home 鍵（`AKEYCODE_HOME`），回傳是否成功注入 |
+| `input.recents()` | 注入多工任務鍵（`AKEYCODE_APP_SWITCH`），回傳是否成功注入 |
 
 ---
 
 ## `app` 應用程式管理
 
 * **`app.launch(package_name)` -> `boolean`**
-  在目標顯示器啟動指定 Package Name 之 App。成功送出啟動請求回傳 `true`。
+  在目標顯示器啟動指定 Package Name 之 App。成功送出啟動請求回傳 `true`；App 未安裝或沒有可啟動的畫面時回傳 `false`。
   * 目標是虛擬顯示器、但裝置不支援在次要顯示器上執行 App（沒有宣告 `android.software.activities_on_secondary_displays`，部分 Android 8.x/9 裝置）時拋錯。這是系統開機時決定的，無法以設定或 shell 權限開啟。
 * **`app.list()` -> `table`**
   列出所有顯示器上正在執行的 App，與目標顯示器無關。回傳陣列，每筆為 `{ package = "com.example.game", display_id = 2 }`。

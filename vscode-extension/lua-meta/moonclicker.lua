@@ -3,6 +3,9 @@
 -- MoonClicker Lua API 的 LuaLS 型別提示 stub。對照 docs/lua-api.md 與
 -- engine/src/main/cpp/LuaBindings.cpp/.h 的實際 API 表面撰寫。
 -- 這份檔案只給編輯器提供語法提示與補全，不會被裝置執行，也不會同步進 Script Folder。
+--
+-- 與服務溝通的函式在 UserService 斷線或異常時拋錯（訊息為 "<module.func>: <原因>"），
+-- 回傳 false 代表操作本身沒成功（例如注入被拒）。
 
 --- 輸出到 Logcat（tag 為 `LuaScript`）。多個參數以 tab 分隔，非字串會自動 `tostring`。
 ---@param ... any
@@ -32,7 +35,7 @@ screen = {}
 ---@return boolean
 function screen.start_mirror() end
 
---- (實體螢幕專用) 釋放由本腳本開啟的實體螢幕鏡像管線引用。成功回傳 true。
+--- (實體螢幕專用) 釋放由本腳本開啟的實體螢幕鏡像管線引用。成功回傳 true；沒有開啟過時回傳 false。腳本結束時會自動釋放。
 ---@return boolean
 function screen.stop_mirror() end
 
@@ -185,7 +188,7 @@ app = {}
 
 --- 在目標顯示器上啟動 app。目標是虛擬顯示器、但裝置不支援在次要顯示器上執行 app 時拋錯。
 ---@param package_name string 應用程式套件名稱（Package Name）
----@return boolean ok 是否成功發送啟動請求
+---@return boolean ok 是否成功發送啟動請求；app 未安裝或沒有可啟動的畫面時為 false
 function app.launch(package_name) end
 
 ---@class moonclicker.AppTask

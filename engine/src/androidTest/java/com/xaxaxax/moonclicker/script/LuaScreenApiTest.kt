@@ -149,4 +149,23 @@ class LuaScreenApiTest {
         assertEquals(0, service.releaseMirrorCalls)
         assertEquals(true, service.mirrorActive)
     }
+
+    /** 收尾時一項失敗不能擋住後面的清理：鏡像歸還失敗，pointer 照樣放開，反過來也一樣。 */
+    @Test
+    fun cleanup_keeps_going_when_the_service_fails() {
+        val service = RecordingMoonClickerService().apply { mirrorActive = false }
+        LuaScriptRunner(service = service, displayId = 0).use { runner ->
+            val outcome = runner.run(
+                """
+                screen.start_mirror()
+                input.down(1, 10, 10)
+                """.trimIndent()
+            )
+            assertEquals(EngineRunState.Finished, outcome.runState)
+            service.failWith = IllegalStateException("service gone")
+        }
+
+        assertEquals(false, service.swipes.last().keep)
+        assertEquals(1, service.releaseMirrorCalls)
+    }
 }

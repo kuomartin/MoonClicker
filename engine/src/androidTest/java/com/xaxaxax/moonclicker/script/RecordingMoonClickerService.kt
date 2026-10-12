@@ -51,6 +51,16 @@ internal class RecordingMoonClickerService(
 
     val calls = CopyOnWriteArrayList<Call>()
 
+    /**
+     * 非 null 時，Lua API 會碰到的服務方法都先拋出它，模擬基礎設施失敗（Binder 斷線、服務端例外）。
+     * 呼叫照樣記錄下來。
+     */
+    var failWith: Throwable? = null
+
+    private fun failIfAsked() {
+        failWith?.let { throw it }
+    }
+
     val swipes: List<Swipe> get() = calls.filterIsInstance<Swipe>()
     val launches: List<Launch> get() = calls.filterIsInstance<Launch>()
     val mutes: List<Mute> get() = calls.filterIsInstance<Mute>()
@@ -69,20 +79,25 @@ internal class RecordingMoonClickerService(
         keep: Boolean,
     ) {
         calls += Swipe(pointerId, displayId, points.toList(), duration, keep)
+        failIfAsked()
     }
+
+    /** `injectKeyEvent` 的回傳值；false 模擬注入被拒。 */
+    var injectKeyResult: Boolean = true
 
     override fun injectKeyEvent(event: KeyEvent, displayId: Int): Boolean {
         calls += Key(event.keyCode, event.action, displayId, event.metaState)
-        return true
+        failIfAsked()
+        return injectKeyResult
     }
 
-    /** 非 null 時 `launchInDisplay` 拋出它，模擬服務端的例外。 */
-    var launchError: RuntimeException? = null
+    /** `app.launch` 的回傳值；false 模擬找不到 launch intent。 */
+    var launchResult: Boolean = true
 
     override fun launchInDisplay(packageName: String, displayId: Int): Boolean {
         calls += Launch(packageName, displayId)
-        launchError?.let { throw it }
-        return true
+        failIfAsked()
+        return launchResult
     }
 
     /** `app.mute` 的回傳值。 */
@@ -90,15 +105,16 @@ internal class RecordingMoonClickerService(
 
     override fun setAppMuted(packageName: String, muted: Boolean): Boolean {
         calls += Mute(packageName, muted)
+        failIfAsked()
         return muteResult
     }
 
-    /** `app.list()` 的來源；null 模擬服務端查詢失敗。 */
-    var appTasks: List<Pair<String, Int>>? = emptyList()
+    /** `app.list()` 的來源。 */
+    var appTasks: List<Pair<String, Int>> = emptyList()
 
     override fun getAppTasks(): Array<MoonClickerAppTask> {
-        val tasks = appTasks ?: throw IllegalStateException("getAppTasks failed")
-        return tasks.map { (packageName, displayId) ->
+        failIfAsked()
+        return appTasks.map { (packageName, displayId) ->
             MoonClickerAppTask().apply {
                 this.packageName = packageName
                 this.displayId = displayId
@@ -167,18 +183,27 @@ internal class RecordingMoonClickerService(
     var releaseMirrorCalls = 0
         private set
 
+    /** `acquireDisplayMirror` 的回傳值；false 模擬取不到鏡像。 */
+    var acquireMirrorResult: Boolean = true
+
     override fun acquireDisplayMirror(displayId: Int): Boolean {
+        failIfAsked()
+        if (!acquireMirrorResult) return false
         mirrorActive = true
         return true
     }
 
     override fun releaseDisplayMirror(displayId: Int): Boolean {
         releaseMirrorCalls++
+        failIfAsked()
         mirrorActive = false
         return true
     }
 
-    override fun isDisplayMirrorActive(displayId: Int): Boolean = mirrorActive
+    override fun isDisplayMirrorActive(displayId: Int): Boolean {
+        failIfAsked()
+        return mirrorActive
+    }
 
     override fun getDisplayInfo(displayId: Int): com.xaxaxax.moonclicker.MoonClickerDisplayInfo =
         com.xaxaxax.moonclicker.MoonClickerDisplayInfo().apply {
