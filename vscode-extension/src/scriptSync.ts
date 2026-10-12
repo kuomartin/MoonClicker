@@ -1,4 +1,5 @@
 import { authHeaders } from "./authSync";
+import { PROTOCOL_VERSION } from "./workbenchConnection";
 
 export interface ScriptSummary {
   id: string;
@@ -183,6 +184,17 @@ export interface DeviceInfo {
   /** 這份 App 安裝的穩定識別，用來對應本機的腳本資料夾；位址會變，這個不會。 */
   id: string;
   name: string;
+  /** Workbench 協定版本；沒有這個欄位的 App 說的是版本 1。 */
+  protocolVersion?: number;
+}
+
+/** App 與擴充套件的協定版本不同時，回傳給使用者看的說明。 */
+export function protocolMismatch(device: DeviceInfo, extensionVersion: number = PROTOCOL_VERSION): string | undefined {
+  const appVersion = device.protocolVersion ?? 1;
+  if (appVersion === extensionVersion) return undefined;
+  return appVersion < extensionVersion
+    ? `裝置上的 App 版本較舊（協定 ${appVersion}，擴充套件 ${extensionVersion}），請更新 App`
+    : `擴充套件版本較舊（協定 ${extensionVersion}，App ${appVersion}），請更新擴充套件`;
 }
 
 export async function getDeviceInfo(address: string, token?: string): Promise<DeviceInfo> {

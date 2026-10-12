@@ -4,7 +4,7 @@ import * as vscode from "vscode";
 import { FolderSync, readSyncState, type SyncReport } from "./folderSync";
 import { FileChangeEvent, FileChangeEvent_Kind } from "./generated/workbench_stream_event_pb";
 import { mergeLuarc } from "./luarc";
-import { createScript, getDeviceInfo, isValidScriptId, ScriptHttpError, type DeviceInfo } from "./scriptSync";
+import { createScript, getDeviceInfo, isValidScriptId, protocolMismatch, ScriptHttpError, type DeviceInfo } from "./scriptSync";
 import { CONFLICT_SUFFIX } from "./syncIgnore";
 
 /**
@@ -40,6 +40,11 @@ export class FolderSyncController implements vscode.Disposable {
       } else {
         vscode.window.showErrorMessage(`MoonClicker: ${(err as Error).message}`);
       }
+      return;
+    }
+    const mismatch = protocolMismatch(device);
+    if (mismatch) {
+      vscode.window.showErrorMessage(`MoonClicker: ${mismatch}`);
       return;
     }
     onDevice(device);

@@ -495,3 +495,7 @@ input:focus, select:focus { outline: 1px solid var(--vscode-focusBorder); }
   border-radius: 4px;
 }
 #overlay[hidden] { display: none; }
+
+#scriptFilter { margin-left: auto; margin-right: 6px; max-width: 45%; font-size: 11px; }
+.tree-group { margin-top: 6px; font-weight: bold; opacity: 0.8; }
+.logScript { opacity: 0.6; margin-right: 4px; }

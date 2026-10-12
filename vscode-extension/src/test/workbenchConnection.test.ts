@@ -3,22 +3,23 @@ import { test } from "node:test";
 import { WebSocketServer } from "ws";
 import { create, toBinary } from "@bufbuild/protobuf";
 import { StreamEventSchema } from "../generated/workbench_stream_event_pb";
-import { ConnectionState, WorkbenchConnection, parseStreamEvent } from "../workbenchConnection";
+import { ConnectionState, PROTOCOL_VERSION, WorkbenchConnection, parseStreamEvent } from "../workbenchConnection";
 
 function encode(event: Parameters<typeof create<typeof StreamEventSchema>>[1]): Uint8Array {
   return toBinary(StreamEventSchema, create(StreamEventSchema, event));
 }
 
 test("parseStreamEvent recognizes a log envelope", () => {
-  const event = parseStreamEvent(encode({ event: { case: "log", value: "hi" } }));
+  const event = parseStreamEvent(encode({ event: { case: "log", value: { scriptId: "demo", line: "hi" } } }));
   assert.equal(event?.event.case, "log");
-  assert.equal(event?.event.case === "log" ? event.event.value : undefined, "hi");
+  assert.equal(event?.event.case === "log" ? event.event.value.line : undefined, "hi");
+  assert.equal(event?.event.case === "log" ? event.event.value.scriptId : undefined, "demo");
 });
 
 test("parseStreamEvent recognizes a data envelope", () => {
-  const event = parseStreamEvent(encode({ event: { case: "data", value: { k: "v" } } }));
+  const event = parseStreamEvent(encode({ event: { case: "data", value: { scriptId: "demo", reset: true, values: { k: "v" } } } }));
   assert.equal(event?.event.case, "data");
-  assert.deepEqual(event?.event.case === "data" ? event.event.value : undefined, { k: "v" });
+  assert.deepEqual(event?.event.case === "data" ? event.event.value.values : undefined, { k: "v" });
 });
 
 test("parseStreamEvent ignores malformed bytes", () => {
@@ -89,7 +90,7 @@ test("connection ignores text frames instead of decoding them as protobuf", asyn
       const port = (server.address() as { port: number }).port;
       server.on("connection", (ws) => {
         ws.send("not a stream event");
-        ws.send(encode({ event: { case: "data", value: { status: "claimed" } } }));
+        ws.send(encode({ event: { case: "data", value: { scriptId: "demo", reset: true, values: { status: "claimed" } } } }));
       });
 
       const connection = new WorkbenchConnection();
@@ -114,7 +115,7 @@ test("connection forwards parsed stream events to listeners", async () => {
     server.on("listening", () => {
       const port = (server.address() as { port: number }).port;
       server.on("connection", (ws) => {
-        ws.send(encode({ event: { case: "data", value: { status: "claimed" } } }));
+        ws.send(encode({ event: { case: "data", value: { scriptId: "demo", reset: true, values: { status: "claimed" } } } }));
       });
 
       const connection = new WorkbenchConnection();
@@ -125,7 +126,7 @@ test("connection forwards parsed stream events to listeners", async () => {
           try {
             assert.equal(event.event.case, "data");
             assert.deepEqual(
-              event.event.case === "data" ? event.event.value : undefined,
+              event.event.case === "data" ? event.event.value.values : undefined,
               { status: "claimed" },
             );
             connection.disconnect();
@@ -154,5 +155,58 @@ test("disconnect after connecting resets to disconnected and can reconnect", asy
     const state = await waitForState(connection, "connected");
     assert.equal(state.status, "connected");
     connection.disconnect();
+  });
+});
+
+test("connect sends the protocol version", async () => {
+  await withServerUrl(async (port, requestUrl) => {
+    const connection = new WorkbenchConnection();
+    connection.connect(`127.0.0.1:${port}`, "secret");
+    await waitForState(connection, "connected");
+
+    const url = new URL(await requestUrl, "http://localhost");
+    assert.equal(url.searchParams.get("protocol"), String(PROTOCOL_VERSION));
+    assert.equal(url.searchParams.get("token"), "secret");
+    connection.disconnect();
+  });
+});
+
+function withServerUrl(fn: (port: number, requestUrl: Promise<string>) => Promise<void>): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const server = new WebSocketServer({ port: 0 });
+    const requestUrl = new Promise<string>((res) => server.on("connection", (_ws, req) => res(req.url ?? "")));
+    server.on("listening", async () => {
+      const port = (server.address() as { port: number }).port;
+      try {
+        await fn(port, requestUrl);
+        resolve();
+      } catch (err) {
+        reject(err);
+      } finally {
+        server.close();
+      }
+    });
+  });
+}
+
+test("a protocol mismatch close reaches the error state with the reason", async () => {
+  await new Promise<void>((resolve, reject) => {
+    const server = new WebSocketServer({ port: 0 });
+    server.on("listening", async () => {
+      const port = (server.address() as { port: number }).port;
+      server.on("connection", (ws) => ws.close(1008, "Workbench protocol mismatch: app 3, extension 2"));
+      const connection = new WorkbenchConnection();
+      connection.connect(`127.0.0.1:${port}`);
+      try {
+        const state = await waitForState(connection, "error");
+        assert.ok(state.status === "error" && state.message.includes("app 3"));
+        resolve();
+      } catch (err) {
+        reject(err);
+      } finally {
+        connection.disconnect();
+        server.close();
+      }
+    });
   });
 });

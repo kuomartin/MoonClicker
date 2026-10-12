@@ -12,7 +12,7 @@ import java.io.File
  * 資料夾名以 "." 開頭，讓 [ScriptStore.scan] 略過。每輪結果以 `data.set("ocrTest", …)` 回報。
  */
 object OcrTestScript {
-    private const val FOLDER_NAME = ".__ocr_test__"
+    const val FOLDER_NAME = ".__ocr_test__"
     private const val UNIQUE_ID = "ocr-test"
 
     fun materialize(scriptsRoot: File, request: OcrTestRequest): Script {

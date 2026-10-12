@@ -66,6 +66,7 @@
     <string name="script_status_channel_description">顯示目前正在執行的腳本</string>
     <string name="script_status_title">執行中：%1$s</string>
     <string name="script_status_action_stop">停止</string>
+    <string name="script_status_summary_title">執行中的腳本</string>
     <string name="script_target_physical">本機螢幕</string>
     <string name="script_target_virtual">虛擬顯示 %1$d</string>
     <string name="script_message_channel_label">腳本訊息</string>

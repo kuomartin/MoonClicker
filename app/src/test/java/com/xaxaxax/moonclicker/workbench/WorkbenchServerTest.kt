@@ -1,6 +1,8 @@
 package com.xaxaxax.moonclicker.workbench
 
 import com.xaxaxax.moonclicker.script.Script
+import com.xaxaxax.moonclicker.script.ScriptLogLine
+import com.xaxaxax.moonclicker.script.ScriptStartOutcome
 import io.ktor.client.plugins.websocket.DefaultClientWebSocketSession
 import io.ktor.client.plugins.websocket.WebSockets as ClientWebSockets
 import io.ktor.client.plugins.websocket.webSocket
@@ -12,17 +14,16 @@ import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.testing.testApplication
+import io.ktor.websocket.CloseReason
 import io.ktor.websocket.Frame
 import io.ktor.websocket.readText
 import java.io.File
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -31,43 +32,46 @@ import moonclicker.workbench.StreamEvent
 
 /** [ScriptSession] 是 Hilt @Singleton、沒有現成的假實作——測試只需要 [ScriptRunner] 這個縮小介面。 */
 private class FakeScriptRunner : ScriptRunner {
-    var running = false
+    val running = mutableSetOf<String>()
     var startedScript: Script? = null
-    var stopped = false
+    var stoppedScriptId: String? = "not stopped"
     var startedOnDisplayScript: Script? = null
     var startedOnDisplayId: Int? = null
+    var outcome: ScriptStartOutcome = ScriptStartOutcome.Started
 
-    override fun isRunning() = running
+    override fun isRunning(scriptId: String) = scriptId in running
 
-    override fun start(script: Script) {
+    override suspend fun start(script: Script): ScriptStartOutcome {
         startedScript = script
+        return outcome
     }
 
-    override suspend fun stop() {
-        stopped = true
-    }
-
-    override fun startOnDisplay(script: Script, displayId: Int) {
+    override suspend fun startOnDisplay(script: Script, displayId: Int): ScriptStartOutcome {
         startedOnDisplayScript = script
         startedOnDisplayId = displayId
+        return outcome
+    }
+
+    override suspend fun stop(scriptId: String?) {
+        stoppedScriptId = scriptId
     }
 }
 
 /** 只有真的原生引擎在跑才會發事件——測試改用可控制的假 flow。 */
 private class FakeScriptStream : ScriptStream {
-    private val _sharedData = MutableStateFlow<Map<String, Any>>(emptyMap())
-    override val sharedData: StateFlow<Map<String, Any>> = _sharedData
-    override val logLines: Flow<String> get() = _logLines
-    private val _logLines = MutableSharedFlow<String>(extraBufferCapacity = 64)
-    val running = MutableStateFlow<String?>(null)
-    override val runningScriptId: Flow<String?> get() = running
+    private val _sharedData = MutableStateFlow<Map<String, Map<String, Any>>>(emptyMap())
+    override val sharedData: Flow<Map<String, Map<String, Any>>> = _sharedData
+    override val logLines: Flow<ScriptLogLine> get() = _logLines
+    private val _logLines = MutableSharedFlow<ScriptLogLine>(extraBufferCapacity = 64)
+    val running = MutableStateFlow<List<String>>(emptyList())
+    override val runningScriptIds: Flow<List<String>> get() = running
 
-    fun setData(data: Map<String, Any>) {
-        _sharedData.value = data
+    fun setData(scriptId: String, data: Map<String, Any>) {
+        _sharedData.value = _sharedData.value + (scriptId to data)
     }
 
-    fun emitLog(line: String) {
-        _logLines.tryEmit(line)
+    fun emitLog(scriptId: String, line: String) {
+        _logLines.tryEmit(ScriptLogLine(scriptId, line))
     }
 }
 
@@ -89,6 +93,16 @@ private suspend fun DefaultClientWebSocketSession.receiveStreamEvent(): StreamEv
     val frame = incoming.receive() as Frame.Binary
     return StreamEvent.ADAPTER.decode(frame.data)
 }
+
+/** 略過其他種類的事件（連線時各種快照的先後不固定），收到符合 [predicate] 的那一筆。 */
+private suspend fun DefaultClientWebSocketSession.receiveStreamEvent(predicate: (StreamEvent) -> Boolean): StreamEvent {
+    while (true) {
+        val event = receiveStreamEvent()
+        if (predicate(event)) return event
+    }
+}
+
+private const val STREAM = "/?protocol=2"
 
 class WorkbenchServerTest {
     @get:Rule
@@ -177,81 +191,122 @@ class WorkbenchServerTest {
             application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
             val client = createClient { install(ClientWebSockets) }
 
-            client.webSocket("/") {
-                // 連上就會先收到一筆 data 快照（見 #62）——跳過它才是這裡要驗的 echo。
-                incoming.receive()
-
+            client.webSocket(STREAM) {
                 send(Frame.Text("hello"))
-                val reply = incoming.receive() as Frame.Text
+                var reply = incoming.receive()
+                // 連上就會先收到 run state（見 #62）——跳過它才是這裡要驗的 echo。
+                while (reply !is Frame.Text) reply = incoming.receive()
                 assertEquals("hello", reply.readText())
             }
         }
     }
 
     @Test
-    fun `websocket connect immediately sends the current data snapshot`() = runTest {
-        fakeStream.setData(mapOf("status" to "claimed", "count" to 3.0))
+    fun `websocket closes a client speaking another protocol version`() = runTest {
         testApplication {
             application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
             val client = createClient { install(ClientWebSockets) }
 
-            client.webSocket("/") {
-                val event = receiveStreamEvent()
+            client.webSocket("/?protocol=1") {
+                val reason = closeReason.await()
 
-                assertEquals("claimed", event.data_?.get("status"))
+                assertEquals(CloseReason.Codes.VIOLATED_POLICY.code, reason?.code)
+                assertTrue(reason?.message.orEmpty().contains("app 2"))
             }
         }
     }
 
     @Test
-    fun `websocket sends the running script on connect and when it changes`() = runTest {
-        fakeStream.running.value = "demo"
+    fun `websocket connect immediately sends each script's data snapshot`() = runTest {
+        fakeStream.setData("demo", mapOf("status" to "claimed", "count" to 3.0))
         testApplication {
             application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
             val client = createClient { install(ClientWebSockets) }
 
-            client.webSocket("/") {
-                val first = listOf(receiveStreamEvent(), receiveStreamEvent())
-                assertEquals("demo", first.firstNotNullOf { it.run_state }.script_id)
+            client.webSocket(STREAM) {
+                val data = receiveStreamEvent { it.data_ != null }.data_!!
 
-                fakeStream.running.value = null
-
-                assertEquals("", receiveStreamEvent().run_state?.script_id)
+                assertEquals("demo", data.script_id)
+                assertTrue(data.reset)
+                assertEquals("claimed", data.values?.get("status"))
             }
         }
     }
 
     @Test
-    fun `websocket streams log lines as they happen`() = runTest {
+    fun `websocket sends the running scripts on connect and when they change`() = runTest {
+        fakeStream.running.value = listOf("demo")
         testApplication {
             application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
             val client = createClient { install(ClientWebSockets) }
 
-            client.webSocket("/") {
-                receiveStreamEvent() // 初始 data 快照，見上一個測試。
+            client.webSocket(STREAM) {
+                assertEquals(listOf("demo"), receiveStreamEvent { it.run_state != null }.run_state!!.running_script_ids)
 
-                fakeStream.emitLog("hello from script")
+                fakeStream.running.value = listOf("demo", "other")
 
-                val event = receiveStreamEvent()
-                assertEquals("hello from script", event.log)
-                assertNull(event.data_)
+                assertEquals(
+                    listOf("demo", "other"),
+                    receiveStreamEvent { it.run_state != null }.run_state!!.running_script_ids,
+                )
             }
         }
     }
 
     @Test
-    fun `websocket streams data updates as they happen`() = runTest {
+    fun `websocket streams log lines tagged with their script`() = runTest {
         testApplication {
             application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
             val client = createClient { install(ClientWebSockets) }
 
-            client.webSocket("/") {
-                receiveStreamEvent() // 初始（空）data 快照。
+            client.webSocket(STREAM) {
+                receiveStreamEvent { it.run_state != null } // 連上時的 run state，表示串流已經接好。
 
-                fakeStream.setData(mapOf("progress" to 0.5))
+                fakeStream.emitLog("demo", "hello from script")
 
-                val event = receiveStreamEvent()
-                assertEquals(0.5, event.data_?.get("progress"))
+                val log = receiveStreamEvent { it.log != null }.log!!
+                assertEquals("demo", log.script_id)
+                assertEquals("hello from script", log.line)
+            }
+        }
+    }
+
+    @Test
+    fun `websocket sends only what changed in data after the snapshot`() = runTest {
+        fakeStream.setData("demo", mapOf("progress" to 0.25, "status" to "busy", "stale" to true))
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+            val client = createClient { install(ClientWebSockets) }
+
+            client.webSocket(STREAM) {
+                receiveStreamEvent { it.data_ != null } // reset 快照。
+
+                fakeStream.setData("demo", mapOf("progress" to 0.5, "status" to "busy"))
+
+                val diff = receiveStreamEvent { it.data_ != null }.data_!!
+                assertFalse(diff.reset)
+                assertEquals(mapOf("progress" to 0.5), diff.values)
+                assertEquals(listOf("stale"), diff.removed)
+            }
+        }
+    }
+
+    @Test
+    fun `data of different scripts is sent separately`() = runTest {
+        fakeStream.setData("a", mapOf("n" to 1.0))
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+            val client = createClient { install(ClientWebSockets) }
+
+            client.webSocket(STREAM) {
+                receiveStreamEvent { it.data_?.script_id == "a" }
+
+                fakeStream.setData("b", mapOf("n" to 2.0))
+
+                val b = receiveStreamEvent { it.data_ != null }.data_!!
+                assertEquals("b", b.script_id)
+                assertTrue(b.reset)
+                assertEquals(2.0, b.values?.get("n"))
             }
         }
     }
@@ -261,15 +316,15 @@ class WorkbenchServerTest {
         // sharedData 的型別是 Map<String, Any>，Double/String/Boolean 只是註解上的約定，
         // 型別系統不保證；Wire 的 Struct 編碼遇到其他型別會丟例外，這裡驗證不會讓整個
         // WebSocket session 崩潰。
-        fakeStream.setData(mapOf("count" to 3))
+        fakeStream.setData("demo", mapOf("count" to 3))
         testApplication {
             application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
             val client = createClient { install(ClientWebSockets) }
 
-            client.webSocket("/") {
-                val event = receiveStreamEvent()
+            client.webSocket(STREAM) {
+                val event = receiveStreamEvent { it.data_ != null }
 
-                assertEquals("3", event.data_?.get("count"))
+                assertEquals("3", event.data_?.values?.get("count"))
             }
         }
     }
@@ -280,16 +335,17 @@ class WorkbenchServerTest {
             application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
             val client = createClient { install(ClientWebSockets) }
 
-            client.webSocket("/") {
-                receiveStreamEvent() // 第一次連線的初始快照。
-                fakeStream.setData(mapOf("status" to "claimed"))
-                receiveStreamEvent() // 消費掉這次變動的推播，模擬「這行資料在斷線前已經送過」。
+            client.webSocket(STREAM) {
+                receiveStreamEvent { it.run_state != null }
+                fakeStream.setData("demo", mapOf("status" to "claimed"))
+                receiveStreamEvent { it.data_ != null } // 模擬「這筆資料在斷線前已經送過」。
             }
 
             // 重新連線：不需要重播任何歷史，新連線一開始就該看到目前的完整快照。
-            client.webSocket("/") {
-                val event = receiveStreamEvent()
-                assertEquals("claimed", event.data_?.get("status"))
+            client.webSocket(STREAM) {
+                val event = receiveStreamEvent { it.data_ != null }
+                assertTrue(event.data_!!.reset)
+                assertEquals("claimed", event.data_?.values?.get("status"))
             }
         }
     }
@@ -551,9 +607,9 @@ class WorkbenchServerTest {
     }
 
     @Test
-    fun `DELETE scripts refuses while a script is running`() = runTest {
+    fun `DELETE scripts refuses while that script is running`() = runTest {
         scriptFolder("hello", "log('hi')")
-        fakeRunner.running = true
+        fakeRunner.running += "hello"
         testApplication {
             application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
 
@@ -587,6 +643,7 @@ class WorkbenchServerTest {
 
             assertTrue(body.contains("\"id\":\"abc\""))
             assertTrue(body.contains("\"name\":\"Pixel\""))
+            assertTrue(body.contains("\"protocolVersion\":2"))
         }
     }
 
@@ -657,8 +714,8 @@ class WorkbenchServerTest {
             application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
             val wsClient = createClient { install(ClientWebSockets) }
 
-            wsClient.webSocket("/") {
-                receiveStreamEvent() // 初始 data 快照。
+            wsClient.webSocket(STREAM) {
+                receiveStreamEvent { it.run_state != null } // 連上時的 run state。
 
                 client.put("/scripts/hello/files/main.lua") { setBody("log('new')") }
 
@@ -677,8 +734,8 @@ class WorkbenchServerTest {
             application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
             val wsClient = createClient { install(ClientWebSockets) }
 
-            wsClient.webSocket("/") {
-                receiveStreamEvent() // 初始 data 快照。
+            wsClient.webSocket(STREAM) {
+                receiveStreamEvent { it.run_state != null } // 連上時的 run state。
 
                 client.put("/scripts/hello/templates/button.png?x=1&y=2&w=3&h=4") {
                     setBody("fake png bytes".toByteArray())
@@ -705,6 +762,7 @@ class WorkbenchServerTest {
             val response = client.post("/scripts/hello/run")
 
             assertEquals(HttpStatusCode.Accepted, response.status)
+            assertEquals("hello", response.bodyAsText())
             assertEquals("hello", fakeRunner.startedScript?.id)
         }
     }
@@ -721,16 +779,29 @@ class WorkbenchServerTest {
     }
 
     @Test
-    fun `run route rejects when a script is already running`() = runTest {
+    fun `run route 409s with the occupying script when the target display is busy`() = runTest {
         scriptFolder("hello", "log('hi')")
-        fakeRunner.running = true
+        fakeRunner.outcome = ScriptStartOutcome.DisplayBusy(displayId = 3, scriptId = "other")
         testApplication {
             application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
 
             val response = client.post("/scripts/hello/run")
 
             assertEquals(HttpStatusCode.Conflict, response.status)
-            assertEquals(null, fakeRunner.startedScript)
+            assertTrue(response.bodyAsText().contains("other"))
+        }
+    }
+
+    @Test
+    fun `run route 409s when that script is already running`() = runTest {
+        scriptFolder("hello", "log('hi')")
+        fakeRunner.outcome = ScriptStartOutcome.AlreadyRunning
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+
+            val response = client.post("/scripts/hello/run")
+
+            assertEquals(HttpStatusCode.Conflict, response.status)
         }
     }
 
@@ -883,8 +954,8 @@ class WorkbenchServerTest {
             application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
             val wsClient = createClient { install(ClientWebSockets) }
 
-            wsClient.webSocket("/") {
-                receiveStreamEvent() // 初始 data 快照。
+            wsClient.webSocket(STREAM) {
+                receiveStreamEvent { it.run_state != null } // 連上時的 run state。
 
                 client.delete("/scripts/hello/templates/button.png")
 
@@ -1011,8 +1082,8 @@ class WorkbenchServerTest {
     }
 
     @Test
-    fun `ocr-test 409s when a script is already running`() = runTest {
-        fakeRunner.running = true
+    fun `ocr-test 409s when an OCR test is already running`() = runTest {
+        fakeRunner.running += ".__ocr_test__"
         testApplication {
             application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays, ocrAvailable = { true }) }
 
@@ -1023,9 +1094,9 @@ class WorkbenchServerTest {
     }
 
     @Test
-    fun `vision-test route 409s when a script is already running`() = runTest {
+    fun `vision-test route 409s when a vision test is already running`() = runTest {
         scriptFolder("hello", "log('hi')")
-        fakeRunner.running = true
+        fakeRunner.running += ".__vision_test__"
         testApplication {
             application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
 
@@ -1051,14 +1122,25 @@ class WorkbenchServerTest {
     }
 
     @Test
-    fun `run stop route stops whatever is running and is idempotent when idle`() = runTest {
+    fun `run stop route stops everything and is idempotent when idle`() = runTest {
         testApplication {
             application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
 
             val response = client.post("/run/stop")
 
             assertEquals(HttpStatusCode.OK, response.status)
-            assertTrue(fakeRunner.stopped)
+            assertEquals(null, fakeRunner.stoppedScriptId)
+        }
+    }
+
+    @Test
+    fun `run stop route stops only the given script`() = runTest {
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+
+            client.post("/run/stop?script=hello")
+
+            assertEquals("hello", fakeRunner.stoppedScriptId)
         }
     }
 }

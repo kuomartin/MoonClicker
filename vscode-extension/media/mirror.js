@@ -193,27 +193,79 @@
     }
   }
 
-  let lastData = {};
+  // 每支腳本各自的 data（extension 已經把差異套用好，這裡拿到的是完整的 map）。
+  const scriptData = {};
+  const knownScripts = new Set();
+  const scriptFilter = document.getElementById("scriptFilter");
+
+  function noteScript(scriptId) {
+    if (!scriptId || knownScripts.has(scriptId)) return;
+    knownScripts.add(scriptId);
+    const opt = document.createElement("option");
+    opt.value = scriptId;
+    opt.textContent = scriptId;
+    scriptFilter.appendChild(opt);
+  }
+
+  function applyScriptFilter() {
+    const selected = scriptFilter.value;
+    for (const line of logContainer.children) {
+      line.hidden = !!selected && !!line.dataset.script && line.dataset.script !== selected;
+    }
+    renderData();
+  }
+  scriptFilter.addEventListener("change", applyScriptFilter);
+
   function handleStreamEvent(e) {
     if (!e) return;
-    if (e.case === "log" || e.log) {
-      const line = e.value || e.log;
+    if (e.case === "log") {
+      const { scriptId, line } = e.value || {};
+      noteScript(scriptId);
       const div = document.createElement("div");
       div.className = "logLine";
-      div.textContent = line;
+      if (scriptId) {
+        div.dataset.script = scriptId;
+        const tag = document.createElement("span");
+        tag.className = "logScript";
+        tag.textContent = "[" + scriptId + "]";
+        div.appendChild(tag);
+      }
+      div.appendChild(document.createTextNode(line || ""));
+      div.hidden = !!scriptFilter.value && !!scriptId && scriptId !== scriptFilter.value;
       logContainer.appendChild(div);
       if (autoScrollCb.checked) {
         logContainer.scrollTop = logContainer.scrollHeight;
       }
-    } else if (e.case === "data" || e.data) {
-      const data = e.value || e.data || {};
-      renderDataTree(dataContainer, data);
-      if (currentMode === "test" && testRunning && Object.prototype.hasOwnProperty.call(data, "visionTest")) {
-        renderVisionTestResult(data.visionTest);
+    } else if (e.case === "data") {
+      const { scriptId, data } = e.value || {};
+      if (!scriptId) return;
+      noteScript(scriptId);
+      scriptData[scriptId] = data || {};
+      renderData();
+      const values = data || {};
+      if (currentMode === "test" && testRunning && Object.prototype.hasOwnProperty.call(values, "visionTest")) {
+        renderVisionTestResult(values.visionTest);
       }
-      if (currentMode === "test" && testRunning && Object.prototype.hasOwnProperty.call(data, "ocrTest")) {
-        renderOcrTestResult(data.ocrTest);
+      if (currentMode === "test" && testRunning && Object.prototype.hasOwnProperty.call(values, "ocrTest")) {
+        renderOcrTestResult(values.ocrTest);
       }
+    } else if (e.case === "runState") {
+      for (const id of (e.value && e.value.runningScriptIds) || []) noteScript(id);
+    }
+  }
+
+  function renderData() {
+    const selected = scriptFilter.value;
+    dataContainer.innerHTML = "";
+    const ids = selected ? [selected] : Object.keys(scriptData);
+    for (const id of ids) {
+      if (!selected) {
+        const header = document.createElement("div");
+        header.className = "tree-group";
+        header.textContent = id;
+        dataContainer.appendChild(header);
+      }
+      renderDataTree(dataContainer, id, scriptData[id] || {});
     }
   }
 
@@ -307,8 +359,9 @@
     if (currentMode === "test" && !testRoiCanvas.hidden) drawRoiOverlay();
   }
 
-  function renderDataTree(container, data) {
-    container.innerHTML = "";
+  // 上次畫出來的值，以「腳本 id + key」為鍵，變動的值閃一下。
+  const lastData = {};
+  function renderDataTree(container, scriptId, data) {
     for (const [k, v] of Object.entries(data)) {
       const node = document.createElement("div");
       node.className = "tree-node";
@@ -328,12 +381,13 @@
       } else {
         valSpan.textContent = String(v);
       }
-      if (lastData[k] !== v) valSpan.classList.add("flash");
+      const flashKey = scriptId + "\u0000" + k;
+      if (lastData[flashKey] !== v) valSpan.classList.add("flash");
+      lastData[flashKey] = v;
       node.appendChild(keySpan);
       node.appendChild(valSpan);
       container.appendChild(node);
     }
-    lastData = data;
   }
 
   // Console / Data 分頁

@@ -66,6 +66,7 @@
     <string name="script_status_channel_description">Shows the currently executing script</string>
     <string name="script_status_title">Running: %1$s</string>
     <string name="script_status_action_stop">Stop</string>
+    <string name="script_status_summary_title">Running scripts</string>
     <string name="script_target_physical">Physical Screen</string>
     <string name="script_target_virtual">Virtual Display %1$d</string>
     <string name="script_message_channel_label">Script Messages</string>
