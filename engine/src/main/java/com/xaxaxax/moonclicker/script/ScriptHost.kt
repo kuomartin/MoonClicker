@@ -17,6 +17,9 @@ import timber.log.Timber
  * 只會有兩份會走樣的實作，所以 native 只留排程、取影格與 OpenCV。
  *
  * 所有方法都在原生的腳本執行緒上被呼叫，而且都是同步的。
+ *
+ * 失敗分兩類（ADR-0021）：基礎設施失敗（Binder 斷線、服務端拋例外）讓例外穿出去，由 native 轉成
+ * Lua error；操作本身沒成功（服務回 false）就回 false。所以這裡不 catch。
  */
 @Keep
 internal class ScriptHost(
@@ -35,103 +38,58 @@ internal class ScriptHost(
 
     /**
      * @param pointerId -1 代表「隨便給一個」，由服務端配一個內部 id。
-     * @param points 攤平的 [x1, y1, x2, y2, ...]。
+     * @param points 攤平的 [x1, y1, x2, y2, ...]，native 端保證至少一個點。
      * @param keep true 表示結束後保持按住。
      */
     @Keep
-    fun swipe(pointerId: Int, points: IntArray, durationMs: Long, keep: Boolean): Boolean {
-        if (points.size < 2) return false
-        return try {
-            service.multiTouchSwipe(pointerId, displayId, points, durationMs, keep)
-            if (keep && pointerId >= 0) {
-                lastPoint[pointerId] = points[points.size - 2] to points[points.size - 1]
-            }
-            true
-        } catch (t: Throwable) {
-            Timber.e(t, "swipe failed")
-            false
+    fun swipe(pointerId: Int, points: IntArray, durationMs: Long, keep: Boolean) {
+        service.multiTouchSwipe(pointerId, displayId, points, durationMs, keep)
+        if (keep && pointerId >= 0) {
+            lastPoint[pointerId] = points[points.size - 2] to points[points.size - 1]
         }
     }
 
+    /** 沒按下的 pointer 直接略過——那不是基礎設施失敗。 */
     @Keep
-    fun pointerUp(pointerId: Int): Boolean {
-        val (x, y) = lastPoint.remove(pointerId) ?: return false
-        return try {
-            // 同一個座標、duration 0、keep=false —— 服務端會補上 UP 並清掉 pointer 狀態。
-            service.multiTouchSwipe(pointerId, displayId, intArrayOf(x, y), 0L, false)
-            true
-        } catch (t: Throwable) {
-            Timber.e(t, "pointerUp failed")
-            false
-        }
+    fun pointerUp(pointerId: Int) {
+        val (x, y) = lastPoint.remove(pointerId) ?: return
+        // 同一個座標、duration 0、keep=false —— 服務端會補上 UP 並清掉 pointer 狀態。
+        service.multiTouchSwipe(pointerId, displayId, intArrayOf(x, y), 0L, false)
     }
 
+    /** DOWN 被拒就不送 UP。 */
     @Keep
-    fun key(keyCode: Int): Boolean = try {
+    fun key(keyCode: Int): Boolean {
         val downTime = android.os.SystemClock.uptimeMillis()
-        service.injectKeyEvent(
-            android.view.KeyEvent(
-                downTime, downTime, android.view.KeyEvent.ACTION_DOWN, keyCode, 0
-            ), displayId
+        val down = android.view.KeyEvent(downTime, downTime, android.view.KeyEvent.ACTION_DOWN, keyCode, 0)
+        if (!service.injectKeyEvent(down, displayId)) return false
+        val up = android.view.KeyEvent(
+            downTime, android.os.SystemClock.uptimeMillis(), android.view.KeyEvent.ACTION_UP, keyCode, 0
         )
-        val upTime = android.os.SystemClock.uptimeMillis()
-        service.injectKeyEvent(
-            android.view.KeyEvent(
-                downTime, upTime, android.view.KeyEvent.ACTION_UP, keyCode, 0
-            ), displayId
-        )
-        true
-    } catch (t: Throwable) {
-        Timber.e(t, "key($keyCode) failed")
-        false
+        return service.injectKeyEvent(up, displayId)
     }
 
     /**
      * 字元已在 native 端檢查過（可印 ASCII、`\n`、`\t`），VIRTUAL_KEYBOARD 都對得到；`getEvents`
-     * 回 null 只是防呆。事件自帶 Shift 的 down/up。中途注入失敗時前面的字已經送出，無法回滾。
+     * 還是回 null 就是環境出了問題。事件自帶 Shift 的 down/up。中途注入失敗時前面的字已經送出，無法回滾。
      */
     @Keep
-    fun text(text: String): Boolean = try {
+    fun text(text: String): Boolean {
         val events = android.view.KeyCharacterMap.load(android.view.KeyCharacterMap.VIRTUAL_KEYBOARD)
             .getEvents(text.toCharArray())
-        if (events == null) {
-            Timber.e("text: no key events for \"$text\"")
-            false
-        } else {
-            events.all { service.injectKeyEvent(it, displayId) }
-        }
-    } catch (t: Throwable) {
-        Timber.e(t, "text failed")
-        false
-    }
-
-    /** 裝置不支援時讓 [UnsupportedOperationException] 穿出去，由 native 端轉成 Lua error。 */
-    @Keep
-    fun launch(packageName: String): Boolean = try {
-        service.launchInDisplay(packageName, displayId)
-    } catch (e: UnsupportedOperationException) {
-        throw e
-    } catch (t: Throwable) {
-        Timber.e(t, "launch($packageName) failed")
-        false
-    }
-
-    /** null 代表列不出來（UserService 異常），由 native 端轉成 Lua error；空陣列是真的沒有 app。 */
-    @Keep
-    fun listApps(): Array<MoonClickerAppTask>? = try {
-        service.appTasks
-    } catch (t: Throwable) {
-        Timber.e(t, "listApps failed")
-        null
+            ?: throw IllegalStateException("no key events for \"$text\"")
+        return events.all { service.injectKeyEvent(it, displayId) }
     }
 
     @Keep
-    fun mute(packageName: String, muted: Boolean): Boolean = try {
-        service.setAppMuted(packageName, muted)
-    } catch (t: Throwable) {
-        Timber.e(t, "mute($packageName, $muted) failed")
-        false
-    }
+    fun launch(packageName: String): Boolean = service.launchInDisplay(packageName, displayId)
+
+    /** 空陣列是真的沒有 app。 */
+    @Keep
+    fun listApps(): Array<MoonClickerAppTask> = service.appTasks
+
+    @Keep
+    fun mute(packageName: String, muted: Boolean): Boolean = service.setAppMuted(packageName, muted)
 
     @Keep
     fun notify(title: String, text: String) = onNotify(title, text)
@@ -145,7 +103,10 @@ internal class ScriptHost(
     @Keep
     fun log(line: String) = onLog(line)
 
-    /** vision 取影格用的 sink；掛不上回 null，由 native 端關掉 vision。 */
+    /**
+     * vision 取影格用的 sink；掛不上回 null，由 native 端關掉 vision。這裡照舊吞例外：
+     * 腳本啟動時是在呼叫端的執行緒上呼叫，還沒有 Lua 堆疊可以拋錯。
+     */
     @Keep
     fun attachSink(surface: Surface): DisplaySink? = try {
         DisplaySink(displayId, surface).takeIf { it.attach(service) }
@@ -154,50 +115,40 @@ internal class ScriptHost(
         null
     }
 
+    /** 已持有時直接回 true，不重複取引用。 */
+    @Keep
+    fun acquireMirror(): Boolean {
+        if (!heldMirror) heldMirror = service.acquireDisplayMirror(displayId)
+        return heldMirror
+    }
+
+    /** 沒持有回 false。先清旗標再歸還：服務端失敗時引用也不能留在這裡等下次再試。 */
+    @Keep
+    fun releaseMirror(): Boolean {
+        if (!heldMirror) return false
+        heldMirror = false
+        service.releaseDisplayMirror(displayId)
+        return true
+    }
+
+    /** 持有時不必走 Binder：`input.*` 在實體螢幕上每次都會問。 */
+    @Keep
+    fun isMirrorActive(): Boolean = heldMirror || service.isDisplayMirrorActive(displayId)
+
     /** 由 C++ 的 pushEvent 呼叫，型別對應 [com.xaxaxax.moonclicker.engine.state.EngineEventType]。 */
     @Keep
     fun onEngineEvent(type: Int, payload: String) {
         EngineStateRepository.onEvent(type, payload)
     }
 
-    /** 已持有時直接回 true，不重複取引用。 */
-    @Keep
-    fun acquireMirror(): Boolean {
-        if (heldMirror) return true
-        heldMirror = try {
-            service.acquireDisplayMirror(displayId)
-        } catch (t: Throwable) {
-            Timber.e(t, "acquireMirror failed")
-            false
-        }
-        return heldMirror
-    }
-
-    /** 沒持有回 false。服務端歸還失敗也視為已歸還——引用不能留在這裡等下次再試。 */
-    @Keep
-    fun releaseMirror(): Boolean {
-        if (!heldMirror) return false
-        heldMirror = false
-        try {
-            service.releaseDisplayMirror(displayId)
-        } catch (t: Throwable) {
-            Timber.e(t, "releaseMirror failed")
-        }
-        return true
-    }
-
-    /** 持有時不必走 Binder：`input.*` 在實體螢幕上每次都會問。 */
-    @Keep
-    fun isMirrorActive(): Boolean = heldMirror || try {
-        service.isDisplayMirrorActive(displayId)
-    } catch (t: Throwable) {
-        Timber.e(t, "isMirrorActive failed")
-        false
-    }
-
-    /** 腳本結束時放開還按著的 pointer、歸還鏡像，不把觸控卡在按下狀態，也不讓鏡像一直開著。 */
+    /**
+     * 腳本結束時放開還按著的 pointer、歸還鏡像，不把觸控卡在按下狀態，也不讓鏡像一直開著。
+     * 這時已經沒有 Lua 堆疊可以拋錯，每一項各自吞掉失敗，不擋住後面的清理。
+     */
     override fun close() {
-        lastPoint.keys.toList().forEach { pointerUp(it) }
-        releaseMirror()
+        lastPoint.keys.toList().forEach { pointerId ->
+            runCatching { pointerUp(pointerId) }.onFailure { Timber.e(it, "pointerUp($pointerId) failed") }
+        }
+        runCatching { releaseMirror() }.onFailure { Timber.e(it, "releaseMirror failed") }
     }
 }

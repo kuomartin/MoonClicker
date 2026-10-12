@@ -185,7 +185,7 @@ void reportHits(ScriptRuntime *runtime, const std::vector<VisionRequest> &reques
 }
 
 void requireVision(lua_State *L, ScriptRuntime *runtime) {
-    if (runtime->isPhysicalDisplay() && !runtime->isMirrorActive()) {
+    if (runtime->isPhysicalDisplay() && !runtime->isMirrorActive(L)) {
         luaL_error(L, "vision on physical display requires active mirror (call screen.start_mirror() first)");
     }
     if (!runtime->hasVision()) {
@@ -195,7 +195,7 @@ void requireVision(lua_State *L, ScriptRuntime *runtime) {
 }
 
 void requireInput(lua_State *L, ScriptRuntime *runtime) {
-    if (runtime->isPhysicalDisplay() && !runtime->isMirrorActive()) {
+    if (runtime->isPhysicalDisplay() && !runtime->isMirrorActive(L)) {
         luaL_error(L, "input on physical display requires active mirror (call screen.start_mirror() first)");
     }
 }
@@ -212,8 +212,8 @@ Ocr *ocrFor(lua_State *L, ScriptRuntime *runtime, const std::vector<VisionReques
 }
 
 /**
- * 在 Lua 與 C++ 例外的邊界執行 [body]：ORT 以 C++ 例外回報錯誤，而 Lua 以 longjmp 收錯，
- * 例外不能穿過 Lua 堆疊。先在 try 內把訊息存起來，離開 catch 之後才 luaL_error。
+ * 把 [body] 拋出的 C++ 例外（ORT 以例外回報錯誤）轉成帶訊息的 Lua error。讓它直接穿出 binding
+ * 的話，Lua 的 `catch (...)` 會把它當成一個沒有錯誤物件的錯誤，腳本看不到原因。
  */
 template<typename Body>
 void guarded(lua_State *L, Body body) {
@@ -340,12 +340,8 @@ int lua_log(lua_State *L) {
     __android_log_print(ANDROID_LOG_DEBUG, "LuaScript", "%s", message.c_str());
 
     ScriptRuntime *runtime = self(L);
-    JNIEnv *env = runtime->env();
-    if (env != nullptr) {
-        jstring jMessage = env->NewStringUTF(message.c_str());
-        env->CallVoidMethod(runtime->hostObject(), runtime->host().log, jMessage);
-        env->DeleteLocalRef(jMessage);
-    }
+    LocalRef<jstring> jMessage(runtime->env(), runtime->env()->NewStringUTF(message.c_str()));
+    runtime->hostVoid(L, "log", runtime->host().log, jMessage.get());
     return 0;
 }
 
@@ -359,13 +355,13 @@ int lua_sleep(lua_State *L) {
 
 int lua_screen_start_mirror(lua_State *L) {
     ScriptRuntime *runtime = self(L);
-    lua_pushboolean(L, runtime->startMirror());
+    lua_pushboolean(L, runtime->startMirror(L));
     return 1;
 }
 
 int lua_screen_stop_mirror(lua_State *L) {
     ScriptRuntime *runtime = self(L);
-    lua_pushboolean(L, runtime->stopMirror());
+    lua_pushboolean(L, runtime->stopMirror(L));
     return 1;
 }
 
@@ -390,7 +386,7 @@ int lua_screen_index(lua_State *L) {
     } else if (strcmp(key, "has_vision") == 0) {
         lua_pushboolean(L, runtime->hasVision());
     } else if (strcmp(key, "is_mirror_active") == 0) {
-        lua_pushboolean(L, runtime->isMirrorActive());
+        lua_pushboolean(L, runtime->isMirrorActive(L));
     } else {
         lua_pushnil(L);
     }
@@ -482,18 +478,14 @@ int lua_vision_read_lines(lua_State *L) {
 // --- input -----------------------------------------------------------------
 
 /** 呼叫 ScriptHost.swipe。points 是攤平的 [x1,y1,x2,y2,...]。 */
-bool callSwipe(ScriptRuntime *runtime, int pointerId, const std::vector<int> &points,
-               long durationMs, bool keep) {
+void callSwipe(lua_State *L, ScriptRuntime *runtime, const char *function, int pointerId,
+               const std::vector<int> &points, long durationMs, bool keep) {
     JNIEnv *env = runtime->env();
-    if (env == nullptr) return false;
-
     auto size = static_cast<jsize>(points.size());
-    jintArray jPoints = env->NewIntArray(size);
-    env->SetIntArrayRegion(jPoints, 0, size, points.data());
-    jboolean ok = env->CallBooleanMethod(runtime->hostObject(), runtime->host().swipe,
-                                         pointerId, jPoints, (jlong) durationMs, (jboolean) keep);
-    env->DeleteLocalRef(jPoints);
-    return ok;
+    LocalRef<jintArray> jPoints(env, env->NewIntArray(size));
+    env->SetIntArrayRegion(jPoints.get(), 0, size, points.data());
+    runtime->hostVoid(L, function, runtime->host().swipe,
+                      pointerId, jPoints.get(), (jlong) durationMs, (jboolean) keep);
 }
 
 /** 讀出 `{x1,y1,x2,y2,...}` 或 `{{x1,y1},{x2,y2},...}`。 */
@@ -528,7 +520,7 @@ int lua_input_tap(lua_State *L) {
     auto y = static_cast<int>(luaL_checknumber(L, 2));
     auto hold = static_cast<long>(luaL_optinteger(L, 3, kDefaultTapHoldMs));
 
-    callSwipe(runtime, -1, {x, y, x, y}, hold, false);
+    callSwipe(L, runtime, "input.tap", -1, {x, y, x, y}, hold, false);
     // 注入是非同步的；線性腳本要的是「點完才往下走」，所以在這裡等它跑完。
     if (!runtime->interruptibleSleep(hold)) raiseStopped(L);
     return 0;
@@ -540,7 +532,7 @@ int lua_input_swipe(lua_State *L) {
     std::vector<int> points = readPoints(L, 1);
     auto duration = static_cast<long>(luaL_optinteger(L, 2, kDefaultSwipeDurationMs));
 
-    callSwipe(runtime, -1, points, duration, false);
+    callSwipe(L, runtime, "input.swipe", -1, points, duration, false);
     if (!runtime->interruptibleSleep(duration)) raiseStopped(L);
     return 0;
 }
@@ -556,7 +548,7 @@ int lua_input_multi_swipe(lua_State *L) {
     while (lua_next(L, 1) != 0) {
         auto pointerId = static_cast<int>(luaL_checkinteger(L, -2));
         std::vector<int> points = readPoints(L, lua_gettop(L));
-        callSwipe(runtime, pointerId, points, duration, false);
+        callSwipe(L, runtime, "input.multi_swipe", pointerId, points, duration, false);
         lua_pop(L, 1);
     }
 
@@ -570,7 +562,7 @@ int lua_input_down(lua_State *L) {
     auto id = static_cast<int>(luaL_checkinteger(L, 1));
     auto x = static_cast<int>(luaL_checknumber(L, 2));
     auto y = static_cast<int>(luaL_checknumber(L, 3));
-    callSwipe(runtime, id, {x, y}, 0, true);
+    callSwipe(L, runtime, "input.down", id, {x, y}, 0, true);
     return 0;
 }
 
@@ -580,7 +572,7 @@ int lua_input_move(lua_State *L) {
     auto id = static_cast<int>(luaL_checkinteger(L, 1));
     auto x = static_cast<int>(luaL_checknumber(L, 2));
     auto y = static_cast<int>(luaL_checknumber(L, 3));
-    callSwipe(runtime, id, {x, y}, 0, true);
+    callSwipe(L, runtime, "input.move", id, {x, y}, 0, true);
     return 0;
 }
 
@@ -588,20 +580,17 @@ int lua_input_up(lua_State *L) {
     ScriptRuntime *runtime = self(L);
     requireInput(L, runtime);
     auto id = static_cast<int>(luaL_checkinteger(L, 1));
-    JNIEnv *env = runtime->env();
-    if (env) env->CallBooleanMethod(runtime->hostObject(), runtime->host().pointerUp, id);
+    runtime->hostVoid(L, "input.up", runtime->host().pointerUp, id);
     return 0;
 }
 
-bool callKey(lua_State *L, ScriptRuntime *runtime, int keyCode) {
+bool callKey(lua_State *L, ScriptRuntime *runtime, const char *function, int keyCode) {
     requireInput(L, runtime);
-    JNIEnv *env = runtime->env();
-    if (env == nullptr) return false;
-    return env->CallBooleanMethod(runtime->hostObject(), runtime->host().key, keyCode);
+    return runtime->hostBoolean(L, function, runtime->host().key, keyCode);
 }
 
 int lua_input_key(lua_State *L) {
-    lua_pushboolean(L, callKey(L, self(L), static_cast<int>(luaL_checkinteger(L, 1))));
+    lua_pushboolean(L, callKey(L, self(L), "input.key", static_cast<int>(luaL_checkinteger(L, 1))));
     return 1;
 }
 
@@ -626,30 +615,23 @@ int lua_input_text(lua_State *L) {
         lua_pushboolean(L, true);
         return 1;
     }
-    JNIEnv *env = runtime->env();
-    if (env == nullptr) {
-        lua_pushboolean(L, false);
-        return 1;
-    }
-    jstring jText = env->NewStringUTF(text);
-    jboolean ok = env->CallBooleanMethod(runtime->hostObject(), runtime->host().text, jText);
-    env->DeleteLocalRef(jText);
-    lua_pushboolean(L, ok);
+    LocalRef<jstring> jText(runtime->env(), runtime->env()->NewStringUTF(text));
+    lua_pushboolean(L, runtime->hostBoolean(L, "input.text", runtime->host().text, jText.get()));
     return 1;
 }
 
 int lua_input_back(lua_State *L) {
-    lua_pushboolean(L, callKey(L, self(L), AKEYCODE_BACK));
+    lua_pushboolean(L, callKey(L, self(L), "input.back", AKEYCODE_BACK));
     return 1;
 }
 
 int lua_input_home(lua_State *L) {
-    lua_pushboolean(L, callKey(L, self(L), AKEYCODE_HOME));
+    lua_pushboolean(L, callKey(L, self(L), "input.home", AKEYCODE_HOME));
     return 1;
 }
 
 int lua_input_recents(lua_State *L) {
-    lua_pushboolean(L, callKey(L, self(L), AKEYCODE_APP_SWITCH));
+    lua_pushboolean(L, callKey(L, self(L), "input.recents", AKEYCODE_APP_SWITCH));
     return 1;
 }
 
@@ -658,33 +640,8 @@ int lua_input_recents(lua_State *L) {
 int lua_app_launch(lua_State *L) {
     ScriptRuntime *runtime = self(L);
     const char *package = luaL_checkstring(L, 1);
-    JNIEnv *env = runtime->env();
-    if (env == nullptr) {
-        lua_pushboolean(L, false);
-        return 1;
-    }
-    jstring jPackage = env->NewStringUTF(package);
-    jboolean ok = env->CallBooleanMethod(runtime->hostObject(), runtime->host().launch, jPackage);
-    env->DeleteLocalRef(jPackage);
-    // ScriptHost.launch 只讓「裝置不支援」的例外穿出來；訊息先推上 Lua 堆疊、釋放 JNI 參照後才 lua_error。
-    if (jthrowable thrown = env->ExceptionOccurred()) {
-        env->ExceptionClear();
-        jclass throwableClass = env->FindClass("java/lang/Throwable");
-        jmethodID getMessage = env->GetMethodID(throwableClass, "getMessage", "()Ljava/lang/String;");
-        auto jMessage = (jstring) env->CallObjectMethod(thrown, getMessage);
-        if (jMessage != nullptr) {
-            const char *message = env->GetStringUTFChars(jMessage, nullptr);
-            lua_pushfstring(L, "app.launch: %s", message);
-            env->ReleaseStringUTFChars(jMessage, message);
-            env->DeleteLocalRef(jMessage);
-        } else {
-            lua_pushstring(L, "app.launch: failed");
-        }
-        env->DeleteLocalRef(throwableClass);
-        env->DeleteLocalRef(thrown);
-        return lua_error(L);
-    }
-    lua_pushboolean(L, ok);
+    LocalRef<jstring> jPackage(runtime->env(), runtime->env()->NewStringUTF(package));
+    lua_pushboolean(L, runtime->hostBoolean(L, "app.launch", runtime->host().launch, jPackage.get()));
     return 1;
 }
 
@@ -694,46 +651,34 @@ int lua_app_mute(lua_State *L) {
     const char *package = luaL_checkstring(L, 1);
     luaL_checktype(L, 2, LUA_TBOOLEAN);
     bool muted = lua_toboolean(L, 2);
-    JNIEnv *env = runtime->env();
-    if (env == nullptr) {
-        lua_pushboolean(L, false);
-        return 1;
-    }
-    jstring jPackage = env->NewStringUTF(package);
-    jboolean ok = env->CallBooleanMethod(runtime->hostObject(), runtime->host().mute, jPackage, (jboolean) muted);
-    env->DeleteLocalRef(jPackage);
-    lua_pushboolean(L, ok);
+    LocalRef<jstring> jPackage(runtime->env(), runtime->env()->NewStringUTF(package));
+    lua_pushboolean(L, runtime->hostBoolean(L, "app.mute", runtime->host().mute, jPackage.get(), (jboolean) muted));
     return 1;
 }
 
 int lua_app_list(lua_State *L) {
     ScriptRuntime *runtime = self(L);
     JNIEnv *env = runtime->env();
-    if (env == nullptr) return luaL_error(L, "app.list: no JNI environment");
-
-    auto tasks = (jobjectArray) env->CallObjectMethod(runtime->hostObject(), runtime->host().listApps);
-    if (tasks == nullptr) return luaL_error(L, "app.list: could not query running apps");
+    LocalRef<jobjectArray> tasks(
+            env, (jobjectArray) runtime->hostObject(L, "app.list", runtime->host().listApps));
 
     const AppTaskFields &fields = runtime->appTaskFields();
-    jsize count = env->GetArrayLength(tasks);
+    jsize count = env->GetArrayLength(tasks.get());
     lua_createtable(L, count, 0);
     for (jsize i = 0; i < count; i++) {
-        jobject task = env->GetObjectArrayElement(tasks, i);
-        auto jPackage = (jstring) env->GetObjectField(task, fields.packageName);
-        const char *package = env->GetStringUTFChars(jPackage, nullptr);
+        LocalRef<jobject> task(env, env->GetObjectArrayElement(tasks.get(), i));
+        LocalRef<jstring> jPackage(env, (jstring) env->GetObjectField(task.get(), fields.packageName));
+        const char *chars = env->GetStringUTFChars(jPackage.get(), nullptr);
+        std::string package(chars);
+        env->ReleaseStringUTFChars(jPackage.get(), chars);
 
         lua_createtable(L, 0, 2);
-        lua_pushstring(L, package);
+        lua_pushstring(L, package.c_str());
         lua_setfield(L, -2, "package");
-        lua_pushinteger(L, env->GetIntField(task, fields.displayId));
+        lua_pushinteger(L, env->GetIntField(task.get(), fields.displayId));
         lua_setfield(L, -2, "display_id");
         lua_rawseti(L, -2, static_cast<lua_Integer>(i + 1));
-
-        env->ReleaseStringUTFChars(jPackage, package);
-        env->DeleteLocalRef(jPackage);
-        env->DeleteLocalRef(task);
     }
-    env->DeleteLocalRef(tasks);
     return 1;
 }
 
@@ -742,25 +687,17 @@ int lua_device_notify(lua_State *L) {
     const char *title = luaL_checkstring(L, 1);
     const char *text = luaL_optstring(L, 2, "");
     JNIEnv *env = runtime->env();
-    if (env == nullptr) return 0;
-
-    jstring jTitle = env->NewStringUTF(title);
-    jstring jText = env->NewStringUTF(text);
-    env->CallVoidMethod(runtime->hostObject(), runtime->host().notify, jTitle, jText);
-    env->DeleteLocalRef(jTitle);
-    env->DeleteLocalRef(jText);
+    LocalRef<jstring> jTitle(env, env->NewStringUTF(title));
+    LocalRef<jstring> jText(env, env->NewStringUTF(text));
+    runtime->hostVoid(L, "device.notify", runtime->host().notify, jTitle.get(), jText.get());
     return 0;
 }
 
 int lua_device_open_uri(lua_State *L) {
     ScriptRuntime *runtime = self(L);
     const char *uri = luaL_checkstring(L, 1);
-    JNIEnv *env = runtime->env();
-    if (env == nullptr) return 0;
-
-    jstring jUri = env->NewStringUTF(uri);
-    env->CallVoidMethod(runtime->hostObject(), runtime->host().openUri, jUri);
-    env->DeleteLocalRef(jUri);
+    LocalRef<jstring> jUri(runtime->env(), runtime->env()->NewStringUTF(uri));
+    runtime->hostVoid(L, "device.open_uri", runtime->host().openUri, jUri.get());
     return 0;
 }
 
@@ -768,13 +705,9 @@ int lua_data_set(lua_State *L) {
     ScriptRuntime *runtime = self(L);
     const char *key = luaL_checkstring(L, 1);
     JNIEnv *env = runtime->env();
-    if (env == nullptr) return 0;
-
-    jstring jKey = env->NewStringUTF(key);
-    jobject jValue = runtime->boxLuaValue(L, 2);
-    env->CallVoidMethod(runtime->hostObject(), runtime->host().setData, jKey, jValue);
-    env->DeleteLocalRef(jKey);
-    if (jValue) env->DeleteLocalRef(jValue);
+    LocalRef<jstring> jKey(env, env->NewStringUTF(key));
+    LocalRef<jobject> jValue(env, runtime->boxLuaValue(L, 2));
+    runtime->hostVoid(L, "data.set", runtime->host().setData, jKey.get(), jValue.get());
     return 0;
 }
 

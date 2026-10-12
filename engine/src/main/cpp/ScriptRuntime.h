@@ -27,8 +27,8 @@ namespace EngineEventType {
 
 /** ScriptHost（Kotlin）上的 upcall 方法。非視覺的 Lua API 全部經由它實作。 */
 struct HostMethods {
-    jmethodID swipe = nullptr;      // (I[IJZ)Z   pointerId, points, durationMs, keep
-    jmethodID pointerUp = nullptr;  // (I)Z
+    jmethodID swipe = nullptr;      // (I[IJZ)V   pointerId, points, durationMs, keep
+    jmethodID pointerUp = nullptr;  // (I)V
     jmethodID key = nullptr;        // (I)Z
     jmethodID text = nullptr;       // (Ljava/lang/String;)Z
     jmethodID launch = nullptr;     // (Ljava/lang/String;)Z
@@ -43,6 +43,29 @@ struct HostMethods {
     jmethodID acquireMirror = nullptr;  // ()Z
     jmethodID releaseMirror = nullptr;  // ()Z
     jmethodID isMirrorActive = nullptr; // ()Z
+};
+
+/**
+ * JNI local ref 的擁有者，解構時 DeleteLocalRef。Lua 執行緒是 native attach 的，local ref 要等
+ * 執行緒 detach 才回收；腳本用 pcall 包住會拋錯的呼叫跑迴圈時，手動刪的 ref 會在拋錯時漏掉。
+ * Lua 以 C++ 編譯，Lua error 是 C++ 例外，這個解構子在拋錯時也會執行。
+ */
+template<typename T>
+class LocalRef {
+public:
+    LocalRef(JNIEnv *env, T ref) : env(env), ref(ref) {}
+
+    ~LocalRef() { if (ref != nullptr) env->DeleteLocalRef(ref); }
+
+    LocalRef(const LocalRef &) = delete;
+
+    LocalRef &operator=(const LocalRef &) = delete;
+
+    T get() const { return ref; }
+
+private:
+    JNIEnv *env;
+    T ref;
 };
 
 /** MoonClickerAppTask（AIDL parcelable）的欄位。 */
@@ -95,6 +118,18 @@ public:
 
     const HostMethods &host() const { return hostMethods; }
 
+    /**
+     * 呼叫 ScriptHost 的 [method]。ScriptHost 讓基礎設施失敗的例外穿出來；有例外時清掉它，
+     * 以 `"<function>: <訊息>"` 拋 Lua error（不回來）。訊息為 null 時用例外的類別名稱。
+     */
+    jboolean hostBoolean(lua_State *L, const char *function, jmethodID method, ...);
+
+    /** 同 [hostBoolean]；回傳的 local ref 由呼叫端擁有。 */
+    jobject hostObject(lua_State *L, const char *function, jmethodID method, ...);
+
+    /** 同 [hostBoolean]。 */
+    void hostVoid(lua_State *L, const char *function, jmethodID method, ...);
+
     const AppTaskFields &appTaskFields() const { return appTask; }
 
     VisionMatcher &vision() { return *visionMatcher; }
@@ -109,11 +144,12 @@ public:
 
     bool isPhysicalDisplay() const { return isPhysical; }
 
-    bool isMirrorActive();
+    bool isMirrorActive(lua_State *L);
 
-    bool startMirror();
+    /** 取不到鏡像或掛不上 reader 時拋 Lua error。 */
+    bool startMirror(lua_State *L);
 
-    bool stopMirror();
+    bool stopMirror(lua_State *L);
 
     /**
      * 第一次呼叫 vision.* 時等影格管線送來第一張影格，最多 [kFirstFrameTimeoutMs]；之後的呼叫
@@ -146,6 +182,9 @@ private:
     bool attachImageReader();
     void detachImageReader();
 
+    /** Lua 執行緒上有 pending exception 時：清掉，以 `"<function>: <訊息>"` 拋 Lua error。 */
+    void raiseIfThrown(lua_State *L, const char *function);
+
     std::unique_ptr<LuaEngine> luaEngine;
     std::unique_ptr<NativeImageReader> imageReader;
     std::unique_ptr<VisionMatcher> visionMatcher;
@@ -166,6 +205,9 @@ private:
 
     jmethodID sinkCloseMethodId = nullptr;      // DisplaySink.close
     jmethodID surfaceReleaseMethodId = nullptr; // android.view.Surface.release
+    jmethodID throwableGetMessage = nullptr;    // Throwable.getMessage
+    jmethodID objectGetClass = nullptr;         // Object.getClass
+    jmethodID classGetName = nullptr;           // Class.getName
 
     /**
      * ANativeWindow_toSurface 產生的 Java Surface。必須留著到收尾時明確 release()——
