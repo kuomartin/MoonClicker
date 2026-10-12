@@ -635,7 +635,7 @@ class WorkbenchServerTest {
             application {
                 workbenchModule(
                     temp.root, fakeRunner, fakeStream, fakeDisplays,
-                    deviceInfo = { WorkbenchDeviceInfo(id = "abc", name = "Pixel") },
+                    deviceInfo = { WorkbenchDeviceInfo("abc", "Pixel", WORKBENCH_PROTOCOL_VERSION) },
                 )
             }
 

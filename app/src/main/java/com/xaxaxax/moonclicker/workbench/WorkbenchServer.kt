@@ -196,7 +196,9 @@ class WorkbenchServer @Inject constructor(
                     workbenchModule(
                         scriptsRoot, scriptRunner, scriptStream, displaySource, shizukuManager, authStore,
                         ocrAvailable = { ocrManager.runtime() != null },
-                        deviceInfo = { WorkbenchDeviceInfo(id = authStore.instanceId, name = Build.MODEL) },
+                        deviceInfo = {
+                            WorkbenchDeviceInfo(authStore.instanceId, Build.MODEL, WORKBENCH_PROTOCOL_VERSION)
+                        },
                     )
                 },
             ).start(wait = false)
@@ -310,12 +312,15 @@ data class OcrTestRequest(
 @Serializable
 data class PairResponse(val token: String)
 
-/** `GET /device`：[id] 是 [WorkbenchAuthStore.instanceId]，[name] 給人看。 */
+/**
+ * `GET /device`：[id] 是 [WorkbenchAuthStore.instanceId]，[name] 給人看。
+ * [protocolVersion] 不給預設值，理由同 [WorkbenchScriptSummary]。
+ */
 @Serializable
 data class WorkbenchDeviceInfo(
     val id: String,
     val name: String,
-    val protocolVersion: Int = WORKBENCH_PROTOCOL_VERSION,
+    val protocolVersion: Int,
 )
 
 /** 見 `proto/workbench_stream_event.proto` 的 `ProtocolVersion`。 */
@@ -336,7 +341,9 @@ fun Application.workbenchModule(
     authStore: WorkbenchAuthStore? = null,
     /** OCR 套件是否已安裝；未安裝時 `/ocr-test` 回 412。 */
     ocrAvailable: () -> Boolean = { false },
-    deviceInfo: () -> WorkbenchDeviceInfo = { WorkbenchDeviceInfo(id = "test-device", name = "Test Device") },
+    deviceInfo: () -> WorkbenchDeviceInfo = {
+        WorkbenchDeviceInfo("test-device", "Test Device", WORKBENCH_PROTOCOL_VERSION)
+    },
 ) {
     install(WebSockets)
     // 誰透過 HTTP 單檔案 API 寫入，都要推給每個開著的 WebSocket——一個 VS Code client
