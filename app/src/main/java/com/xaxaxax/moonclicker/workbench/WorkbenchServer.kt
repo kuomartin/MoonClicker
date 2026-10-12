@@ -139,8 +139,8 @@ class WorkbenchServer @Inject constructor(
     }
 
     private val scriptStream = object : ScriptStream {
-        override val logLines: Flow<String> get() = ScriptEngine.logLines
-        override val sharedData: StateFlow<Map<String, Any>> get() = ScriptEngine.sharedData
+        override val logLines: Flow<String> get() = scriptSession.logLines
+        override val sharedData: StateFlow<Map<String, Any>> get() = scriptSession.sharedData
         override val runningScriptId: Flow<String?>
             get() = scriptSession.state.map { state -> state.script?.id.takeIf { state.isRunning } }
     }

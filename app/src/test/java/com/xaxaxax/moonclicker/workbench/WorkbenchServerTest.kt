@@ -53,7 +53,7 @@ private class FakeScriptRunner : ScriptRunner {
     }
 }
 
-/** [ScriptEngine] 是全域單例、只有真的原生引擎在跑才會發事件——測試改用可控制的假 flow。 */
+/** 只有真的原生引擎在跑才會發事件——測試改用可控制的假 flow。 */
 private class FakeScriptStream : ScriptStream {
     private val _sharedData = MutableStateFlow<Map<String, Any>>(emptyMap())
     override val sharedData: StateFlow<Map<String, Any>> = _sharedData

@@ -2,7 +2,6 @@ package com.xaxaxax.moonclicker.script
 
 import android.graphics.Rect
 import com.xaxaxax.moonclicker.engine.state.EngineRunState
-import com.xaxaxax.moonclicker.engine.state.EngineStateRepository
 import com.xaxaxax.moonclicker.script.puppet.PuppetRecorder
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -99,7 +98,7 @@ class VisionCoordinatesTest(private val orientation: Orientation) {
         assertEquals(
             "roi $hitRoi frames the marker at $marker but vision.wait never matched it, at " +
                     "display rotation ${env.displayRotation(displayId)}\n" +
-                    "last match = ${EngineStateRepository.state.value.lastVisionResult}\n" +
+                    "last match = ${outcome.lastVisionResult}\n" +
                     env.logcat("VisionMatcher"),
             true,
             outcome.data["hit_found"],
@@ -111,7 +110,7 @@ class VisionCoordinatesTest(private val orientation: Orientation) {
             "roi $missRoi frames the glyph at $glyph, which excludes the marker at $marker, but " +
                     "vision.wait matched anyway at display rotation ${env.displayRotation(displayId)} " +
                     "— the roi is either being ignored or applied at the wrong offset.\n" +
-                    "last match = ${EngineStateRepository.state.value.lastVisionResult}",
+                    "last match = ${outcome.lastVisionResult}",
             false,
             outcome.data["miss_found"],
         )
@@ -138,7 +137,7 @@ class VisionCoordinatesTest(private val orientation: Orientation) {
                     "${env.displayRotation(displayId)}; puppet ${PuppetRecorder.current}\n" +
                     // miss 時 confidence 一律是 0（低於門檻就 continue），所以這裡讀得到的是
                     // 「哪張圖、找到沒」，不是相關係數。
-                    "last match = ${EngineStateRepository.state.value.lastVisionResult}\n" +
+                    "last match = ${outcome.lastVisionResult}\n" +
                     env.logcat("VisionMatcher", "NativeImageReader", "GlesDistributor", "LuaEngine"),
             true,
             outcome.data["found"],

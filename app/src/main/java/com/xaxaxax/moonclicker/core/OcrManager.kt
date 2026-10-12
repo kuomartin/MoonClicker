@@ -79,7 +79,7 @@ class OcrManager @Inject constructor(
     /** 腳本執行中不校準：同時推論會互相拖慢，量到的數字沒有意義。設定頁也會停用按鈕。 */
     private suspend fun calibrate() {
         val dir = installer.installedDir ?: return
-        if (_calibration.value == OcrCalibrationState.Running || ScriptEngine.isRunning) return
+        if (_calibration.value == OcrCalibrationState.Running || ScriptEngine.isAnyRunning) return
         _calibration.value = OcrCalibrationState.Running
         _calibration.value = try {
             val results = OcrCalibrator.measure(dir)

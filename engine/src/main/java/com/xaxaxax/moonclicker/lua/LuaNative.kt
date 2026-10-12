@@ -28,6 +28,7 @@ internal object LuaNative {
      * @param scriptDir 腳本資料夾，內含 main.lua。
      * @param ocrPackDir OCR 套件目錄；空字串表示未安裝或不支援。OCR 在腳本第一次用到時才載入。
      * @param ocrThreads OCR 的執行緒數。
+     * @return native ScriptRuntime 的 handle，交給 [nativeStop]；0 表示沒有啟動。
      */
     external fun nativeStart(
         host: ScriptHost,
@@ -40,9 +41,8 @@ internal object LuaNative {
         scriptDir: String,
         ocrPackDir: String,
         ocrThreads: Int,
-    ): Boolean
+    ): Long
 
-    external fun nativeStop()
-
-    external fun nativeIsRunning(): Boolean
+    /** 停止並等 Lua 執行緒結束，然後釋放 [handle]。每個 handle 只能呼叫一次。 */
+    external fun nativeStop(handle: Long)
 }
