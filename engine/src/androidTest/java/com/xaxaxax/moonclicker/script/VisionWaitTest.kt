@@ -167,6 +167,12 @@ class VisionWaitTest {
             val outcome = env.runScript(displayId, """data.set("found", vision.find("marker.png") ~= nil)""")
 
             assertEquals(EngineRunState.Finished, outcome.runState)
+            if (outcome.data["found"] != true) {
+                // 先讓畫面變一次再量：這條擋的正是「新 sink 在靜止畫面上收到的那張是空的」，
+                // 在靜止畫面上量會量到同一張空影格，把失敗誤判成 ATD 而跳過。
+                PuppetActivity.showAfter(100, marker = true, glyph = false)
+                env.assumeFramesHaveContent(displayId)
+            }
             assertEquals("attempt ${attempt + 1}: the first vision.find saw no screen", true, outcome.data["found"])
         }
     }
