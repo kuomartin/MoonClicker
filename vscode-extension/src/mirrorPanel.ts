@@ -8,6 +8,7 @@ import { startOcrTest, startVisionTest, stopRun } from "./visionTest";
 import type { OcrTestMode } from "./visionTest";
 import { listScripts, createScript, type ScriptSummary } from "./scriptSync";
 import { listDisplays, toggleDisplayMirror } from "./displaySync";
+import { errorText } from "./l10n";
 
 /**
  * 收幀間隔超過這個值就當作卡住（見 [FrameStalenessTracker]）。裝置端出幀間隔上限是
@@ -116,16 +117,16 @@ export function openMirrorPanel(
       } else if (message?.type === "saveTemplate") {
         const { scriptId, templateName, roi, pngBase64 } = message;
         if (!scriptId || !templateName || !roi || !pngBase64) {
-          vscode.window.showErrorMessage("MoonClicker: 裁切模板存檔參數不完整");
+          vscode.window.showErrorMessage(vscode.l10n.t("MoonClicker: Missing parameters for saving the template"));
           return;
         }
         try {
           const pngBuffer = Buffer.from(pngBase64, "base64");
           await saveTemplate(address, scriptId, templateName, roi, pngBuffer, token);
           safePostMessage({ type: "saveTemplateResult", success: true });
-          vscode.window.showInformationMessage(`MoonClicker: 模板「${templateName}」已成功存檔到 ${scriptId}`);
+          vscode.window.showInformationMessage(vscode.l10n.t("MoonClicker: Saved template \"{0}\" to {1}", templateName, scriptId));
         } catch (err) {
-          const errMsg = (err as Error).message;
+          const errMsg = errorText(err);
           safePostMessage({
             type: "saveTemplateResult",
             success: false,
@@ -133,7 +134,7 @@ export function openMirrorPanel(
           });
           mirrorOutputChannel.appendLine(`[MoonClicker Save Template Error] ${errMsg}`);
           mirrorOutputChannel.show(true);
-          vscode.window.showErrorMessage(`MoonClicker 儲存模板失敗: ${errMsg}`);
+          vscode.window.showErrorMessage(vscode.l10n.t("MoonClicker: Failed to save template: {0}", errMsg));
         }
       } else if (message?.type === "requestTemplates") {
         const { scriptId } = message;
@@ -142,19 +143,19 @@ export function openMirrorPanel(
           const templates = await listTemplates(address, scriptId, token);
           safePostMessage({ type: "templatesResult", scriptId, success: true, templates });
         } catch (err) {
-          safePostMessage({ type: "templatesResult", scriptId, success: false, error: (err as Error).message });
+          safePostMessage({ type: "templatesResult", scriptId, success: false, error: errorText(err) });
         }
       } else if (message?.type === "deleteTemplate") {
         const { scriptId, templateName } = message;
         if (!scriptId || !templateName) {
-          safePostMessage({ type: "deleteTemplateResult", success: false, error: "刪除模板參數不完整" });
+          safePostMessage({ type: "deleteTemplateResult", success: false, error: vscode.l10n.t("Missing parameters for deleting the template") });
           return;
         }
         try {
           await deleteTemplate(address, scriptId, templateName, token);
           safePostMessage({ type: "deleteTemplateResult", success: true, scriptId, templateName });
         } catch (err) {
-          const errMsg = (err as Error).message;
+          const errMsg = errorText(err);
           safePostMessage({ type: "deleteTemplateResult", success: false, scriptId, templateName, error: errMsg });
           mirrorOutputChannel.appendLine(`[MoonClicker Delete Template Error] ${errMsg}`);
           mirrorOutputChannel.show(true);
@@ -178,19 +179,19 @@ export function openMirrorPanel(
           const scripts = await listScripts(address, token).catch(() => []);
           safePostMessage({ type: "scripts", scripts });
         } catch (err) {
-          safePostMessage({ type: "createScriptResult", success: false, scriptId, error: (err as Error).message });
+          safePostMessage({ type: "createScriptResult", success: false, scriptId, error: errorText(err) });
         }
       } else if (message?.type === "startVisionTest") {
         const { scriptId, displayId, image, roi, threshold, intervalMs } = message;
         if (!scriptId || typeof displayId !== "number" || !image || !roi || typeof threshold !== "number") {
-          safePostMessage({ type: "visionTestResult", success: false, error: "測試比對參數不完整" });
+          safePostMessage({ type: "visionTestResult", success: false, error: vscode.l10n.t("Missing parameters for the match test") });
           return;
         }
         try {
           activeTestScriptId = await startVisionTest(address, scriptId, displayId, image, roi, threshold, intervalMs, token);
           safePostMessage({ type: "visionTestResult", success: true });
         } catch (err) {
-          const errMsg = (err as Error).message;
+          const errMsg = errorText(err);
           safePostMessage({ type: "visionTestResult", success: false, error: errMsg });
           mirrorOutputChannel.appendLine(`[MoonClicker Vision Test Error] ${errMsg}`);
           mirrorOutputChannel.show(true);
@@ -198,7 +199,7 @@ export function openMirrorPanel(
       } else if (message?.type === "startOcrTest") {
         const { displayId, mode, roi, text, exact, threshold, intervalMs } = message;
         if (typeof displayId !== "number" || !mode || !["read", "read_lines", "find"].includes(mode)) {
-          safePostMessage({ type: "visionTestResult", success: false, error: "OCR 測試參數不完整" });
+          safePostMessage({ type: "visionTestResult", success: false, error: vscode.l10n.t("Missing parameters for the OCR test") });
           return;
         }
         try {
@@ -210,7 +211,7 @@ export function openMirrorPanel(
           // 與模板測試共用同一組 start/stop 狀態機，所以回同一種訊息。
           safePostMessage({ type: "visionTestResult", success: true });
         } catch (err) {
-          const errMsg = (err as Error).message;
+          const errMsg = errorText(err);
           safePostMessage({ type: "visionTestResult", success: false, error: errMsg });
           mirrorOutputChannel.appendLine(`[MoonClicker OCR Test Error] ${errMsg}`);
           mirrorOutputChannel.show(true);
@@ -221,7 +222,7 @@ export function openMirrorPanel(
           activeTestScriptId = undefined;
           safePostMessage({ type: "runStopResult", success: true });
         } catch (err) {
-          const errMsg = (err as Error).message;
+          const errMsg = errorText(err);
           safePostMessage({ type: "runStopResult", success: false, error: errMsg });
           mirrorOutputChannel.appendLine(`[MoonClicker Stop Run Error] ${errMsg}`);
           mirrorOutputChannel.show(true);
@@ -243,11 +244,15 @@ export function openMirrorPanel(
           const enable = message.enable !== false;
           toggleDisplayMirror(address, targetDisplayId, enable, token)
             .then(() => {
-              vscode.window.showInformationMessage(`MoonClicker: 顯示器 ${targetDisplayId} 鏡像已${enable ? "開啟" : "關閉"}`);
+              vscode.window.showInformationMessage(
+                enable
+                  ? vscode.l10n.t("MoonClicker: Mirroring turned on for display {0}", targetDisplayId)
+                  : vscode.l10n.t("MoonClicker: Mirroring turned off for display {0}", targetDisplayId),
+              );
               openMirrorPanel(extensionUri, address, targetDisplayId, token);
             })
             .catch((err) => {
-              vscode.window.showErrorMessage(`MoonClicker: 切換鏡像失敗: ${(err as Error).message}`);
+              vscode.window.showErrorMessage(`MoonClicker: ${errorText(err)}`);
             });
         }
       }
@@ -333,8 +338,10 @@ function renderHtml(jmuxerUri: string, cspSource: string, extensionPath?: string
   const css = fs.readFileSync(path.join(mediaDir, "mirror.css"), "utf8");
   const bodyHtml = fs.readFileSync(path.join(mediaDir, "mirror.html"), "utf8");
   const js = fs.readFileSync(path.join(mediaDir, "mirror.js"), "utf8");
+  // 英文介面時 bundle 是 undefined，面板直接顯示原文。
+  const l10n = JSON.stringify(vscode.l10n.bundle ?? {}).replace(/</g, "\\u003c");
   return `<!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="${vscode.env.language}">
 <head>
 <meta charset="UTF-8" />
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; media-src blob:; img-src data: blob:; style-src 'unsafe-inline' ${cspSource}; script-src 'unsafe-inline' ${cspSource};" />
@@ -346,6 +353,7 @@ ${css}
 <body>
 ${bodyHtml}
   <script>
+window.moonclickerL10n = ${l10n};
 ${js}
   </script>
 </body>

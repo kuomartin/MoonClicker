@@ -1,4 +1,5 @@
 import { authHeaders } from "./authSync";
+import { MessageError, msg } from "./message";
 
 export interface DisplaySummary {
   id: number;
@@ -17,7 +18,7 @@ export async function listDisplays(address: string, token?: string): Promise<Dis
     headers: authHeaders(token),
   });
   if (!response.ok) {
-    throw new Error(`列出裝置上的顯示器失敗（HTTP ${response.status}）`);
+    throw new MessageError(msg("Failed to list displays on the device (HTTP {0})", response.status));
   }
   return (await response.json()) as DisplaySummary[];
 }
@@ -32,6 +33,6 @@ export async function toggleDisplayMirror(address: string, displayId: number, en
   });
   if (!response.ok) {
     const reason = await response.text();
-    throw new Error(`切換鏡像失敗（HTTP ${response.status}）：${reason}`);
+    throw new MessageError(msg("Failed to toggle mirroring (HTTP {0}): {1}", response.status, reason));
   }
 }

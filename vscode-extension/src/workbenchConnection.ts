@@ -1,6 +1,7 @@
 import WebSocket from "ws";
 import { fromBinary } from "@bufbuild/protobuf";
 import { ProtocolVersion, StreamEventSchema, type StreamEvent } from "./generated/workbench_stream_event_pb";
+import { msg, type Text } from "./message";
 
 export type { StreamEvent };
 
@@ -14,7 +15,7 @@ export type ConnectionState =
   | { status: "disconnected" }
   | { status: "connecting"; address: string }
   | { status: "connected"; address: string }
-  | { status: "error"; address: string; message: string };
+  | { status: "error"; address: string; message: Text };
 
 /**
  * 解析一筆原始 WebSocket 二進位訊息成 [StreamEvent]。形狀來自
@@ -88,7 +89,11 @@ export class WorkbenchConnection {
 
     socket.on("close", (code, reason) => {
       if (code === POLICY_VIOLATION) {
-        this.setState({ status: "error", address, message: `App 與擴充套件的協定版本不同，請更新較舊的一方（${reason.toString()}）` });
+        this.setState({
+          status: "error",
+          address,
+          message: msg("The app and the extension use different protocol versions. Update the older one ({0})", reason.toString()),
+        });
         return;
       }
       if (this._state.status !== "error") {

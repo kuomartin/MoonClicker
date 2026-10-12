@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createServer, IncomingMessage, Server } from "node:http";
 import { after, before, test } from "node:test";
+import { formatText } from "../message";
 import {
   deleteEntry,
   getTree,
@@ -185,6 +186,6 @@ test("runScript throws with the server's reason when a script is already running
 
 test("protocolMismatch names the older side", () => {
   assert.equal(protocolMismatch({ id: "d", name: "n", protocolVersion: 2 }, 2), undefined);
-  assert.match(protocolMismatch({ id: "d", name: "n" }, 2) ?? "", /請更新 App/);
-  assert.match(protocolMismatch({ id: "d", name: "n", protocolVersion: 3 }, 2) ?? "", /請更新擴充套件/);
+  assert.match(formatText(protocolMismatch({ id: "d", name: "n" }, 2) ?? ""), /update the app/);
+  assert.match(formatText(protocolMismatch({ id: "d", name: "n", protocolVersion: 3 }, 2) ?? ""), /update the extension/);
 });
