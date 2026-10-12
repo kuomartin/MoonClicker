@@ -61,6 +61,7 @@ private:
         int handle;
         jobject jSurface; // Global ref to the Java Surface
         ANativeWindow* window;
+        /** render thread 第一次要畫給它時才建立（見 addSurface）；EGL_NO_SURFACE 表示還沒建立。 */
         EGLSurface eglSurface;
         /** 這個 sink 最後收到的影格（SurfaceTexture 時間戳）；-1 表示還沒收過。 */
         long long deliveredTimestamp;

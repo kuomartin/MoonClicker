@@ -177,22 +177,19 @@ int GlesDistributor::addSurface(JNIEnv *env, jobject surface) {
     eglGetConfigAttrib(eglDisplay, eglConfig, EGL_NATIVE_VISUAL_ID, &format);
     ANativeWindow_setBuffersGeometry(window, 0, 0, format);
 
-    EGLSurface eglSurface = eglCreateWindowSurface(eglDisplay, eglConfig, window, nullptr);
-    if (eglSurface != EGL_NO_SURFACE) {
-        int handle = nextHandle++;
-        jobject globalSurface = env->NewGlobalRef(surface);
-        sinks.push_back({handle, globalSurface, window, eglSurface, -1});
-        // 從閒置節奏立刻切回來，不然新掛上的鏡像要等最多 250ms 才看到第一張。新 sink 的
-        // deliveredTimestamp 是 -1，畫面靜止也會在下一圈收到目前這張影格。
-        frameCond.notify_all();
-        LOGD("Successfully added sink handle %d, window %p. Total sinks: %zu", handle, window,
-             sinks.size());
-        return handle;
-    } else {
-        LOGE("Failed to create EGL window surface: %x", eglGetError());
-        ANativeWindow_release(window);
-        return -1;
-    }
+    // EGL surface 由 render thread 在 drawFrame 建立，這裡只登記 window：在呼叫端（binder
+    // thread）建立的話，模擬器的 EGL 送出的第一張 buffer 是全零——每條執行緒各有一條到
+    // 主機的連線，第一張 buffer 在建立時就綁在呼叫端的連線上，render thread 畫的內容
+    // 進不去。畫面靜止時 sink 只會收到這一張，vision 就看不到畫面。
+    int handle = nextHandle++;
+    jobject globalSurface = env->NewGlobalRef(surface);
+    sinks.push_back({handle, globalSurface, window, EGL_NO_SURFACE, -1});
+    // 從閒置節奏立刻切回來，不然新掛上的鏡像要等最多 250ms 才看到第一張。新 sink 的
+    // deliveredTimestamp 是 -1，畫面靜止也會在下一圈收到目前這張影格。
+    frameCond.notify_all();
+    LOGD("Successfully added sink handle %d, window %p. Total sinks: %zu", handle, window,
+         sinks.size());
+    return handle;
 }
 
 void GlesDistributor::removeSurface(int handle) {
@@ -200,7 +197,7 @@ void GlesDistributor::removeSurface(int handle) {
     for (auto it = sinks.begin(); it != sinks.end(); ++it) {
         if (it->handle == handle) {
             LOGD("Removing sink handle %d, surface %p", handle, it->window);
-            eglDestroySurface(eglDisplay, it->eglSurface);
+            if (it->eglSurface != EGL_NO_SURFACE) eglDestroySurface(eglDisplay, it->eglSurface);
             ANativeWindow_release(it->window);
 
             JNIEnv *env;
@@ -279,7 +276,7 @@ void GlesDistributor::terminateEGL() {
         }
 
         for (auto &sink: sinks) {
-            eglDestroySurface(eglDisplay, sink.eglSurface);
+            if (sink.eglSurface != EGL_NO_SURFACE) eglDestroySurface(eglDisplay, sink.eglSurface);
             ANativeWindow_release(sink.window);
             if (env) env->DeleteGlobalRef(sink.jSurface);
         }
@@ -381,6 +378,20 @@ int GlesDistributor::drawFrame(long long timestamp) {
         if (it->deliveredTimestamp == timestamp) {
             it++;
             continue;
+        }
+        if (it->eglSurface == EGL_NO_SURFACE) {
+            it->eglSurface = eglCreateWindowSurface(eglDisplay, eglConfig, it->window, nullptr);
+            if (it->eglSurface == EGL_NO_SURFACE) {
+                LOGE("Failed to create EGL window surface for sink handle %d: %x; removing it",
+                     it->handle, eglGetError());
+                ANativeWindow_release(it->window);
+                JNIEnv *env;
+                if (javaVM->GetEnv((void **) &env, JNI_VERSION_1_6) == JNI_OK) {
+                    env->DeleteGlobalRef(it->jSurface);
+                }
+                it = sinks.erase(it);
+                continue;
+            }
         }
         if (!eglMakeCurrent(eglDisplay, it->eglSurface, it->eglSurface, eglContext)) {
             LOGE("eglMakeCurrent failed for sink handle %d: %x", it->handle, eglGetError());
