@@ -3,10 +3,9 @@
 
 #include <android/native_window_jni.h>
 
-ScriptRuntime::ScriptRuntime(JNIEnv *env, jobject host, jobject service) {
+ScriptRuntime::ScriptRuntime(JNIEnv *env, jobject host) {
     env->GetJavaVM(&javaVM);
     hostObj = env->NewGlobalRef(host);
-    serviceObj = env->NewGlobalRef(service);
 
     jclass hostClass = env->GetObjectClass(hostObj);
     hostMethods.swipe = env->GetMethodID(hostClass, "swipe", "(I[IJZ)Z");
@@ -26,17 +25,15 @@ ScriptRuntime::ScriptRuntime(JNIEnv *env, jobject host, jobject service) {
     hostMethods.log = env->GetMethodID(hostClass, "log", "(Ljava/lang/String;)V");
     hostMethods.attachSink = env->GetMethodID(hostClass, "attachSink",
                                               "(Landroid/view/Surface;)Lcom/xaxaxax/moonclicker/DisplaySink;");
+    hostMethods.acquireMirror = env->GetMethodID(hostClass, "acquireMirror", "()Z");
+    hostMethods.releaseMirror = env->GetMethodID(hostClass, "releaseMirror", "()Z");
+    hostMethods.isMirrorActive = env->GetMethodID(hostClass, "isMirrorActive", "()Z");
 
     // 在呼叫端（有 app class loader 的 Java 執行緒）解析；Lua 執行緒是 attach 進來的，FindClass 找不到 app 的類別。
     jclass appTaskClass = env->FindClass("com/xaxaxax/moonclicker/MoonClickerAppTask");
     appTask.packageName = env->GetFieldID(appTaskClass, "packageName", "Ljava/lang/String;");
     appTask.displayId = env->GetFieldID(appTaskClass, "displayId", "I");
     env->DeleteLocalRef(appTaskClass);
-
-    jclass serviceClass = env->GetObjectClass(serviceObj);
-    acquireMirrorMethodId = env->GetMethodID(serviceClass, "acquireDisplayMirror", "(I)Z");
-    releaseMirrorMethodId = env->GetMethodID(serviceClass, "releaseDisplayMirror", "(I)Z");
-    isMirrorActiveMethodId = env->GetMethodID(serviceClass, "isDisplayMirrorActive", "(I)Z");
 
     jclass sinkClass = env->FindClass("com/xaxaxax/moonclicker/DisplaySink");
     sinkCloseMethodId = env->GetMethodID(sinkClass, "close", "()V");
@@ -64,7 +61,6 @@ ScriptRuntime::~ScriptRuntime() {
         else return;
     }
     env->DeleteGlobalRef(hostObj);
-    env->DeleteGlobalRef(serviceObj);
     env->DeleteGlobalRef(doubleClass);
     env->DeleteGlobalRef(booleanClass);
     if (attached) javaVM->DetachCurrentThread();
@@ -83,7 +79,6 @@ bool ScriptRuntime::start(int displayId, bool isPhysical, bool withVision, int s
     this->scriptDir = scriptDir;
     this->surfaceWidth = surfaceWidth;
     this->surfaceHeight = surfaceHeight;
-    this->heldMirrorRef = false;
     this->ocrPackDir = ocrPackDir;
     this->ocrThreads = ocrThreads;
 
@@ -121,19 +116,8 @@ void ScriptRuntime::stop() {
     if (luaThread.joinable()) luaThread.join();
     ocrEngine.reset();
 
+    // 鏡像引用由 ScriptHost.close() 歸還；它在這之後才被呼叫，所以順序仍是先拿掉 reader 再歸還。
     detachImageReader();
-    if (heldMirrorRef) {
-        JNIEnv *env = nullptr;
-        bool attached = false;
-        if (javaVM->GetEnv((void **) &env, JNI_VERSION_1_6) == JNI_EDETACHED) {
-            if (javaVM->AttachCurrentThread(&env, nullptr) == JNI_OK) attached = true;
-        }
-        if (env && releaseMirrorMethodId) {
-            env->CallBooleanMethod(serviceObj, releaseMirrorMethodId, displayId);
-            if (attached) javaVM->DetachCurrentThread();
-        }
-        heldMirrorRef = false;
-    }
     if (luaEngine) luaEngine->close();
 }
 
@@ -224,41 +208,23 @@ void ScriptRuntime::detachImageReader() {
 
 bool ScriptRuntime::isMirrorActive() {
     if (!isPhysical) return true;
-    if (heldMirrorRef) return true;
-    JNIEnv *env = nullptr;
-    bool attached = false;
-    if (javaVM->GetEnv((void **) &env, JNI_VERSION_1_6) == JNI_EDETACHED) {
-        if (javaVM->AttachCurrentThread(&env, nullptr) == JNI_OK) attached = true;
-    }
-    if (!env || !isMirrorActiveMethodId) return false;
-    jboolean active = env->CallBooleanMethod(serviceObj, isMirrorActiveMethodId, displayId);
-    if (attached) javaVM->DetachCurrentThread();
-    return active;
+    return luaEnv->CallBooleanMethod(hostObj, hostMethods.isMirrorActive);
 }
 
 bool ScriptRuntime::startMirror() {
     if (!isPhysical) return true;
-    if (heldMirrorRef) return true;
+    // 實體螢幕上 reader 只會由這裡掛上，掛著就代表已經持有鏡像。
+    if (visionEnabled) return true;
 
-    JNIEnv *env = nullptr;
-    bool attached = false;
-    if (javaVM->GetEnv((void **) &env, JNI_VERSION_1_6) == JNI_EDETACHED) {
-        if (javaVM->AttachCurrentThread(&env, nullptr) == JNI_OK) attached = true;
-    }
-    if (!env || !acquireMirrorMethodId) return false;
-
-    jboolean ok = env->CallBooleanMethod(serviceObj, acquireMirrorMethodId, displayId);
-    if (attached) javaVM->DetachCurrentThread();
-    if (!ok) {
-        LOGE("acquireDisplayMirror failed for display %d", displayId);
+    if (!luaEnv->CallBooleanMethod(hostObj, hostMethods.acquireMirror)) {
+        LOGE("acquireMirror failed for display %d", displayId);
         return false;
     }
-    heldMirrorRef = true;
 
     uint64_t framesBefore = visionMatcher->frameCounter();
     if (!attachImageReader()) {
-        LOGE("attachImageReader failed after acquireDisplayMirror");
-        stopMirror();
+        LOGE("attachImageReader failed after acquireMirror");
+        luaEnv->CallBooleanMethod(hostObj, hostMethods.releaseMirror);
         return false;
     }
     visionEnabled = true;
@@ -278,22 +244,9 @@ void ScriptRuntime::awaitFirstFrameIfPending() {
 
 bool ScriptRuntime::stopMirror() {
     if (!isPhysical) return true;
-    if (!heldMirrorRef) return false;
-
     detachImageReader();
     visionEnabled = false;
-
-    JNIEnv *env = nullptr;
-    bool attached = false;
-    if (javaVM->GetEnv((void **) &env, JNI_VERSION_1_6) == JNI_EDETACHED) {
-        if (javaVM->AttachCurrentThread(&env, nullptr) == JNI_OK) attached = true;
-    }
-    if (env && releaseMirrorMethodId) {
-        env->CallBooleanMethod(serviceObj, releaseMirrorMethodId, displayId);
-        if (attached) javaVM->DetachCurrentThread();
-    }
-    heldMirrorRef = false;
-    return true;
+    return luaEnv->CallBooleanMethod(hostObj, hostMethods.releaseMirror);
 }
 
 bool ScriptRuntime::interruptibleSleep(long ms) {
