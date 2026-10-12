@@ -81,7 +81,7 @@ The public Kotlin facade over native `LuaNative` bindings in `:engine`, used to 
 _Avoid_: LuaEngineControl, JNI bridge, LuaNative (when referencing public caller API).
 
 **ScriptHost**:
-The Engine Module's single JNI upcall target implementing non-native Lua APIs (`input.*`, `app.launch`, `device.*`, `data.set`) on top of `IMoonClickerService`.
+The Engine Module's single JNI upcall target implementing non-native Lua APIs (`input.*`, `app.*`, `device.*`, `data.set`, and the mirror control of `screen`) on top of `IMoonClickerService`. It holds the mirror reference a script acquired with `screen.start_mirror()` and returns it when the script ends.
 _Avoid_: JNI callbacks, native bridge.
 
 **VisionMatcher**:
