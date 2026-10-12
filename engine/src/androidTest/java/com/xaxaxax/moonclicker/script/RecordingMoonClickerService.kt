@@ -164,12 +164,16 @@ internal class RecordingMoonClickerService(
 
     var mirrorActive: Boolean = true
 
+    var releaseMirrorCalls = 0
+        private set
+
     override fun acquireDisplayMirror(displayId: Int): Boolean {
         mirrorActive = true
         return true
     }
 
     override fun releaseDisplayMirror(displayId: Int): Boolean {
+        releaseMirrorCalls++
         mirrorActive = false
         return true
     }
