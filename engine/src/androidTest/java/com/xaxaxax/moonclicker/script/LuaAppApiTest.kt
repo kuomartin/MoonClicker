@@ -7,13 +7,14 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** `app.list()` 對真的 system_server：列出所有顯示器上的 task，與腳本的目標顯示器無關。 */
+/** `app.*` 對真的 system_server。 */
 @RunWith(AndroidJUnit4::class)
 class LuaAppApiTest {
 
     @get:Rule
     val env = Tier1Env()
 
+    /** `app.list()` 列出所有顯示器上的 task，與腳本的目標顯示器無關。 */
     @Test
     fun app_list_finds_the_puppet_on_its_display_from_any_target() {
         val displayId = env.createDisplay()
@@ -39,5 +40,17 @@ class LuaAppApiTest {
                 outcome.data["found"],
             )
         }
+    }
+
+    /** package 打錯是腳本能處理的情況：回 false，不是 Lua error（ADR-0021）。 */
+    @Test
+    fun app_launch_of_a_package_that_is_not_installed_returns_false() {
+        val displayId = env.createDisplay()
+        val outcome = LuaScriptRunner(service = env.service, displayId = displayId).use {
+            it.run("data.set('ok', app.launch('com.xaxaxax.moonclicker.not.installed'))")
+        }
+
+        assertEquals(outcome.error, EngineRunState.Finished, outcome.runState)
+        assertEquals(false, outcome.data["ok"])
     }
 }

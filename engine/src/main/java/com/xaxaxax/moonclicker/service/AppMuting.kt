@@ -33,17 +33,24 @@ internal class AppMuting(
     }
 
     /**
-     * package 未安裝或 appops 呼叫失敗時回 false。已靜音再靜音、未靜音就解除都是 no-op：
-     * 重記原本的 mode 會讀到我們自己寫的值，之後就還原不回去。
+     * package 未安裝時回 false；appops 呼叫或紀錄檔寫入失敗時拋例外（見 [toBinderException]）。
+     * 已靜音再靜音、未靜音就解除都是 no-op：重記原本的 mode 會讀到我們自己寫的值，之後就還原不回去。
      */
     @Synchronized
-    fun setMuted(packageName: String, muted: Boolean): Boolean = try {
-        val uid = packageManager.getPackageUid(packageName, 0)
-        if (muted) mute(packageName, uid) else unmute(packageName, uid)
-        true
-    } catch (t: Throwable) {
-        Timber.w(t, "Unable to set muted=$muted for package '$packageName'")
-        false
+    fun setMuted(packageName: String, muted: Boolean): Boolean {
+        val uid = try {
+            packageManager.getPackageUid(packageName, 0)
+        } catch (_: PackageManager.NameNotFoundException) {
+            Timber.w("setMuted: package '$packageName' is not installed")
+            return false
+        }
+        try {
+            if (muted) mute(packageName, uid) else unmute(packageName, uid)
+        } catch (t: Throwable) {
+            Timber.w(t, "Unable to set muted=$muted for package '$packageName'")
+            throw t.toBinderException("setAppMuted")
+        }
+        return true
     }
 
     /** 還原所有靜音中的 package。還原失敗的保留在紀錄裡，留給下一個行程再試。 */
