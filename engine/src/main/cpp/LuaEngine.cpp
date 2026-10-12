@@ -1,8 +1,6 @@
 #include "LuaEngine.h"
 
-extern "C" {
 int luaopen_cjson(lua_State *L);
-}
 
 LuaEngine::~LuaEngine() {
     close();
