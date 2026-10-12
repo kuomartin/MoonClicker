@@ -70,9 +70,11 @@ add_library(moonclicker_native SHARED
         ${LUA_CJSON_SRC}
 )
 
-# Suppress warnings for Lua source files
-set_source_files_properties(${LUA_SRC} PROPERTIES COMPILE_FLAGS "-Wno-deprecated-declarations")
-set_source_files_properties(${LUA_CJSON_SRC} PROPERTIES COMPILE_FLAGS "-Wno-deprecated-declarations")
+# Lua 與 cjson 以 C++ 編譯：lua_error 因此是 C++ 例外而不是 longjmp，binding（C++）裡被越過的
+# stack frame 會執行解構子。cjson 不是 C++-clean，vendored 版本補了 void* 的 cast、把 strbuf.c 的
+# 變數 try 改名為 attempt；升級 cjson 時要重新套用。
+set_source_files_properties(${LUA_SRC} PROPERTIES LANGUAGE CXX COMPILE_FLAGS "-Wno-deprecated-declarations")
+set_source_files_properties(${LUA_CJSON_SRC} PROPERTIES LANGUAGE CXX COMPILE_FLAGS "-Wno-deprecated-declarations")
 
 # ONNX Runtime 只用標頭：libonnxruntime.so 隨 OCR 套件在執行期下載後 dlopen（ADR-0018），
 # C++ API 由 OrtLoader 以 Ort::InitApi 手動初始化。
