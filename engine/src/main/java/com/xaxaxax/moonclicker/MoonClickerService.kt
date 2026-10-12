@@ -1,6 +1,7 @@
 package com.xaxaxax.moonclicker
 
 import android.os.Build
+import android.os.IBinder
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.Surface
@@ -8,6 +9,7 @@ import androidx.annotation.Keep
 import com.xaxaxax.moonclicker.service.ActivityLauncher
 import com.xaxaxax.moonclicker.service.AppMuting
 import com.xaxaxax.moonclicker.service.DisplayMirroring
+import com.xaxaxax.moonclicker.service.DisplaySinks
 import com.xaxaxax.moonclicker.service.DisplayQuery
 import com.xaxaxax.moonclicker.service.GlesDistributor
 import com.xaxaxax.moonclicker.service.InputInjector
@@ -72,6 +74,12 @@ class MoonClickerService @JvmOverloads constructor(
     )
     private val virtualDisplayLifecycle = VirtualDisplayLifecycle(context, platformHandles, glesDistributor)
     private val displayMirroring = DisplayMirroring(virtualDisplayLifecycle, glesDistributor, platformHandles.displayManager)
+    private val displaySinks = DisplaySinks<Surface>(
+        resolveDistributorId = displayMirroring::resolveDistributorId,
+        attachSurface = glesDistributor::attachSurface,
+        detachSurface = glesDistributor::detachSurface,
+        holdAwake = virtualDisplayLifecycle::holdAwake,
+    ).also { glesDistributor.onUnregister = it::onDistributorUnregistered }
     private val inputInjector = InputInjector(platformHandles.inputManager, virtualDisplayLifecycle)
     private val activityLauncher = ActivityLauncher(platformHandles.packageManager, callerPackage, virtualDisplayLifecycle)
     private val permissionGrants = PermissionGrants(
@@ -125,26 +133,12 @@ class MoonClickerService @JvmOverloads constructor(
     override fun createVirtualDisplay(name: String, width: Int, height: Int, densityDpi: Int, flags: Int): Int =
         virtualDisplayLifecycle.createVirtualDisplay(name, width, height, densityDpi, flags)
 
-    override fun addVirtualDisplaySurface(displayId: Int, surface: Surface): Int {
-        Timber.d("addVirtualDisplaySurface: id=$displayId surfaceValid=${surface.isValid}")
-        // 有 surface 掛著就是有人在看（全螢幕預覽、串流、vision 腳本取影格），這段期間不讓它逾時。
-        virtualDisplayLifecycle.holdDisplayGroupAwake(displayId)
-        val actualId = displayMirroring.resolveDistributorId(displayId)
-        val handle = glesDistributor.attachSurface(actualId, surface)
-        if (handle < 0) {
-            Timber.e("addVirtualDisplaySurface: distributor not found for id=$displayId (actualId=$actualId)")
-            virtualDisplayLifecycle.releaseDisplayGroupAwake(displayId)
-        }
-        return handle
+    override fun attachDisplaySink(displayId: Int, surface: Surface, token: IBinder): Boolean {
+        Timber.d("attachDisplaySink: id=$displayId surfaceValid=${surface.isValid}")
+        return displaySinks.attach(displayId, surface, token)
     }
 
-    override fun removeVirtualDisplaySurface(displayId: Int, handle: Int): Boolean {
-        Timber.d("removeVirtualDisplaySurface: id=$displayId handle=$handle")
-        val actualId = displayMirroring.resolveDistributorId(displayId)
-        val detached = glesDistributor.detachSurface(actualId, handle)
-        if (detached) virtualDisplayLifecycle.releaseDisplayGroupAwake(displayId)
-        return detached
-    }
+    override fun detachDisplaySink(token: IBinder): Boolean = displaySinks.detach(token)
 
     override fun resizeVirtualDisplay(displayId: Int, width: Int, height: Int, densityDpi: Int): Boolean =
         virtualDisplayLifecycle.resizeVirtualDisplay(displayId, width, height, densityDpi)

@@ -1,5 +1,6 @@
 package com.xaxaxax.moonclicker.script
 
+import android.os.IBinder
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.Surface
@@ -43,6 +44,10 @@ internal class RecordingMoonClickerService(
     data class Launch(val packageName: String, val displayId: Int) : Call
 
     data class Mute(val packageName: String, val muted: Boolean) : Call
+
+    data class SinkAttach(val displayId: Int, val token: IBinder) : Call
+
+    data class SinkDetach(val token: IBinder) : Call
 
     val calls = CopyOnWriteArrayList<Call>()
 
@@ -105,10 +110,16 @@ internal class RecordingMoonClickerService(
 
     override fun getDisplaySize(displayId: Int): IntArray = size
 
-    override fun addVirtualDisplaySurface(displayId: Int, surface: Surface): Int =
-        if (mirrorActive) 1001 else -1
+    override fun attachDisplaySink(displayId: Int, surface: Surface, token: IBinder): Boolean {
+        if (!mirrorActive) return false
+        calls.add(SinkAttach(displayId, token))
+        return true
+    }
 
-    override fun removeVirtualDisplaySurface(displayId: Int, handle: Int): Boolean = true
+    override fun detachDisplaySink(token: IBinder): Boolean {
+        calls.add(SinkDetach(token))
+        return true
+    }
 
     // --- 這一層用不到的 ------------------------------------------------------
 

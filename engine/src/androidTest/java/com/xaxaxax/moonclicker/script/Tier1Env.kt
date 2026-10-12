@@ -18,6 +18,7 @@ import android.os.PowerManager
 import android.os.SystemClock
 import android.view.MotionEvent
 import androidx.test.platform.app.InstrumentationRegistry
+import com.xaxaxax.moonclicker.DisplaySink
 import com.xaxaxax.moonclicker.MoonClickerService
 import com.xaxaxax.moonclicker.ocr.OcrRuntime
 import com.xaxaxax.moonclicker.script.puppet.PuppetActivity
@@ -307,9 +308,9 @@ class Tier1Env : ExternalResource() {
             }
         }, Handler(thread.looper))
 
-        val handle = service.addVirtualDisplaySurface(displayId, reader.surface)
+        val sink = DisplaySink(displayId, reader.surface)
         try {
-            assertTrue("addVirtualDisplaySurface returned $handle", handle >= 0)
+            assertTrue("attachDisplaySink was refused", sink.attach(service))
             if (quietMs <= 0) return done.await(timeoutMs, TimeUnit.MILLISECONDS)
             val deadline = SystemClock.uptimeMillis() + timeoutMs
             while (SystemClock.uptimeMillis() < deadline) {
@@ -319,7 +320,7 @@ class Tier1Env : ExternalResource() {
             }
             return false
         } finally {
-            if (handle >= 0) service.removeVirtualDisplaySurface(displayId, handle)
+            sink.close()
             synchronized(lock) { closing = true }
             reader.close()
             thread.quitSafely()

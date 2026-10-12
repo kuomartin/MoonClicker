@@ -153,11 +153,10 @@ internal class VirtualDisplayLifecycle(
             return false
         }
 
+        // 舊 distributor 上的 sink 跟著消失，連同它們撐著的 wake lock（見 DisplaySinks）；
+        // 重連的人會再撐起來。
         glesDistributor.unregister(displayId)
         glesDistributor.destroyDistributor(oldPtr)
-        // 舊 distributor 上的 surface 跟著消失，不會有人再為它們呼叫 remove；它們撐著的 wake lock
-        // 一併放掉，重連的人會再撐起來。
-        wakeLocks.dropAll(displayId)
         vdStore[displayId] = ManagedDisplay(
             managed.display,
             surfaceWidth = width,
@@ -170,7 +169,6 @@ internal class VirtualDisplayLifecycle(
     }
 
     fun destroyVirtualDisplay(displayId: Int): Boolean {
-        wakeLocks.dropAll(displayId)
         vdStore.remove(displayId)?.display?.release()
         glesDistributor.unregister(displayId)?.let { ptr -> glesDistributor.destroyDistributor(ptr) }
         return true
@@ -215,8 +213,8 @@ internal class VirtualDisplayLifecycle(
      * 是個死結（issue #6、#121）。預設 group 的 `wakeUp` 叫不到這個 group。
      *
      * 在每個會操作這個顯示器的入口都先喚醒一次（[DisplayGroupWakeLocks.pulse]），讓它沒有機會
-     * 卡進那個死結；緊接著送進去的輸入會重設該 group 的計時。有人在看的期間則由
-     * [holdDisplayGroupAwake] 撐著不讓它逾時。
+     * 卡進那個死結；緊接著送進去的輸入會重設該 group 的計時。有 sink 掛著的期間則由
+     * [holdAwake] 撐著不讓它逾時。
      */
     fun wakeDisplayGroupIfOwned(displayId: Int) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
@@ -224,18 +222,14 @@ internal class VirtualDisplayLifecycle(
     }
 
     /**
-     * 多一個正在看 [displayId] 畫面的人（掛上一個 surface）：持有綁在它 display group 上的螢幕
-     * wake lock，第一個人進來時順便叫醒它。與 [releaseDisplayGroupAwake] 成對呼叫。
-     *
-     * surface 的主人若死掉而沒呼叫 [releaseDisplayGroupAwake]，wake lock 會持有到顯示器銷毀為止。
+     * 讓 [displayId] 的 display group 在呼叫端放手前不閒置逾時（acquire 時順便叫醒），回傳放手的
+     * 函式。不擁有獨立 display group 的顯示器不撐，回 null——撐了會連主螢幕一起點亮。
      */
-    fun holdDisplayGroupAwake(displayId: Int) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
-        if (ownsDisplayGroup(displayId)) wakeLocks.hold(displayId)
-    }
-
-    fun releaseDisplayGroupAwake(displayId: Int) {
-        wakeLocks.drop(displayId)
+    fun holdAwake(displayId: Int): (() -> Unit)? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return null
+        if (!ownsDisplayGroup(displayId)) return null
+        val token = wakeLocks.acquire(displayId) ?: return null
+        return { wakeLocks.release(token) }
     }
 
     /**

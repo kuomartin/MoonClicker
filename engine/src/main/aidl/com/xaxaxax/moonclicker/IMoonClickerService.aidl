@@ -10,8 +10,15 @@ interface IMoonClickerService {
     boolean grantRuntimePermission(String packageName, String permissionName) = 2;
     // VirtualDisplay 管理
     int createVirtualDisplay(String name, int width, int height, int densityDpi, int flags) = 101;
-    int addVirtualDisplaySurface(int displayId, in Surface surface) = 102;
-    boolean removeVirtualDisplaySurface(int displayId, int handle) = 103;
+    /**
+     * Attaches a consumer surface to the display's frames (a DisplaySink), owned by [token].
+     * While attached, a display owning its display group is kept from idling off. The sink is
+     * released on detachDisplaySink(token), when the display is resized or destroyed, or when
+     * [token] dies. Returns false if [token] is already attached or the display has no frames.
+     */
+    boolean attachDisplaySink(int displayId, in Surface surface, IBinder token) = 102;
+    /** Returns false if [token] is not attached (never was, already detached, or dropped). */
+    boolean detachDisplaySink(IBinder token) = 103;
     boolean destroyVirtualDisplay(int displayId) = 104;
 
     int[] getVirtualDisplays() = 105;
@@ -26,10 +33,10 @@ interface IMoonClickerService {
      * Rebuilds the native GLES distributor at the new size and swaps it in via
      * VirtualDisplay.resize()/setSurface() rather than destroying and recreating the whole
      * VirtualDisplay: callers that only know the displayId (e.g. an already-running script)
-     * keep working across the resize. Any consumer surface already attached via
-     * addVirtualDisplaySurface is dropped with the old distributor and is NOT carried over —
-     * the caller must re-attach. Returns false (and leaves the display as it was) if resize
-     * fails at any step.
+     * keep working across the resize. Any sink already attached via attachDisplaySink is
+     * dropped with the old distributor and is NOT carried over — its token no longer refers to
+     * anything, and the caller must attach again. Returns false (and leaves the display as it
+     * was) if resize fails at any step.
      */
     boolean resizeVirtualDisplay(int displayId, int width, int height, int densityDpi) = 112;
 
@@ -37,7 +44,7 @@ interface IMoonClickerService {
      * Turns off the display group owned by this virtual display (DPMS sleep), without
      * destroying it — the reverse of the implicit wake done on every entry point that
      * operates the display (injected input, launchInDisplay) and of the wake lock held while
-     * a surface is attached via addVirtualDisplaySurface. Only affects displays this service
+     * a sink is attached via attachDisplaySink. Only affects displays this service
      * created that own their display group; returns false otherwise.
      */
     boolean sleepVirtualDisplay(int displayId) = 113;
