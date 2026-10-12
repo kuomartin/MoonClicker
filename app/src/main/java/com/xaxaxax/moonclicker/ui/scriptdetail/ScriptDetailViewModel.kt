@@ -11,7 +11,6 @@ import com.xaxaxax.moonclicker.ScriptDetailRoute
 import com.xaxaxax.moonclicker.core.DisplayConfig
 import com.xaxaxax.moonclicker.core.DisplayInfo
 import com.xaxaxax.moonclicker.core.readDisplayInfo
-import com.xaxaxax.moonclicker.engine.ScriptEngine
 import com.xaxaxax.moonclicker.script.Script
 import com.xaxaxax.moonclicker.script.ScriptArchive
 import com.xaxaxax.moonclicker.script.ScriptSession
@@ -62,7 +61,7 @@ class ScriptDetailViewModel @Inject constructor(
     val uiState: StateFlow<ScriptDetailUiState> = combine(
         store.scripts,
         session.state,
-        ScriptEngine.sharedData,
+        session.sharedData,
         virtualDisplays,
     ) { scripts, sessionState, sharedData, displays ->
         val script = scripts.firstOrNull { it.id == scriptId }

@@ -8,27 +8,17 @@ import org.json.JSONArray
 import timber.log.Timber
 
 /**
- * Single observable source of truth for native engine state, fed by [EngineEventType]
- * events pushed from the C++ side (see ScriptRuntime::pushEvent) via
- * [com.xaxaxax.moonclicker.script.ScriptHost.onEngineEvent]. This is what UI/consumer modules
- * should observe instead of polling whether the engine is running.
+ * 一個 [com.xaxaxax.moonclicker.engine.ScriptEngine] 實例的狀態，由 C++ 端推來的 [EngineEventType]
+ * 事件（見 ScriptRuntime::pushEvent）經 [com.xaxaxax.moonclicker.script.ScriptHost] 餵進來。
+ * UI 觀察這裡，不輪詢引擎是否在跑。
  */
-object EngineStateRepository {
-    private val _state = MutableStateFlow(EngineState())
+internal class EngineStateRepository(scriptId: String) {
+    private val _state = MutableStateFlow(
+        EngineState(runState = EngineRunState.Starting, runningScriptId = scriptId)
+    )
     val state: StateFlow<EngineState> = _state.asStateFlow()
 
-    /**
-     * Called right before starting a script, so stale terminal state from a previous run is
-     * never mistaken for the new run's outcome.
-     */
-    fun reset(scriptId: String?) {
-        _state.value = EngineState(
-            runState = EngineRunState.Starting,
-            runningScriptId = scriptId,
-        )
-    }
-
-    internal fun onEvent(type: Int, payload: String) {
+    fun onEvent(type: Int, payload: String) {
         when (type) {
             EngineEventType.RUNNING -> _state.update { it.copy(runState = EngineRunState.Running) }
             EngineEventType.FINISHED -> _state.update { it.copy(runState = EngineRunState.Finished) }

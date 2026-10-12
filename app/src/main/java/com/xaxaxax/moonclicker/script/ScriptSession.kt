@@ -5,8 +5,8 @@ import android.content.Intent
 import com.xaxaxax.moonclicker.IMoonClickerService
 import com.xaxaxax.moonclicker.engine.ScriptEngine
 import com.xaxaxax.moonclicker.engine.ScriptRun
+import com.xaxaxax.moonclicker.engine.ScriptStartResult
 import com.xaxaxax.moonclicker.engine.state.EngineRunState
-import com.xaxaxax.moonclicker.engine.state.EngineStateRepository
 import com.xaxaxax.moonclicker.core.AppSettings
 import com.xaxaxax.moonclicker.core.OcrManager
 import com.xaxaxax.moonclicker.core.DisplayConfig
@@ -17,14 +17,20 @@ import com.xaxaxax.moonclicker.shizuku.createVirtualDisplay
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -45,13 +51,11 @@ data class ScriptSessionState(
 }
 
 /**
- * 執行中的那一份腳本。
- *
- * 一次一個是刻意的：原生引擎是單例，而 UI 也以「執行中的那一個」來表達。要並行得連同
- * 這裡的狀態模型一起改，不是把 native 的單例拿掉就好。
+ * 執行中的那一份腳本。引擎可以同時跑多個實例，但這裡的狀態模型與 UI 目前仍以「執行中的那一個」表達。
  *
  * 顯示器的生命週期不屬於這裡：需要時會建，但**結束時不銷毀**——那是 Displays 頁的事。
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 @Singleton
 class ScriptSession @Inject constructor(
     @param:ApplicationContext private val context: Context,
@@ -60,26 +64,36 @@ class ScriptSession @Inject constructor(
     private val settings: AppSettings,
     private val ocrManager: OcrManager,
 ) {
-    private data class RunInfo(val script: Script, val displayId: Int)
+    private data class RunInfo(val script: Script, val displayId: Int, val engine: ScriptEngine)
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val runInfo = MutableStateFlow<RunInfo?>(null)
     private val startFailure = MutableStateFlow<String?>(null)
+    private val engine: Flow<ScriptEngine?> = runInfo.map { it?.engine }
 
     val state: StateFlow<ScriptSessionState> =
-        combine(runInfo, startFailure, EngineStateRepository.state) { info, failure, engine ->
+        combine(
+            runInfo.flatMapLatest { info ->
+                info?.engine?.state?.map { info to it.runState } ?: flowOf(null to EngineRunState.Idle)
+            },
+            startFailure,
+        ) { (info, runState), failure ->
             ScriptSessionState(
                 script = info?.script,
                 displayId = info?.displayId,
-                // 引擎狀態只有在說的是同一份腳本時才採用，避免顯示上一輪的結局。
-                runState = if (info != null && engine.runningScriptId == info.script.id) {
-                    engine.runState
-                } else {
-                    EngineRunState.Idle
-                },
+                runState = runState,
                 startFailure = failure,
             )
         }.stateIn(scope, SharingStarted.Eagerly, ScriptSessionState())
+
+    /** 目前（或最後一次）執行的腳本以 `data.set` 發佈的鍵值。 */
+    val sharedData: StateFlow<Map<String, Any>> =
+        engine.flatMapLatest { it?.sharedData ?: flowOf(emptyMap()) }
+            .stateIn(scope, SharingStarted.Eagerly, emptyMap())
+
+    /** 目前執行的腳本送出的 log。換腳本時不重播上一支的。 */
+    val logLines: Flow<String> =
+        engine.flatMapLatest { it?.logLines ?: emptyFlow() }.shareIn(scope, SharingStarted.Eagerly)
 
     init {
         scope.launch {
@@ -88,11 +102,6 @@ class ScriptSession @Inject constructor(
                     notifier.showRunning(current.script.name, current.displayId)
                 } else {
                     notifier.cancelRunning()
-                }
-                // 腳本自己跑完或出錯時，原生執行緒已經結束，但取影格的 surface 還掛在
-                // 顯示器上。這裡收尾，讓顯示器回到乾淨狀態（但不銷毀它）。
-                if (current.script != null && current.runState.isTerminal) {
-                    ScriptEngine.stop()
                 }
             }
         }
@@ -129,7 +138,6 @@ class ScriptSession @Inject constructor(
                 val displayId = resolveDisplay(service, target)
                     ?: return@withService "Target display not found"
 
-                runInfo.value = RunInfo(script, displayId)
                 val started = ScriptEngine.start(
                     context = context,
                     service = service,
@@ -143,7 +151,14 @@ class ScriptSession @Inject constructor(
                     onNotify = { title, text -> notifier.showScriptMessage(title, text) },
                     onOpenUri = ::openUri,
                 )
-                if (!started) return@withService "Native engine failed to start"
+                when (started) {
+                    is ScriptStartResult.Started -> runInfo.value = RunInfo(script, displayId, started.engine)
+
+                    is ScriptStartResult.DisplayBusy ->
+                        return@withService "Display ${started.displayId} is running ${started.scriptId}"
+
+                    is ScriptStartResult.Failed -> return@withService started.message
+                }
                 if (target.hasVision && settings.autoOpenFullscreen.value) openFullscreen(displayId)
                 null
             }
@@ -153,23 +168,18 @@ class ScriptSession @Inject constructor(
     }
 
     fun stop() {
-        scope.launch { ScriptEngine.stop() }
+        scope.launch { runInfo.value?.engine?.stop() }
     }
 
     /**
      * 給需要「真的停了才能做下一步」的呼叫端用（見 WorkbenchServer 的 `POST /run/stop`：
-     * webview 收到成功回應就會立刻送下一個 start，若這裡只是 fire-and-forget，
-     * `state.isRunning` 還沒翻成 false 就會被 409 擋下——實測過，ROI 調整後的
-     * debounce 重啟要按兩次「開始測試」才成功）。
+     * webview 收到成功回應就會立刻送下一個 start，[state] 還沒翻成非 running 就會被 409 擋下）。
      *
-     * `ScriptEngine.stop()` 呼叫的 `nativeStop()` 只是「請求」native 端停止，真正停止是
-     * native 執行緒退出後透過 [EngineEventType.STOPPED] 事件非同步推回
-     * [EngineStateRepository] 的（見該檔案），不是 `nativeStop()` 一回傳就代表停了。
-     * 這裡呼叫完就等 [state] 真的翻成非 running（或逾時），呼叫端才能放心接著做下一步。
+     * [ScriptEngine.stop] 返回時引擎已經停了，但 [state] 是非同步合成的，這裡等它跟上（或逾時）。
      */
     suspend fun stopAndAwait(timeoutMs: Long = 3000) {
         if (!state.value.isRunning) return
-        ScriptEngine.stop()
+        runInfo.value?.engine?.stop()
         withTimeoutOrNull(timeoutMs) {
             state.first { !it.isRunning }
         }
@@ -251,11 +261,6 @@ class ScriptSession @Inject constructor(
         }
     }
 }
-
-private val EngineRunState.isTerminal: Boolean
-    get() = this is EngineRunState.Finished ||
-            this is EngineRunState.Error ||
-            this is EngineRunState.Stopped
 
 /**
  * [ScriptSession.resolveDisplay] 沿用現有虛擬顯示時，判斷某個顯示器的建立尺寸
