@@ -57,6 +57,8 @@ class DistributorDeliveryTest {
         }.apply { start() }
         try {
             val frames = env.countFrames(displayId, 1_000)
+            // ATD 映像檔沒有圖形堆疊，畫面內容改變時虛擬顯示幾乎不送新緩衝區。
+            if (frames < 8) env.assumeFramesHaveContent(displayId)
             assertTrue("only $frames frames in 1 s while the screen changed every 50 ms", frames >= 8)
         } finally {
             toggler.interrupt()
