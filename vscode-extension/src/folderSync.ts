@@ -6,12 +6,14 @@ import {
   deleteEntry,
   deleteScript,
   getTree,
+  INVALID_SCRIPT_ID,
   isValidScriptId,
   listScripts,
   readFile,
   ScriptHttpError,
   writeFile,
 } from "./scriptSync";
+import { errorMessage, MessageError, msg, type Message, type Text } from "./message";
 import { CONFLICT_SUFFIX, loadSyncFilter, type SyncFilter } from "./syncIgnore";
 import { planSync, relPathOf, scriptIdOf, type SyncAction } from "./syncPlan";
 
@@ -26,6 +28,10 @@ import { planSync, relPathOf, scriptIdOf, type SyncAction } from "./syncPlan";
 
 export const STATE_DIR = ".moonclicker";
 const STATE_FILE = "state.json";
+
+export const FOLDER_OWNED_BY_OTHER_DEVICE: Message = msg(
+  "This folder is already synced with another device. Choose a different folder.",
+);
 
 interface SyncState {
   deviceId: string;
@@ -43,8 +49,8 @@ export interface SyncReport {
   /** 一邊刪除、另一邊修改：保留了修改的版本。 */
   restored: string[];
   /** 沒有同步的腳本與原因，例如名稱不合規則、使用者拒絕刪除。 */
-  skipped: { scriptId: string; reason: string }[];
-  errors: { key: string; message: string }[];
+  skipped: { scriptId: string; reason: Text }[];
+  errors: { key: string; message: Text }[];
 }
 
 export function emptyReport(): SyncReport {
@@ -88,7 +94,7 @@ export class FolderSync {
     this.root = path.resolve(options.root);
     const state = readSyncState(this.root);
     if (state && state.deviceId !== options.deviceId) {
-      throw new Error("這個資料夾已經和另一台裝置同步，請選擇其他資料夾");
+      throw new MessageError(FOLDER_OWNED_BY_OTHER_DEVICE);
     }
     this.base = new Map(Object.entries(state?.files ?? {}));
   }
@@ -401,7 +407,7 @@ export class FolderSync {
       // 拿掉 base：這些腳本在下次完整同步時會被當成裝置上新增的腳本，重新拉回本機。
       for (const scriptId of scriptIds) {
         for (const key of this.baseKeysUnder(scriptId)) this.base.delete(key);
-        report.skipped.push({ scriptId, reason: "本機資料夾已刪除，但選擇保留裝置上的腳本" });
+        report.skipped.push({ scriptId, reason: msg("Deleted locally; kept on the device as chosen") });
       }
       return;
     }
@@ -429,13 +435,13 @@ export class FolderSync {
     try {
       await task();
     } catch (err) {
-      report.errors.push({ key, message: (err as Error).message });
+      report.errors.push({ key, message: errorMessage(err) });
     }
   }
 
-  private newScriptProblem(scriptId: string): string | undefined {
-    if (!isValidScriptId(scriptId)) return "裝置上的腳本名稱只能是小寫英數字、「.」「_」「-」";
-    if (!fs.existsSync(path.join(this.root, scriptId, "main.lua"))) return "缺少 main.lua";
+  private newScriptProblem(scriptId: string): Text | undefined {
+    if (!isValidScriptId(scriptId)) return INVALID_SCRIPT_ID;
+    if (!fs.existsSync(path.join(this.root, scriptId, "main.lua"))) return msg("main.lua is missing");
     return undefined;
   }
 

@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { WebSocketServer } from "ws";
 import { create, toBinary } from "@bufbuild/protobuf";
 import { StreamEventSchema } from "../generated/workbench_stream_event_pb";
+import { formatText } from "../message";
 import { ConnectionState, PROTOCOL_VERSION, WorkbenchConnection, parseStreamEvent } from "../workbenchConnection";
 
 function encode(event: Parameters<typeof create<typeof StreamEventSchema>>[1]): Uint8Array {
@@ -199,7 +200,7 @@ test("a protocol mismatch close reaches the error state with the reason", async 
       connection.connect(`127.0.0.1:${port}`);
       try {
         const state = await waitForState(connection, "error");
-        assert.ok(state.status === "error" && state.message.includes("app 3"));
+        assert.ok(state.status === "error" && formatText(state.message).includes("app 3"));
         resolve();
       } catch (err) {
         reject(err);

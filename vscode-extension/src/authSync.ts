@@ -1,3 +1,5 @@
+import { MessageError, msg } from "./message";
+
 export async function pairWithPin(address: string, pin: string): Promise<string> {
   const response = await fetch(`http://${address}/pair`, {
     method: "POST",
@@ -7,7 +9,7 @@ export async function pairWithPin(address: string, pin: string): Promise<string>
 
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(text || `配對失敗（HTTP ${response.status}）`);
+    throw new MessageError(text || msg("Pairing failed (HTTP {0})", response.status));
   }
 
   const data = (await response.json()) as { token: string };

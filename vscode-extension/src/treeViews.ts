@@ -12,7 +12,7 @@ export class RemoteScriptItem extends vscode.TreeItem {
     // contextValue 決定行內按鈕：沒在跑時顯示執行，在跑時顯示停止。
     this.contextValue = running ? "remoteScriptRunning" : "remoteScript";
     this.iconPath = new vscode.ThemeIcon(running ? "debug-start" : "file-code");
-    this.description = running ? `${summary.id} · 執行中` : summary.id;
+    this.description = running ? `${summary.id} · ${vscode.l10n.t("running")}` : summary.id;
     this.command = {
       command: "moonclicker.openScript",
       title: "Open Script",

@@ -1,4 +1,5 @@
 import { authHeaders } from "./authSync";
+import { MessageError, msg } from "./message";
 import type { TemplateRoi } from "./templateSync";
 
 /**
@@ -20,7 +21,7 @@ export async function startVisionTest(
   token?: string,
 ): Promise<string> {
   if (!scriptId || scriptId.includes("/") || scriptId.includes("..")) {
-    throw new Error("腳本 ID 無效");
+    throw new MessageError(msg("Invalid script ID"));
   }
 
   const url = `http://${address}/scripts/${encodeURIComponent(scriptId)}/vision-test`;
@@ -46,12 +47,12 @@ export async function startVisionTest(
   if (!response.ok) {
     const reason = await response.text();
     if (response.status === 409) {
-      throw new Error(`裝置忙碌中（HTTP 409）：${reason}`);
+      throw new MessageError(msg("Device is busy (HTTP 409): {0}", reason));
     }
     if (response.status === 404) {
-      throw new Error(`找不到腳本（HTTP 404）：${reason || scriptId}`);
+      throw new MessageError(msg("Script not found (HTTP 404): {0}", reason || scriptId));
     }
-    throw new Error(`啟動測試比對失敗（HTTP ${response.status}）：${reason}`);
+    throw new MessageError(msg("Failed to start the match test (HTTP {0}): {1}", response.status, reason));
   }
   return response.text();
 }
@@ -103,12 +104,14 @@ export async function startOcrTest(address: string, options: OcrTestOptions, tok
   if (!response.ok) {
     const reason = await response.text();
     if (response.status === 409) {
-      throw new Error(`裝置忙碌中（HTTP 409）：${reason}`);
+      throw new MessageError(msg("Device is busy (HTTP 409): {0}", reason));
     }
     if (response.status === 412) {
-      throw new Error("裝置尚未安裝 OCR 元件：請到裝置的「設定 → 文字辨識（OCR）」下載（HTTP 412）");
+      throw new MessageError(
+        msg("OCR is not installed on the device. Download it in the app under Settings → Text recognition (OCR) (HTTP 412)"),
+      );
     }
-    throw new Error(`啟動 OCR 測試失敗（HTTP ${response.status}）：${reason}`);
+    throw new MessageError(msg("Failed to start the OCR test (HTTP {0}): {1}", response.status, reason));
   }
   return response.text();
 }
@@ -128,6 +131,6 @@ export async function stopRun(address: string, token?: string, scriptId?: string
 
   if (!response.ok) {
     const reason = await response.text();
-    throw new Error(`停止執行失敗（HTTP ${response.status}）：${reason}`);
+    throw new MessageError(msg("Failed to stop (HTTP {0}): {1}", response.status, reason));
   }
 }

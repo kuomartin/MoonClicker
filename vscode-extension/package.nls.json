@@ -1,0 +1,16 @@
+{
+  "displayName": "MoonClicker Script Workbench",
+  "description": "Connect VS Code to a MoonClicker device running Script Workbench.",
+  "command.connect": "MoonClicker: Connect to Device",
+  "command.disconnect": "MoonClicker: Disconnect from Device",
+  "command.openScript": "MoonClicker: Open Script",
+  "command.newScript": "MoonClicker: New Script",
+  "command.run": "MoonClicker: Run Current Script on Device",
+  "command.stop": "MoonClicker: Stop Script on Device",
+  "command.openWorkbench": "MoonClicker: Open Workbench",
+  "command.runRemote": "MoonClicker: Run Remote Script",
+  "command.refresh": "MoonClicker: Refresh and Sync",
+  "viewsContainer.scripts": "MoonClicker Scripts",
+  "view.workspace": "Workspace",
+  "viewsWelcome.disconnected": "Not connected to a device.\n[Connect to Device](command:moonclicker.connect)\nTurn on Script Workbench in the app's developer options, and VS Code finds devices on the same network automatically."
+}
