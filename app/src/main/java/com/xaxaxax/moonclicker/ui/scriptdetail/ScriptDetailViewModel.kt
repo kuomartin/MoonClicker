@@ -60,8 +60,8 @@ class ScriptDetailViewModel @Inject constructor(
 
     val uiState: StateFlow<ScriptDetailUiState> = combine(
         store.scripts,
-        session.state,
-        session.sharedData,
+        session.stateOf(scriptId),
+        session.sharedData(scriptId),
         virtualDisplays,
     ) { scripts, sessionState, sharedData, displays ->
         val script = scripts.firstOrNull { it.id == scriptId }
@@ -108,7 +108,7 @@ class ScriptDetailViewModel @Inject constructor(
         session.start(script, target ?: session.defaultTargetFor(script))
     }
 
-    fun stop() = session.stop()
+    fun stop() = session.stop(scriptId)
 
     fun export(uri: Uri) {
         val script = uiState.value.script ?: return
@@ -130,7 +130,7 @@ class ScriptDetailViewModel @Inject constructor(
     /** @return true 表示刪掉了，呼叫端該離開這一頁。 */
     fun delete(): Boolean {
         val script = uiState.value.script ?: return false
-        if (session.state.value.isRunning && session.state.value.script?.id == script.id) {
+        if (session.isRunning(script.id)) {
             _message.value = context.getString(R.string.scripts_running_cannot_operate)
             return false
         }

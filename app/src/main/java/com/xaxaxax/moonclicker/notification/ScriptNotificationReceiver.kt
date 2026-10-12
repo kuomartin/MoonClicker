@@ -16,10 +16,11 @@ class ScriptNotificationReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != ACTION_STOP) return
-        session.stop()
+        intent.getStringExtra(EXTRA_SCRIPT_ID)?.let(session::stop)
     }
 
     companion object {
         const val ACTION_STOP = "com.xaxaxax.moonclicker.action.STOP_SCRIPT"
+        const val EXTRA_SCRIPT_ID = "scriptId"
     }
 }

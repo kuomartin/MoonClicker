@@ -355,7 +355,7 @@
           const data = JSON.parse(event.data);
           window.postMessage({ type: "streamEvent", event: data }, "*");
         } catch {
-          window.postMessage({ type: "streamEvent", event: { case: "log", value: event.data } }, "*");
+          window.postMessage({ type: "streamEvent", event: { case: "log", value: { scriptId: "", line: event.data } } }, "*");
         }
       };
     } catch (e) {

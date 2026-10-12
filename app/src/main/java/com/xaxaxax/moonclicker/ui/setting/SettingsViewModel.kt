@@ -97,8 +97,8 @@ class SettingsViewModel @Inject constructor(
     /** 先併成一份，是為了讓外層 combine 停在小於等於 5 個具名參數上。 */
     private val userServiceState = combine(
         shizukuManager.statusFlow,
-        scriptSession.state,
-    ) { status, session -> status to session.isRunning }
+        scriptSession.isAnyRunning,
+    ) { status, running -> status to running }
 
     private val permissionCombinedState = combine(
         permissionManager.hasNotificationPermission,

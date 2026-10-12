@@ -4,9 +4,10 @@ import android.os.Build
 import com.xaxaxax.moonclicker.IMoonClickerService
 import com.xaxaxax.moonclicker.core.AppSettings
 import com.xaxaxax.moonclicker.core.OcrManager
-import com.xaxaxax.moonclicker.engine.ScriptEngine
 import com.xaxaxax.moonclicker.script.Script
+import com.xaxaxax.moonclicker.script.ScriptLogLine
 import com.xaxaxax.moonclicker.script.ScriptSession
+import com.xaxaxax.moonclicker.script.ScriptStartOutcome
 import com.xaxaxax.moonclicker.script.ScriptTarget
 import com.xaxaxax.moonclicker.script.ScriptStore
 import com.xaxaxax.moonclicker.script.TemplateRoi
@@ -32,7 +33,9 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.routing
 import io.ktor.server.websocket.WebSockets
 import io.ktor.server.websocket.webSocket
+import io.ktor.websocket.CloseReason
 import io.ktor.websocket.Frame
+import io.ktor.websocket.close
 import io.ktor.websocket.readText
 import java.io.File
 import java.net.Inet4Address
@@ -45,14 +48,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.withIndex
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import moonclicker.workbench.ProtocolVersion
 import timber.log.Timber
 
 /**
@@ -68,28 +69,28 @@ import timber.log.Timber
  * 真的 `ScriptSession`/Hilt。
  */
 interface ScriptRunner {
-    fun isRunning(): Boolean
-    fun start(script: Script)
-    /**
-     * 停止目前執行中的腳本並等到真的停了才回傳（若沒有在跑，是安全的 no-op）——見
-     * [ScriptSession.stopAndAwait]：不等的話，webview 端「stop 完馬上 start」的重啟流程
-     * 會因為 native 端還沒把 STOPPED 事件非同步推回來，被 isRunning() 擋下 409。
-     */
-    suspend fun stop()
+    fun isRunning(scriptId: String): Boolean
+    /** 啟動並等引擎答覆。 */
+    suspend fun start(script: Script): ScriptStartOutcome
     /** 跟 [start] 不同：不吃 `script.json` 的 `display`，強制跑在既有的虛擬顯示 [displayId] 上（見 vision-test）。 */
-    fun startOnDisplay(script: Script, displayId: Int)
+    suspend fun startOnDisplay(script: Script, displayId: Int): ScriptStartOutcome
+    /**
+     * 停止 [scriptId]（null 表示全部）並等到真的停了才回傳；沒有在跑是安全的 no-op。見
+     * [ScriptSession.stopAndAwait]：不等的話，webview 端「stop 完馬上 start」的重啟流程會被 409 擋下。
+     */
+    suspend fun stop(scriptId: String?)
 }
 
 /**
- * log/data 即時串流需要的最小介面（見 #62）。真正實作直接轉呼叫全域單例
- * [ScriptEngine]；存在這一層是為了讓 `workbenchModule` 的 JVM 測試餵假的
- * flow，不用真的跑一次原生引擎才能發出 log/data 事件。
+ * log/data 即時串流需要的最小介面（見 #62）。真正實作直接轉呼叫 [ScriptSession]；存在這一層
+ * 是為了讓 `workbenchModule` 的 JVM 測試餵假的 flow，不用真的跑一次原生引擎才能發出 log/data 事件。
  */
 interface ScriptStream {
-    val logLines: Flow<String>
-    val sharedData: StateFlow<Map<String, Any>>
-    /** 執行中腳本的資料夾名稱，沒有腳本在跑時是 null；訂閱時要先送出目前的值。 */
-    val runningScriptId: Flow<String?>
+    val logLines: Flow<ScriptLogLine>
+    /** 每支執行過的腳本最後的 data，以腳本 id 為鍵；訂閱時要先送出目前的值。 */
+    val sharedData: Flow<Map<String, Map<String, Any>>>
+    /** 執行中腳本的資料夾名稱；訂閱時要先送出目前的值。 */
+    val runningScriptIds: Flow<List<String>>
 }
 
 /**
@@ -131,18 +132,17 @@ class WorkbenchServer @Inject constructor(
     val authStore: WorkbenchAuthStore,
 ) {
     private val scriptRunner = object : ScriptRunner {
-        override fun isRunning() = scriptSession.state.value.isRunning
-        override fun start(script: Script) = scriptSession.start(script)
-        override suspend fun stop() = scriptSession.stopAndAwait()
-        override fun startOnDisplay(script: Script, displayId: Int) =
-            scriptSession.start(script, ScriptTarget.ExistingVirtual(displayId))
+        override fun isRunning(scriptId: String) = scriptSession.isRunning(scriptId)
+        override suspend fun start(script: Script) = scriptSession.run(script)
+        override suspend fun startOnDisplay(script: Script, displayId: Int) =
+            scriptSession.run(script, ScriptTarget.ExistingVirtual(displayId))
+        override suspend fun stop(scriptId: String?) = scriptSession.stopAndAwait(scriptId)
     }
 
     private val scriptStream = object : ScriptStream {
-        override val logLines: Flow<String> get() = scriptSession.logLines
-        override val sharedData: StateFlow<Map<String, Any>> get() = scriptSession.sharedData
-        override val runningScriptId: Flow<String?>
-            get() = scriptSession.state.map { state -> state.script?.id.takeIf { state.isRunning } }
+        override val logLines: Flow<ScriptLogLine> get() = scriptSession.logLines
+        override val sharedData: Flow<Map<String, Map<String, Any>>> get() = scriptSession.allSharedData
+        override val runningScriptIds: Flow<List<String>> get() = scriptSession.runningScriptIds
     }
 
     private val displaySource = object : DisplaySource {
@@ -312,7 +312,14 @@ data class PairResponse(val token: String)
 
 /** `GET /device`：[id] 是 [WorkbenchAuthStore.instanceId]，[name] 給人看。 */
 @Serializable
-data class WorkbenchDeviceInfo(val id: String, val name: String)
+data class WorkbenchDeviceInfo(
+    val id: String,
+    val name: String,
+    val protocolVersion: Int = WORKBENCH_PROTOCOL_VERSION,
+)
+
+/** 見 `proto/workbench_stream_event.proto` 的 `ProtocolVersion`。 */
+val WORKBENCH_PROTOCOL_VERSION: Int = ProtocolVersion.PROTOCOL_VERSION_CURRENT.value
 
 /**
  * [scriptsRoot] 拆成參數而不是內部自己算，是為了比照 [ScriptStore.scan] 的作法，讓
@@ -403,25 +410,38 @@ fun Application.workbenchModule(
 
         // log + data.set 即時串流（見 #62），外加保留 #57 用來驗證連線本身的 echo。
         //
-        // data 用 sharedData 這個 StateFlow 的訂閱語意天生就有「重連重送目前快照」的效果——
-        // 新的 collector 一訂閱就會先拿到目前值，不需要另外記錄「上次送過什麼」。
-        // log 是 logLines 這個 SharedFlow，live-only，斷線期間錯過的行不補、不維護歷史 buffer。
+        // data 與 run state 都是 StateFlow 語意：新的 collector 一訂閱就先拿到目前值，重連時
+        // 自然重送快照。log 是 live-only，斷線期間錯過的行不補。
         webSocket("/") {
+            val clientVersion = call.request.queryParameters["protocol"]?.toIntOrNull()
+            if (clientVersion != WORKBENCH_PROTOCOL_VERSION) {
+                close(
+                    CloseReason(
+                        CloseReason.Codes.VIOLATED_POLICY,
+                        "Workbench protocol mismatch: app $WORKBENCH_PROTOCOL_VERSION, extension ${clientVersion ?: "unknown"}",
+                    )
+                )
+                return@webSocket
+            }
             val dataJob = launch {
-                scriptStream.sharedData.collect { send(dataFrame(it)) }
+                val sent = HashMap<String, Map<String, Any>>()
+                scriptStream.sharedData.collect { all ->
+                    for ((scriptId, data) in all) {
+                        dataFrame(scriptId, sent[scriptId], data)?.let { send(it) }
+                        sent[scriptId] = data
+                    }
+                }
             }
             val logJob = launch {
-                scriptStream.logLines.collect { send(logFrame(it)) }
+                scriptStream.logLines.collect { send(logFrame(it.scriptId, it.line)) }
             }
             val fileChangeJob = launch {
                 fileChanges.collect { send(fileChangeFrame(it)) }
             }
             val runStateJob = launch {
-                scriptStream.runningScriptId
+                scriptStream.runningScriptIds
                     .distinctUntilChanged()
-                    .withIndex()
-                    .filter { (index, scriptId) -> index > 0 || scriptId != null }
-                    .collect { (_, scriptId) -> send(runStateFrame(scriptId)) }
+                    .collect { send(runStateFrame(it)) }
             }
             try {
                 for (frame in incoming) {

@@ -9,6 +9,7 @@ import { WorkspaceTreeProvider, RemoteScriptItem } from "./treeViews";
 import { startMdnsDaemon, getCachedDevices, mdnsEvents, checkDeviceHealth, refreshMdns } from "./mdnsDiscovery";
 import { pairWithPin } from "./authSync";
 import { stopRun } from "./visionTest";
+import { ScriptDataStore } from "./scriptStreamState";
 
 let connection: WorkbenchConnection | undefined;
 let statusBarItem: vscode.StatusBarItem | undefined;
@@ -18,6 +19,8 @@ let extensionContext: vscode.ExtensionContext | undefined;
 let workspaceProvider: WorkspaceTreeProvider;
 let activeToken: string | undefined;
 let folderSync: FolderSyncController;
+let scriptData = new ScriptDataStore();
+let runningScriptIds: string[] = [];
 /** 使用者按下 Connect 之後的第一次連上才算互動式：可以跳出選擇資料夾。自動重連不跳。 */
 let interactiveConnect = false;
 /** 每個 address 各自的 token：自動重連時從 secrets 撈回來。 */
@@ -91,8 +94,9 @@ export function activate(context: vscode.ExtensionContext): void {
         .then(() => workspaceProvider.refresh());
     } else if (state.status !== "connecting") {
       folderSync.stop();
-      setRunningScript(undefined);
+      setRunningScripts([]);
     }
+    if (state.status !== "connected") scriptData.clear();
     if (state.status === "error") {
       vscode.window.showErrorMessage(`MoonClicker: 連線到 ${state.address} 失敗——${state.message}`);
     }
@@ -100,19 +104,25 @@ export function activate(context: vscode.ExtensionContext): void {
 
   connection.onDidReceiveStreamEvent((event) => {
     if (event.event.case === "log") {
-      logChannel.appendLine(event.event.value);
+      const { scriptId, line } = event.event.value;
+      logChannel.appendLine(`[${scriptId}] ${line}`);
+      postStreamEventToMirror({ case: "log", value: { scriptId, line } });
     } else if (event.event.case === "data") {
+      const scriptId = event.event.value.scriptId;
+      const data = scriptData.apply(event.event.value);
       dataChannel.clear();
-      dataChannel.appendLine(JSON.stringify(event.event.value, null, 2));
+      dataChannel.appendLine(JSON.stringify(scriptData.all(), null, 2));
+      postStreamEventToMirror({ case: "data", value: { scriptId, data } });
     } else if (event.event.case === "runState") {
-      setRunningScript(event.event.value.scriptId || undefined);
+      const runningScriptIds = event.event.value.runningScriptIds;
+      setRunningScripts(runningScriptIds);
+      postStreamEventToMirror({ case: "runState", value: { runningScriptIds } });
     } else if (event.event.case === "fileChange") {
       folderSync.handleRemoteChange(event.event.value);
       // 整支腳本新增、刪除，或名稱可能改了，側邊欄的清單要跟著更新。
       const changedPath = event.event.value.path;
       if (!changedPath || changedPath === "main.lua" || changedPath === "script.json") workspaceProvider.refresh();
     }
-    postStreamEventToMirror(event.event);
   });
 
   context.subscriptions.push(
@@ -147,7 +157,7 @@ export function deactivate(): void {
 
 function insertRunDivider(): void {
   const divider = `--- Run triggered at ${new Date().toLocaleTimeString()} ---`;
-  postStreamEventToMirror({ case: "log", value: divider });
+  postStreamEventToMirror({ case: "log", value: { scriptId: "", line: divider } });
 }
 
 interface ConnectItem extends vscode.QuickPickItem {
@@ -366,11 +376,12 @@ async function runRemoteCommand(item?: RemoteScriptItem): Promise<void> {
   }
 }
 
-function setRunningScript(scriptId: string | undefined): void {
-  workspaceProvider.setRunningScript(scriptId);
+function setRunningScripts(scriptIds: string[]): void {
+  runningScriptIds = scriptIds;
+  workspaceProvider.setRunningScripts(scriptIds);
   if (!runStatusItem) return;
-  if (scriptId) {
-    runStatusItem.text = `$(debug-stop) 執行中：${scriptId}`;
+  if (scriptIds.length > 0) {
+    runStatusItem.text = `$(debug-stop) 執行中：${scriptIds.join("、")}`;
     runStatusItem.show();
   } else {
     runStatusItem.hide();
@@ -404,12 +415,21 @@ async function openWorkbenchCommand(): Promise<void> {
   });
 }
 
-/** 停止裝置上正在執行的腳本；沒有腳本在跑時裝置端是 no-op。 */
+/** 停止裝置上正在執行的腳本；同時有多支在跑時先問要停哪一支。 */
 async function stopCommand(): Promise<void> {
   const address = connectedAddress();
   if (!address) return;
+  let scriptId: string | undefined;
+  if (runningScriptIds.length === 1) {
+    scriptId = runningScriptIds[0];
+  } else if (runningScriptIds.length > 1) {
+    const all = "$(debug-stop) 全部停止";
+    const picked = await vscode.window.showQuickPick([...runningScriptIds, all], { placeHolder: "要停止哪一支腳本？" });
+    if (!picked) return;
+    scriptId = picked === all ? undefined : picked;
+  }
   try {
-    await stopRun(address, activeToken);
+    await stopRun(address, activeToken, scriptId);
   } catch (err) {
     vscode.window.showErrorMessage(`MoonClicker: ${(err as Error).message}`);
   }

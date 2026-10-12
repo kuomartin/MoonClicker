@@ -21,12 +21,10 @@ let connection: MirrorConnection | undefined;
 const mirrorOutputChannel = vscode.window.createOutputChannel("MoonClicker Mirror");
 
 /**
- * 目前是不是有一個「我們自己啟動的」測試迴圈（模板或 OCR）在裝置端跑——只追蹤這個，不是
- * `scriptRunner.isRunning()` 的鏡像。刻意不追蹤「裝置上是不是有東西在跑」，因為那可能是
- * 使用者自己另外啟動的真實腳本（例如從 Explorer 樹狀圖按 Run）：面板關閉時只該清掉我們
- * 自己留下的東西，不能連使用者的真實腳本一起停掉。
+ * 面板自己啟動、還在跑的測試迴圈（模板或 OCR）的腳本 id。停止時只停它：裝置上同時可能有
+ * 使用者自己啟動的腳本，不能一起停掉。
  */
-let visionTestActive = false;
+let activeTestScriptId: string | undefined;
 
 /**
  * `moonclicker.openWorkbench` 的面板邏輯（見 #77、#78）。跟 `extension.ts` 的 [WorkbenchConnection] 是完全
@@ -82,9 +80,10 @@ export function openMirrorPanel(
       // webview 一旦 dispose，裡面所有 JS（含 stopTestIfRunningOnModeExit 那套）都停了，
       // 沒有人會再送 stopRun——面板關閉前若我們自己啟動的 vision-test 還在跑，這裡補送
       // 最後一次，不留孤兒迴圈在裝置端背景繼續耗電、佔著執行槽。
-      if (visionTestActive) {
-        visionTestActive = false;
-        stopRun(address, token).catch((err) => {
+      if (activeTestScriptId) {
+        const testScriptId = activeTestScriptId;
+        activeTestScriptId = undefined;
+        stopRun(address, token, testScriptId).catch((err) => {
           mirrorOutputChannel.appendLine(`[MoonClicker Stop Run On Dispose Error] ${(err as Error).message}`);
         });
       }
@@ -188,8 +187,7 @@ export function openMirrorPanel(
           return;
         }
         try {
-          await startVisionTest(address, scriptId, displayId, image, roi, threshold, intervalMs, token);
-          visionTestActive = true;
+          activeTestScriptId = await startVisionTest(address, scriptId, displayId, image, roi, threshold, intervalMs, token);
           safePostMessage({ type: "visionTestResult", success: true });
         } catch (err) {
           const errMsg = (err as Error).message;
@@ -204,12 +202,11 @@ export function openMirrorPanel(
           return;
         }
         try {
-          await startOcrTest(
+          activeTestScriptId = await startOcrTest(
             address,
             { displayId, mode: mode as OcrTestMode, roi, text, exact, threshold, intervalMs },
             token,
           );
-          visionTestActive = true;
           // 與模板測試共用同一組 start/stop 狀態機，所以回同一種訊息。
           safePostMessage({ type: "visionTestResult", success: true });
         } catch (err) {
@@ -220,8 +217,8 @@ export function openMirrorPanel(
         }
       } else if (message?.type === "stopRun") {
         try {
-          await stopRun(address, token);
-          visionTestActive = false;
+          if (activeTestScriptId) await stopRun(address, token, activeTestScriptId);
+          activeTestScriptId = undefined;
           safePostMessage({ type: "runStopResult", success: true });
         } catch (err) {
           const errMsg = (err as Error).message;

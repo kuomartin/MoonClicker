@@ -20,8 +20,7 @@ import javax.inject.Singleton
 /**
  * 執行中的腳本唯一的系統層可見處（Overlay UI 已移除，見 ADR-0007）。
  *
- * 一次只跑一份腳本，所以這裡不需要上一代那個彙總多份腳本的 summary——常駐通知就是
- * 那一份腳本本身，動作只有「停止」。
+ * 每支執行中的腳本一則常駐通知，動作只有「停止」；全部放在同一個 group，由一則 summary 收合。
  *
  * 通知**不會**讓行程活著。被移除的 AccessibilityService 原本順帶有這個效果，而
  * `setOngoing(true)` 沒有，所以長時間執行的腳本可能在使用者切到別的 app 之後被系統殺掉。
@@ -34,11 +33,17 @@ class ScriptStatusNotifier @Inject constructor(
     private val manager = NotificationManagerCompat.from(context)
     private var messageId = MESSAGE_NOTIFICATION_ID_BASE
 
+    /** 腳本 id → 常駐通知 id。同一支腳本每次執行沿用同一個 id。 */
+    private val statusIds = HashMap<String, Int>()
+    private val shownStatus = HashSet<String>()
+
     init {
         createChannels()
     }
 
-    fun showRunning(scriptName: String, displayId: Int?) {
+    @Synchronized
+    fun showRunning(scriptId: String, scriptName: String, displayId: Int?) {
+        val id = statusIds.getOrPut(scriptId) { STATUS_NOTIFICATION_ID_BASE + statusIds.size }
         val target = when (displayId) {
             null -> ""
             0 -> context.getString(R.string.script_target_physical)
@@ -53,19 +58,37 @@ class ScriptStatusNotifier @Inject constructor(
             .setOnlyAlertOnce(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setContentIntent(openScriptsIntent())
+            .setGroup(STATUS_GROUP)
             .addAction(
                 android.R.drawable.ic_media_pause,
                 context.getString(R.string.script_status_action_stop),
-                stopIntent(),
+                stopIntent(scriptId, requestCode = id),
             )
             .build()
 
-        notify(STATUS_NOTIFICATION_ID, notification)
+        shownStatus += scriptId
+        notify(SUMMARY_NOTIFICATION_ID, summary())
+        notify(id, notification)
     }
 
-    fun cancelRunning() {
-        manager.cancel(STATUS_NOTIFICATION_ID)
+    @Synchronized
+    fun cancelRunning(scriptId: String) {
+        if (!shownStatus.remove(scriptId)) return
+        statusIds[scriptId]?.let(manager::cancel)
+        if (shownStatus.isEmpty()) manager.cancel(SUMMARY_NOTIFICATION_ID)
     }
+
+    private fun summary(): Notification =
+        NotificationCompat.Builder(context, STATUS_CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_media_play)
+            .setContentTitle(context.getString(R.string.script_status_summary_title))
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setContentIntent(openScriptsIntent())
+            .setGroup(STATUS_GROUP)
+            .setGroupSummary(true)
+            .build()
 
     /** 腳本透過 Lua 的 `device.notify` 發的訊息——與執行狀態分開，不會蓋掉常駐通知。 */
     fun showScriptMessage(title: String, text: String) {
@@ -100,11 +123,12 @@ class ScriptStatusNotifier @Inject constructor(
         )
     }
 
-    private fun stopIntent(): PendingIntent {
+    private fun stopIntent(scriptId: String, requestCode: Int): PendingIntent {
         val intent = Intent(context, ScriptNotificationReceiver::class.java)
             .setAction(ScriptNotificationReceiver.ACTION_STOP)
+            .putExtra(ScriptNotificationReceiver.EXTRA_SCRIPT_ID, scriptId)
         return PendingIntent.getBroadcast(
-            context, 0, intent,
+            context, requestCode, intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
     }
@@ -135,7 +159,9 @@ class ScriptStatusNotifier @Inject constructor(
     private companion object {
         const val STATUS_CHANNEL_ID = "script_status"
         const val MESSAGE_CHANNEL_ID = "script_message"
-        const val STATUS_NOTIFICATION_ID = 1001
+        const val STATUS_GROUP = "script_status"
+        const val SUMMARY_NOTIFICATION_ID = 1000
+        const val STATUS_NOTIFICATION_ID_BASE = 1001
         const val MESSAGE_NOTIFICATION_ID_BASE = 2000
     }
 }

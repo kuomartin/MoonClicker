@@ -1,5 +1,6 @@
 package com.xaxaxax.moonclicker.workbench
 
+import com.xaxaxax.moonclicker.script.ScriptStartOutcome
 import com.xaxaxax.moonclicker.script.ScriptStore
 import com.xaxaxax.moonclicker.script.TemplateRoi
 import com.xaxaxax.moonclicker.script.TemplateStore
@@ -44,12 +45,12 @@ fun Route.visionRoutes(
             )
             return@post
         }
-        if (scriptRunner.isRunning()) {
-            call.respondText("A script is already running", status = HttpStatusCode.Conflict)
+        if (scriptRunner.isRunning(OcrTestScript.FOLDER_NAME)) {
+            call.respondStart(OcrTestScript.FOLDER_NAME, ScriptStartOutcome.AlreadyRunning)
             return@post
         }
-        scriptRunner.startOnDisplay(OcrTestScript.materialize(scriptsRoot, request), request.displayId)
-        call.respondText("Started", status = HttpStatusCode.Accepted)
+        val ocrScript = OcrTestScript.materialize(scriptsRoot, request)
+        call.respondStart(ocrScript.id, scriptRunner.startOnDisplay(ocrScript, request.displayId))
     }
 
     // 拿既有模板去對虛擬顯示做一次性 vision.find 迴圈（見 vision-test 合約）：{id} 只用來
@@ -66,8 +67,8 @@ fun Route.visionRoutes(
             call.respondText("Invalid request body", status = HttpStatusCode.BadRequest)
             return@post
         }
-        if (scriptRunner.isRunning()) {
-            call.respondText("A script is already running", status = HttpStatusCode.Conflict)
+        if (scriptRunner.isRunning(VisionTestScript.FOLDER_NAME)) {
+            call.respondStart(VisionTestScript.FOLDER_NAME, ScriptStartOutcome.AlreadyRunning)
             return@post
         }
         val imagePath = File(script.dir, request.image).absolutePath
@@ -78,8 +79,7 @@ fun Route.visionRoutes(
             threshold = request.threshold,
             intervalMs = request.intervalMs,
         )
-        scriptRunner.startOnDisplay(syntheticScript, request.displayId)
-        call.respondText("Started", status = HttpStatusCode.Accepted)
+        call.respondStart(syntheticScript.id, scriptRunner.startOnDisplay(syntheticScript, request.displayId))
     }
 
     // 裁切模板存回裝置（見 #75）：body 是裁切完的 PNG bytes，roi（邏輯座標，依 ADR-0013）
