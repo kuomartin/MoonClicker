@@ -3,13 +3,15 @@
 
 #include <android/native_window_jni.h>
 
+#include <cstdarg>
+
 ScriptRuntime::ScriptRuntime(JNIEnv *env, jobject host) {
     env->GetJavaVM(&javaVM);
     hostObj = env->NewGlobalRef(host);
 
     jclass hostClass = env->GetObjectClass(hostObj);
-    hostMethods.swipe = env->GetMethodID(hostClass, "swipe", "(I[IJZ)Z");
-    hostMethods.pointerUp = env->GetMethodID(hostClass, "pointerUp", "(I)Z");
+    hostMethods.swipe = env->GetMethodID(hostClass, "swipe", "(I[IJZ)V");
+    hostMethods.pointerUp = env->GetMethodID(hostClass, "pointerUp", "(I)V");
     hostMethods.key = env->GetMethodID(hostClass, "key", "(I)Z");
     hostMethods.text = env->GetMethodID(hostClass, "text", "(Ljava/lang/String;)Z");
     hostMethods.launch = env->GetMethodID(hostClass, "launch", "(Ljava/lang/String;)Z");
@@ -41,6 +43,16 @@ ScriptRuntime::ScriptRuntime(JNIEnv *env, jobject host) {
 
     jclass surfaceClass = env->FindClass("android/view/Surface");
     surfaceReleaseMethodId = env->GetMethodID(surfaceClass, "release", "()V");
+
+    jclass throwableClass = env->FindClass("java/lang/Throwable");
+    throwableGetMessage = env->GetMethodID(throwableClass, "getMessage", "()Ljava/lang/String;");
+    env->DeleteLocalRef(throwableClass);
+    jclass objectClass = env->FindClass("java/lang/Object");
+    objectGetClass = env->GetMethodID(objectClass, "getClass", "()Ljava/lang/Class;");
+    env->DeleteLocalRef(objectClass);
+    jclass classClass = env->FindClass("java/lang/Class");
+    classGetName = env->GetMethodID(classClass, "getName", "()Ljava/lang/String;");
+    env->DeleteLocalRef(classClass);
 
     jclass localDouble = env->FindClass("java/lang/Double");
     doubleClass = (jclass) env->NewGlobalRef(localDouble);
@@ -206,26 +218,24 @@ void ScriptRuntime::detachImageReader() {
     }
 }
 
-bool ScriptRuntime::isMirrorActive() {
+bool ScriptRuntime::isMirrorActive(lua_State *L) {
     if (!isPhysical) return true;
-    return luaEnv->CallBooleanMethod(hostObj, hostMethods.isMirrorActive);
+    return hostBoolean(L, "screen.is_mirror_active", hostMethods.isMirrorActive);
 }
 
-bool ScriptRuntime::startMirror() {
+bool ScriptRuntime::startMirror(lua_State *L) {
     if (!isPhysical) return true;
     // 實體螢幕上 reader 只會由這裡掛上，掛著就代表已經持有鏡像。
     if (visionEnabled) return true;
 
-    if (!luaEnv->CallBooleanMethod(hostObj, hostMethods.acquireMirror)) {
-        LOGE("acquireMirror failed for display %d", displayId);
-        return false;
+    if (!hostBoolean(L, "screen.start_mirror", hostMethods.acquireMirror)) {
+        luaL_error(L, "screen.start_mirror: could not acquire the mirror of display %d", displayId);
     }
 
     uint64_t framesBefore = visionMatcher->frameCounter();
     if (!attachImageReader()) {
-        LOGE("attachImageReader failed after acquireMirror");
-        luaEnv->CallBooleanMethod(hostObj, hostMethods.releaseMirror);
-        return false;
+        hostBoolean(L, "screen.start_mirror", hostMethods.releaseMirror);
+        luaL_error(L, "screen.start_mirror: could not attach the frame reader to display %d", displayId);
     }
     visionEnabled = true;
     firstFramePending = true;
@@ -242,11 +252,60 @@ void ScriptRuntime::awaitFirstFrameIfPending() {
     }
 }
 
-bool ScriptRuntime::stopMirror() {
+bool ScriptRuntime::stopMirror(lua_State *L) {
     if (!isPhysical) return true;
     detachImageReader();
     visionEnabled = false;
-    return luaEnv->CallBooleanMethod(hostObj, hostMethods.releaseMirror);
+    return hostBoolean(L, "screen.stop_mirror", hostMethods.releaseMirror);
+}
+
+jboolean ScriptRuntime::hostBoolean(lua_State *L, const char *function, jmethodID method, ...) {
+    va_list args;
+    va_start(args, method);
+    jboolean result = luaEnv->CallBooleanMethodV(hostObj, method, args);
+    va_end(args);
+    raiseIfThrown(L, function);
+    return result;
+}
+
+jobject ScriptRuntime::hostObject(lua_State *L, const char *function, jmethodID method, ...) {
+    va_list args;
+    va_start(args, method);
+    jobject result = luaEnv->CallObjectMethodV(hostObj, method, args);
+    va_end(args);
+    raiseIfThrown(L, function);
+    return result;
+}
+
+void ScriptRuntime::hostVoid(lua_State *L, const char *function, jmethodID method, ...) {
+    va_list args;
+    va_start(args, method);
+    luaEnv->CallVoidMethodV(hostObj, method, args);
+    va_end(args);
+    raiseIfThrown(L, function);
+}
+
+void ScriptRuntime::raiseIfThrown(lua_State *L, const char *function) {
+    jthrowable thrown = luaEnv->ExceptionOccurred();
+    if (thrown == nullptr) return;
+    luaEnv->ExceptionClear();
+    LocalRef<jthrowable> thrownRef(luaEnv, thrown);
+
+    // DeadObjectException 之類通常沒有 message，退而用類別名稱，至少看得出是哪一種失敗。
+    LocalRef<jstring> message(luaEnv, (jstring) luaEnv->CallObjectMethod(thrown, throwableGetMessage));
+    std::string text;
+    if (message.get() != nullptr) {
+        const char *chars = luaEnv->GetStringUTFChars(message.get(), nullptr);
+        text = chars;
+        luaEnv->ReleaseStringUTFChars(message.get(), chars);
+    } else {
+        LocalRef<jobject> type(luaEnv, luaEnv->CallObjectMethod(thrown, objectGetClass));
+        LocalRef<jstring> name(luaEnv, (jstring) luaEnv->CallObjectMethod(type.get(), classGetName));
+        const char *chars = luaEnv->GetStringUTFChars(name.get(), nullptr);
+        text = chars;
+        luaEnv->ReleaseStringUTFChars(name.get(), chars);
+    }
+    luaL_error(L, "%s: %s", function, text.c_str());
 }
 
 bool ScriptRuntime::interruptibleSleep(long ms) {
@@ -272,13 +331,18 @@ void ScriptRuntime::pushEvent(int type, const std::string &payload) {
     jstring jPayload = env->NewStringUTF(payload.c_str());
     env->CallVoidMethod(hostObj, hostMethods.onEvent, type, jPayload);
     env->DeleteLocalRef(jPayload);
+    // 不是 Lua API，可能在呼叫端的執行緒上，沒有 Lua 堆疊可以拋錯；但不能留下 pending exception。
+    if (env->ExceptionCheck()) {
+        env->ExceptionDescribe();
+        env->ExceptionClear();
+        LOGE("onEngineEvent(%d) threw", type);
+    }
 
     if (attached) javaVM->DetachCurrentThread();
 }
 
 jobject ScriptRuntime::boxLuaValue(lua_State *L, int index) {
     JNIEnv *e = env();
-    if (e == nullptr) return nullptr;
 
     switch (lua_type(L, index)) {
         case LUA_TNUMBER:

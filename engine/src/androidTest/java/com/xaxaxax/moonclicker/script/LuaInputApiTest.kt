@@ -230,18 +230,18 @@ class LuaInputApiTest {
     /** 空表代表「沒有 app 在跑」，所以查詢失敗不能也回空表。 */
     @Test
     fun app_list_raises_when_the_service_cannot_answer() = withRunner { runner ->
-        runner.recorded.appTasks = null
+        runner.recorded.failWith = IllegalStateException("getAppTasks failed")
         val outcome = runner.run("app.list()")
 
         val error = outcome.error
         assertTrue("expected an Error, got ${outcome.runState}", error != null)
-        assertTrue("unhelpful message: $error", error!!.contains("app.list"))
+        assertTrue("unhelpful message: $error", error!!.contains("app.list: getAppTasks failed"))
     }
 
     /** 裝置不支援次要顯示器不是重試能解決的事，所以拋錯而非回 false。 */
     @Test
     fun app_launch_raises_when_the_device_does_not_support_secondary_displays() = withRunner { runner ->
-        runner.recorded.launchError = UnsupportedOperationException("not supported here")
+        runner.recorded.failWith = UnsupportedOperationException("not supported here")
         val outcome = runner.run("app.launch(\"com.example.game\")")
 
         val error = outcome.error
@@ -249,9 +249,10 @@ class LuaInputApiTest {
         assertTrue("unhelpful message: $error", error!!.contains("app.launch: not supported here"))
     }
 
+    /** 找不到 launch intent 是腳本能處理的情況（package 名打錯），回 false 而非拋錯。 */
     @Test
-    fun app_launch_returns_false_on_other_service_failures() = withRunner { runner ->
-        runner.recorded.launchError = IllegalStateException("binder hiccup")
+    fun app_launch_returns_false_when_the_service_refuses() = withRunner { runner ->
+        runner.recorded.launchResult = false
         val outcome = runner.run("data.set(\"ok\", app.launch(\"com.example.game\"))")
 
         assertEquals(EngineRunState.Finished, outcome.runState)
