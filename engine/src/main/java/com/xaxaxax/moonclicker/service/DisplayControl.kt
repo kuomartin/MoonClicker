@@ -12,8 +12,12 @@ import dev.rikka.tools.refine.Refine
 import timber.log.Timber
 import java.util.concurrent.ConcurrentHashMap
 
-/** 顯示器查詢：尺寸（邏輯、surface 空間）、旋轉、以及彙整給呼叫端的 [MoonClickerDisplayInfo]。 */
-internal class DisplayQuery(
+/**
+ * 任意顯示器（實體螢幕、別的進程建立的虛擬顯示器、本服務建立的 VD）的查詢與 WindowManager 設定：
+ * 尺寸（邏輯、surface 空間）、彙整給呼叫端的 [MoonClickerDisplayInfo]、旋轉、輸入法。只有本服務建立的
+ * VD 才有的事（建立、resize、銷毀、睡眠）在 [VirtualDisplayLifecycle]。
+ */
+internal class DisplayControl(
     private val displayManager: DisplayManager,
     private val virtualDisplayLifecycle: VirtualDisplayLifecycle,
     private val displayMirroring: DisplayMirroring,
