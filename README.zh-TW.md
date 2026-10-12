@@ -38,6 +38,8 @@ MoonClicker 是一款專為 Android 設計的遠端 Lua 控制與背景自動化
 
 ## 🚀 快速開始
 
+從安裝到跑起範例腳本、寫第一支腳本的完整步驟，見 [Wiki](https://github.com/kuomartin/MoonClicker/wiki/Home)。
+
 > **目前的限制**：一般使用者現階段主要能使用背景執行功能（例如背景播放、掛機）；撰寫 Lua 腳本需要電腦端搭配 VS Code Extension，或直接匯入已完成的腳本檔案。
 
 ### 安裝與授權
