@@ -40,6 +40,9 @@ struct HostMethods {
     jmethodID onEvent = nullptr;    // (ILjava/lang/String;)V
     jmethodID log = nullptr;        // (Ljava/lang/String;)V
     jmethodID attachSink = nullptr; // (Landroid/view/Surface;)Lcom/xaxaxax/moonclicker/DisplaySink;
+    jmethodID acquireMirror = nullptr;  // ()Z
+    jmethodID releaseMirror = nullptr;  // ()Z
+    jmethodID isMirrorActive = nullptr; // ()Z
 };
 
 /** MoonClickerAppTask（AIDL parcelable）的欄位。 */
@@ -56,10 +59,13 @@ struct AppTaskFields {
  *
  * 它**不擁有目標顯示器**：顯示器由 :app 建立與銷毀，這裡只把自己的 ImageReader surface
  * 掛上去，結束時再拿掉。
+ *
+ * 對 Kotlin 的呼叫一律經由 ScriptHost，不直接碰 IMoonClickerService；鏡像引用也由 ScriptHost
+ * 持有，腳本結束時由它歸還。
  */
 class ScriptRuntime {
 public:
-    ScriptRuntime(JNIEnv *env, jobject host, jobject service);
+    ScriptRuntime(JNIEnv *env, jobject host);
 
     ~ScriptRuntime();
 
@@ -150,7 +156,6 @@ private:
     JavaVM *javaVM = nullptr;
     JNIEnv *luaEnv = nullptr;     // 只在 Lua 執行緒上有效
     jobject hostObj = nullptr;
-    jobject serviceObj = nullptr;
     HostMethods hostMethods;
     AppTaskFields appTask;
 
@@ -161,9 +166,6 @@ private:
 
     jmethodID sinkCloseMethodId = nullptr;      // DisplaySink.close
     jmethodID surfaceReleaseMethodId = nullptr; // android.view.Surface.release
-    jmethodID acquireMirrorMethodId = nullptr;  // IMoonClickerService.acquireDisplayMirror
-    jmethodID releaseMirrorMethodId = nullptr;  // IMoonClickerService.releaseDisplayMirror
-    jmethodID isMirrorActiveMethodId = nullptr; // IMoonClickerService.isDisplayMirrorActive
 
     /**
      * ANativeWindow_toSurface 產生的 Java Surface。必須留著到收尾時明確 release()——
@@ -177,7 +179,6 @@ private:
     std::string scriptDir;
     int displayId = -1;
     bool isPhysical = false;
-    bool heldMirrorRef = false;
     int surfaceWidth = 0;
     int surfaceHeight = 0;
     bool visionEnabled = false;
