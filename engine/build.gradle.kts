@@ -69,18 +69,14 @@ android {
     testOptions {
         managedDevices {
             localDevices {
-                // ATD（automated test device）映像檔把圖形堆疊拿掉了：虛擬顯示建得起來、
-                // 影格也照送，但每一張都是全黑。所以它跑得完 Tier 0 與 Tier 1 的非比對測試，
-                // `vision.*` 的比對會被 Tier1Env.assumeFramesHaveContent 跳過。
-                // 開機快，適合平常跑。
+                // ATD（automated test device）映像檔把圖形堆疊拿掉了：虛擬顯示建得起來，但影格全黑，畫面內容改變時也幾乎不送新緩衝區。所以它跑得完 Tier 0 與 Tier 1 中不看影格內容的測試；`vision.*` 的比對與畫面改變時的影格分發會被 Tier1Env.assumeFramesHaveContent 跳過。開機快，適合平常跑。
                 create("api36") {
                     device = "Pixel 6"
                     apiLevel = 36
                     systemImageSource = "aosp-atd"
                     testedAbi = "x86_64"
                 }
-                // 同一個 API level 的完整 AOSP 映像檔，唯一的差別是它真的會合成畫面——
-                // 所以比對那一段只有在這台（或實機）上才真的被執行到。映像檔更大、開機更慢。
+                // 同一個 API level 的完整 AOSP 映像檔，唯一的差別是它真的會合成畫面——所以比對與畫面改變時的影格分發只有在這台（或實機）上才真的被執行到。映像檔更大、開機更慢。
                 create("api36aosp") {
                     device = "Pixel 6"
                     apiLevel = 36
