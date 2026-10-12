@@ -60,6 +60,35 @@ jobs:
           path: dist/*.vsix
           retention-days: 7
 
+  publish:
+    name: Publish to Marketplace and Open VSX
+    needs: [build-vscode-extension]
+    runs-on: ubuntu-latest
+    # 沒設 token 的 registry 略過，GitHub release 照常建立。
+    env:
+      VSCE_PAT: ${{ secrets.VSCE_PAT }}
+      OVSX_PAT: ${{ secrets.OVSX_PAT }}
+
+    steps:
+      - name: Download VSIX Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: moonclicker-vscode-extension
+          path: release-assets
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Publish to Visual Studio Marketplace
+        if: env.VSCE_PAT != ''
+        run: npx --yes @vscode/vsce publish --packagePath release-assets/*.vsix
+
+      - name: Publish to Open VSX
+        if: env.OVSX_PAT != ''
+        run: npx --yes ovsx publish release-assets/*.vsix
+
   create-release:
     name: Create Release
     needs: [build-vscode-extension]
