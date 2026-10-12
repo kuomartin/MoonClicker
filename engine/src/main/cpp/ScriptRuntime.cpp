@@ -24,6 +24,8 @@ ScriptRuntime::ScriptRuntime(JNIEnv *env, jobject host, jobject service) {
                                            "(Ljava/lang/String;Ljava/lang/Object;)V");
     hostMethods.onEvent = env->GetMethodID(hostClass, "onEngineEvent", "(ILjava/lang/String;)V");
     hostMethods.log = env->GetMethodID(hostClass, "log", "(Ljava/lang/String;)V");
+    hostMethods.attachSink = env->GetMethodID(hostClass, "attachSink",
+                                              "(Landroid/view/Surface;)Lcom/xaxaxax/moonclicker/DisplaySink;");
 
     // 在呼叫端（有 app class loader 的 Java 執行緒）解析；Lua 執行緒是 attach 進來的，FindClass 找不到 app 的類別。
     jclass appTaskClass = env->FindClass("com/xaxaxax/moonclicker/MoonClickerAppTask");
@@ -32,12 +34,13 @@ ScriptRuntime::ScriptRuntime(JNIEnv *env, jobject host, jobject service) {
     env->DeleteLocalRef(appTaskClass);
 
     jclass serviceClass = env->GetObjectClass(serviceObj);
-    addSurfaceMethodId = env->GetMethodID(serviceClass, "addVirtualDisplaySurface",
-                                          "(ILandroid/view/Surface;)I");
-    removeSurfaceMethodId = env->GetMethodID(serviceClass, "removeVirtualDisplaySurface", "(II)Z");
     acquireMirrorMethodId = env->GetMethodID(serviceClass, "acquireDisplayMirror", "(I)Z");
     releaseMirrorMethodId = env->GetMethodID(serviceClass, "releaseDisplayMirror", "(I)Z");
     isMirrorActiveMethodId = env->GetMethodID(serviceClass, "isDisplayMirrorActive", "(I)Z");
+
+    jclass sinkClass = env->FindClass("com/xaxaxax/moonclicker/DisplaySink");
+    sinkCloseMethodId = env->GetMethodID(sinkClass, "close", "()V");
+    env->DeleteLocalRef(sinkClass);
 
     jclass surfaceClass = env->FindClass("android/view/Surface");
     surfaceReleaseMethodId = env->GetMethodID(surfaceClass, "release", "()V");
@@ -150,7 +153,7 @@ Ocr *ScriptRuntime::ocr(std::string &error) {
 }
 
 bool ScriptRuntime::attachImageReader() {
-    if (sinkHandle >= 0 && sinkSurface != nullptr) {
+    if (sink != nullptr && sinkSurface != nullptr) {
         return true;
     }
     imageReader = std::make_unique<NativeImageReader>(surfaceWidth, surfaceHeight);
@@ -170,13 +173,17 @@ bool ScriptRuntime::attachImageReader() {
         attached = true;
     }
     jobject surface = ANativeWindow_toSurface(env, imageReader->getWindow());
-    sinkHandle = env->CallIntMethod(serviceObj, addSurfaceMethodId, displayId, surface);
+    jobject localSink = env->CallObjectMethod(hostObj, hostMethods.attachSink, surface);
+    if (localSink != nullptr) {
+        sink = env->NewGlobalRef(localSink);
+        env->DeleteLocalRef(localSink);
+    }
     sinkSurface = env->NewGlobalRef(surface);
     env->DeleteLocalRef(surface);
     if (attached) javaVM->DetachCurrentThread();
 
-    if (sinkHandle < 0) {
-        LOGE("addVirtualDisplaySurface failed for display %d", displayId);
+    if (sink == nullptr) {
+        LOGE("attachDisplaySink failed for display %d", displayId);
         detachImageReader();
         return false;
     }
@@ -184,15 +191,17 @@ bool ScriptRuntime::attachImageReader() {
 }
 
 void ScriptRuntime::detachImageReader() {
-    if (sinkHandle >= 0 || sinkSurface != nullptr) {
+    if (sink != nullptr || sinkSurface != nullptr) {
         JNIEnv *env = nullptr;
         bool attached = false;
         if (javaVM->GetEnv((void **) &env, JNI_VERSION_1_6) == JNI_EDETACHED) {
             if (javaVM->AttachCurrentThread(&env, nullptr) == JNI_OK) attached = true;
         }
         if (env) {
-            if (sinkHandle >= 0) {
-                env->CallBooleanMethod(serviceObj, removeSurfaceMethodId, displayId, sinkHandle);
+            if (sink) {
+                env->CallVoidMethod(sink, sinkCloseMethodId);
+                env->DeleteGlobalRef(sink);
+                sink = nullptr;
             }
             if (sinkSurface) {
                 // 先讓服務端不再送影格，再釋放自己這一份 Surface。
@@ -202,7 +211,6 @@ void ScriptRuntime::detachImageReader() {
             }
             if (attached) javaVM->DetachCurrentThread();
         }
-        sinkHandle = -1;
     }
     // 顯示器本身刻意不銷毀——它的生命週期屬於 :app 的 Displays 頁。
     if (imageReader) {

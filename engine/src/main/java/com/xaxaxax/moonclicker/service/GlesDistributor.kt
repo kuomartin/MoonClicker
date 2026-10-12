@@ -44,10 +44,18 @@ internal class GlesDistributor(
         distributorStore[displayId] = nativePtr
     }
 
+    /**
+     * distributor 被移除登記時呼叫，帶它的 displayId——掛在上面的 surface 會跟著它一起消失。
+     * 所有讓 distributor 消失的路徑（resize、destroy、legacy 鏡像）都經過 [unregister]。
+     */
+    var onUnregister: (displayId: Int) -> Unit = {}
+
     /** 移除登記，回傳被移除的 nativePtr（呼叫端負責 `destroyDistributor`）。 */
     fun unregister(displayId: Int): Long? {
         stopRotationTracking(displayId)
-        return distributorStore.remove(displayId)
+        val ptr = distributorStore.remove(displayId) ?: return null
+        onUnregister(displayId)
+        return ptr
     }
 
     fun ptrFor(displayId: Int): Long? = distributorStore[displayId]
@@ -57,10 +65,9 @@ internal class GlesDistributor(
         return addSurface(ptr, surface)
     }
 
-    fun detachSurface(displayId: Int, handle: Int): Boolean {
-        val ptr = ptrFor(displayId) ?: return false
+    fun detachSurface(displayId: Int, handle: Int) {
+        val ptr = ptrFor(displayId) ?: return
         removeSurface(ptr, handle)
-        return true
     }
 
     private fun startRotationTracking(displayId: Int, nativePtr: Long) {
