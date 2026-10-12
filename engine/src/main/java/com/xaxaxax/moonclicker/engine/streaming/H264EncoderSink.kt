@@ -4,6 +4,7 @@ import android.media.MediaCodec
 import android.media.MediaCodecInfo
 import android.media.MediaFormat
 import android.os.Build
+import com.xaxaxax.moonclicker.DisplaySink
 import com.xaxaxax.moonclicker.IMoonClickerService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
@@ -28,7 +29,7 @@ class H264EncoderSink(
 ) {
     val h264Flow: Flow<ByteArray> = callbackFlow {
         var codec: MediaCodec? = null
-        var surfaceHandle: Int = -1
+        var sink: DisplaySink? = null
 
         try {
             codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
@@ -66,8 +67,8 @@ class H264EncoderSink(
             codec.start()
 
             // Register to MoonClickerService (Zero-copy GLES fan-out)
-            surfaceHandle = service.addVirtualDisplaySurface(displayId, inputSurface)
-            if (surfaceHandle < 0) {
+            val attached = DisplaySink(displayId, inputSurface).also { sink = it }.attach(service)
+            if (!attached) {
                 Timber.e("H264EncoderSink: failed to add surface to display $displayId")
                 close(RuntimeException("Failed to add surface"))
                 return@callbackFlow
@@ -115,13 +116,7 @@ class H264EncoderSink(
             // 讓 collector 收到失敗而結束；否則下面的 awaitClose 會永遠等下去，串流端只看到連線卻沒有畫面。
             close(e)
         } finally {
-            if (surfaceHandle >= 0) {
-                try {
-                    service.removeVirtualDisplaySurface(displayId, surfaceHandle)
-                } catch (e: Exception) {
-                    Timber.e(e, "Failed to remove surface handle $surfaceHandle")
-                }
-            }
+            sink?.close()
             try {
                 codec?.stop()
                 codec?.release()
