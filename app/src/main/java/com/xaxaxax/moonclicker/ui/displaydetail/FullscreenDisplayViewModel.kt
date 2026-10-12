@@ -61,9 +61,9 @@ class FullscreenDisplayViewModel @Inject constructor(
     private val _finishEvents = Channel<Unit>(Channel.BUFFERED)
     val finishEvents: Flow<Unit> = _finishEvents.receiveAsFlow()
 
-    /** 啟動 app 失敗的一次性提示，值是字串資源 id；畫面收到就顯示 Toast。 */
-    private val _launchErrors = Channel<Int>(Channel.BUFFERED)
-    val launchErrors: Flow<Int> = _launchErrors.receiveAsFlow()
+    /** 啟動 app、送出按鍵失敗的一次性提示，值是字串資源 id；畫面收到就顯示 Toast。 */
+    private val _errorMessages = Channel<Int>(Channel.BUFFERED)
+    val errorMessages: Flow<Int> = _errorMessages.receiveAsFlow()
 
     /**
      * 綁好的服務，也是 UI 判斷「可以顯示鏡像了沒」的依據——服務在，鏡像才有東西可映。
@@ -108,16 +108,19 @@ class FullscreenDisplayViewModel @Inject constructor(
         viewModelScope.launch {
             shizukuManager.withService { service ->
                 val downTime = SystemClock.uptimeMillis()
+                // DOWN 被拒就不送 UP：服務端沒有按下的鍵，UP 只會是一個孤立的事件。
                 service.injectKeyEvent(
                     KeyEvent(downTime, downTime, KeyEvent.ACTION_DOWN, keyCode, 0),
                     displayId,
-                )
-                service.injectKeyEvent(
+                ) && service.injectKeyEvent(
                     KeyEvent(downTime, SystemClock.uptimeMillis(), KeyEvent.ACTION_UP, keyCode, 0),
                     displayId,
                 )
+            }.onSuccess { injected ->
+                if (!injected) _errorMessages.trySend(R.string.fullscreen_key_failed)
             }.onFailure {
                 Timber.e(it)
+                _errorMessages.trySend(R.string.fullscreen_key_failed)
             }
         }
     }
@@ -171,9 +174,9 @@ class FullscreenDisplayViewModel @Inject constructor(
             shizukuManager.withService { service ->
                 service.launchInDisplay(packageName, displayId)
             }.onSuccess { launched ->
-                if (!launched) _launchErrors.trySend(R.string.fullscreen_launch_failed)
+                if (!launched) _errorMessages.trySend(R.string.fullscreen_launch_failed)
             }.onFailure {
-                _launchErrors.trySend(launchErrorMessage(it))
+                _errorMessages.trySend(launchErrorMessage(it))
             }
             closeAppList()
         }
