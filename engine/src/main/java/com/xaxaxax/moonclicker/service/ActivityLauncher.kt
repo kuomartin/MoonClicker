@@ -20,6 +20,8 @@ internal class ActivityLauncher(
     private val virtualDisplayLifecycle: VirtualDisplayLifecycle,
 ) {
     /**
+     * @return package 未安裝、沒有可啟動的 activity 時為 false。
+     * @throws IllegalStateException 啟動本身失敗（hidden API、權限、未知錯誤碼），見 [toBinderException]。
      * @throws UnsupportedOperationException 裝置沒有宣告 [PackageManager.FEATURE_ACTIVITIES_ON_SECONDARY_DISPLAYS]。
      *   框架開機時就依這個 feature 決定能不能把 activity 放到次要顯示器，shell 權限改不了：
      *   `moveTaskToStack` 會直接拋錯，`startActivity` 則悄悄改開在主螢幕並回報成功。
@@ -58,9 +60,12 @@ internal class ActivityLauncher(
             Timber.d("ActivityTaskManager.startActivity result = $result")
             checkStartActivityResult(result, intent)
             true
-        } catch (t: Throwable) {
-            Timber.d(t, "Failed to launch $packageName in display#$displayId.")
+        } catch (e: ActivityNotFoundException) {
+            Timber.w(e, "No activity to launch $packageName in display#$displayId.")
             false
+        } catch (t: Throwable) {
+            Timber.e(t, "Failed to launch $packageName in display#$displayId.")
+            throw t.toBinderException("launchInDisplay")
         }
     }
 
@@ -68,7 +73,7 @@ internal class ActivityLauncher(
     // 只在 Q 以下走到。除了啟動，這條路也涵蓋「app 已經跑在別的顯示器上」——
     // Workaround.startActivity 的 AM 退路不涵蓋，它一律重新啟動。
 
-    private fun launchOrMoveViaActivityManager(packageName: String, displayId: Int): Boolean = runCatching {
+    private fun launchOrMoveViaActivityManager(packageName: String, displayId: Int): Boolean = try {
         val iam = ActivityManagerHidden.getService()
         val tasks = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) iam.getTasks(50) else iam.getTasks(50, 0)
         val task = tasks.find { it.baseActivity?.packageName == packageName }
@@ -81,8 +86,7 @@ internal class ActivityLauncher(
             iam.moveTaskToStack(hiddenInfo.id, newStackId, true)
         } else {
             val intent = packageManager.getLaunchIntentForPackage(packageName)
-                ?: throw IllegalArgumentException("launchInDisplay: no launcher intent for $packageName")
-                    .also { Timber.w(it) }
+                ?: throw ActivityNotFoundException("no launcher intent for $packageName")
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
             // setLaunchDisplayId is @hide — access via Refine + LSPass
@@ -104,9 +108,14 @@ internal class ActivityLauncher(
             Timber.d("IActivityManager.startActivity result = $result")
             checkStartActivityResult(result, intent)
         }
-    }.onFailure {
-        Timber.e(it, "Failed to launch/move $packageName in display#$displayId.")
-    }.isSuccess
+        true
+    } catch (e: ActivityNotFoundException) {
+        Timber.w(e, "No activity to launch $packageName in display#$displayId.")
+        false
+    } catch (t: Throwable) {
+        Timber.e(t, "Failed to launch/move $packageName in display#$displayId.")
+        throw t.toBinderException("launchInDisplay")
+    }
 
     private fun checkStartActivityResult(result: Int, intent: Intent) {
         if (result >= 1) return  // ActivityManager.START_SUCCESS and other non-error codes
