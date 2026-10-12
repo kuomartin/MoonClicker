@@ -120,4 +120,33 @@ class LuaScreenApiTest {
             assertEquals(false, outcome.data["after"])
         }
     }
+
+    /** 腳本忘了 `stop_mirror()` 就結束時，引擎收尾要替它歸還。 */
+    @Test
+    fun the_mirror_this_script_started_is_released_when_it_ends() {
+        val service = RecordingMoonClickerService().apply { mirrorActive = false }
+        LuaScriptRunner(service = service, displayId = 0).use { runner ->
+            val outcome = runner.run("screen.start_mirror()")
+
+            assertEquals(EngineRunState.Finished, outcome.runState)
+        }
+
+        assertEquals(1, service.releaseMirrorCalls)
+        assertEquals(false, service.mirrorActive)
+    }
+
+    /** 別人開的鏡像（例如 UI 的鏡像面板）不是這支腳本的，收尾時不能關掉。 */
+    @Test
+    fun a_mirror_the_script_did_not_start_is_left_alone_when_it_ends() {
+        val service = RecordingMoonClickerService().apply { mirrorActive = true }
+        LuaScriptRunner(service = service, displayId = 0).use { runner ->
+            val outcome = runner.run("data.set('active', screen.is_mirror_active)")
+
+            assertEquals(EngineRunState.Finished, outcome.runState)
+            assertEquals(true, outcome.data["active"])
+        }
+
+        assertEquals(0, service.releaseMirrorCalls)
+        assertEquals(true, service.mirrorActive)
+    }
 }

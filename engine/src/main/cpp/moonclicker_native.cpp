@@ -101,7 +101,6 @@ Java_com_xaxaxax_moonclicker_lua_LuaNative_nativeStart(
         JNIEnv *env,
         jobject thiz,
         jobject host,
-        jobject service,
         jint displayId,
         jboolean isPhysical,
         jboolean withVision,
@@ -122,7 +121,7 @@ Java_com_xaxaxax_moonclicker_lua_LuaNative_nativeStart(
     env->ReleaseStringUTFChars(scriptDir, dir);
     if (dirCopy.empty() || dirCopy.back() != '/') dirCopy += '/';
 
-    auto *runtime = new ScriptRuntime(env, host, service);
+    auto *runtime = new ScriptRuntime(env, host);
     if (!runtime->start(displayId, isPhysical, withVision, surfaceWidth, surfaceHeight, initialRotation,
                         dirCopy, toString(env, ocrPackDir), ocrThreads)) {
         delete runtime;

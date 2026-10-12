@@ -119,7 +119,6 @@ object ScriptEngine {
 
         val started = LuaNative.nativeStart(
             scriptHost,
-            service,
             run.displayId,
             isPhysical,
             run.hasVision,
@@ -145,8 +144,8 @@ object ScriptEngine {
 
     fun stop() {
         LuaNative.nativeStop()
-        // native 已經停了，收尾放開任何還按著的觸控，別把目標 app 卡在按下狀態。
-        host?.releaseAllPointers()
+        // native 已經停了、reader 也拿掉了，這時才放開觸控、歸還鏡像。
+        host?.close()
         host = null
     }
 }
