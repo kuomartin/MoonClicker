@@ -136,6 +136,20 @@ class AppSettings @Inject constructor(
         _ocrCalibratedThreads.value = threads
     }
 
+    private val _virtualDeviceEnabled =
+        MutableStateFlow(prefs.getBoolean(KEY_VIRTUAL_DEVICE_ENABLED, false))
+
+    /**
+     * 實驗性功能：新的虛擬顯示經 VirtualDevice 建立（issue #124，Android 13+）。開著的期間 shell
+     * 持有一個 companion association，見 docs/virtual-display-pitfalls.md。
+     */
+    val virtualDeviceEnabled: StateFlow<Boolean> = _virtualDeviceEnabled.asStateFlow()
+
+    fun setVirtualDeviceEnabled(enabled: Boolean) {
+        prefs.edit { putBoolean(KEY_VIRTUAL_DEVICE_ENABLED, enabled) }
+        _virtualDeviceEnabled.value = enabled
+    }
+
     companion object {
         private const val PREFS_NAME = "moonclicker_settings"
         private const val KEY_AUTO_FULLSCREEN = "auto_open_fullscreen"
@@ -147,6 +161,7 @@ class AppSettings @Inject constructor(
         private const val KEY_SHOW_EXTERNAL_DISPLAYS = "show_external_displays"
         private const val KEY_OCR_THREADS = "ocr_threads"
         private const val KEY_OCR_CALIBRATED_THREADS = "ocr_calibrated_threads"
+        private const val KEY_VIRTUAL_DEVICE_ENABLED = "virtual_device_enabled"
 
         /**
          * [Activity.attachBaseContext] 跑在 Hilt 欄位注入完成之前，讀不到 [AppSettings] 實例，

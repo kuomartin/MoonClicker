@@ -137,6 +137,11 @@
     <!-- Settings -->
     <string name="settings_general">一般</string>
     <string name="settings_auto_fullscreen">在虛擬顯示執行時自動開啟全螢幕</string>
+    <string name="settings_experimental">實驗性功能</string>
+    <string name="settings_virtual_device">以 VirtualDevice 建立虛擬顯示</string>
+    <string name="settings_virtual_device_note">新的虛擬顯示不隨主螢幕休眠，手機鎖定時仍可操作。開啟時會替 shell 建立一個配對裝置關聯；關閉時移除它，並關閉以這種方式建立的虛擬顯示。</string>
+    <string name="settings_virtual_device_enable_failed">無法建立配對裝置關聯。</string>
+    <string name="settings_virtual_device_disable_failed">無法移除配對裝置關聯。</string>
     <string name="settings_auto_fullscreen_note">關閉時腳本仍在背景執行，只是不會跳出鏡像畫面。</string>
     <string name="settings_default_start_page">預設啟動頁面</string>
     <string name="settings_language">語言</string>

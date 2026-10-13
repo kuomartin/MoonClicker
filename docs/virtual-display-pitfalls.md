@@ -74,6 +74,22 @@ Android 17 開啟各 display group 分開逾時（`isSeparateTimeoutsEnabled`）
 
 → `VirtualDisplayLifecycle.landedOutsideDefaultGroup`、`VirtualDisplayIdleDeadlockTest.sleepRefusesADisplayInTheDefaultGroup`
 
+### 經 VirtualDevice 建立的顯示器需要 companion association
+
+設定裡的實驗性開關（Android 13+）讓新的 VD 改由 `VirtualDeviceManager.createVirtualDevice` 建立的 VirtualDevice 產生（issue #124）。VirtualDevice 的顯示器有自己的 display group，而 `VirtualDeviceParams` 設成 `LOCK_STATE_ALWAYS_UNLOCKED`，手機鎖定時仍可操作，不受上一節的 group 0 問題影響。建立失敗時退回一般的 `DisplayManager` 路徑。
+
+建立 VirtualDevice 要一個 shell 套件持有的 companion association。shell 沒有配對流程，所以用 `cmd companiondevice associate <user> com.android.shell <MAC> android.app.role.COMPANION_DEVICE_APP_STREAMING` 建一個假 MAC（`02:6d:63:00:00:xx`）的 association：
+
+- API 35 起 `VirtualDeviceManagerService` 只接受 APP_STREAMING 等串流類 profile 的 association；13/14 不檢查，`cmd` 也會忽略多出來的 profile 參數。
+- API 33 一個 association 同時只能有一個 VirtualDevice，所以每多一個 VD 就多建一個 association；34 起共用一個。
+- `cmd companiondevice list` 在 API 33 不印 association id，id 改用 `ICompanionDeviceManager.getAssociations` 查。
+
+association 打開開關時建立、關掉開關時移除，不隨 VD 增減：每次建立都要跑一次 `cmd`，而 association 留著的代價很小。留著期間的影響：解除安裝 App 不會帶走它，要在解除安裝前關掉開關，或之後用 `cmd companiondevice disassociate` 移除；任何以 shell 身分執行的程式都能用它建立 VirtualDevice，但 shell 本來就能做到同等的事。
+
+VirtualDevice 的顯示器名稱由系統決定（`VirtualDevice_<id>`），對外回報的仍是呼叫端給的名字，腳本才能以名字找回自己的 VD。
+
+→ `VirtualDevices`、`VirtualDisplayLifecycle.createDeviceDisplay`
+
 ### API 27–28 注入不到虛擬顯示
 
 `MotionEvent.setDisplayId` 是 API 29 才有的隱藏 API，在那之前沒有辦法把事件標到某個顯示器
