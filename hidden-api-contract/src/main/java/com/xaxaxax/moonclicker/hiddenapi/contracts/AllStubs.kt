@@ -24,7 +24,6 @@ internal val ALL_STUB_CONTRACTS: List<StubContracts> = listOf(
     I_COMPANION_DEVICE_MANAGER,
     I_VIRTUAL_DEVICE_MANAGER,
     VIRTUAL_DEVICE_MANAGER_HIDDEN,
-    VIRTUAL_DEVICE_MANAGER_VIRTUAL_DEVICE,
     VIRTUAL_DEVICE_PARAMS,
     // Does not need to check IApplicationThread, ProfilerInfo
     RUNNING_TASK_INFO_HIDDEN, // Including API 27
