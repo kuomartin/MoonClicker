@@ -10,6 +10,7 @@ import com.xaxaxax.moonclicker.shizuku.ShizukuManager
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -54,7 +55,9 @@ class ScriptSessionTest {
         context = mockk(relaxed = true),
         shizukuManager = mockk(relaxed = true),
         notifier = mockk<ScriptStatusNotifier>(relaxed = true),
-        settings = mockk<AppSettings>(relaxed = true),
+        settings = mockk<AppSettings>(relaxed = true) {
+            every { virtualDeviceEnabled } returns MutableStateFlow(false)
+        },
         ocrManager = mockk<OcrManager>(relaxed = true),
     )
 
