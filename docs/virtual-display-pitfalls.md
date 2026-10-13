@@ -83,6 +83,9 @@ Android 17 開啟各 display group 分開逾時（`isSeparateTimeoutsEnabled`）
 - API 35 起 `VirtualDeviceManagerService` 只接受 APP_STREAMING 等串流類 profile 的 association；13/14 不檢查，`cmd` 也會忽略多出來的 profile 參數。
 - API 33 一個 association 同時只能有一個 VirtualDevice，所以每多一個 VD 就多建一個 association；34 起共用一個。
 - `cmd companiondevice list` 在 API 33 不印 association id，id 改用 `ICompanionDeviceManager.getAssociations` 查。
+- `cmd` 回傳時 association 不一定已寫進 CDM 的 store，建立後要輪詢到查得到為止。API 33 的 `cmd` 還會以 exit 1 結束（`NetworkPolicyManagerService.addUidPolicy` 不接受 shell uid），但那發生在 association 寫入之後，不代表失敗。
+
+VirtualDevice 的顯示器不帶 `OWN_DISPLAY_GROUP`。帶了就不會進 VirtualDevice 專屬的 group；Android 17 開啟各 group 分開逾時時，還會像〈要了 `OWN_DISPLAY_GROUP` 也可能落在預設 group〉所述被判回預設 group（Pixel 7a 實測落在 group 0）。
 
 association 打開開關時建立、關掉開關時移除，不隨 VD 增減：每次建立都要跑一次 `cmd`，而 association 留著的代價很小。留著期間的影響：解除安裝 App 不會帶走它，要在解除安裝前關掉開關，或之後用 `cmd companiondevice disassociate` 移除；任何以 shell 身分執行的程式都能用它建立 VirtualDevice，但 shell 本來就能做到同等的事。
 

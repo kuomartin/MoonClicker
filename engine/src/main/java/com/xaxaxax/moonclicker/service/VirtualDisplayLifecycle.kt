@@ -344,6 +344,9 @@ internal class VirtualDisplayLifecycle(
      * 經 VirtualDevice 建，旗標的退讓同 [createDisplay]。任何失敗都回 null，呼叫端改走一般的
      * `DisplayManager`：實驗性功能失敗不該讓建立 VD 整個失敗。VirtualDevice 的顯示器名稱由系統
      * 決定（`VirtualDevice_<id>`），呼叫端給的名字另存在 [ManagedDisplay.name]。
+     *
+     * 不帶 `OWN_DISPLAY_GROUP`：帶了就不會進 VirtualDevice 專屬的 group，而 Android 17 開啟各
+     * group 分開逾時時，還會被判回預設 group。
      */
     private fun createDeviceDisplay(
         width: Int,
@@ -355,11 +358,12 @@ internal class VirtualDisplayLifecycle(
     ): VirtualDevices.Created? {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return null
         val devices = virtualDevices()
+        val deviceFlags = privilegedFlags and DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP.inv()
         return try {
             try {
-                devices.create(width, height, densityDpi, surface, privilegedFlags)
+                devices.create(width, height, densityDpi, surface, deviceFlags)
             } catch (e: SecurityException) {
-                Timber.w(e, "VirtualDevice display rejected with flags=0x${privilegedFlags.toString(16)}")
+                Timber.w(e, "VirtualDevice display rejected with flags=0x${deviceFlags.toString(16)}")
                 devices.create(width, height, densityDpi, surface, baseFlags)
             }
         } catch (t: Throwable) {
