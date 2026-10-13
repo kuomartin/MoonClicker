@@ -4,11 +4,11 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.xaxaxax.moonclicker.IMoonClickerService
 import com.xaxaxax.moonclicker.engine.ScriptEngine
 import com.xaxaxax.moonclicker.engine.ScriptRun
+import com.xaxaxax.moonclicker.engine.ScriptStartResult
 import com.xaxaxax.moonclicker.engine.state.EngineRunState
-import com.xaxaxax.moonclicker.engine.state.EngineStateRepository
+import com.xaxaxax.moonclicker.engine.state.VisionResult
 import com.xaxaxax.moonclicker.ocr.OcrRuntime
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -28,6 +28,7 @@ internal data class ScriptOutcome(
     val data: Map<String, Any>,
     val notifications: List<Pair<String, String>>,
     val openedUris: List<String>,
+    val lastVisionResult: List<VisionResult>,
 ) {
     val error: String? get() = (runState as? EngineRunState.Error)?.message
 }
@@ -45,7 +46,7 @@ internal data class ScriptOutcome(
  *  3. **[LuaScriptRunner.recorded]** —— [RecordingMoonClickerService] 記下的服務呼叫。驗座標、
  *     duration、pointer id 這些送到邊界上的實際值。
  *
- * 每個 runner 只跑一份腳本；原生引擎是單例，所以測試之間一定要 [close]。
+ * 每個 runner 只跑一份腳本，用完一定要 [close]：還在跑的實例會佔住它的顯示器。
  */
 internal class LuaScriptRunner(
     /** Tier 0 用 [RecordingMoonClickerService]；Tier 1 傳真的 `MoonClickerService` 進來。 */
@@ -67,6 +68,10 @@ internal class LuaScriptRunner(
     private val logLines = MutableStateFlow<List<String>>(emptyList())
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var dir: File? = null
+    private var engine: ScriptEngine? = null
+
+    /** 最後一次 [tryStart] 用的腳本識別。 */
+    val scriptId: String? get() = dir?.name
 
     /** 寫出腳本、啟動、等到終態。 */
     fun run(
@@ -79,13 +84,13 @@ internal class LuaScriptRunner(
         return await(timeoutMs)
     }
 
-    /** 啟動後立刻返回——要在腳本執行中做事（例如中途 [stop]）時用這個。 */
-    fun start(
+    /** 啟動後立刻返回，回傳引擎的答覆。 */
+    fun tryStart(
         main: String,
         files: Map<String, String> = emptyMap(),
         /** 模板圖之類的二進位檔，和 `main.lua` 放在同一個資料夾裡。 */
         assets: Map<String, ByteArray> = emptyMap(),
-    ) {
+    ): ScriptStartResult {
         val folder = File(context.cacheDir, "lua-test/${System.nanoTime()}")
         check(folder.mkdirs()) { "could not create script folder $folder" }
         dir = folder
@@ -98,13 +103,7 @@ internal class LuaScriptRunner(
             File(folder, name).apply { parentFile?.mkdirs() }.writeBytes(bytes)
         }
 
-        // UNDISPATCHED：保證 collect 真的掛上 SharedFlow 才讓這行 launch 返回，避免腳本執行緒
-        // 在訂閱建立前就把最早幾行 log 發出去（SharedFlow 沒有 replay，emit 時没人訂閱就遺失）。
-        scope.launch(start = CoroutineStart.UNDISPATCHED) {
-            ScriptEngine.logLines.collect { line -> logLines.update { it + line } }
-        }
-
-        val started = ScriptEngine.start(
+        val result = ScriptEngine.start(
             context = context,
             service = service,
             run = ScriptRun(
@@ -117,25 +116,43 @@ internal class LuaScriptRunner(
             onNotify = { title, text -> notifications += title to text },
             onOpenUri = { openedUris += it },
         )
-        check(started) { "ScriptEngine refused to start; the previous test probably leaked a run" }
+        if (result is ScriptStartResult.Started) {
+            val started = result.engine
+            engine = started
+            // logLines 有 replay，啟動後才訂閱也收得到開頭幾行。
+            scope.launch { started.logLines.collect { line -> logLines.update { it + line } } }
+        }
+        return result
+    }
+
+    /** 啟動後立刻返回——要在腳本執行中做事（例如中途 [stop]）時用這個。沒啟動就讓測試失敗。 */
+    fun start(
+        main: String,
+        files: Map<String, String> = emptyMap(),
+        assets: Map<String, ByteArray> = emptyMap(),
+    ) {
+        val result = tryStart(main, files, assets)
+        check(result is ScriptStartResult.Started) { "ScriptEngine refused to start: $result" }
     }
 
     /** 等到 `Finished` / `Error` / `Stopped`。逾時就讓測試以 TimeoutCancellationException 失敗。 */
     fun await(timeoutMs: Long = DEFAULT_TIMEOUT_MS): ScriptOutcome = runBlocking {
+        val engine = checkNotNull(engine) { "not started" }
         val state = withTimeout(timeoutMs) {
-            EngineStateRepository.state.first { it.runState.isTerminal }
+            engine.state.first { it.runState.isTerminal }
         }
         ScriptOutcome(
             runState = state.runState,
-            data = ScriptEngine.sharedData.value,
+            data = engine.sharedData.value,
             notifications = notifications.toList(),
             openedUris = openedUris.toList(),
+            lastVisionResult = state.lastVisionResult,
         )
     }
 
     /** 等到腳本用 `data.set` 發佈 [key]——要在腳本執行到某一行之後才做事時用這個。 */
     fun awaitData(key: String, timeoutMs: Long = DEFAULT_TIMEOUT_MS) = runBlocking {
-        withTimeout(timeoutMs) { ScriptEngine.sharedData.first { key in it } }
+        withTimeout(timeoutMs) { checkNotNull(engine).sharedData.first { key in it } }
     }
 
     /**
@@ -147,10 +164,10 @@ internal class LuaScriptRunner(
     }
 
     /** 從外部停止執行中的腳本，模擬使用者按下停止。 */
-    fun stop() = ScriptEngine.stop()
+    fun stop() = checkNotNull(engine).stop()
 
     override fun close() {
-        ScriptEngine.stop()
+        engine?.stop()
         scope.cancel()
         dir?.deleteRecursively()
         dir = null
@@ -166,6 +183,6 @@ internal val EngineRunState.isTerminal: Boolean
             this is EngineRunState.Error ||
             this is EngineRunState.Stopped
 
-/** 每個測試都要自己的 runner，而且一定要收掉——原生引擎是單例。 */
+/** 每個測試都要自己的 runner，而且一定要收掉。 */
 internal inline fun withRunner(block: (LuaScriptRunner) -> Unit) =
     LuaScriptRunner().use(block)

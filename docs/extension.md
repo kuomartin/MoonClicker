@@ -2,8 +2,12 @@
 
 ## 安裝擴充套件
 
-1. 從 [Releases](https://github.com/kuomartin/MoonClicker/releases) 下載最新的 `moonclicker-script-workbench.vsix`。
-2. 在 VS Code 執行 **Extensions: Install from VSIX...** 指令，選擇下載的檔案完成安裝。
+擴充套件發布在 [Open VSX](https://open-vsx.org/extension/kuomartin/moonclicker-script-workbench)，沒有上 Visual Studio Marketplace。
+
+* **VSCodium、Cursor 等預設使用 Open VSX 的編輯器**：在擴充套件面板搜尋 `MoonClicker` 安裝，之後會自動更新。
+* **VS Code**：內建的擴充套件面板只連 Visual Studio Marketplace，搜尋不到。從 Open VSX 頁面的 **Download** 或 [Releases](https://github.com/kuomartin/MoonClicker/releases) 下載 `.vsix`，再執行 **Extensions: Install from VSIX...** 安裝；不會自動更新，新版要重新安裝。
+
+擴充套件與 App 的 Workbench 協定版本要一致，版本號的前兩碼（x.y）相同即可。
 
 ## 連線裝置
 
@@ -18,7 +22,7 @@
 
 連線期間，本機的新增、修改、刪除會即時推上裝置，裝置上透過腳本工作台的改動也會即時拉回來。直接在手機上用 App 或檔案管理員做的改動，要按側邊欄的 **重新整理並同步** 或重新連線才會同步。
 
-本機新增的子資料夾要有 `main.lua`，而且名稱只能是小寫英數字、`.`、`_`、`-`，才會在裝置上建立成新腳本；也可以用側邊欄標題列的 **New Script** 建立。資料夾根目錄的 `.moonclicker/` 記錄同步狀態，`.luarc.json` 提供 Lua API 型別提示，兩者都不會同步到裝置。
+本機新增的子資料夾要有 `main.lua`，而且名稱只能是小寫英數字、`.`、`_`、`-`，才會在裝置上建立成新腳本；也可以用側邊欄標題列的 **新增腳本** 建立。資料夾根目錄的 `.moonclicker/` 記錄同步狀態，`.luarc.json` 提供 Lua API 型別提示，兩者都不會同步到裝置。
 
 ## 連線後可以做什麼
 

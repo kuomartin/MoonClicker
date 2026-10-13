@@ -8,22 +8,45 @@ import "google/protobuf/struct.proto";
 // （Wire）與 vscode-extension 端 workbenchConnection.ts（@bufbuild/protobuf）
 // 都從這一份 .proto 產生型別。
 
+// Workbench 協定版本。改動 HTTP 路由或串流事件而舊的另一端無法正確運作時加一。
+// App 在 `GET /device` 回報自己的版本；擴充套件連串流時以 `?protocol=` 帶上自己的版本，
+// 不一致時 App 以 1008 關閉串流，擴充套件提示更新較舊的一方。
+enum ProtocolVersion {
+  PROTOCOL_VERSION_UNSPECIFIED = 0;
+  PROTOCOL_VERSION_CURRENT = 2;
+}
+
 message StreamEvent {
+  // 1、2、4 是協定版本 1 的 log、data、run_state。
+  reserved 1, 2, 4;
   oneof event {
-    string log = 1;
-    // ScriptEngine.sharedData 的值只會是 Double/String/Boolean（table 在引擎端
-    // 已經 JSON 字串化）；Struct 是剛好對應這種動態小型 map 的標準型別。
-    google.protobuf.Struct data = 2;
     FileChangeEvent file_change = 3;
-    RunStateEvent run_state = 4;
+    LogEvent log = 5;
+    DataEvent data = 6;
+    RunStateEvent run_state = 7;
   }
 }
 
-// 裝置上執行中的腳本變動時推播。連線當下若有腳本在跑會先送一筆；沒有就不送，
-// client 連上時一律假設沒有腳本在跑。
-message RunStateEvent {
-  // 執行中腳本的資料夾名稱（Script Folder 的 id）；空字串代表沒有腳本在跑。
+// 腳本以 `log(...)` 送出的一行。
+message LogEvent {
   string script_id = 1;
+  string line = 2;
+}
+
+// 腳本 `data` 的變動。每條連線上，每支腳本的第一筆是 reset 的完整快照，之後只送差異。
+// 值只會是 number/string/boolean（table 在引擎端已經 JSON 字串化）。
+message DataEvent {
+  string script_id = 1;
+  // true 表示先清空這支腳本的 data，再套用 values。
+  bool reset = 2;
+  google.protobuf.Struct values = 3;
+  repeated string removed = 4;
+}
+
+// 執行中的腳本變動時推播；連線當下一律先送一筆。
+message RunStateEvent {
+  // 執行中腳本的資料夾名稱（Script Folder 的 id）。
+  repeated string running_script_ids = 1;
 }
 
 // Script Folder 底下的檔案被寫入/刪除時推播（VS Code FileSystemProvider 的

@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { createServer, IncomingMessage, Server } from "node:http";
 import { after, before, test } from "node:test";
+import { formatText } from "../message";
 import {
   deleteEntry,
   getTree,
   listScripts,
   mkdir,
+  protocolMismatch,
   readFile,
   renameEntry,
   runScript,
@@ -180,4 +182,10 @@ test("runScript triggers execution through the device's run route", async () => 
 
 test("runScript throws with the server's reason when a script is already running", async () => {
   await assert.rejects(() => runScript(address, "running"), /already running/);
+});
+
+test("protocolMismatch names the older side", () => {
+  assert.equal(protocolMismatch({ id: "d", name: "n", protocolVersion: 2 }, 2), undefined);
+  assert.match(formatText(protocolMismatch({ id: "d", name: "n" }, 2) ?? ""), /update the app/);
+  assert.match(formatText(protocolMismatch({ id: "d", name: "n", protocolVersion: 3 }, 2) ?? ""), /update the extension/);
 });

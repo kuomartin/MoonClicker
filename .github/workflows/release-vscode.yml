@@ -60,6 +60,30 @@ jobs:
           path: dist/*.vsix
           retention-days: 7
 
+  publish:
+    name: Publish to Open VSX
+    needs: [build-vscode-extension]
+    runs-on: ubuntu-latest
+    # 只上 Open VSX；沒設 token 時略過，GitHub release 照常建立。
+    env:
+      OVSX_PAT: ${{ secrets.OVSX_PAT }}
+
+    steps:
+      - name: Download VSIX Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: moonclicker-vscode-extension
+          path: release-assets
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Publish to Open VSX
+        if: env.OVSX_PAT != ''
+        run: npx --yes ovsx publish release-assets/*.vsix
+
   create-release:
     name: Create Release
     needs: [build-vscode-extension]

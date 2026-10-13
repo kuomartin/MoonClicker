@@ -73,11 +73,11 @@ The `:engine` Gradle module — the sole boundary allowed to touch native intern
 _Avoid_: Native layer, backend module.
 
 **EngineStateRepository**:
-The observable single source of truth (`StateFlow<EngineState>`) in the Engine Module aggregating script run states and vision matching results.
+The observable state (`StateFlow<EngineState>`) of one [[ScriptEngine]] instance: its run state and latest vision matching results.
 _Avoid_: Engine status, native state holder.
 
 **ScriptEngine**:
-The public Kotlin facade over native `LuaNative` bindings in `:engine`, used to start/stop scripts and exchange shared data.
+The public Kotlin facade over native `LuaNative` bindings in `:engine`. Each instance is one run with its own Lua state, thread, state, log and shared data; instances on different displays run concurrently, and a display runs at most one at a time (the physical screen counts as one).
 _Avoid_: LuaEngineControl, JNI bridge, LuaNative (when referencing public caller API).
 
 **ScriptHost**:

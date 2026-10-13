@@ -3,10 +3,12 @@ package com.xaxaxax.moonclicker.workbench
 import com.xaxaxax.moonclicker.script.SafePath
 import com.xaxaxax.moonclicker.script.Script
 import com.xaxaxax.moonclicker.script.ScriptMeta
+import com.xaxaxax.moonclicker.script.ScriptStartOutcome
 import com.xaxaxax.moonclicker.script.ScriptStore
 import com.xaxaxax.moonclicker.script.TemplateStore
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
 import io.ktor.server.request.receiveStream
 import io.ktor.server.request.receiveText
@@ -72,15 +74,15 @@ fun Route.scriptRoutes(
     }
 
     // 刪除整個腳本：VS Code 那邊整個腳本資料夾被刪掉時用。單檔案的 DELETE 不接受空路徑，
-    // 刪不到資料夾本身。執行中一律拒絕——ScriptRunner 只知道「有沒有東西在跑」，不知道是哪一支。
+    // 刪不到資料夾本身。這支腳本執行中時拒絕。
     delete("/scripts/{id}") {
         val script = call.parameters["id"]?.let { id -> ScriptStore.scan(scriptsRoot).find { it.id == id } }
         if (script == null) {
             call.respondText("Script not found", status = HttpStatusCode.NotFound)
             return@delete
         }
-        if (scriptRunner.isRunning()) {
-            call.respondText("A script is running", status = HttpStatusCode.Conflict)
+        if (scriptRunner.isRunning(script.id)) {
+            call.respondText("Script is running", status = HttpStatusCode.Conflict)
             return@delete
         }
         if (!script.dir.deleteRecursively()) {
@@ -245,19 +247,24 @@ fun Route.scriptRoutes(
             call.respondText("Script not found", status = HttpStatusCode.NotFound)
             return@post
         }
-        if (scriptRunner.isRunning()) {
-            call.respondText("A script is already running", status = HttpStatusCode.Conflict)
-            return@post
-        }
-        scriptRunner.start(script)
-        call.respondText("Started", status = HttpStatusCode.Accepted)
+        call.respondStart(script.id, scriptRunner.start(script))
     }
 
-    // 停止目前執行中的腳本（見 vision-test 合約）：一般腳本、vision-test 都吃同一個
-    // ScriptRunner slot，這裡不分是哪一種，統一停。沒有腳本在跑時呼叫也不報錯——
-    // ScriptSession.stop() 本來就是安全的 no-op。
+    // 停止 `?script=` 指定的腳本，沒指定就全部停。沒有在跑時呼叫也不報錯。
     post("/run/stop") {
-        scriptRunner.stop()
+        scriptRunner.stop(call.request.queryParameters["script"])
         call.respondText("Stopped")
     }
+}
+
+/**
+ * 啟動結果對應的回應。202 的 body 是腳本 id（vision-test 之類的暫存腳本，呼叫端停止時要用）；
+ * 目標顯示器被佔用或這支腳本已在跑時回 409，訊息帶上佔用的腳本。
+ */
+internal suspend fun ApplicationCall.respondStart(scriptId: String, outcome: ScriptStartOutcome) = when (outcome) {
+    ScriptStartOutcome.Started -> respondText(scriptId, status = HttpStatusCode.Accepted)
+    ScriptStartOutcome.AlreadyRunning -> respondText("Script is already running: $scriptId", status = HttpStatusCode.Conflict)
+    is ScriptStartOutcome.DisplayBusy ->
+        respondText("Display ${outcome.displayId} is running ${outcome.scriptId}", status = HttpStatusCode.Conflict)
+    is ScriptStartOutcome.Failed -> respondText(outcome.message, status = HttpStatusCode.InternalServerError)
 }

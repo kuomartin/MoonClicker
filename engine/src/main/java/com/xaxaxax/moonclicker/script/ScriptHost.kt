@@ -5,7 +5,6 @@ import androidx.annotation.Keep
 import com.xaxaxax.moonclicker.DisplaySink
 import com.xaxaxax.moonclicker.IMoonClickerService
 import com.xaxaxax.moonclicker.MoonClickerAppTask
-import com.xaxaxax.moonclicker.engine.state.EngineStateRepository
 import timber.log.Timber
 
 /**
@@ -29,6 +28,7 @@ internal class ScriptHost(
     private val onOpenUri: (uri: String) -> Unit,
     private val onData: (key: String, value: Any?) -> Unit,
     private val onLog: (line: String) -> Unit,
+    private val onEvent: (type: Int, payload: String) -> Unit,
 ) : AutoCloseable {
     /** 記住每個 pointer 最後的位置，這樣 [pointerUp] 才知道要在哪裡放開。 */
     private val lastPoint = HashMap<Int, Pair<Int, Int>>()
@@ -138,7 +138,7 @@ internal class ScriptHost(
     /** 由 C++ 的 pushEvent 呼叫，型別對應 [com.xaxaxax.moonclicker.engine.state.EngineEventType]。 */
     @Keep
     fun onEngineEvent(type: Int, payload: String) {
-        EngineStateRepository.onEvent(type, payload)
+        onEvent(type, payload)
     }
 
     /**

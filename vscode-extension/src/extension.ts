@@ -9,6 +9,8 @@ import { WorkspaceTreeProvider, RemoteScriptItem } from "./treeViews";
 import { startMdnsDaemon, getCachedDevices, mdnsEvents, checkDeviceHealth, refreshMdns } from "./mdnsDiscovery";
 import { pairWithPin } from "./authSync";
 import { stopRun } from "./visionTest";
+import { ScriptDataStore } from "./scriptStreamState";
+import { errorText, localize } from "./l10n";
 
 let connection: WorkbenchConnection | undefined;
 let statusBarItem: vscode.StatusBarItem | undefined;
@@ -18,6 +20,8 @@ let extensionContext: vscode.ExtensionContext | undefined;
 let workspaceProvider: WorkspaceTreeProvider;
 let activeToken: string | undefined;
 let folderSync: FolderSyncController;
+let scriptData = new ScriptDataStore();
+let runningScriptIds: string[] = [];
 /** 使用者按下 Connect 之後的第一次連上才算互動式：可以跳出選擇資料夾。自動重連不跳。 */
 let interactiveConnect = false;
 /** 每個 address 各自的 token：自動重連時從 secrets 撈回來。 */
@@ -59,7 +63,7 @@ export function activate(context: vscode.ExtensionContext): void {
   renderStatusBar({ status: "disconnected" });
   runStatusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 99);
   runStatusItem.command = "moonclicker.stop";
-  runStatusItem.tooltip = "停止裝置上的腳本";
+  runStatusItem.tooltip = vscode.l10n.t("Stop scripts on the device");
   context.subscriptions.push(runStatusItem);
 
   workspaceProvider = new WorkspaceTreeProvider();
@@ -91,28 +95,37 @@ export function activate(context: vscode.ExtensionContext): void {
         .then(() => workspaceProvider.refresh());
     } else if (state.status !== "connecting") {
       folderSync.stop();
-      setRunningScript(undefined);
+      setRunningScripts([]);
     }
+    if (state.status !== "connected") scriptData.clear();
     if (state.status === "error") {
-      vscode.window.showErrorMessage(`MoonClicker: 連線到 ${state.address} 失敗——${state.message}`);
+      vscode.window.showErrorMessage(
+        vscode.l10n.t("MoonClicker: Failed to connect to {0}: {1}", state.address, localize(state.message)),
+      );
     }
   });
 
   connection.onDidReceiveStreamEvent((event) => {
     if (event.event.case === "log") {
-      logChannel.appendLine(event.event.value);
+      const { scriptId, line } = event.event.value;
+      logChannel.appendLine(`[${scriptId}] ${line}`);
+      postStreamEventToMirror({ case: "log", value: { scriptId, line } });
     } else if (event.event.case === "data") {
+      const scriptId = event.event.value.scriptId;
+      const data = scriptData.apply(event.event.value);
       dataChannel.clear();
-      dataChannel.appendLine(JSON.stringify(event.event.value, null, 2));
+      dataChannel.appendLine(JSON.stringify(scriptData.all(), null, 2));
+      postStreamEventToMirror({ case: "data", value: { scriptId, data } });
     } else if (event.event.case === "runState") {
-      setRunningScript(event.event.value.scriptId || undefined);
+      const runningScriptIds = event.event.value.runningScriptIds;
+      setRunningScripts(runningScriptIds);
+      postStreamEventToMirror({ case: "runState", value: { runningScriptIds } });
     } else if (event.event.case === "fileChange") {
       folderSync.handleRemoteChange(event.event.value);
       // 整支腳本新增、刪除，或名稱可能改了，側邊欄的清單要跟著更新。
       const changedPath = event.event.value.path;
       if (!changedPath || changedPath === "main.lua" || changedPath === "script.json") workspaceProvider.refresh();
     }
-    postStreamEventToMirror(event.event);
   });
 
   context.subscriptions.push(
@@ -147,7 +160,7 @@ export function deactivate(): void {
 
 function insertRunDivider(): void {
   const divider = `--- Run triggered at ${new Date().toLocaleTimeString()} ---`;
-  postStreamEventToMirror({ case: "log", value: divider });
+  postStreamEventToMirror({ case: "log", value: { scriptId: "", line: divider } });
 }
 
 interface ConnectItem extends vscode.QuickPickItem {
@@ -159,14 +172,14 @@ async function connectCommand(): Promise<void> {
   if (!extensionContext) return;
 
   const quickPick = vscode.window.createQuickPick<ConnectItem>();
-  quickPick.title = "MoonClicker: 搜尋區網內的裝置...";
-  quickPick.placeholder = "選擇要連線的 MoonClicker 裝置";
+  quickPick.title = vscode.l10n.t("MoonClicker: Searching for devices on the local network...");
+  quickPick.placeholder = vscode.l10n.t("Choose a MoonClicker device to connect to");
   quickPick.busy = true;
 
   const baseItems: ConnectItem[] = [
     {
-      label: "$(edit) 手動輸入 IP:port",
-      description: "自行輸入裝置位址",
+      label: "$(edit) " + vscode.l10n.t("Enter IP:port manually"),
+      description: vscode.l10n.t("Type the device address yourself"),
       isManual: true,
     }
   ];
@@ -180,7 +193,7 @@ async function connectCommand(): Promise<void> {
       currentItems.push({
         label: `$(circle-outline) ${dev.name}`,
         description: dev.address,
-        detail: "Checking status...",
+        detail: vscode.l10n.t("Checking status..."),
         address: dev.address,
       });
     });
@@ -196,7 +209,7 @@ async function connectCommand(): Promise<void> {
           items[idx] = {
             ...items[idx],
             label: isOnline ? `$(pass-filled) ${dev.name}` : `$(circle-outline) ${dev.name}`,
-            detail: isOnline ? "mDNS 自動發現的裝置" : "(Offline / Cached)",
+            detail: isOnline ? vscode.l10n.t("Discovered via mDNS") : vscode.l10n.t("(Offline / Cached)"),
           };
           quickPick.items = items;
         }
@@ -221,10 +234,10 @@ async function connectCommand(): Promise<void> {
     let address: string | undefined;
     if (picked.isManual) {
       address = await vscode.window.showInputBox({
-        prompt: "裝置的 IP:port（見裝置端 Settings > Script Workbench）",
+        prompt: vscode.l10n.t("Device IP:port (see Settings > Script Workbench on the device)"),
         placeHolder: "192.168.1.23:8787",
         validateInput: (value) =>
-          /^[^\s:]+:\d+$/.test(value) ? undefined : "格式需要是 ip:port",
+          /^[^\s:]+:\d+$/.test(value) ? undefined : vscode.l10n.t("Format must be ip:port"),
       });
     } else {
       address = picked.address;
@@ -247,10 +260,13 @@ async function connectCommand(): Promise<void> {
 
     if (!authenticated) {
       const pin = await vscode.window.showInputBox({
-        prompt: `連線至 ${address} 需要驗證，請輸入 Android 裝置畫面上顯示的 6 位數 PIN 碼（若未開啟，請先在手機端開啟配對模式）`,
+        prompt: vscode.l10n.t(
+          "Connecting to {0} requires pairing. Enter the 6-digit PIN shown on the Android device (turn on pairing mode on the device first).",
+          address,
+        ),
         placeHolder: "123456",
         password: true,
-        validateInput: (val) => (/^\d{6}$/.test(val) ? undefined : "PIN 碼格式需要是 6 位數字"),
+        validateInput: (val) => (/^\d{6}$/.test(val) ? undefined : vscode.l10n.t("The PIN must be 6 digits")),
       });
 
       if (!pin) return;
@@ -258,9 +274,9 @@ async function connectCommand(): Promise<void> {
       try {
         token = await pairWithPin(address, pin);
         await extensionContext!.secrets.store(secretKey, token);
-        vscode.window.showInformationMessage(`MoonClicker: 連線至 ${address} 配對成功！已儲存憑證。`);
+        vscode.window.showInformationMessage(vscode.l10n.t("MoonClicker: Paired with {0}. Credentials saved.", address));
       } catch (err) {
-        vscode.window.showErrorMessage(`MoonClicker 配對失敗: ${(err as Error).message}`);
+        vscode.window.showErrorMessage(vscode.l10n.t("MoonClicker: Pairing failed: {0}", errorText(err)));
         return;
       }
     }
@@ -282,7 +298,7 @@ async function connectCommand(): Promise<void> {
 function connectedAddress(): string | undefined {
   const state = connection?.state;
   if (state?.status !== "connected") {
-    vscode.window.showErrorMessage("MoonClicker: 尚未連線到裝置");
+    vscode.window.showErrorMessage(vscode.l10n.t("MoonClicker: Not connected to a device"));
     return undefined;
   }
   return state.address;
@@ -291,12 +307,12 @@ function connectedAddress(): string | undefined {
 async function pickScript(address: string): Promise<string | undefined> {
   const scripts = await listScripts(address, activeToken);
   if (scripts.length === 0) {
-    vscode.window.showInformationMessage("MoonClicker: 裝置上還沒有任何腳本");
+    vscode.window.showInformationMessage(vscode.l10n.t("MoonClicker: There are no scripts on the device yet"));
     return undefined;
   }
   const picked = await vscode.window.showQuickPick(
     scripts.map((s) => ({ label: s.name, description: s.id, id: s.id })),
-    { placeHolder: "選擇要同步的 Script Folder" },
+    { placeHolder: vscode.l10n.t("Choose a script") },
   );
   return picked?.id;
 }
@@ -308,7 +324,9 @@ async function openScriptCommand(item?: RemoteScriptItem): Promise<void> {
   const uri = folderSync.mainLuaUri(scriptId);
   if (!uri) {
     vscode.window.showErrorMessage(
-      folderSync.root ? `MoonClicker: 本機資料夾裡沒有「${scriptId}」的 main.lua` : "MoonClicker: 請先連線並選擇腳本資料夾",
+      folderSync.root
+        ? vscode.l10n.t("MoonClicker: The local folder has no main.lua for \"{0}\"", scriptId)
+        : vscode.l10n.t("MoonClicker: Connect and choose a scripts folder first"),
     );
     return;
   }
@@ -322,7 +340,7 @@ async function runCommand(): Promise<void> {
   const address = connectedAddress();
   if (!address) return;
   if (!editor || !scriptId) {
-    vscode.window.showErrorMessage("MoonClicker: 請在同步的腳本資料夾中開啟要執行的腳本");
+    vscode.window.showErrorMessage(vscode.l10n.t("MoonClicker: Open the script to run from the synced scripts folder"));
     return;
   }
   try {
@@ -330,9 +348,9 @@ async function runCommand(): Promise<void> {
     await folderSync.flush(editor.document.uri.fsPath);
     insertRunDivider();
     await runScript(address, scriptId, activeToken);
-    vscode.window.showInformationMessage(`MoonClicker: 已在裝置上觸發「${scriptId}」執行`);
+    vscode.window.showInformationMessage(vscode.l10n.t("MoonClicker: Started \"{0}\" on the device", scriptId));
   } catch (err) {
-    vscode.window.showErrorMessage(`MoonClicker: ${(err as Error).message}`);
+    vscode.window.showErrorMessage(`MoonClicker: ${errorText(err)}`);
   }
 }
 
@@ -360,17 +378,18 @@ async function runRemoteCommand(item?: RemoteScriptItem): Promise<void> {
     if (mainLua) await folderSync.flush(mainLua.fsPath);
     insertRunDivider();
     await runScript(address, id, activeToken);
-    vscode.window.showInformationMessage(`MoonClicker: 已在裝置上觸發「${id}」執行`);
+    vscode.window.showInformationMessage(vscode.l10n.t("MoonClicker: Started \"{0}\" on the device", id));
   } catch (err) {
-    vscode.window.showErrorMessage(`MoonClicker: ${(err as Error).message}`);
+    vscode.window.showErrorMessage(`MoonClicker: ${errorText(err)}`);
   }
 }
 
-function setRunningScript(scriptId: string | undefined): void {
-  workspaceProvider.setRunningScript(scriptId);
+function setRunningScripts(scriptIds: string[]): void {
+  runningScriptIds = scriptIds;
+  workspaceProvider.setRunningScripts(scriptIds);
   if (!runStatusItem) return;
-  if (scriptId) {
-    runStatusItem.text = `$(debug-stop) 執行中：${scriptId}`;
+  if (scriptIds.length > 0) {
+    runStatusItem.text = "$(debug-stop) " + vscode.l10n.t("Running: {0}", scriptIds.join(", "));
     runStatusItem.show();
   } else {
     runStatusItem.hide();
@@ -397,21 +416,34 @@ async function openWorkbenchCommand(): Promise<void> {
       displays[0]?.id ??
       0;
   } catch (err) {
-    vscode.window.showWarningMessage(`MoonClicker: 讀不到顯示器清單，先開啟 display 0——${(err as Error).message}`);
+    vscode.window.showWarningMessage(
+      vscode.l10n.t("MoonClicker: Could not list displays, opening display 0: {0}", errorText(err)),
+    );
   }
   openMirrorPanel(extensionContext.extensionUri, address, displayId, activeToken, (id) => {
     extensionContext?.globalState.update(LAST_DISPLAY_KEY, id);
   });
 }
 
-/** 停止裝置上正在執行的腳本；沒有腳本在跑時裝置端是 no-op。 */
+/** 停止裝置上正在執行的腳本；同時有多支在跑時先問要停哪一支。 */
 async function stopCommand(): Promise<void> {
   const address = connectedAddress();
   if (!address) return;
+  let scriptId: string | undefined;
+  if (runningScriptIds.length === 1) {
+    scriptId = runningScriptIds[0];
+  } else if (runningScriptIds.length > 1) {
+    const all = "$(debug-stop) " + vscode.l10n.t("Stop all");
+    const picked = await vscode.window.showQuickPick([...runningScriptIds, all], {
+      placeHolder: vscode.l10n.t("Which script do you want to stop?"),
+    });
+    if (!picked) return;
+    scriptId = picked === all ? undefined : picked;
+  }
   try {
-    await stopRun(address, activeToken);
+    await stopRun(address, activeToken, scriptId);
   } catch (err) {
-    vscode.window.showErrorMessage(`MoonClicker: ${(err as Error).message}`);
+    vscode.window.showErrorMessage(`MoonClicker: ${errorText(err)}`);
   }
 }
 
@@ -419,23 +451,23 @@ function renderStatusBar(state: ConnectionState): void {
   if (!statusBarItem) return;
   switch (state.status) {
     case "disconnected":
-      statusBarItem.text = "$(circle-slash) MoonClicker: 未連線";
-      statusBarItem.tooltip = "連線到裝置";
+      statusBarItem.text = "$(circle-slash) " + vscode.l10n.t("MoonClicker: Disconnected");
+      statusBarItem.tooltip = vscode.l10n.t("Connect to a device");
       statusBarItem.command = "moonclicker.connect";
       break;
     case "connecting":
-      statusBarItem.text = `$(sync~spin) MoonClicker: 連線中 ${state.address}`;
+      statusBarItem.text = "$(sync~spin) " + vscode.l10n.t("MoonClicker: Connecting to {0}", state.address);
       statusBarItem.tooltip = undefined;
       statusBarItem.command = undefined;
       break;
     case "connected":
-      statusBarItem.text = `$(check) MoonClicker: 已連線 ${state.address}`;
-      statusBarItem.tooltip = "開啟 Workbench 面板";
+      statusBarItem.text = "$(check) " + vscode.l10n.t("MoonClicker: Connected to {0}", state.address);
+      statusBarItem.tooltip = vscode.l10n.t("Open the Workbench panel");
       statusBarItem.command = "moonclicker.openWorkbench";
       break;
     case "error":
-      statusBarItem.text = `$(error) MoonClicker: 連線失敗`;
-      statusBarItem.tooltip = "重新連線";
+      statusBarItem.text = "$(error) " + vscode.l10n.t("MoonClicker: Connection failed");
+      statusBarItem.tooltip = vscode.l10n.t("Reconnect");
       statusBarItem.command = "moonclicker.connect";
       break;
   }

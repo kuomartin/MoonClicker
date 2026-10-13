@@ -2,6 +2,29 @@
 (function () {
   const vscode = window.vscode || (typeof acquireVsCodeApi === "function" ? acquireVsCodeApi() : null);
 
+  // ---------- 在地化 ----------
+  // 原文是英文；擴充套件把 `vscode.l10n.bundle`（英文介面時沒有）放在 window.moonclickerL10n，查不到就顯示原文。
+  const l10nBundle = window.moonclickerL10n || {};
+  function tr(text, ...args) {
+    const template = l10nBundle[text] ?? text;
+    return template.replace(/\{(\d+)\}/g, (all, i) => (i in args ? String(args[i]) : all));
+  }
+  /** 翻譯 HTML 裡的靜態文字：每個文字節點與 title/placeholder 屬性各自查表。 */
+  function translateDom(root) {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const text = node.nodeValue.trim();
+      if (text && l10nBundle[text]) node.nodeValue = node.nodeValue.replace(text, l10nBundle[text]);
+    }
+    root.querySelectorAll("[title], [placeholder]").forEach((el) => {
+      for (const attr of ["title", "placeholder"]) {
+        const value = el.getAttribute(attr);
+        if (value && l10nBundle[value]) el.setAttribute(attr, l10nBundle[value]);
+      }
+    });
+  }
+  translateDom(document.body);
+
   // ---------- 共用元素 ----------
   const displaySelect = document.getElementById("displaySelect");
   const refreshDisplayBtn = document.getElementById("refreshDisplayBtn");
@@ -114,10 +137,10 @@
       toggleMirrorBtn.hidden = false;
       toggleMirrorBtn.disabled = false;
       if (current.isMirrorActive) {
-        toggleMirrorBtn.textContent = "停止鏡像";
+        toggleMirrorBtn.textContent = tr("Stop mirroring");
         toggleMirrorBtn.className = "secondary";
       } else {
-        toggleMirrorBtn.textContent = "啟動鏡像";
+        toggleMirrorBtn.textContent = tr("Start mirroring");
         toggleMirrorBtn.className = "";
       }
     } else {
@@ -129,11 +152,11 @@
     if (currentDisplayId === null) return;
     if (toggleMirrorBtn) {
       toggleMirrorBtn.disabled = true;
-      toggleMirrorBtn.textContent = enable ? "啟動中…" : "停止中…";
+      toggleMirrorBtn.textContent = enable ? tr("Starting…") : tr("Stopping…");
     }
     if (overlayActionBtn) {
       overlayActionBtn.disabled = true;
-      overlayActionBtn.textContent = enable ? "啟動中…" : "停止中…";
+      overlayActionBtn.textContent = enable ? tr("Starting…") : tr("Stopping…");
     }
     vscode?.postMessage({ type: "toggleMirror", displayId: currentDisplayId, enable });
   }
@@ -161,7 +184,7 @@
       const needsAction = showAction || isMirrorOff || (text && (text.includes("404") || text.includes("實體螢幕需先啟動鏡像")));
       overlayActionBtn.hidden = !(needsAction && isPhysical);
       overlayActionBtn.disabled = false;
-      overlayActionBtn.textContent = "立即啟動實體螢幕鏡像";
+      overlayActionBtn.textContent = tr("Start mirroring the physical screen");
     }
     runOverlay.hidden = false;
   }
@@ -176,44 +199,96 @@
     if (!state) return;
     switch (state.status) {
       case "disconnected":
-        statusEl.textContent = "已停止";
-        showOverlay("串流已停止");
+        statusEl.textContent = tr("Stopped");
+        showOverlay(tr("Stream stopped"));
         break;
       case "connecting":
-        statusEl.textContent = "連線中 display " + state.displayId + "…";
-        showOverlay("連線中…");
+        statusEl.textContent = tr("Connecting to display {0}…", state.displayId);
+        showOverlay(tr("Connecting…"));
         break;
       case "connected":
-        statusEl.textContent = "已連線 display " + state.displayId;
+        statusEl.textContent = tr("Connected to display {0}", state.displayId);
         break;
       case "error":
-        statusEl.textContent = "連線失敗：" + state.message;
-        showOverlay("連線失敗：" + state.message);
+        statusEl.textContent = tr("Connection failed: {0}", state.message);
+        showOverlay(tr("Connection failed: {0}", state.message));
         break;
     }
   }
 
-  let lastData = {};
+  // 每支腳本各自的 data（extension 已經把差異套用好，這裡拿到的是完整的 map）。
+  const scriptData = {};
+  const knownScripts = new Set();
+  const scriptFilter = document.getElementById("scriptFilter");
+
+  function noteScript(scriptId) {
+    if (!scriptId || knownScripts.has(scriptId)) return;
+    knownScripts.add(scriptId);
+    const opt = document.createElement("option");
+    opt.value = scriptId;
+    opt.textContent = scriptId;
+    scriptFilter.appendChild(opt);
+  }
+
+  function applyScriptFilter() {
+    const selected = scriptFilter.value;
+    for (const line of logContainer.children) {
+      line.hidden = !!selected && !!line.dataset.script && line.dataset.script !== selected;
+    }
+    renderData();
+  }
+  scriptFilter.addEventListener("change", applyScriptFilter);
+
   function handleStreamEvent(e) {
     if (!e) return;
-    if (e.case === "log" || e.log) {
-      const line = e.value || e.log;
+    if (e.case === "log") {
+      const { scriptId, line } = e.value || {};
+      noteScript(scriptId);
       const div = document.createElement("div");
       div.className = "logLine";
-      div.textContent = line;
+      if (scriptId) {
+        div.dataset.script = scriptId;
+        const tag = document.createElement("span");
+        tag.className = "logScript";
+        tag.textContent = "[" + scriptId + "]";
+        div.appendChild(tag);
+      }
+      div.appendChild(document.createTextNode(line || ""));
+      div.hidden = !!scriptFilter.value && !!scriptId && scriptId !== scriptFilter.value;
       logContainer.appendChild(div);
       if (autoScrollCb.checked) {
         logContainer.scrollTop = logContainer.scrollHeight;
       }
-    } else if (e.case === "data" || e.data) {
-      const data = e.value || e.data || {};
-      renderDataTree(dataContainer, data);
-      if (currentMode === "test" && testRunning && Object.prototype.hasOwnProperty.call(data, "visionTest")) {
-        renderVisionTestResult(data.visionTest);
+    } else if (e.case === "data") {
+      const { scriptId, data } = e.value || {};
+      if (!scriptId) return;
+      noteScript(scriptId);
+      scriptData[scriptId] = data || {};
+      renderData();
+      const values = data || {};
+      if (currentMode === "test" && testRunning && Object.prototype.hasOwnProperty.call(values, "visionTest")) {
+        renderVisionTestResult(values.visionTest);
       }
-      if (currentMode === "test" && testRunning && Object.prototype.hasOwnProperty.call(data, "ocrTest")) {
-        renderOcrTestResult(data.ocrTest);
+      if (currentMode === "test" && testRunning && Object.prototype.hasOwnProperty.call(values, "ocrTest")) {
+        renderOcrTestResult(values.ocrTest);
       }
+    } else if (e.case === "runState") {
+      for (const id of (e.value && e.value.runningScriptIds) || []) noteScript(id);
+    }
+  }
+
+  function renderData() {
+    const selected = scriptFilter.value;
+    dataContainer.innerHTML = "";
+    const ids = selected ? [selected] : Object.keys(scriptData);
+    for (const id of ids) {
+      if (!selected) {
+        const header = document.createElement("div");
+        header.className = "tree-group";
+        header.textContent = id;
+        dataContainer.appendChild(header);
+      }
+      renderDataTree(dataContainer, id, scriptData[id] || {});
     }
   }
 
@@ -236,18 +311,18 @@
     // VisionTestScript.kt）——這是「腳本真的啟動了」的訊號，跟「第一輪比對結果」是兩件
     // 事：沒有這個 special case，v.hit 是 undefined，會被誤判成「未命中」。
     if (v.started) {
-      testMatchText.textContent = "偵測中…";
+      testMatchText.textContent = tr("Detecting…");
       return;
     }
     if (v.hit) {
       const confidence = typeof v.confidence === "number" ? v.confidence.toFixed(2) : "?";
-      testMatchText.textContent = "命中 · 信心度 " + confidence + "（cx=" + v.cx + ", cy=" + v.cy + "）";
+      testMatchText.textContent = tr("Match · confidence {0} (cx={1}, cy={2})", confidence, v.cx, v.cy);
       testMatchIcon.textContent = "✓";
       testMatchIcon.className = "matchIcon hit";
       const hasBox = ["x", "y", "w", "h"].every((k) => typeof v[k] === "number");
       lastHitBox = hasBox ? { x: v.x, y: v.y, w: v.w, h: v.h, confidence: v.confidence } : null;
     } else {
-      testMatchText.textContent = "未命中";
+      testMatchText.textContent = tr("No match");
       testMatchIcon.textContent = "✕";
       testMatchIcon.className = "matchIcon miss";
       lastHitBox = null;
@@ -267,11 +342,11 @@
     }
     if (!v || typeof v !== "object") return;
     if (v.started) {
-      testMatchText.textContent = "辨識中…（第一次會先載入 OCR）";
+      testMatchText.textContent = tr("Recognizing… (OCR loads on first use)");
       return;
     }
     const now = Date.now();
-    if (lastOcrResultAt) testLatency.textContent = "更新間隔 " + (now - lastOcrResultAt) + " ms";
+    if (lastOcrResultAt) testLatency.textContent = tr("Updated every {0} ms", now - lastOcrResultAt);
     lastOcrResultAt = now;
 
     const isBox = (b) => b && ["x", "y", "w", "h"].every((k) => typeof b[k] === "number");
@@ -279,12 +354,12 @@
       lastOcrLines = [];
       if (v.hit) {
         const similarity = typeof v.confidence === "number" ? v.confidence.toFixed(2) : "?";
-        testMatchText.textContent = "命中 · 相似度 " + similarity + "\n整行：" + (v.line || "");
+        testMatchText.textContent = tr("Match · similarity {0}\nLine: {1}", similarity, v.line || "");
         testMatchIcon.textContent = "✓";
         testMatchIcon.className = "matchIcon hit";
         lastHitBox = isBox(v) ? { x: v.x, y: v.y, w: v.w, h: v.h, confidence: v.confidence } : null;
       } else {
-        testMatchText.textContent = "未命中";
+        testMatchText.textContent = tr("No match");
         testMatchIcon.textContent = "✕";
         testMatchIcon.className = "matchIcon miss";
         lastHitBox = null;
@@ -293,12 +368,12 @@
       lastHitBox = null;
       lastOcrLines = Array.isArray(v.lines) ? v.lines.filter(isBox) : [];
       if (lastOcrLines.length === 0) {
-        testMatchText.textContent = "沒有辨識出文字";
+        testMatchText.textContent = tr("No text recognized");
         testMatchIcon.textContent = "✕";
         testMatchIcon.className = "matchIcon miss";
       } else {
         testMatchText.textContent = lastOcrLines
-          .map((l) => l.text + "（" + (typeof l.confidence === "number" ? l.confidence.toFixed(2) : "?") + "）")
+          .map((l) => l.text + " (" + (typeof l.confidence === "number" ? l.confidence.toFixed(2) : "?") + ")")
           .join("\n");
         testMatchIcon.textContent = "✓";
         testMatchIcon.className = "matchIcon hit";
@@ -307,8 +382,9 @@
     if (currentMode === "test" && !testRoiCanvas.hidden) drawRoiOverlay();
   }
 
-  function renderDataTree(container, data) {
-    container.innerHTML = "";
+  // 上次畫出來的值，以「腳本 id + key」為鍵，變動的值閃一下。
+  const lastData = {};
+  function renderDataTree(container, scriptId, data) {
     for (const [k, v] of Object.entries(data)) {
       const node = document.createElement("div");
       node.className = "tree-node";
@@ -328,12 +404,13 @@
       } else {
         valSpan.textContent = String(v);
       }
-      if (lastData[k] !== v) valSpan.classList.add("flash");
+      const flashKey = scriptId + "\u0000" + k;
+      if (lastData[flashKey] !== v) valSpan.classList.add("flash");
+      lastData[flashKey] = v;
       node.appendChild(keySpan);
       node.appendChild(valSpan);
       container.appendChild(node);
     }
-    lastData = data;
   }
 
   // Console / Data 分頁
@@ -379,7 +456,7 @@
     } else if (msg.type === "staleness") {
       stale = msg.stale;
       if (stale) {
-        showOverlay("畫面已停滯——裝置可能休眠、WiFi 斷線，或 workbench service 已停止");
+        showOverlay(tr("The stream has stalled. The device may be asleep, off Wi-Fi, or the workbench service has stopped."));
       } else {
         hideOverlayIfConnected();
       }
@@ -400,7 +477,7 @@
         opt.value = d.id;
         let label = d.name + " (" + d.width + "x" + d.height + ")";
         if (d.isVirtual === false) {
-          label += d.isMirrorActive ? " [實體·鏡像中]" : " [實體·未開啟]";
+          label += " " + (d.isMirrorActive ? tr("[physical · mirroring]") : tr("[physical · off]"));
         }
         opt.textContent = label;
         if (d.id === currentDisplayId) opt.selected = true;
@@ -414,13 +491,13 @@
       if (msg.success) {
         testRunning = true;
         setTestStatusPill("running");
-        testLatency.textContent = "輪詢間隔 " + currentIntervalMs() + " ms";
-        testMatchText.textContent = "等待結果…";
+        testLatency.textContent = tr("Polling every {0} ms", currentIntervalMs());
+        testMatchText.textContent = tr("Waiting for results…");
         lastOcrResultAt = 0;
         updateRoiCanvasVisibility();
       } else {
         testRunning = false;
-        setTestStatusPill("error", msg.error || "啟動測試比對失敗");
+        setTestStatusPill("error", msg.error || tr("Failed to start the test"));
       }
       updateTestStartStopBtn();
     } else if (msg.type === "runStopResult") {
@@ -438,20 +515,20 @@
         updateRoiCanvasVisibility();
       } else {
         pendingRestart = false;
-        setTestStatusPill("error", msg.error || "停止執行失敗");
+        setTestStatusPill("error", msg.error || tr("Failed to stop"));
       }
       updateTestStartStopBtn();
     } else if (msg.type === "saveTemplateResult") {
       buildSaveBtn.disabled = false;
       if (msg.success && pendingSave) {
         buildStatus.style.color = "var(--moon-success)";
-        buildStatus.textContent = "已存到裝置";
+        buildStatus.textContent = tr("Saved to the device");
         buildTemplateName.value = "";
         requestTemplatesFor(pendingSave.scriptId); // 重新拉裝置端的真實清單，而不是本地猜一筆
         setTimeout(() => { buildStatus.textContent = ""; }, 2000);
       } else {
         buildStatus.style.color = "var(--vscode-errorForeground)";
-        buildStatus.textContent = msg.error || "儲存失敗";
+        buildStatus.textContent = msg.error || tr("Save failed");
       }
       pendingSave = null;
     } else if (msg.type === "templatesResult") {
@@ -466,18 +543,18 @@
         requestTemplatesFor(msg.scriptId); // 同上，讓裝置端的真實清單說了算
       } else {
         buildStatus.style.color = "var(--vscode-errorForeground)";
-        buildStatus.textContent = msg.error || "刪除失敗";
+        buildStatus.textContent = msg.error || tr("Delete failed");
       }
     } else if (msg.type === "createScriptResult") {
       addingScript = false;
       addScriptBtn.disabled = false;
       if (msg.success) {
-        setWriteStatus("已建立", false);
+        setWriteStatus(tr("Created"), false);
         newScriptIdInput.value = "";
         setTimeout(() => { writeStatus.textContent = ""; }, 2000);
         // 新腳本清單本身由 mirrorPanel.ts 緊接著送一次 "scripts" 補上，這裡不用自己拼。
       } else {
-        setWriteStatus(msg.error || "建立失敗", true);
+        setWriteStatus(msg.error || tr("Create failed"), true);
       }
     }
   });
@@ -517,7 +594,7 @@
   }
 
   function renderCaptureQueue() {
-    captureQueueCount.textContent = "擷取佇列 · " + captureShots.length + " 張";
+    captureQueueCount.textContent = tr("Capture queue · {0}", captureShots.length);
     captureQueueItems.innerHTML = "";
     for (const shot of captureShots) {
       const item = document.createElement("div");
@@ -603,7 +680,7 @@
       shotImageCache[shot.id] = new Promise((resolve, reject) => {
         const img = new Image();
         img.onload = () => resolve(img);
-        img.onerror = () => reject(new Error("圖片解碼失敗"));
+        img.onerror = () => reject(new Error(tr("Failed to decode the image")));
         img.src = shot.dataUrl;
       });
     }
@@ -613,7 +690,8 @@
   function renderBuildShotPicker() {
     buildShotPicker.innerHTML = "";
     if (captureShots.length === 0) {
-      buildShotPicker.innerHTML = '<span class="emptyHint">尚無擷取畫面，先到「1 · 採集」擷取一張</span>';
+      buildShotPicker.innerHTML = '<span class="emptyHint"></span>';
+      buildShotPicker.firstChild.textContent = tr("No captures yet. Take one in \"1 · Capture\" first.");
       buildSourceTime.textContent = "—";
       buildCropPreview.style.backgroundImage = "";
       buildRoiRect = null;
@@ -803,7 +881,7 @@
     if (scriptsList.length === 0) {
       const opt = document.createElement("option");
       opt.value = "";
-      opt.textContent = "（尚未連線，無法列出腳本）";
+      opt.textContent = tr("(Not connected, cannot list scripts)");
       selectEl.appendChild(opt);
     } else if (prev && scriptsList.some((s) => s.id === prev)) {
       selectEl.value = prev;
@@ -821,21 +899,22 @@
 
   function currentBuildScriptName() {
     const s = scriptsList.find((s) => s.id === buildScriptSelect.value);
-    return s ? (s.name || s.id) : buildScriptSelect.value || "此腳本";
+    return s ? (s.name || s.id) : buildScriptSelect.value || tr("this script");
   }
 
   function renderBuildTemplateList() {
     const scriptId = buildScriptSelect.value;
-    buildTemplateListLabel.textContent = currentBuildScriptName() + " 的模板";
+    buildTemplateListLabel.textContent = tr("Templates in {0}", currentBuildScriptName());
     buildTemplateList.innerHTML = "";
     const list = deviceTemplates[scriptId];
     if (list === undefined) {
-      buildTemplateList.innerHTML =
-        '<span class="emptyHint">' + (deviceTemplatesLoading[scriptId] ? "讀取中…" : "尚未連線") + "</span>";
+      buildTemplateList.innerHTML = '<span class="emptyHint"></span>';
+      buildTemplateList.firstChild.textContent = deviceTemplatesLoading[scriptId] ? tr("Loading…") : tr("Not connected");
       return;
     }
     if (list.length === 0) {
-      buildTemplateList.innerHTML = '<span class="emptyHint">尚無模板</span>';
+      buildTemplateList.innerHTML = '<span class="emptyHint"></span>';
+      buildTemplateList.firstChild.textContent = tr("No templates yet");
       return;
     }
     for (const t of list) {
@@ -847,7 +926,8 @@
         '<span class="templateRowName"></span>' +
         '<span class="templateRowMeta"></span>' +
         "</div>" +
-        '<button type="button" class="linkBtn" title="刪除模板">✕</button>';
+        '<button type="button" class="linkBtn">✕</button>';
+      row.querySelector("button").title = tr("Delete template");
       row.querySelector(".templateRowName").textContent = t.name;
       row.querySelector(".templateRowMeta").textContent = t.roi.w + " × " + t.roi.h;
       row.querySelector("button").addEventListener("click", () => {
@@ -871,30 +951,30 @@
     const name = buildTemplateName.value.trim();
     const shot = currentBuildShot();
     if (!scriptId) {
-      buildStatus.textContent = "請先選擇所屬腳本";
+      buildStatus.textContent = tr("Choose a script first");
       buildStatus.style.color = "var(--vscode-errorForeground)";
       return;
     }
     if (!name) {
-      buildStatus.textContent = "請輸入模板名稱";
+      buildStatus.textContent = tr("Enter a template name");
       buildStatus.style.color = "var(--vscode-errorForeground)";
       return;
     }
     if (!shot) {
-      buildStatus.textContent = "請先到「1 · 採集」擷取一張畫面";
+      buildStatus.textContent = tr("Take a capture in \"1 · Capture\" first");
       buildStatus.style.color = "var(--vscode-errorForeground)";
       return;
     }
     const roi = calculateBuildRoi();
     if (!roi) {
-      buildStatus.textContent = "請先拉出有效的裁切區域";
+      buildStatus.textContent = tr("Drag out a valid crop area first");
       buildStatus.style.color = "var(--vscode-errorForeground)";
       return;
     }
 
     buildSaveBtn.disabled = true;
     buildStatus.style.color = "var(--vscode-foreground)";
-    buildStatus.textContent = "裁切中…";
+    buildStatus.textContent = tr("Cropping…");
     pendingSave = { scriptId, name, threshold: Number(buildThreshold.value) / 100 };
 
     try {
@@ -905,13 +985,13 @@
       helperCanvas.getContext("2d").drawImage(img, roi.x, roi.y, roi.w, roi.h, 0, 0, roi.w, roi.h);
       const dataUrl = helperCanvas.toDataURL("image/png");
       const pngBase64 = dataUrl.split(",")[1];
-      buildStatus.textContent = "儲存中…";
+      buildStatus.textContent = tr("Saving…");
       vscode?.postMessage({ type: "saveTemplate", scriptId, templateName: name, roi, pngBase64 });
     } catch (err) {
       pendingSave = null;
       buildSaveBtn.disabled = false;
       buildStatus.style.color = "var(--vscode-errorForeground)";
-      buildStatus.textContent = "裁切畫面失敗：" + (err && err.message ? err.message : String(err));
+      buildStatus.textContent = tr("Failed to crop: {0}", err && err.message ? err.message : String(err));
     }
   });
 
@@ -986,8 +1066,8 @@
       const opt = document.createElement("option");
       opt.value = "";
       opt.textContent = deviceTemplates[testScriptSelect.value] === undefined
-        ? "（讀取中…）"
-        : "（此腳本尚無模板，先到「2 · 建立模板」建立一個）";
+        ? tr("(Loading…)")
+        : tr("(No templates in this script yet. Create one in \"2 · Build templates\".)");
       testTemplateSelect.appendChild(opt);
       testThreshold.disabled = true;
     } else {
@@ -995,7 +1075,7 @@
       for (const t of list) {
         const opt = document.createElement("option");
         opt.value = t.name;
-        opt.textContent = t.name + "（" + t.roi.w + " × " + t.roi.h + "）";
+        opt.textContent = t.name + " (" + t.roi.w + " × " + t.roi.h + ")";
         testTemplateSelect.appendChild(opt);
       }
       if (prev && list.some((t) => t.name === prev)) {
@@ -1051,7 +1131,7 @@
 
   testIntervalInput.addEventListener("change", () => {
     if (testRunning) {
-      testLatency.textContent = "輪詢間隔 " + currentIntervalMs() + " ms";
+      testLatency.textContent = tr("Polling every {0} ms", currentIntervalMs());
     }
     scheduleTestRestartIfRunning();
   });
@@ -1064,15 +1144,15 @@
     lastOcrResultAt = 0;
     if (currentMode === "test" && !testRoiCanvas.hidden) drawRoiOverlay();
     if (isOcrTarget()) {
-      testMatchText.textContent = testRunning ? "等待結果…" : "尚未開始測試";
+      testMatchText.textContent = testRunning ? tr("Waiting for results…") : tr("Test not started");
       return;
     }
     const t = currentTestTemplate();
     if (!t) {
-      testMatchText.textContent = "尚無模板可比對";
+      testMatchText.textContent = tr("No template to match");
       return;
     }
-    testMatchText.textContent = testRunning ? "等待結果…" : "尚未開始測試";
+    testMatchText.textContent = testRunning ? tr("Waiting for results…") : tr("Test not started");
   }
 
   function currentTestTemplate() {
@@ -1113,7 +1193,7 @@
       default:
         return (
           "local hit = vision.wait({\n" +
-          "  text = " + luaString(testTextInput.value || "開始") + ",\n" +
+          "  text = " + luaString(testTextInput.value || tr("Start")) + ",\n" +
           (testExactCheckbox.checked ? "  exact = true,\n" : "") +
           (roi ? "  roi = " + luaRoi(roi) + ",\n" : "") +
           "  threshold = " + threshold + ",\n" +
@@ -1159,32 +1239,24 @@
       document.body.removeChild(ta);
     }
     const original = copySnippetBtn.textContent;
-    copySnippetBtn.textContent = "已複製！";
+    copySnippetBtn.textContent = tr("Copied!");
     setTimeout(() => { copySnippetBtn.textContent = original; }, 1200);
   });
 
   // ---------- 即時測試比對 start/stop（真實 RPC，共用 /run 執行槽） ----------
 
+  const TEST_STATUS_LABELS = {
+    idle: "Not started",
+    starting: "Starting…",
+    running: "Matching live",
+    stopping: "Stopping…",
+    error: "Error",
+  };
+
   function setTestStatusPill(state, detail) {
-    testStatusPill.classList.remove("statusPill-error");
-    switch (state) {
-      case "idle":
-        testStatusPill.innerHTML = '<span class="statusDot"></span>未開始';
-        break;
-      case "starting":
-        testStatusPill.innerHTML = '<span class="statusDot"></span>啟動中…';
-        break;
-      case "running":
-        testStatusPill.innerHTML = '<span class="statusDot"></span>即時比對中';
-        break;
-      case "stopping":
-        testStatusPill.innerHTML = '<span class="statusDot"></span>停止中…';
-        break;
-      case "error":
-        testStatusPill.classList.add("statusPill-error");
-        testStatusPill.innerHTML = '<span class="statusDot"></span>錯誤';
-        break;
-    }
+    testStatusPill.classList.toggle("statusPill-error", state === "error");
+    testStatusPill.innerHTML = '<span class="statusDot"></span>';
+    testStatusPill.append(tr(TEST_STATUS_LABELS[state]));
     if (detail) {
       testErrorMsg.textContent = detail;
       testErrorMsg.hidden = false;
@@ -1196,25 +1268,25 @@
   function updateTestStartStopBtn() {
     testStartStopBtn.disabled = testPending;
     if (testPending) {
-      testStartStopBtn.textContent = testRunning ? "停止中…" : "啟動中…";
+      testStartStopBtn.textContent = testRunning ? tr("Stopping…") : tr("Starting…");
     } else {
-      testStartStopBtn.textContent = testRunning ? "停止測試" : "開始測試";
+      testStartStopBtn.textContent = testRunning ? tr("Stop test") : tr("Start test");
     }
   }
 
   function requestStartOcrTest() {
     if (currentDisplayId === null) {
-      setTestStatusPill("error", "尚未選擇顯示器");
+      setTestStatusPill("error", tr("No display selected"));
       return;
     }
     const mode = testTarget();
     const roi = calculateTestRoi();
     if (mode === "read" && !roi) {
-      setTestStatusPill("error", "讀取單行需要 ROI：先按「調整 ROI」框出要讀的那一行");
+      setTestStatusPill("error", tr("Reading one line needs an ROI. Use \"Adjust ROI\" to box the line first."));
       return;
     }
     if (mode === "find" && !testTextInput.value) {
-      setTestStatusPill("error", "請輸入要找的文字");
+      setTestStatusPill("error", tr("Enter the text to find"));
       return;
     }
     testPending = true;
@@ -1239,11 +1311,11 @@
     }
     const t = currentTestTemplate();
     if (!t) {
-      setTestStatusPill("error", "尚無模板可測試");
+      setTestStatusPill("error", tr("No template to test"));
       return;
     }
     if (currentDisplayId === null) {
-      setTestStatusPill("error", "尚未選擇顯示器");
+      setTestStatusPill("error", tr("No display selected"));
       return;
     }
     const roi = calculateTestRoi() || { x: 96, y: 420, w: 130, h: 40 };
@@ -1600,13 +1672,14 @@
 
   function formatModified(ms) {
     if (!ms) return "—";
-    return new Date(ms).toLocaleString("zh-Hant-TW", { hour12: false });
+    return new Date(ms).toLocaleString(document.documentElement.lang || undefined, { hour12: false });
   }
 
   function renderWriteScriptCards() {
     writeScriptCards.innerHTML = "";
     if (scriptsList.length === 0) {
-      writeScriptCards.innerHTML = '<span class="emptyHint">尚未連線，無法列出腳本</span>';
+      writeScriptCards.innerHTML = '<span class="emptyHint"></span>';
+      writeScriptCards.firstChild.textContent = tr("Not connected, cannot list scripts");
       return;
     }
     for (const s of scriptsList) {
@@ -1616,9 +1689,10 @@
       card.innerHTML =
         '<svg class="scriptCardIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>' +
         '<div class="scriptCardInfo"><span class="scriptCardName"></span><span class="scriptCardMeta"></span></div>' +
-        '<button type="button" class="secondary">在編輯器開啟</button>';
+        '<button type="button" class="secondary"></button>';
+      card.querySelector("button").textContent = tr("Open in editor");
       card.querySelector(".scriptCardName").textContent = s.name || s.id;
-      card.querySelector(".scriptCardMeta").textContent = templateCount + " 個模板 · 上次修改 " + formatModified(s.modifiedMs);
+      card.querySelector(".scriptCardMeta").textContent = tr("{0} template(s) · modified {1}", templateCount, formatModified(s.modifiedMs));
       card.querySelector("button").addEventListener("click", () => {
         vscode?.postMessage({ type: "openScriptInEditor", scriptId: s.id, scriptName: s.name });
       });
@@ -1635,17 +1709,17 @@
     if (addingScript) return;
     const id = newScriptIdInput.value.trim();
     if (!id) {
-      setWriteStatus("請輸入腳本名稱", true);
+      setWriteStatus(tr("Enter a script name"), true);
       return;
     }
     if (id.startsWith(".") || !SCRIPT_ID_PATTERN.test(id)) {
-      setWriteStatus("只能是小寫英數字、「.」「_」「-」，且不能以「.」開頭", true);
+      setWriteStatus(tr('Only lowercase letters, digits, ".", "_" and "-" are allowed, and the name cannot start with "."'), true);
       return;
     }
     addingScript = true;
     addScriptBtn.disabled = true;
     writeStatus.style.color = "var(--vscode-foreground)";
-    writeStatus.textContent = "建立中…";
+    writeStatus.textContent = tr("Creating…");
     vscode?.postMessage({ type: "createScript", scriptId: id });
   });
 
@@ -1653,6 +1727,7 @@
   renderCaptureQueue();
   populateScriptSelects();
   renderTestTemplateOptions();
+  testLatency.textContent = tr("Polling every {0} ms", currentIntervalMs());
 
   // 自動化與 LLM DevTools 測試掛載
   window.__MOONCLICKER_TEST__ = {

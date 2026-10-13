@@ -13,7 +13,7 @@ import java.io.File
  * 資料夾名以 "." 開頭，讓 [ScriptStore.scan] 略過，不會出現在使用者的腳本列表裡。
  */
 object VisionTestScript {
-    private const val FOLDER_NAME = ".__vision_test__"
+    const val FOLDER_NAME = ".__vision_test__"
     private const val UNIQUE_ID = "vision-test"
 
     /**

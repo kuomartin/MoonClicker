@@ -1,0 +1,16 @@
+{
+  "displayName": "MoonClicker 腳本工作台",
+  "description": "將 VS Code 連線到開啟腳本工作台的 MoonClicker 裝置。",
+  "command.connect": "MoonClicker: 連線到裝置",
+  "command.disconnect": "MoonClicker: 中斷裝置連線",
+  "command.openScript": "MoonClicker: 開啟腳本",
+  "command.newScript": "MoonClicker: 新增腳本",
+  "command.run": "MoonClicker: 在裝置上執行目前的腳本",
+  "command.stop": "MoonClicker: 停止裝置上的腳本",
+  "command.openWorkbench": "MoonClicker: 開啟 Workbench",
+  "command.runRemote": "MoonClicker: 執行裝置上的腳本",
+  "command.refresh": "MoonClicker: 重新整理並同步",
+  "viewsContainer.scripts": "MoonClicker 腳本",
+  "view.workspace": "工作區",
+  "viewsWelcome.disconnected": "尚未連線到裝置。\n[連線到裝置](command:moonclicker.connect)\n在 App 的開發人員選項開啟腳本工作台後，VS Code 會自動搜尋同一個網路上的裝置。"
+}

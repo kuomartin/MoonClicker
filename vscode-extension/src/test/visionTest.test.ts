@@ -34,7 +34,7 @@ test("startOcrTest turns a 412 into a pointer to the device's OCR settings", asy
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const { port } = server.address() as { port: number };
   try {
-    await assert.rejects(startOcrTest(`127.0.0.1:${port}`, { displayId: 7, mode: "read_lines" }), /文字辨識（OCR）/);
+    await assert.rejects(startOcrTest(`127.0.0.1:${port}`, { displayId: 7, mode: "read_lines" }), /Text recognition \(OCR\)/);
   } finally {
     server.close();
   }

@@ -133,7 +133,7 @@ fun ScriptsScreenContent(
     onRefresh: () -> Unit = {},
     onImport: () -> Unit = {},
     onPlay: (Script) -> Unit = {},
-    onStop: () -> Unit = {},
+    onStop: (Script) -> Unit = {},
     onOpen: (Script) -> Unit = {},
     onResolveImportConflict: (overwrite: Boolean) -> Unit = {},
     onShowExamples: () -> Unit = {},
@@ -216,10 +216,10 @@ fun ScriptsScreenContent(
                     items(uiState.scripts, key = { it.id }) { script ->
                         ScriptItem(
                             script = script,
-                            session = uiState.session,
+                            session = uiState.sessions[script.id] ?: ScriptSessionState(),
                             onClick = { onOpen(script) },
                             onPlay = { onPlay(script) },
-                            onStop = onStop,
+                            onStop = { onStop(script) },
                         )
                     }
                 }
@@ -333,8 +333,7 @@ fun ScriptItem(
     onPlay: () -> Unit,
     onStop: () -> Unit,
 ) {
-    val isThisRunning = session.isRunning && session.script?.id == script.id
-    val otherRunning = session.isRunning && !isThisRunning
+    val isThisRunning = session.isRunning
 
     Card(
         modifier = Modifier
@@ -371,8 +370,8 @@ fun ScriptItem(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                if (!isThisRunning && session.script?.id == script.id) {
-                    session.runState.summary()?.let {
+                if (!isThisRunning) {
+                    (session.startFailure ?: session.runState.summary())?.let {
                         Text(
                             text = it,
                             style = MaterialTheme.typography.bodySmall,
@@ -392,7 +391,7 @@ fun ScriptItem(
                     )
                 }
             } else {
-                IconButton(onClick = onPlay, enabled = !otherRunning && script.uniqueId != null) {
+                IconButton(onClick = onPlay, enabled = script.uniqueId != null) {
                     Icon(
                         Icons.Default.PlayArrow,
                         contentDescription = stringResource(R.string.script_detail_run),
