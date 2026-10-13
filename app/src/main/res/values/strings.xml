@@ -137,6 +137,11 @@
     <!-- Settings -->
     <string name="settings_general">General</string>
     <string name="settings_auto_fullscreen">Auto-open fullscreen when running on virtual display</string>
+    <string name="settings_experimental">Experimental</string>
+    <string name="settings_virtual_device">Create virtual displays through VirtualDevice</string>
+    <string name="settings_virtual_device_note">New virtual displays don\'t sleep with the main screen and stay usable while the phone is locked. Turning this on adds a companion device association for the shell; turning it off removes it and closes the virtual displays created this way.</string>
+    <string name="settings_virtual_device_enable_failed">Could not create the companion device association.</string>
+    <string name="settings_virtual_device_disable_failed">Could not remove the companion device association.</string>
     <string name="settings_auto_fullscreen_note">When disabled, the script still runs in the background without popping up the mirror screen.</string>
     <string name="settings_default_start_page">Default start page</string>
     <string name="settings_language">Language</string>

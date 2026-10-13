@@ -75,7 +75,7 @@ internal class DisplayControl(
         val isMirrorActive = displayMirroring.isDisplayMirrorActive(displayId)
         return MoonClickerDisplayInfo().apply {
             this.displayId = displayId
-            this.name = display.name ?: "Display $displayId"
+            this.name = virtualDisplayLifecycle.requestedName(displayId) ?: display.name ?: "Display $displayId"
             this.width = metrics.widthPixels
             this.height = metrics.heightPixels
             this.densityDpi = metrics.densityDpi

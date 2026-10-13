@@ -1,5 +1,6 @@
 package com.xaxaxax.moonclicker.hiddenapi.contracts;
 
+import android.companion.virtual.VirtualDeviceParams;
 import android.hardware.display.DisplayManagerHidden;
 import android.os.Build;
 import android.os.PowerManagerHidden;
@@ -57,6 +58,7 @@ public final class StubConstantTable {
     private static final String DISPLAY_MANAGER = "android.hardware.display.DisplayManager";
     private static final String POWER_MANAGER_STUB = "android.os.PowerManagerHidden";
     private static final String POWER_MANAGER = "android.os.PowerManager";
+    private static final String VIRTUAL_DEVICE_PARAMS = "android.companion.virtual.VirtualDeviceParams";
 
     public static List<Constant> all() {
         // Public SDK since API 19/20 — safe to require from our minSdk.
@@ -98,7 +100,11 @@ public final class StubConstantTable {
 
                 // Reason code VirtualDisplayLifecycle passes to goToSleep; predates minSdk.
                 new Constant(POWER_MANAGER_STUB, POWER_MANAGER, "GO_TO_SLEEP_REASON_APPLICATION",
-                        PowerManagerHidden.GO_TO_SLEEP_REASON_APPLICATION, MIN_API));
+                        PowerManagerHidden.GO_TO_SLEEP_REASON_APPLICATION, MIN_API),
+
+                // VirtualDevices 的 VirtualDeviceParams；類別本身 API 33 才有。
+                new Constant(VIRTUAL_DEVICE_PARAMS, VIRTUAL_DEVICE_PARAMS, "LOCK_STATE_ALWAYS_UNLOCKED",
+                        VirtualDeviceParams.LOCK_STATE_ALWAYS_UNLOCKED, Build.VERSION_CODES.TIRAMISU));
     }
 
     private static Constant displayFlag(String name, int stubValue, int sinceApi) {

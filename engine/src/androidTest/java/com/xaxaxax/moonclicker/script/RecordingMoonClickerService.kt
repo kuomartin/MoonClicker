@@ -154,6 +154,10 @@ internal class RecordingMoonClickerService(
 
     override fun destroyVirtualDisplay(displayId: Int): Boolean = unused("destroyVirtualDisplay")
 
+    override fun ensureVirtualDeviceAssociation(): Boolean = unused("ensureVirtualDeviceAssociation")
+
+    override fun removeVirtualDeviceAssociations() = unused("removeVirtualDeviceAssociations")
+
     override fun sleepVirtualDisplay(displayId: Int): Boolean = unused("sleepVirtualDisplay")
 
     override fun setDisplayKeyboardEnabled(displayId: Int, enabled: Boolean): Boolean =
