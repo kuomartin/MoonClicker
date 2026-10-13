@@ -307,7 +307,7 @@ class ScriptSession @Inject constructor(
                 }
                 when {
                     matchByName == null ->
-                        runCatching { service.createVirtualDisplay(target.config) }
+                        runCatching { service.createVirtualDisplay(target.config, settings.virtualDeviceEnabled.value) }
                             .onFailure { Timber.e(it, "createVirtualDisplay failed") }
                             .getOrNull()
                             ?.takeIf { it >= 0 }

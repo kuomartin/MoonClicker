@@ -31,6 +31,8 @@ class StubConstantContractTest(private val constant: StubConstantTable.Constant)
     fun stubValueMatchesPlatform() {
         val sdk = Build.VERSION.SDK_INT
         val owner = PlatformReflection.classOrNull(constant.platformOwner)
+        // 比常數更晚出現的類別（例如 API 33 的 VirtualDeviceParams）在 sinceApi 之前本來就不存在。
+        if (owner == null && sdk < constant.sinceApi) return
         assertNotNull("${constant.platformOwner} is missing on API $sdk", owner)
 
         val field = PlatformReflection.findField(owner!!, constant.name)

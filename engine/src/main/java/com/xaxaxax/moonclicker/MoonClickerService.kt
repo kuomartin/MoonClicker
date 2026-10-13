@@ -109,6 +109,7 @@ class MoonClickerService @JvmOverloads constructor(
                 "Landroid/app/ActivityOptions",         // ActivityLauncher
                 "Landroid/app/ActivityTaskManager",     // ActivityLauncher
                 "Landroid/app/AppOpsManager",            // AppMuting, PermissionGrants
+                "Landroid/companion/",                   // VirtualDevices
                 "Landroid/content/pm/PackageManager",    // LauncherAppsCache, PermissionGrants
                 "Landroid/hardware/input/InputManager",  // InputInjector
                 "Landroid/os/IPowerManager",             // DisplayGroupWakeLocks
@@ -132,6 +133,12 @@ class MoonClickerService @JvmOverloads constructor(
 
     override fun createVirtualDisplay(name: String, width: Int, height: Int, densityDpi: Int, flags: Int): Int =
         virtualDisplayLifecycle.createVirtualDisplay(name, width, height, densityDpi, flags)
+
+    override fun ensureVirtualDeviceAssociation(): Boolean =
+        virtualDisplayLifecycle.ensureVirtualDeviceAssociation()
+
+    override fun removeVirtualDeviceAssociations() =
+        virtualDisplayLifecycle.removeVirtualDeviceAssociations()
 
     override fun attachDisplaySink(displayId: Int, surface: Surface, token: IBinder): Boolean {
         Timber.d("attachDisplaySink: id=$displayId surfaceValid=${surface.isValid}")

@@ -24,6 +24,7 @@ import com.xaxaxax.moonclicker.workbench.WorkbenchService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import jakarta.inject.Inject
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -32,6 +33,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -59,6 +61,9 @@ data class SettingsUiState(
     val isShizukuUidWarning: Boolean = false,
     val isDeveloperOptionsUnlocked: Boolean = false,
     val showExternalDisplays: Boolean = false,
+    val virtualDeviceEnabled: Boolean = false,
+    /** 正在建立或移除 association，開關暫時不能再按。 */
+    val virtualDeviceBusy: Boolean = false,
 ) {
     /** 停止會銷毀所有虛擬顯示，執行中的腳本更是直接陪葬。 */
     val canStopUserService: Boolean
@@ -82,6 +87,7 @@ class SettingsViewModel @Inject constructor(
     val authStore: WorkbenchAuthStore,
 ) : ViewModel() {
     private val isRefreshing = MutableStateFlow(false)
+    private val virtualDeviceBusy = MutableStateFlow(false)
 
     /**
      * "" 代表跟隨系統語言。Android 13+ 直接讀寫系統的 LocaleManager；13 以下沒有這套機制，
@@ -134,13 +140,19 @@ class SettingsViewModel @Inject constructor(
         GeneralSettingsStateHolder(autoOpenFullscreen, defaultStartPage, appLanguage, developerOptionsUnlocked, showExternalDisplays)
     }
 
+    private val localState = combine(
+        isRefreshing,
+        appSettings.virtualDeviceEnabled,
+        virtualDeviceBusy,
+    ) { refreshing, virtualDevice, busy -> Triple(refreshing, virtualDevice, busy) }
+
     val uiState: StateFlow<SettingsUiState> = combine(
         userServiceState,
         permissionCombinedState,
-        isRefreshing,
+        localState,
         generalSettingsState,
         workbenchCombinedState,
-    ) { (status, scriptRunning), permissions, refreshing, general, (workbenchEnabled, workbenchAddress, auth) ->
+    ) { (status, scriptRunning), permissions, (refreshing, virtualDevice, virtualDeviceBusy), general, (workbenchEnabled, workbenchAddress, auth) ->
         SettingsUiState(
             shizukuStatus = status,
             hasNotificationPermission = permissions.hasNotification,
@@ -152,6 +164,8 @@ class SettingsViewModel @Inject constructor(
             appLanguage = general.appLanguage,
             isDeveloperOptionsUnlocked = general.developerOptionsUnlocked,
             showExternalDisplays = general.showExternalDisplays,
+            virtualDeviceEnabled = virtualDevice,
+            virtualDeviceBusy = virtualDeviceBusy,
             isScriptRunning = scriptRunning,
             workbenchEnabled = workbenchEnabled,
             workbenchAddress = workbenchAddress,
@@ -235,6 +249,35 @@ class SettingsViewModel @Inject constructor(
             context.stopService(intent)
         }
         appSettings.setWorkbenchEnabled(enabled)
+    }
+
+    /**
+     * 開關與 association 的存廢保持一致：開時先建 association、關時先移除，成功才改設定值。
+     * 關閉會一併銷毀經 VirtualDevice 建立的虛擬顯示。
+     */
+    fun setVirtualDeviceEnabled(enabled: Boolean) {
+        if (virtualDeviceBusy.value) return
+        virtualDeviceBusy.value = true
+        viewModelScope.launch {
+            val done = shizukuManager.withService { service ->
+                withContext(Dispatchers.IO) {
+                    if (enabled) {
+                        service.ensureVirtualDeviceAssociation()
+                    } else {
+                        service.removeVirtualDeviceAssociations()
+                        true
+                    }
+                }
+            }.getOrDefault(false)
+            if (done) {
+                appSettings.setVirtualDeviceEnabled(enabled)
+            } else {
+                _message.value = context.getString(
+                    if (enabled) R.string.settings_virtual_device_enable_failed else R.string.settings_virtual_device_disable_failed
+                )
+            }
+            virtualDeviceBusy.value = false
+        }
     }
 
     /** 開發人員選項用：載入重新建置的服務。 */

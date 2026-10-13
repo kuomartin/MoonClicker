@@ -13,6 +13,8 @@ import android.view.DisplayHidden
 import android.view.DisplayInfo
 import android.view.Surface
 import androidx.annotation.ChecksSdkIntAtLeast
+import androidx.annotation.RequiresApi
+import com.xaxaxax.moonclicker.IMoonClickerService
 import com.xaxaxax.moonclicker.MoonClickerService
 import dev.rikka.tools.refine.Refine
 import java.util.concurrent.ConcurrentHashMap
@@ -33,7 +35,16 @@ private class ManagedDisplay(
      * 那種情況，不能只看「這個 displayId 是不是我建的」。
      */
     val ownsDisplayGroup: Boolean,
-)
+    /** 經 [VirtualDevices] 建立時，關掉背後的 VirtualDevice。 */
+    val closeDevice: (() -> Unit)? = null,
+    /** 呼叫端給的名字。VirtualDevice 的顯示器名稱由系統決定，對外回報這個才認得出來。 */
+    val name: String? = null,
+) {
+    fun release() {
+        display.release()
+        closeDevice?.invoke()
+    }
+}
 
 /**
  * 虛擬顯示的生命週期：建立、resize、銷毀、休眠，以及誰擁有自己 display group 的判定。
@@ -71,10 +82,29 @@ internal class VirtualDisplayLifecycle(
     private val vdStore = mutableMapOf<Int, ManagedDisplay>()
     private val wakeLocks = DisplayGroupWakeLocks({ platformHandles.powerManagerService }, platformHandles.callerPackage)
     private val grantedPermissions = ConcurrentHashMap<String, Boolean>()
+    private var virtualDevicesInstance: VirtualDevices? = null
+
+    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
+    @Synchronized
+    private fun virtualDevices(): VirtualDevices =
+        virtualDevicesInstance ?: VirtualDevices(context, platformHandles.callerPackage).also { virtualDevicesInstance = it }
+
+    /** 見 `IMoonClickerService.ensureVirtualDeviceAssociation`。 */
+    fun ensureVirtualDeviceAssociation(): Boolean =
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && virtualDevices().ensureAssociation()
+
+    /** 見 `IMoonClickerService.removeVirtualDeviceAssociations`。 */
+    fun removeVirtualDeviceAssociations() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        vdStore.filterValues { it.closeDevice != null }.keys.forEach(::destroyVirtualDisplay)
+        virtualDevices().removeAssociations()
+    }
 
     fun allDisplayIds(): Set<Int> = vdStore.keys.toSet()
 
     fun isKnownVirtualDisplay(displayId: Int): Boolean = vdStore.containsKey(displayId)
+
+    fun requestedName(displayId: Int): String? = vdStore[displayId]?.name
 
     fun surfaceSize(displayId: Int): Pair<Int, Int>? =
         vdStore[displayId]?.let { it.surfaceWidth to it.surfaceHeight }
@@ -82,7 +112,7 @@ internal class VirtualDisplayLifecycle(
     /** process 即將結束（見 `MoonClickerService.destroy`）：只釋放 VD，不管 distributor——
      * `exitProcess` 緊接在後，native 資源交給進程結束回收，不值得多做一輪清理。 */
     fun releaseAll() {
-        vdStore.values.forEach { it.display.release() }
+        vdStore.values.forEach { it.release() }
     }
 
     /** 讓 [DisplayMirroring] 把它自己建立的 VD（VD 版鏡像）登記進同一份 [vdStore]。 */
@@ -101,24 +131,33 @@ internal class VirtualDisplayLifecycle(
             return -1
         }
 
+        val viaDevice = if (flags and IMoonClickerService.FLAG_VIRTUAL_DEVICE != 0) {
+            createDeviceDisplay(width, height, densityDpi, sourceSurface, privilegedFlags, baseFlags)
+        } else {
+            null
+        }
+
         var usedFlags = privilegedFlags
-        val vd = createDisplay(name, width, height, densityDpi, sourceSurface, privilegedFlags)
+        val vd = viaDevice?.display
+            ?: createDisplay(name, width, height, densityDpi, sourceSurface, privilegedFlags)
             ?: createDisplay(name, width, height, densityDpi, sourceSurface, baseFlags).also { usedFlags = baseFlags }
             ?: run {
                 glesDistributor.destroyDistributor(nativePtr)
                 return -1
             }
+        val managed = ManagedDisplay(vd, surfaceWidth = width, surfaceHeight = height, ownsDisplayGroup = false, viaDevice?.close)
 
         val displayId = vd.display?.displayId ?: run {
-            vd.release()
+            managed.release()
             glesDistributor.destroyDistributor(nativePtr)
             return -1
         }
-        val ownsDisplayGroup = usedFlags and DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP != 0 &&
+        // VirtualDevice 的顯示器不靠 OWN_DISPLAY_GROUP 也有自己的 group，一樣以實際落點為準。
+        val ownsDisplayGroup = (viaDevice != null || usedFlags and DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP != 0) &&
                 landedOutsideDefaultGroup(vd.display)
-        vdStore[displayId] = ManagedDisplay(vd, surfaceWidth = width, surfaceHeight = height, ownsDisplayGroup = ownsDisplayGroup)
+        vdStore[displayId] = ManagedDisplay(vd, width, height, ownsDisplayGroup, managed.closeDevice, name)
         glesDistributor.register(displayId, nativePtr)
-        Timber.d("VirtualDisplay created: id=$displayId name=$name ${width}x${height}@$densityDpi (Distributor Active xxx)")
+        Timber.d("VirtualDisplay created: id=$displayId name=$name ${width}x${height}@$densityDpi viaDevice=${viaDevice != null} ownsDisplayGroup=$ownsDisplayGroup")
 
         runCatching {
             val info = DisplayInfo()
@@ -162,6 +201,8 @@ internal class VirtualDisplayLifecycle(
             surfaceWidth = width,
             surfaceHeight = height,
             ownsDisplayGroup = managed.ownsDisplayGroup,
+            closeDevice = managed.closeDevice,
+            name = managed.name,
         )
         glesDistributor.register(displayId, newPtr)
         Timber.d("resizeVirtualDisplay: display $displayId resized to ${width}x${height}@$densityDpi")
@@ -169,7 +210,7 @@ internal class VirtualDisplayLifecycle(
     }
 
     fun destroyVirtualDisplay(displayId: Int): Boolean {
-        vdStore.remove(displayId)?.display?.release()
+        vdStore.remove(displayId)?.release()
         glesDistributor.unregister(displayId)?.let { ptr -> glesDistributor.destroyDistributor(ptr) }
         return true
     }
@@ -298,6 +339,38 @@ internal class VirtualDisplayLifecycle(
             Timber.d("$permission granted=$granted for uid=${Process.myUid()}")
             granted
         }
+
+    /**
+     * 經 VirtualDevice 建，旗標的退讓同 [createDisplay]。任何失敗都回 null，呼叫端改走一般的
+     * `DisplayManager`：實驗性功能失敗不該讓建立 VD 整個失敗。VirtualDevice 的顯示器名稱由系統
+     * 決定（`VirtualDevice_<id>`），呼叫端給的名字另存在 [ManagedDisplay.name]。
+     *
+     * 不帶 `OWN_DISPLAY_GROUP`：帶了就不會進 VirtualDevice 專屬的 group，而 Android 17 開啟各
+     * group 分開逾時時，還會被判回預設 group。
+     */
+    private fun createDeviceDisplay(
+        width: Int,
+        height: Int,
+        densityDpi: Int,
+        surface: Surface,
+        privilegedFlags: Int,
+        baseFlags: Int,
+    ): VirtualDevices.Created? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return null
+        val devices = virtualDevices()
+        val deviceFlags = privilegedFlags and DisplayManagerHidden.VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP.inv()
+        return try {
+            try {
+                devices.create(width, height, densityDpi, surface, deviceFlags)
+            } catch (e: SecurityException) {
+                Timber.w(e, "VirtualDevice display rejected with flags=0x${deviceFlags.toString(16)}")
+                devices.create(width, height, densityDpi, surface, baseFlags)
+            }
+        } catch (t: Throwable) {
+            Timber.w(t, "could not create a display through a VirtualDevice, falling back")
+            null
+        }
+    }
 
     /**
      * 建一個虛擬顯示，失敗回 `null`。
