@@ -1,9 +1,13 @@
 package android.companion.virtual;
 
 import android.content.Context;
+import android.hardware.display.VirtualDisplay;
 import android.os.Build;
+import android.view.Surface;
 
 import androidx.annotation.RequiresApi;
+
+import java.util.concurrent.Executor;
 
 import dev.rikka.tools.refine.RefineAs;
 
@@ -20,7 +24,21 @@ public class VirtualDeviceManagerHidden {
     }
 
     /** @param associationId a CDM association the context's package holds. */
-    public VirtualDeviceManager$VirtualDevice createVirtualDevice(int associationId, VirtualDeviceParams params) {
+    public VirtualDevice createVirtualDevice(int associationId, VirtualDeviceParams params) {
         throw new RuntimeException("Stub!");
+    }
+
+    public static class VirtualDevice {
+
+        /** Deprecated from API 34 but present on every level; the only overload API 33 has. */
+        public VirtualDisplay createVirtualDisplay(int width, int height, int densityDpi, Surface surface,
+                                                   int flags, Executor executor, VirtualDisplay.Callback callback) {
+            throw new RuntimeException("Stub!");
+        }
+
+        /** Tears down the device and every display it created. */
+        public void close() {
+            throw new RuntimeException("Stub!");
+        }
     }
 }
