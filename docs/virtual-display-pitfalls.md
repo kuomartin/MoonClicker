@@ -74,6 +74,27 @@ Android 17 開啟各 display group 分開逾時（`isSeparateTimeoutsEnabled`）
 
 → `VirtualDisplayLifecycle.landedOutsideDefaultGroup`、`VirtualDisplayIdleDeadlockTest.sleepRefusesADisplayInTheDefaultGroup`
 
+### 經 VirtualDevice 建立的顯示器需要 companion association
+
+設定裡的實驗性開關（Android 13+）讓新的 VD 改由 `VirtualDeviceManager.createVirtualDevice` 建立的 VirtualDevice 產生（issue #124）。VirtualDevice 的顯示器有自己的 display group，而 `VirtualDeviceParams` 設成 `LOCK_STATE_ALWAYS_UNLOCKED`，手機鎖定時仍可操作，不受上一節的 group 0 問題影響。建立失敗時退回一般的 `DisplayManager` 路徑。
+
+建立 VirtualDevice 要一個 shell 套件持有的 companion association，profile 是 APP_STREAMING（API 35 起 `VirtualDeviceManagerService` 只接受這類串流 profile）。shell 只能經 `cmd companiondevice` 建立：`ICompanionDeviceManager.associate` 要求呼叫端 manifest 宣告 `uses-feature android.software.companion_device_setup`，`com.android.shell` 沒有；`createAssociation` 不能帶 profile；restore 的 binder 方法只給 system。一般 App 也走不通：`REQUEST_COMPANION_PROFILE_APP_STREAMING` 是 `signature|privileged`。
+
+- API 35 起用 `cmd companiondevice apply-restored-payload <user> <base64>`，payload 是只含一筆 association 的 CDM 備份資料（`BackupRestoreProcessor.getBackupPayload` 的格式），`display_name` 設成 MoonClicker。系統設定「連線偏好設定」以 association 為單位列出，名稱就是 `AssociationInfo.displayName`。套件已安裝時 restore 直接授予 role，不跳確認畫面。payload 與其中的 XML 都不是公開介面。
+- API 33/34 沒有 `apply-restored-payload`，用 `cmd companiondevice associate <user> com.android.shell <MAC> <profile>`。名稱無法指定：33/34 是 null，35 起的 `associate` 是 profile 字串。
+- MAC 是假的（`02:6d:63:00:00:xx`），用來從 shell 名下的 association 認出自己建的。
+- API 33 一個 association 同時只能有一個 VirtualDevice，所以每多一個 VD 就多建一個 association；34 起共用一個。
+- 查詢與移除走 `ICompanionDeviceManager.getAssociations`、`disassociate(int)`：`cmd companiondevice list` 在 API 33 不印 association id，而 Android 17 的 `cmd` 參數格式在 flag 後面改成選項式，位置參數的 MAC 之後會失效。
+- `cmd` 回傳時 association 不一定已寫進 CDM 的 store，建立後要輪詢到查得到為止。API 33 的 `associate` 還會以 exit 1 結束（`NetworkPolicyManagerService.addUidPolicy` 不接受 shell uid），但那發生在 association 寫入之後，不代表失敗。
+
+VirtualDevice 的顯示器不帶 `OWN_DISPLAY_GROUP`。帶了就不會進 VirtualDevice 專屬的 group；Android 17 開啟各 group 分開逾時時，還會像〈要了 `OWN_DISPLAY_GROUP` 也可能落在預設 group〉所述被判回預設 group（Pixel 7a 實測落在 group 0）。
+
+association 打開開關時建立、關掉開關時移除，不隨 VD 增減：建立要跑一次 `cmd`，而 association 留著的代價很小。留著期間的影響：解除安裝 App 不會帶走它，要在解除安裝前關掉開關，或之後在系統設定「連線偏好設定」移除；任何以 shell 身分執行的程式都能用它建立 VirtualDevice，但 shell 本來就能做到同等的事。
+
+VirtualDevice 的顯示器名稱由系統決定（`VirtualDevice_<id>`），對外回報的仍是呼叫端給的名字，腳本才能以名字找回自己的 VD。
+
+→ `VirtualDevices`、`VirtualDisplayLifecycle.createDeviceDisplay`
+
 ### API 27–28 注入不到虛擬顯示
 
 `MotionEvent.setDisplayId` 是 API 29 才有的隱藏 API，在那之前沒有辦法把事件標到某個顯示器

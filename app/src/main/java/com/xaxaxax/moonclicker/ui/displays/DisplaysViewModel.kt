@@ -63,7 +63,7 @@ private const val REFRESH_DELAY = 500
 class DisplaysViewModel @Inject constructor(
     private val shizukuManager: ShizukuManager,
     private val thumbnailCache: DisplayThumbnailCache,
-    appSettings: AppSettings,
+    private val appSettings: AppSettings,
 ) : ViewModel() {
     private val displays = MutableStateFlow<List<DisplayCardInfo>>(emptyList())
     private val isLoading = MutableStateFlow(false)
@@ -187,7 +187,7 @@ class DisplaysViewModel @Inject constructor(
     fun createDisplay(config: DisplayConfig = defaultConfig) {
         viewModelScope.launch {
             shizukuManager.withService { service ->
-                service.createVirtualDisplay(config)
+                service.createVirtualDisplay(config, appSettings.virtualDeviceEnabled.value)
             }
             refreshDisplays()
         }

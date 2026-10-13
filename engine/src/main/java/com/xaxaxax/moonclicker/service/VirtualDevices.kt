@@ -1,0 +1,207 @@
+package com.xaxaxax.moonclicker.service
+
+import android.companion.ICompanionDeviceManager
+import android.companion.virtual.IVirtualDeviceManager
+import android.companion.virtual.VirtualDeviceManagerHidden
+import android.companion.virtual.VirtualDeviceParams
+import android.content.AttributionSource
+import android.content.Context
+import android.content.ContextWrapper
+import android.hardware.display.VirtualDisplay
+import android.os.Build
+import android.os.Process
+import android.os.ServiceManager
+import android.view.Surface
+import androidx.annotation.RequiresApi
+import timber.log.Timber
+import java.nio.ByteBuffer
+import java.util.Base64
+
+/**
+ * 經 VirtualDevice 建立虛擬顯示（issue #124），讓 VD 有自己的 display group 與鎖定狀態。
+ *
+ * 建立 VirtualDevice 要一個 companion association。shell 沒有配對流程，`ICompanionDeviceManager`
+ * 的建立方法又要求呼叫端 manifest 宣告 `companion_device_setup`，所以經 `cmd companiondevice`
+ * 替 shell 套件建一個假 MAC 的 association（[MAC_PREFIX]），profile 是 APP_STREAMING：API 35 起
+ * VirtualDeviceManagerService 只接受這類 profile 的 association。API 35 起用 `apply-restored-payload`，
+ * 才能讓系統設定顯示 [DISPLAY_NAME]；33/34 只有 `associate`，名稱是 profile 字串。
+ * association 由 App 的實驗性開關決定存廢，不隨 VD 增減，見 docs/virtual-display-pitfalls.md。
+ */
+@RequiresApi(Build.VERSION_CODES.TIRAMISU)
+internal class VirtualDevices(context: Context, private val callerPackage: String) {
+
+    /** 建好的 VD 連同關掉它背後 VirtualDevice 的方法；關掉 device 會一併拆掉它的顯示器。 */
+    class Created(val display: VirtualDisplay, val close: () -> Unit)
+
+    private val shellContext = ShellContext(context, callerPackage)
+    private val userId = Process.myUid() / PER_USER_RANGE
+
+    private val manager: VirtualDeviceManagerHidden? by lazy {
+        ServiceManager.getService(VIRTUAL_DEVICE_SERVICE)
+            ?.let { VirtualDeviceManagerHidden(IVirtualDeviceManager.Stub.asInterface(it), shellContext) }
+    }
+
+    private val companionDeviceManager: ICompanionDeviceManager? by lazy {
+        ServiceManager.getService(Context.COMPANION_DEVICE_SERVICE)
+            ?.let { ICompanionDeviceManager.Stub.asInterface(it) }
+    }
+
+    /** API 33 一個 association 同時只能有一個 VirtualDevice，記下哪些正被佔用。 */
+    private val busyAssociations = mutableSetOf<Int>()
+
+    /** 至少有一個 association；沒有就建一個。 */
+    @Synchronized
+    fun ensureAssociation(): Boolean = associations().isNotEmpty() || associate(0) != null
+
+    /** 移除所有 [MAC_PREFIX] 的 association。呼叫端要先銷毀經這裡建立的 VD。 */
+    @Synchronized
+    fun removeAssociations() {
+        associations().keys.forEach { id ->
+            try {
+                companionDeviceManager?.disassociate(id)
+            } catch (t: Throwable) {
+                Timber.w(t, "could not remove companion association %d", id)
+            }
+        }
+        busyAssociations.clear()
+    }
+
+    /**
+     * 建一個 VirtualDevice 與它的 VD，失敗回 null。[flags] 被拒（SecurityException）時丟出，
+     * 讓呼叫端換一組旗標重試。
+     */
+    @Synchronized
+    fun create(width: Int, height: Int, densityDpi: Int, surface: Surface, flags: Int): Created? {
+        val vdm = manager ?: return null.also { Timber.w("virtual device service is not available") }
+        val associationId = pickAssociation() ?: return null
+        val params = VirtualDeviceParams.Builder()
+            .setLockState(VirtualDeviceParams.LOCK_STATE_ALWAYS_UNLOCKED)
+            .build()
+        val device = vdm.createVirtualDevice(associationId, params)
+        val display = try {
+            device.createVirtualDisplay(width, height, densityDpi, surface, flags, null, null)
+        } catch (t: Throwable) {
+            device.close()
+            throw t
+        }
+        if (display == null) {
+            device.close()
+            return null
+        }
+        busyAssociations += associationId
+        return Created(display) {
+            device.close()
+            synchronized(this) { busyAssociations -= associationId }
+        }
+    }
+
+    /** API 34+ 共用第一個 association；API 33 找沒被佔用的，都被佔用就多建一個。 */
+    private fun pickAssociation(): Int? {
+        val existing = associations()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            return existing.keys.firstOrNull() ?: associate(0)
+        }
+        existing.keys.firstOrNull { it !in busyAssociations }?.let { return it }
+        val usedIndexes = existing.values.mapNotNull { it.removePrefix(MAC_PREFIX).toIntOrNull(16) }.toSet()
+        val index = (0..0xff).firstOrNull { it !in usedIndexes } ?: return null
+        return associate(index)
+    }
+
+    /** association id → MAC，只列 [MAC_PREFIX] 開頭的。 */
+    private fun associations(): Map<Int, String> = try {
+        companionDeviceManager?.getAssociations(callerPackage, userId).orEmpty()
+            .mapNotNull { info ->
+                val mac = info.deviceMacAddress?.toString() ?: return@mapNotNull null
+                if (mac.startsWith(MAC_PREFIX)) info.id to mac else null
+            }
+            .toMap()
+    } catch (t: Throwable) {
+        Timber.w(t, "could not list companion associations")
+        emptyMap()
+    }
+
+    /**
+     * `cmd` 結束時 association 不一定已進 CDM 的 store：shell 指令回傳後才在 system_server
+     * 主執行緒加入，所以短暫輪詢。
+     */
+    private fun associate(index: Int): Int? {
+        val mac = MAC_PREFIX + "%02x".format(index)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+            val payload = Base64.getEncoder().encodeToString(restorePayload(mac))
+            runCmd("apply-restored-payload", userId.toString(), payload)
+        } else {
+            runCmd("associate", userId.toString(), callerPackage, mac, APP_STREAMING_PROFILE)
+        }
+        repeat(ASSOCIATE_POLL_ATTEMPTS) {
+            associations().entries.firstOrNull { it.value == mac }?.let { return it.key }
+            Thread.sleep(ASSOCIATE_POLL_INTERVAL_MS)
+        }
+        Timber.w("association for $mac was not created")
+        return null
+    }
+
+    /**
+     * CDM 備份資料，只含一筆 association（`BackupRestoreProcessor.getBackupPayload` 的格式）：
+     * 版本、association XML、system data transfer request XML，各段前置長度。XML 是
+     * `AssociationDiskStore`／`SystemDataTransferRequestStore` 的持久化格式，parser 文字與
+     * binary XML 都接受。request 段要是有 `<requests>` 根標籤的文件，空的會讓系統記一筆錯誤。
+     */
+    private fun restorePayload(mac: String): ByteArray {
+        val associations = ("<state persistence-version=\"1\"><associations max-id=\"1\">" +
+            "<association id=\"1\" profile=\"$APP_STREAMING_PROFILE\" package=\"$callerPackage\" " +
+            "mac_address=\"$mac\" display_name=\"$DISPLAY_NAME\" self_managed=\"false\" " +
+            "notify_device_nearby=\"false\" /></associations></state>").toByteArray()
+        val requests = "<requests />".toByteArray()
+        return ByteBuffer.allocate(Int.SIZE_BYTES * 3 + associations.size + requests.size)
+            .putInt(RESTORE_PAYLOAD_VERSION)
+            .putInt(associations.size)
+            .put(associations)
+            .putInt(requests.size)
+            .put(requests)
+            .array()
+    }
+
+    private fun runCmd(vararg args: String) = try {
+        val process = ProcessBuilder("cmd", "companiondevice", *args).redirectErrorStream(true).start()
+        val output = process.inputStream.bufferedReader().use { it.readText() }.trim()
+        val exit = process.waitFor()
+        Timber.d("cmd companiondevice %s -> exit=%d %s", args.joinToString(" "), exit, output)
+    } catch (t: Throwable) {
+        Timber.e(t, "cmd companiondevice %s failed", args.joinToString(" "))
+    }
+
+    /**
+     * 向 VirtualDeviceManager 宣稱 [callerPackage] 的 Context。API 34 起它改用
+     * `getApplicationContext()` 取套件名，API 35 起改傳 `getAttributionSource()`，都得對上 calling uid。
+     */
+    private class ShellContext(base: Context, private val packageName: String) : ContextWrapper(base) {
+        override fun getPackageName(): String = packageName
+        override fun getOpPackageName(): String = packageName
+        override fun getApplicationContext(): Context = this
+        override fun getAttributionSource(): AttributionSource =
+            AttributionSource.Builder(Process.myUid()).setPackageName(packageName).build()
+    }
+
+    private companion object {
+        /** `Context.VIRTUAL_DEVICE_SERVICE`，API 34 才公開。 */
+        const val VIRTUAL_DEVICE_SERVICE = "virtualdevice"
+
+        /** `AssociationRequest.DEVICE_PROFILE_APP_STREAMING`。 */
+        const val APP_STREAMING_PROFILE = "android.app.role.COMPANION_DEVICE_APP_STREAMING"
+
+        /** 系統設定「連線偏好設定」顯示的 association 名稱，API 35+ 才設得了。 */
+        const val DISPLAY_NAME = "MoonClicker"
+
+        /** `BackupRestoreProcessor.BACKUP_AND_RESTORE_VERSION`。 */
+        const val RESTORE_PAYLOAD_VERSION = 0
+
+        /** 本地管理位元設起的假 MAC，末段是編號；"6d:63" 是 "mc"。 */
+        const val MAC_PREFIX = "02:6d:63:00:00:"
+
+        /** `UserHandle.PER_USER_RANGE`，@hide。 */
+        const val PER_USER_RANGE = 100000
+
+        const val ASSOCIATE_POLL_ATTEMPTS = 20
+        const val ASSOCIATE_POLL_INTERVAL_MS = 50L
+    }
+}

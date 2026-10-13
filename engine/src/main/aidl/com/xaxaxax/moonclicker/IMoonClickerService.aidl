@@ -9,7 +9,21 @@ interface IMoonClickerService {
     boolean setOverlayAllowed(String packageName) = 1;
     boolean grantRuntimePermission(String packageName, String permissionName) = 2;
     // VirtualDisplay 管理
+    /**
+     * Bit in createVirtualDisplay's flags: create the display through a VirtualDevice
+     * (issue #124, API 33+), so it gets its own display group and stays unlocked. Falls back
+     * to a plain virtual display when that fails or below API 33.
+     */
+    const int FLAG_VIRTUAL_DEVICE = 0x40000000;
     int createVirtualDisplay(String name, int width, int height, int densityDpi, int flags) = 101;
+    /**
+     * Creates the companion association FLAG_VIRTUAL_DEVICE needs, unless one exists. It stays
+     * until removeVirtualDeviceAssociations. Returns false below API 33 or when it could not be
+     * created.
+     */
+    boolean ensureVirtualDeviceAssociation() = 115;
+    /** Destroys the displays created through a VirtualDevice, then removes the associations. */
+    void removeVirtualDeviceAssociations() = 116;
     /**
      * Attaches a consumer surface to the display's frames (a DisplaySink), owned by [token].
      * While attached, a display owning its display group is kept from idling off. The sink is

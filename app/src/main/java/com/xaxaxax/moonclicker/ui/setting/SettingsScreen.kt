@@ -191,6 +191,7 @@ fun SettingsScreen(
         onAutoOpenFullscreenChange = viewModel::setAutoOpenFullscreen,
         onDefaultStartPageChange = viewModel::setDefaultStartPage,
         onAppLanguageChange = viewModel::setAppLanguage,
+        onVirtualDeviceChange = viewModel::setVirtualDeviceEnabled,
         onNavigateToAbout = onNavigateToAbout,
         onNavigateToDeveloperOptions = onNavigateToDeveloperOptions,
         ocrSection = { OcrSettingsSection() },
@@ -208,6 +209,7 @@ private fun SettingsScreenContent(
     onAutoOpenFullscreenChange: (Boolean) -> Unit,
     onDefaultStartPageChange: (TopLevelDestination) -> Unit = {},
     onAppLanguageChange: (String) -> Unit = {},
+    onVirtualDeviceChange: (Boolean) -> Unit = {},
     onNavigateToAbout: () -> Unit = {},
     onNavigateToDeveloperOptions: () -> Unit = {},
     /** 自帶 ViewModel 的區塊以 slot 傳入，預覽不需要 Hilt。 */
@@ -356,6 +358,20 @@ private fun SettingsScreenContent(
                 }
 
                 item { ocrSection() }
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    item {
+                        Section(name = stringResource(R.string.settings_experimental)) {
+                            ToggleSettingItem(
+                                name = stringResource(R.string.settings_virtual_device),
+                                description = stringResource(R.string.settings_virtual_device_note),
+                                checked = uiState.virtualDeviceEnabled,
+                                onCheckedChange = onVirtualDeviceChange,
+                                enabled = uiState.shizukuStatus.isAuthorized && !uiState.virtualDeviceBusy,
+                            )
+                        }
+                    }
+                }
 
                 item {
                     Row(
