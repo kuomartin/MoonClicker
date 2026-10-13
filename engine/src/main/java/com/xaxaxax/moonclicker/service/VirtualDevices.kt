@@ -111,11 +111,19 @@ internal class VirtualDevices(context: Context, private val callerPackage: Strin
         emptyMap()
     }
 
+    /**
+     * `cmd` 結束時 association 不一定已進 CDM 的 store：shell 指令回傳後才在 system_server
+     * 主執行緒加入，所以短暫輪詢。
+     */
     private fun associate(index: Int): Int? {
         val mac = MAC_PREFIX + "%02x".format(index)
         runCmd("associate", userId.toString(), callerPackage, mac, APP_STREAMING_PROFILE)
-        return associations().entries.firstOrNull { it.value == mac }?.key
-            ?: null.also { Timber.w("association for $mac was not created") }
+        repeat(ASSOCIATE_POLL_ATTEMPTS) {
+            associations().entries.firstOrNull { it.value == mac }?.let { return it.key }
+            Thread.sleep(ASSOCIATE_POLL_INTERVAL_MS)
+        }
+        Timber.w("association for $mac was not created")
+        return null
     }
 
     private fun runCmd(vararg args: String) = try {
@@ -151,5 +159,8 @@ internal class VirtualDevices(context: Context, private val callerPackage: Strin
 
         /** `UserHandle.PER_USER_RANGE`，@hide。 */
         const val PER_USER_RANGE = 100000
+
+        const val ASSOCIATE_POLL_ATTEMPTS = 20
+        const val ASSOCIATE_POLL_INTERVAL_MS = 50L
     }
 }
