@@ -93,15 +93,15 @@ test("saveTemplate rejects invalid template name before network call", async () 
 
   await assert.rejects(
     () => saveTemplate(address, "hello", "foo/bar", roi, fakePng),
-    /模板名稱不可包含/,
+    /cannot contain/,
   );
   await assert.rejects(
     () => saveTemplate(address, "hello", "..", roi, fakePng),
-    /模板名稱不可包含/,
+    /cannot contain/,
   );
   await assert.rejects(
     () => saveTemplate(address, "hello", "   ", roi, fakePng),
-    /模板名稱不可為空/,
+    /cannot be empty/,
   );
 });
 

@@ -1,35 +1,35 @@
 <div id="modeSwitcher">
-  <button class="modeBtn" data-mode="capture">1 · 採集</button>
+  <button class="modeBtn" data-mode="capture">1 · Capture</button>
   <span class="modeChevron">›</span>
-  <button class="modeBtn" data-mode="build">2 · 建立模板</button>
+  <button class="modeBtn" data-mode="build">2 · Build templates</button>
   <span class="modeChevron">›</span>
-  <button class="modeBtn" data-mode="test">3 · 測試模板</button>
+  <button class="modeBtn" data-mode="test">3 · Test templates</button>
   <span class="modeChevron">›</span>
-  <button class="modeBtn" data-mode="write">4 · 編寫</button>
+  <button class="modeBtn" data-mode="write">4 · Write</button>
   <span class="modeChevron">›</span>
-  <button class="modeBtn active" data-mode="run">5 · 運行除錯</button>
+  <button class="modeBtn active" data-mode="run">5 · Run & debug</button>
   <div class="spacer"></div>
   <div id="globalDisplayGroup">
     <select id="displaySelect"></select>
-    <button id="refreshDisplayBtn" class="secondary" type="button" title="刷新 display 列表">↻</button>
+    <button id="refreshDisplayBtn" class="secondary" type="button" title="Refresh display list">↻</button>
   </div>
 </div>
 
 <!-- ========== 1 採集（真的從即時串流擷取畫面；佇列僅存在於 webview 記憶體，尚未落地實際檔案） ========== -->
 <section id="panel-capture" class="modePanel" hidden>
   <div class="subToolbar">
-    <span class="hintPill">快捷鍵 <kbd>Ctrl+Shift+S</kbd> 擷取目前畫面（尚未接線）</span>
+    <span class="hintPill">Shortcut <kbd>Ctrl+Shift+S</kbd> captures the current screen (not wired yet)</span>
     <div class="spacer"></div>
-    <button id="captureShotBtn" type="button">立即擷取</button>
+    <button id="captureShotBtn" type="button">Capture now</button>
   </div>
   <div id="captureStage" class="darkStage">
-    <div id="captureStageHint" class="stageHint">尚未收到畫面</div>
+    <div id="captureStageHint" class="stageHint">No frames received yet</div>
   </div>
   <div id="captureQueue">
     <div class="captureQueueHeader">
-      <span id="captureQueueCount">擷取佇列 · 0 張</span>
+      <span id="captureQueueCount">Capture queue · 0</span>
       <div class="spacer"></div>
-      <button id="clearQueueBtn" class="linkBtn" type="button">全部清除</button>
+      <button id="clearQueueBtn" class="linkBtn" type="button">Clear all</button>
     </div>
     <div id="captureQueueItems"></div>
   </div>
@@ -41,29 +41,29 @@
     <div id="buildCropPreview" class="cropPreview">
       <canvas id="buildRoiCanvas"></canvas>
     </div>
-    <span class="stageSourceLabel">來源：<span id="buildSourceTime">—</span> 擷取畫面</span>
+    <span class="stageSourceLabel">Captured at <span id="buildSourceTime">—</span></span>
   </div>
   <div id="buildSidebar">
     <div class="sidebarSection">
-      <span class="sidebarLabel">選擇擷取畫面</span>
+      <span class="sidebarLabel">Choose a capture</span>
       <div id="buildShotPicker" class="shotPicker"></div>
     </div>
     <div class="sidebarSection">
-      <span class="sidebarLabel">新模板</span>
-      <label class="fieldLabel">所屬腳本</label>
+      <span class="sidebarLabel">New template</span>
+      <label class="fieldLabel">Script</label>
       <select id="buildScriptSelect"></select>
-      <label class="fieldLabel">模板名稱</label>
-      <input id="buildTemplateName" type="text" placeholder="例如：btn_confirm" />
-      <label class="fieldLabel">比對閾值</label>
+      <label class="fieldLabel">Template name</label>
+      <input id="buildTemplateName" type="text" placeholder="e.g. btn_confirm" />
+      <label class="fieldLabel">Match threshold</label>
       <div class="thresholdRow">
         <input id="buildThreshold" type="range" min="0" max="100" value="85" />
         <span id="buildThresholdVal">0.85</span>
       </div>
       <span id="buildStatus" class="statusMsg"></span>
-      <button id="buildSaveBtn" type="button">儲存模板</button>
+      <button id="buildSaveBtn" type="button">Save template</button>
     </div>
     <div class="sidebarSection">
-      <span class="sidebarLabel" id="buildTemplateListLabel">模板</span>
+      <span class="sidebarLabel" id="buildTemplateListLabel">Templates</span>
       <div id="buildTemplateList"></div>
     </div>
   </div>
@@ -72,39 +72,39 @@
 <!-- ========== 3 測試模板與文字（模板清單來自裝置；ROI 拖曳為真實互動；結果為裝置端 vision.find/vision.read 實際回報） ========== -->
 <section id="panel-test" class="modePanel" hidden>
   <div class="subToolbar">
-    <span>目標</span>
+    <span>Target</span>
     <select id="testTargetSelect">
-      <option value="template">模板</option>
-      <option value="read">文字 · 讀取單行</option>
-      <option value="read_lines">文字 · 讀取多行</option>
-      <option value="find">文字 · 找文字</option>
+      <option value="template">Template</option>
+      <option value="read">Text · read one line</option>
+      <option value="read_lines">Text · read lines</option>
+      <option value="find">Text · find text</option>
     </select>
     <div class="vDivider"></div>
     <span id="testTemplateControls">
-      <span>腳本</span>
+      <span>Script</span>
       <select id="testScriptSelect"></select>
-      <span>模板</span>
+      <span>Template</span>
       <select id="testTemplateSelect"></select>
     </span>
     <span id="testTextControls" hidden>
-      <span>文字</span>
-      <input id="testTextInput" type="text" placeholder="要找的文字" style="width: 110px;" />
-      <label><input id="testExactCheckbox" type="checkbox" /> 整行比對</label>
+      <span>Text</span>
+      <input id="testTextInput" type="text" placeholder="Text to find" style="width: 110px;" />
+      <label><input id="testExactCheckbox" type="checkbox" /> Whole line</label>
     </span>
     <span id="testThresholdControls">
-      <span>閾值</span>
+      <span>Threshold</span>
       <input id="testThreshold" type="range" min="0" max="100" value="85" />
       <span id="testThresholdVal">0.85</span>
     </span>
     <div class="vDivider"></div>
-    <span>間隔</span>
+    <span>Interval</span>
     <input id="testIntervalInput" type="number" min="50" max="5000" step="50" value="300" style="width: 62px;" />
     <span>ms</span>
     <div class="vDivider"></div>
-    <button id="testAdjustRoiBtn" type="button" class="secondary">調整 ROI</button>
-    <button id="testStartStopBtn" type="button">開始測試</button>
+    <button id="testAdjustRoiBtn" type="button" class="secondary">Adjust ROI</button>
+    <button id="testStartStopBtn" type="button">Start test</button>
     <div class="spacer"></div>
-    <span id="testStatusPill" class="statusPill"><span class="statusDot"></span>未開始</span>
+    <span id="testStatusPill" class="statusPill"><span class="statusDot"></span>Not started</span>
   </div>
   <div id="testStageWrap">
     <div id="testStage">
@@ -112,19 +112,19 @@
     </div>
     <div id="testSidebar">
       <div class="sidebarSection">
-        <span class="sidebarLabel">比對結果</span>
+        <span class="sidebarLabel">Result</span>
         <div id="testMatchResult">
           <span id="testMatchIcon" class="matchIcon">?</span>
-          <span id="testMatchText">尚未開始測試</span>
+          <span id="testMatchText">Test not started</span>
         </div>
-        <span id="testLatency" class="statusMsg">輪詢間隔 300 ms</span>
+        <span id="testLatency" class="statusMsg">Polling every 300 ms</span>
         <span id="testErrorMsg" class="statusMsg" hidden></span>
       </div>
       <div class="sidebarSection" id="testSnippetSection">
         <div class="snippetHeader">
           <span class="sidebarLabel">Lua Snippet</span>
           <div class="spacer"></div>
-          <button id="copySnippetBtn" type="button" class="secondary">複製程式碼</button>
+          <button id="copySnippetBtn" type="button" class="secondary">Copy code</button>
         </div>
         <pre id="testSnippet" class="codeBlock"></pre>
       </div>
@@ -136,14 +136,14 @@
 <section id="panel-write" class="modePanel" hidden>
   <div id="writeList">
     <div class="writeListHeader">
-      <span class="sidebarLabel">腳本</span>
+      <span class="sidebarLabel">Scripts</span>
       <div class="spacer"></div>
-      <input id="newScriptIdInput" type="text" placeholder="script_id（小寫英數字、. _ -）" />
-      <button id="addScriptBtn" type="button">新增腳本</button>
+      <input id="newScriptIdInput" type="text" placeholder="script_id (lowercase letters, digits, . _ -)" />
+      <button id="addScriptBtn" type="button">New script</button>
     </div>
     <span id="writeStatus" class="statusMsg"></span>
     <div id="writeScriptCards"></div>
-    <span class="statusMsg">腳本內容於 VS Code 文字編輯器分頁中撰寫；此面板僅負責清單與模板管理。</span>
+    <span class="statusMsg">Write script code in VS Code editor tabs; this panel only manages the script list and templates.</span>
   </div>
 </section>
 
@@ -151,15 +151,15 @@
 <section id="panel-run" class="modePanel">
   <div id="leftPanel">
     <div id="toolbar">
-      <button id="toggleMirrorBtn" type="button" class="secondary" hidden>啟動鏡像</button>
-      <span id="status">連線中…</span>
-      <button id="stopButton" type="button">停止</button>
+      <button id="toggleMirrorBtn" type="button" class="secondary" hidden>Start mirroring</button>
+      <span id="status">Connecting…</span>
+      <button id="stopButton" type="button">Stop</button>
     </div>
     <div id="stage">
       <video id="frame" autoplay muted playsinline></video>
       <div id="overlay">
-        <div id="overlayText">尚未收到畫面</div>
-        <button id="overlayActionBtn" type="button" hidden>立即啟動實體螢幕鏡像</button>
+        <div id="overlayText">No frames received yet</div>
+        <button id="overlayActionBtn" type="button" hidden>Start mirroring the physical screen</button>
       </div>
     </div>
   </div>
@@ -167,6 +167,9 @@
     <div id="rightTabs">
       <button class="rightTabBtn active" data-tab="console" type="button">Console</button>
       <button class="rightTabBtn" data-tab="data" type="button">Data View</button>
+      <select id="scriptFilter" title="Filter by script">
+        <option value="">All scripts</option>
+      </select>
     </div>
     <div id="consoleTabPanel" class="rightTabPanel">
       <div id="logToolbar">

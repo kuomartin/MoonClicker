@@ -78,7 +78,7 @@ fun ScriptDetailScreen(
     ) { uri -> uri?.let(viewModel::export) }
 
     val script = uiState.script
-    val isThisRunning = uiState.session.isRunning && uiState.session.script?.id == script?.id
+    val isThisRunning = uiState.session.isRunning
 
     Scaffold(
         topBar = {
@@ -272,8 +272,8 @@ fun ScriptDetailScreen(
 
 @Composable
 private fun statusText(uiState: ScriptDetailUiState): String {
-    val isThisScript = uiState.session.script?.id == uiState.script?.id
-    if (!isThisScript) return stringResource(R.string.scripts_status_idle)
+    val failure = uiState.session.startFailure
+    if (failure != null && !uiState.session.isRunning) return stringResource(R.string.scripts_status_error, failure)
     val target = uiState.session.displayId?.let {
         if (it == 0) stringResource(R.string.script_target_physical)
         else stringResource(R.string.script_target_virtual, it)

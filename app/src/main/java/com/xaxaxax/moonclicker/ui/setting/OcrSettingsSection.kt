@@ -66,9 +66,9 @@ class OcrSettingsViewModel @Inject constructor(
         ocrManager.calibration,
         appSettings.ocrThreads,
         appSettings.ocrCalibratedThreads,
-        scriptSession.state,
-    ) { pack, calibration, threads, calibrated, session ->
-        OcrSettingsUiState(pack, calibration, threads, calibrated, session.isRunning)
+        scriptSession.isAnyRunning,
+    ) { pack, calibration, threads, calibrated, running ->
+        OcrSettingsUiState(pack, calibration, threads, calibrated, running)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), OcrSettingsUiState())
 
     fun download() = ocrManager.download()

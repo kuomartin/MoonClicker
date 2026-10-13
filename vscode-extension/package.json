@@ -1,13 +1,18 @@
 {
   "name": "moonclicker-script-workbench",
-  "displayName": "MoonClicker Script Workbench",
-  "description": "Connect VS Code to a MoonClicker device running Script Workbench.",
+  "displayName": "%displayName%",
+  "description": "%description%",
   "version": "0.3.0",
   "publisher": "kuomartin",
+  "icon": "media/icon.png",
   "repository": {
     "type": "git",
     "url": "https://github.com/kuomartin/MoonClicker.git",
     "directory": "vscode-extension"
+  },
+  "homepage": "https://github.com/kuomartin/MoonClicker/blob/master/docs/extension.md",
+  "bugs": {
+    "url": "https://github.com/kuomartin/MoonClicker/issues"
   },
   "private": true,
   "engines": {
@@ -16,51 +21,59 @@
   "categories": [
     "Other"
   ],
+  "keywords": [
+    "android",
+    "automation",
+    "lua",
+    "moonclicker",
+    "scripting"
+  ],
   "activationEvents": [],
   "main": "./dist/extension.js",
+  "l10n": "./l10n",
   "contributes": {
     "commands": [
       {
         "command": "moonclicker.connect",
-        "title": "MoonClicker: Connect to Device",
+        "title": "%command.connect%",
         "icon": "$(plug)"
       },
       {
         "command": "moonclicker.disconnect",
-        "title": "MoonClicker: Disconnect from Device",
+        "title": "%command.disconnect%",
         "icon": "$(debug-disconnect)"
       },
       {
         "command": "moonclicker.openScript",
-        "title": "MoonClicker: Open Script"
+        "title": "%command.openScript%"
       },
       {
         "command": "moonclicker.newScript",
-        "title": "MoonClicker: New Script",
+        "title": "%command.newScript%",
         "icon": "$(new-file)"
       },
       {
         "command": "moonclicker.run",
-        "title": "MoonClicker: Run Current Script on Device"
+        "title": "%command.run%"
       },
       {
         "command": "moonclicker.stop",
-        "title": "MoonClicker: Stop Script on Device",
+        "title": "%command.stop%",
         "icon": "$(debug-stop)"
       },
       {
         "command": "moonclicker.openWorkbench",
-        "title": "MoonClicker: Open Workbench",
+        "title": "%command.openWorkbench%",
         "icon": "$(device-camera-video)"
       },
       {
         "command": "moonclicker.runRemote",
-        "title": "MoonClicker: Run Remote Script",
+        "title": "%command.runRemote%",
         "icon": "$(play)"
       },
       {
         "command": "moonclicker.refresh",
-        "title": "MoonClicker: Refresh and Sync",
+        "title": "%command.refresh%",
         "icon": "$(refresh)"
       }
     ],
@@ -129,7 +142,7 @@
       "activitybar": [
         {
           "id": "moonclicker-scripts",
-          "title": "MoonClicker Scripts",
+          "title": "%viewsContainer.scripts%",
           "icon": "$(device-mobile)"
         }
       ]
@@ -138,14 +151,14 @@
       "moonclicker-scripts": [
         {
           "id": "moonclicker.workspace",
-          "name": "Workspace"
+          "name": "%view.workspace%"
         }
       ]
     },
     "viewsWelcome": [
       {
         "view": "moonclicker.workspace",
-        "contents": "尚未連線到裝置。\n[連線到裝置](command:moonclicker.connect)\n在 App 的開發人員選項開啟腳本工作台後，VS Code 會自動搜尋同一個網路上的裝置。",
+        "contents": "%viewsWelcome.disconnected%",
         "when": "!moonclicker.connected"
       }
     ]

@@ -30,7 +30,8 @@ import javax.inject.Inject
 
 data class ScriptsUiState(
     val scripts: List<Script> = emptyList(),
-    val session: ScriptSessionState = ScriptSessionState(),
+    /** 以腳本 id 為鍵；不在裡面的腳本沒執行過。 */
+    val sessions: Map<String, ScriptSessionState> = emptyMap(),
     val shizukuStatus: ShizukuConnectionStatus = ShizukuConnectionStatus.NOT_AVAILABLE,
     val scriptsPath: String = "",
     /** 匯入的 zip 撞了裝置上既有腳本的 uniqueId，等使用者選覆蓋還是取消。 */
@@ -68,7 +69,7 @@ class ScriptsViewModel @Inject constructor(
 
     val uiState: StateFlow<ScriptsUiState> = combine(
         store.scripts,
-        session.state,
+        session.states,
         shizukuManager.statusFlow,
         _importConflict,
         _examples,
@@ -76,7 +77,7 @@ class ScriptsViewModel @Inject constructor(
         val installedIds = scripts.mapNotNullTo(HashSet()) { it.uniqueId }
         ScriptsUiState(
             scripts = scripts,
-            session = sessionState,
+            sessions = sessionState,
             shizukuStatus = shizuku,
             scriptsPath = store.root.absolutePath,
             importConflict = pending?.conflict,
@@ -98,7 +99,7 @@ class ScriptsViewModel @Inject constructor(
         session.start(script, target ?: session.defaultTargetFor(script))
     }
 
-    fun stop() = session.stop()
+    fun stop(script: Script) = session.stop(script.id)
 
     fun import(uri: Uri) {
         viewModelScope.launch {

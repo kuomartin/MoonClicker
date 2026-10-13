@@ -1,4 +1,5 @@
 import { authHeaders } from "./authSync";
+import { MessageError, msg } from "./message";
 
 export interface TemplateRoi {
   readonly x: number;
@@ -41,13 +42,13 @@ export async function saveTemplate(
 ): Promise<void> {
   const normName = normalizeTemplateName(templateName);
   if (!normName) {
-    throw new Error("模板名稱不可為空");
+    throw new MessageError(msg("Template name cannot be empty"));
   }
   if (normName.includes("/") || normName.includes("..")) {
-    throw new Error("模板名稱不可包含「/」或「..」");
+    throw new MessageError(msg("Template name cannot contain \"/\" or \"..\""));
   }
   if (!scriptId || scriptId.includes("/") || scriptId.includes("..")) {
-    throw new Error("腳本 ID 無效");
+    throw new MessageError(msg("Invalid script ID"));
   }
 
   const query = new URLSearchParams({
@@ -71,9 +72,9 @@ export async function saveTemplate(
   if (!response.ok) {
     const reason = await response.text();
     if (response.status === 409) {
-      throw new Error(`模板已存在（HTTP 409）：${reason || normName}`);
+      throw new MessageError(msg("Template already exists (HTTP 409): {0}", reason || normName));
     }
-    throw new Error(`儲存模板失敗（HTTP ${response.status}）：${reason}`);
+    throw new MessageError(msg("Failed to save template (HTTP {0}): {1}", response.status, reason));
   }
 }
 
@@ -90,7 +91,7 @@ export async function listTemplates(address: string, scriptId: string, token?: s
   const url = `http://${address}/scripts/${encodeURIComponent(scriptId)}/templates`;
   const response = await fetch(url, { headers: authHeaders(token) });
   if (!response.ok) {
-    throw new Error(`列出模板失敗（HTTP ${response.status}）：${await response.text()}`);
+    throw new MessageError(msg("Failed to list templates (HTTP {0}): {1}", response.status, await response.text()));
   }
   const raw = (await response.json()) as Record<string, { roi: TemplateRoi }>;
   return Object.entries(raw).map(([name, entry]) => ({ name, roi: entry.roi }));
@@ -115,13 +116,13 @@ export async function deleteTemplate(
 ): Promise<void> {
   const name = templateName.trim();
   if (!name) {
-    throw new Error("模板名稱不可為空");
+    throw new MessageError(msg("Template name cannot be empty"));
   }
   if (name.includes("/") || name.includes("..")) {
-    throw new Error("模板名稱不可包含「/」或「..」");
+    throw new MessageError(msg("Template name cannot contain \"/\" or \"..\""));
   }
   if (!scriptId || scriptId.includes("/") || scriptId.includes("..")) {
-    throw new Error("腳本 ID 無效");
+    throw new MessageError(msg("Invalid script ID"));
   }
 
   const url = `http://${address}/scripts/${encodeURIComponent(scriptId)}/templates/${encodeURIComponent(name)}`;
@@ -133,8 +134,8 @@ export async function deleteTemplate(
   if (!response.ok) {
     const reason = await response.text();
     if (response.status === 404) {
-      throw new Error(`找不到模板（HTTP 404）：${reason || name}`);
+      throw new MessageError(msg("Template not found (HTTP 404): {0}", reason || name));
     }
-    throw new Error(`刪除模板失敗（HTTP ${response.status}）：${reason}`);
+    throw new MessageError(msg("Failed to delete template (HTTP {0}): {1}", response.status, reason));
   }
 }

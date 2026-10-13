@@ -75,6 +75,6 @@ test("toggleDisplayMirror issues POST with enable query param", async () => {
 test("toggleDisplayMirror throws on server error", async () => {
   await assert.rejects(
     () => toggleDisplayMirror(address, 999, true),
-    /切換鏡像失敗（HTTP 500）/
+    /Failed to toggle mirroring \(HTTP 500\)/
   );
 });

@@ -1,4 +1,6 @@
 import { authHeaders } from "./authSync";
+import { Message, MessageError, Text, msg } from "./message";
+import { PROTOCOL_VERSION } from "./workbenchConnection";
 
 export interface ScriptSummary {
   id: string;
@@ -19,9 +21,9 @@ export interface ScriptTreeEntry {
 }
 
 /** 裝置端 HTTP 狀態碼原樣帶出來，呼叫端不用回頭解析錯誤訊息字串就能判斷要怎麼處理。 */
-export class ScriptHttpError extends Error {
-  constructor(message: string, public readonly status: number) {
-    super(message);
+export class ScriptHttpError extends MessageError {
+  constructor(text: Text, public readonly status: number) {
+    super(text);
   }
 }
 
@@ -35,7 +37,7 @@ export async function listScripts(address: string, token?: string): Promise<Scri
     headers: authHeaders(token),
   });
   if (!response.ok) {
-    throw new ScriptHttpError(`列出裝置上的腳本失敗（HTTP ${response.status}）`, response.status);
+    throw new ScriptHttpError(msg("Failed to list scripts on the device (HTTP {0})", response.status), response.status);
   }
   return (await response.json()) as ScriptSummary[];
 }
@@ -46,7 +48,7 @@ export async function getTree(address: string, id: string, token?: string): Prom
     headers: authHeaders(token),
   });
   if (!response.ok) {
-    throw new ScriptHttpError(`讀取腳本檔案樹失敗（HTTP ${response.status}）`, response.status);
+    throw new ScriptHttpError(msg("Failed to read the script file tree (HTTP {0})", response.status), response.status);
   }
   return (await response.json()) as ScriptTreeEntry[];
 }
@@ -59,7 +61,7 @@ function filesUrl(address: string, id: string, path: string): string {
 export async function readFile(address: string, id: string, path: string, token?: string): Promise<Uint8Array> {
   const response = await fetch(filesUrl(address, id, path), { headers: authHeaders(token) });
   if (!response.ok) {
-    throw new ScriptHttpError(`讀取檔案失敗（HTTP ${response.status}）：${path}`, response.status);
+    throw new ScriptHttpError(msg("Failed to read file (HTTP {0}): {1}", response.status, path), response.status);
   }
   return new Uint8Array(await response.arrayBuffer());
 }
@@ -77,7 +79,7 @@ export async function writeFile(
     body: content,
   });
   if (!response.ok) {
-    throw new ScriptHttpError(`寫入檔案失敗（HTTP ${response.status}）：${path}`, response.status);
+    throw new ScriptHttpError(msg("Failed to write file (HTTP {0}): {1}", response.status, path), response.status);
   }
 }
 
@@ -87,7 +89,7 @@ export async function deleteEntry(address: string, id: string, path: string, tok
     headers: authHeaders(token),
   });
   if (!response.ok) {
-    throw new ScriptHttpError(`刪除失敗（HTTP ${response.status}）：${path}`, response.status);
+    throw new ScriptHttpError(msg("Failed to delete (HTTP {0}): {1}", response.status, path), response.status);
   }
 }
 
@@ -98,7 +100,7 @@ export async function mkdir(address: string, id: string, path: string, token?: s
     headers: authHeaders(token),
   });
   if (!response.ok) {
-    throw new ScriptHttpError(`建立資料夾失敗（HTTP ${response.status}）：${path}`, response.status);
+    throw new ScriptHttpError(msg("Failed to create folder (HTTP {0}): {1}", response.status, path), response.status);
   }
 }
 
@@ -117,7 +119,7 @@ export async function renameEntry(
   });
   if (!response.ok) {
     const reason = await response.text();
-    throw new ScriptHttpError(reason || `改名失敗（HTTP ${response.status}）`, response.status);
+    throw new ScriptHttpError(reason || msg("Failed to rename (HTTP {0})", response.status), response.status);
   }
 }
 
@@ -126,6 +128,11 @@ export async function renameEntry(
  * 兩邊共用同一條規則，不在這裡另外維護一份。
  */
 const SCRIPT_ID_PATTERN = /^[a-z0-9._-]+$/;
+
+/** 腳本名稱不合 [isValidScriptId] 時給使用者看的說明。 */
+export const INVALID_SCRIPT_ID: Message = msg(
+  "Only lowercase letters, digits, \".\", \"_\" and \"-\" are allowed, and the name cannot start with \".\"",
+);
 
 export function isValidScriptId(id: string): boolean {
   return !!id && !id.startsWith(".") && SCRIPT_ID_PATTERN.test(id);
@@ -137,7 +144,7 @@ export function isValidScriptId(id: string): boolean {
  */
 export async function createScript(address: string, id: string, token?: string): Promise<void> {
   if (!isValidScriptId(id)) {
-    throw new Error("腳本名稱只能是小寫英數字、「.」「_」「-」，且不能以「.」開頭");
+    throw new MessageError(INVALID_SCRIPT_ID);
   }
   const response = await fetch(`http://${address}/scripts/${encodeURIComponent(id)}`, {
     method: "POST",
@@ -146,9 +153,9 @@ export async function createScript(address: string, id: string, token?: string):
   if (!response.ok) {
     const reason = await response.text();
     if (response.status === 409) {
-      throw new Error(`腳本已存在（HTTP 409）：${reason || id}`);
+      throw new MessageError(msg("Script already exists (HTTP 409): {0}", reason || id));
     }
-    throw new ScriptHttpError(reason || `新增腳本失敗（HTTP ${response.status}）`, response.status);
+    throw new ScriptHttpError(reason || msg("Failed to create script (HTTP {0})", response.status), response.status);
   }
 }
 
@@ -163,7 +170,7 @@ export async function runScript(address: string, id: string, token?: string): Pr
   });
   if (!response.ok) {
     const reason = await response.text();
-    throw new Error(`執行失敗（HTTP ${response.status}）：${reason}`);
+    throw new MessageError(msg("Failed to run (HTTP {0}): {1}", response.status, reason));
   }
 }
 
@@ -175,7 +182,7 @@ export async function deleteScript(address: string, id: string, token?: string):
   });
   if (!response.ok) {
     const reason = await response.text();
-    throw new ScriptHttpError(reason || `刪除腳本失敗（HTTP ${response.status}）`, response.status);
+    throw new ScriptHttpError(reason || msg("Failed to delete script (HTTP {0})", response.status), response.status);
   }
 }
 
@@ -183,12 +190,23 @@ export interface DeviceInfo {
   /** 這份 App 安裝的穩定識別，用來對應本機的腳本資料夾；位址會變，這個不會。 */
   id: string;
   name: string;
+  /** Workbench 協定版本；沒有這個欄位的 App 說的是版本 1。 */
+  protocolVersion?: number;
+}
+
+/** App 與擴充套件的協定版本不同時，回傳給使用者看的說明。 */
+export function protocolMismatch(device: DeviceInfo, extensionVersion: number = PROTOCOL_VERSION): Message | undefined {
+  const appVersion = device.protocolVersion ?? 1;
+  if (appVersion === extensionVersion) return undefined;
+  return appVersion < extensionVersion
+    ? msg("The app on the device is outdated (protocol {0}, extension {1}). Please update the app.", appVersion, extensionVersion)
+    : msg("The extension is outdated (protocol {0}, app {1}). Please update the extension.", extensionVersion, appVersion);
 }
 
 export async function getDeviceInfo(address: string, token?: string): Promise<DeviceInfo> {
   const response = await fetch(`http://${address}/device`, { headers: authHeaders(token) });
   if (!response.ok) {
-    throw new ScriptHttpError(`讀取裝置資訊失敗（HTTP ${response.status}）`, response.status);
+    throw new ScriptHttpError(msg("Failed to read device info (HTTP {0})", response.status), response.status);
   }
   return (await response.json()) as DeviceInfo;
 }

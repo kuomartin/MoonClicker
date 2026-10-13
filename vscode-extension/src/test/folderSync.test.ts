@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, IncomingMessage, Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -145,6 +145,22 @@ test("a new local script with main.lua is created on the device", async () => {
   const report = await newSync().fullSync();
   assert.deepEqual(report.pushed.sort(), ["fresh/a.png", "fresh/main.lua"]);
   assert.equal(deviceFile("fresh/main.lua"), "log('new')");
+});
+
+test("a device script whose name is not a valid new id still round-trips as one copy", async () => {
+  // 匯入 zip 時資料夾名稱可含大寫與非 ASCII 字母，比 VS Code 新增腳本的規則寬。
+  for (const id of ["Alto-s-Adventure", "自動刷"]) deviceScript(id, { "main.lua": "v1" });
+  await newSync().fullSync();
+  localFile("Alto-s-Adventure/main.lua", "v2");
+  localFile("自動刷/main.lua", "v2");
+
+  const report = await newSync().fullSync();
+  await newSync().fullSync();
+
+  assert.deepEqual(report.pushed.sort(), ["Alto-s-Adventure/main.lua", "自動刷/main.lua"]);
+  assert.deepEqual([...device.keys()].sort(), ["Alto-s-Adventure", "自動刷"]);
+  assert.equal(deviceFile("自動刷/main.lua"), "v2");
+  assert.deepEqual(readdirSync(root).filter((n) => !n.startsWith(".")).sort(), ["Alto-s-Adventure", "自動刷"]);
 });
 
 test("new local scripts with an invalid name or no main.lua are skipped", async () => {

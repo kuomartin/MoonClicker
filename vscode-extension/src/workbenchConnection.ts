@@ -1,14 +1,21 @@
 import WebSocket from "ws";
 import { fromBinary } from "@bufbuild/protobuf";
-import { StreamEventSchema, type StreamEvent } from "./generated/workbench_stream_event_pb";
+import { ProtocolVersion, StreamEventSchema, type StreamEvent } from "./generated/workbench_stream_event_pb";
+import { msg, type Text } from "./message";
 
 export type { StreamEvent };
+
+/** 這個擴充套件說的 Workbench 協定版本，見 proto 的 `ProtocolVersion`。 */
+export const PROTOCOL_VERSION: number = ProtocolVersion.CURRENT;
+
+/** App 因協定版本不同而關閉串流時用的 close code。 */
+const POLICY_VIOLATION = 1008;
 
 export type ConnectionState =
   | { status: "disconnected" }
   | { status: "connecting"; address: string }
   | { status: "connected"; address: string }
-  | { status: "error"; address: string; message: string };
+  | { status: "error"; address: string; message: Text };
 
 /**
  * 解析一筆原始 WebSocket 二進位訊息成 [StreamEvent]。形狀來自
@@ -56,7 +63,9 @@ export class WorkbenchConnection {
     this.disconnect();
     this.setState({ status: "connecting", address });
 
-    const wsUrl = token ? `ws://${address}/?token=${encodeURIComponent(token)}` : `ws://${address}/`;
+    const query = new URLSearchParams({ protocol: String(PROTOCOL_VERSION) });
+    if (token) query.set("token", token);
+    const wsUrl = `ws://${address}/?${query}`;
     const socket = new WebSocket(wsUrl);
     this.socket = socket;
 
@@ -78,7 +87,15 @@ export class WorkbenchConnection {
       this.setState({ status: "error", address, message: err.message });
     });
 
-    socket.on("close", () => {
+    socket.on("close", (code, reason) => {
+      if (code === POLICY_VIOLATION) {
+        this.setState({
+          status: "error",
+          address,
+          message: msg("The app and the extension use different protocol versions. Update the older one ({0})", reason.toString()),
+        });
+        return;
+      }
       if (this._state.status !== "error") {
         this.setState({ status: "disconnected" });
       }

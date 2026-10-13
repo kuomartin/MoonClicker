@@ -3,7 +3,6 @@
 #include <opencv2/imgcodecs.hpp>
 
 #include <cstdio>
-#include <mutex>
 #include <sstream>
 #include <string>
 
@@ -11,13 +10,6 @@
 #include "Ocr.h"
 #include "ScriptRuntime.h"
 #include "TextMatch.h"
-
-/**
- * 一次只跑一個腳本。這不是偷懶——UI 也是以「執行中的那一個」來表達的
- * （見 :app 的 ScriptSession）。要並行就得連同 Kotlin 端的狀態模型一起改。
- */
-static ScriptRuntime *gRuntime = nullptr;
-static std::mutex gRuntimeMutex;
 
 static std::string toString(JNIEnv *env, jstring value) {
     const char *chars = env->GetStringUTFChars(value, nullptr);
@@ -96,7 +88,8 @@ Java_com_xaxaxax_moonclicker_MoonClickerService_nativeDestroyDistributor(JNIEnv 
     delete distributor;
 }
 
-JNIEXPORT jboolean JNICALL
+/** 每次執行一個 ScriptRuntime，handle 由 Kotlin 的 ScriptEngine 實例持有。 */
+JNIEXPORT jlong JNICALL
 Java_com_xaxaxax_moonclicker_lua_LuaNative_nativeStart(
         JNIEnv *env,
         jobject thiz,
@@ -110,12 +103,6 @@ Java_com_xaxaxax_moonclicker_lua_LuaNative_nativeStart(
         jstring scriptDir,
         jstring ocrPackDir,
         jint ocrThreads) {
-    std::lock_guard<std::mutex> lock(gRuntimeMutex);
-    if (gRuntime != nullptr) {
-        LOGE("nativeStart rejected: a script is already running");
-        return JNI_FALSE;
-    }
-
     const char *dir = env->GetStringUTFChars(scriptDir, nullptr);
     std::string dirCopy(dir);
     env->ReleaseStringUTFChars(scriptDir, dir);
@@ -125,24 +112,14 @@ Java_com_xaxaxax_moonclicker_lua_LuaNative_nativeStart(
     if (!runtime->start(displayId, isPhysical, withVision, surfaceWidth, surfaceHeight, initialRotation,
                         dirCopy, toString(env, ocrPackDir), ocrThreads)) {
         delete runtime;
-        return JNI_FALSE;
+        return 0;
     }
-
-    gRuntime = runtime;
-    return JNI_TRUE;
+    return reinterpret_cast<jlong>(runtime);
 }
 
 JNIEXPORT void JNICALL
-Java_com_xaxaxax_moonclicker_lua_LuaNative_nativeStop(JNIEnv *env, jobject thiz) {
-    std::lock_guard<std::mutex> lock(gRuntimeMutex);
-    delete gRuntime;  // 解構子會 stop() 並等執行緒結束
-    gRuntime = nullptr;
-}
-
-JNIEXPORT jboolean JNICALL
-Java_com_xaxaxax_moonclicker_lua_LuaNative_nativeIsRunning(JNIEnv *env, jobject thiz) {
-    std::lock_guard<std::mutex> lock(gRuntimeMutex);
-    return gRuntime && gRuntime->isRunning() ? JNI_TRUE : JNI_FALSE;
+Java_com_xaxaxax_moonclicker_lua_LuaNative_nativeStop(JNIEnv *env, jobject thiz, jlong handle) {
+    delete reinterpret_cast<ScriptRuntime *>(handle);  // 解構子會 stop() 並等執行緒結束
 }
 
 // --- OCR -------------------------------------------------------------------

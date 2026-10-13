@@ -1,11 +1,20 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { FolderSync, readSyncState, type SyncReport } from "./folderSync";
+import { FOLDER_OWNED_BY_OTHER_DEVICE, FolderSync, readSyncState, type SyncReport } from "./folderSync";
 import { FileChangeEvent, FileChangeEvent_Kind } from "./generated/workbench_stream_event_pb";
 import { mergeLuarc } from "./luarc";
-import { createScript, getDeviceInfo, isValidScriptId, ScriptHttpError, type DeviceInfo } from "./scriptSync";
+import {
+  createScript,
+  getDeviceInfo,
+  INVALID_SCRIPT_ID,
+  isValidScriptId,
+  protocolMismatch,
+  ScriptHttpError,
+  type DeviceInfo,
+} from "./scriptSync";
 import { CONFLICT_SUFFIX } from "./syncIgnore";
+import { errorText, localize } from "./l10n";
 
 /**
  * [FolderSync] 的 VS Code 端：決定本機資料夾、掛 watcher、把同步結果告訴使用者。
@@ -36,10 +45,17 @@ export class FolderSyncController implements vscode.Disposable {
       device = await getDeviceInfo(address, token);
     } catch (err) {
       if (err instanceof ScriptHttpError && err.status === 404) {
-        vscode.window.showWarningMessage("MoonClicker: 裝置上的 App 版本太舊，不支援同步腳本資料夾，請更新 App");
+        vscode.window.showWarningMessage(
+          vscode.l10n.t("MoonClicker: The app on the device is too old to sync the scripts folder. Please update the app."),
+        );
       } else {
-        vscode.window.showErrorMessage(`MoonClicker: ${(err as Error).message}`);
+        vscode.window.showErrorMessage(`MoonClicker: ${errorText(err)}`);
       }
+      return;
+    }
+    const mismatch = protocolMismatch(device);
+    if (mismatch) {
+      vscode.window.showErrorMessage(`MoonClicker: ${localize(mismatch)}`);
       return;
     }
     onDevice(device);
@@ -55,7 +71,7 @@ export class FolderSyncController implements vscode.Disposable {
         confirmDeleteScripts: (ids) => confirmDeleteScripts(ids),
       });
     } catch (err) {
-      vscode.window.showErrorMessage(`MoonClicker: ${(err as Error).message}`);
+      vscode.window.showErrorMessage(`MoonClicker: ${errorText(err)}`);
       return;
     }
     try {
@@ -65,12 +81,15 @@ export class FolderSyncController implements vscode.Disposable {
     const sync = this.sync;
     try {
       const report = await vscode.window.withProgress(
-        { location: vscode.ProgressLocation.Notification, title: `MoonClicker: 同步「${device.name}」的腳本…` },
+        {
+          location: vscode.ProgressLocation.Notification,
+          title: vscode.l10n.t("MoonClicker: Syncing scripts on \"{0}\"…", device.name),
+        },
         () => sync.fullSync(),
       );
       this.showReport(report, true);
     } catch (err) {
-      vscode.window.showErrorMessage(`MoonClicker: 同步失敗——${(err as Error).message}`);
+      vscode.window.showErrorMessage(vscode.l10n.t("MoonClicker: Sync failed: {0}", errorText(err)));
       this.stop();
       return;
     }
@@ -93,7 +112,7 @@ export class FolderSyncController implements vscode.Disposable {
     try {
       this.showReport(await sync.fullSync(), true);
     } catch (err) {
-      vscode.window.showErrorMessage(`MoonClicker: 同步失敗——${(err as Error).message}`);
+      vscode.window.showErrorMessage(vscode.l10n.t("MoonClicker: Sync failed: {0}", errorText(err)));
     }
   }
 
@@ -134,21 +153,21 @@ export class FolderSyncController implements vscode.Disposable {
   async newScript(address: string, token: string | undefined): Promise<void> {
     const sync = this.sync;
     if (!sync) {
-      vscode.window.showErrorMessage("MoonClicker: 請先連線並選擇腳本資料夾");
+      vscode.window.showErrorMessage(vscode.l10n.t("MoonClicker: Connect and choose a scripts folder first"));
       return;
     }
     const id = await vscode.window.showInputBox({
-      prompt: "新腳本的名稱，同時是資料夾名稱與 uniqueId",
+      prompt: vscode.l10n.t("Name of the new script, used as both its folder name and uniqueId"),
       placeHolder: "my-script",
       validateInput: (value) =>
-        isValidScriptId(value) ? undefined : "只能是小寫英數字、「.」「_」「-」，且不能以「.」開頭",
+        isValidScriptId(value) ? undefined : localize(INVALID_SCRIPT_ID),
     });
     if (!id) return;
     try {
       await createScript(address, id, token);
       this.showReport(await sync.remoteChanged(id, "", "changed"), false);
     } catch (err) {
-      vscode.window.showErrorMessage(`MoonClicker: ${(err as Error).message}`);
+      vscode.window.showErrorMessage(`MoonClicker: ${errorText(err)}`);
       return;
     }
     const uri = this.mainLuaUri(id);
@@ -158,7 +177,7 @@ export class FolderSyncController implements vscode.Disposable {
   private run(task: Promise<SyncReport>): void {
     task.then(
       (report) => this.showReport(report, false),
-      (err) => vscode.window.showErrorMessage(`MoonClicker: 同步失敗——${(err as Error).message}`),
+      (err) => vscode.window.showErrorMessage(vscode.l10n.t("MoonClicker: Sync failed: {0}", errorText(err))),
     );
   }
 
@@ -175,16 +194,18 @@ export class FolderSyncController implements vscode.Disposable {
     if (!interactive) return undefined;
 
     if (saved && fs.existsSync(saved)) {
+      const open = vscode.l10n.t("Open");
+      const other = vscode.l10n.t("Choose another folder");
       const choice = await vscode.window.showInformationMessage(
-        `MoonClicker:「${device.name}」的腳本資料夾是 ${saved}，要在這個視窗開啟嗎？`,
-        "開啟",
-        "選擇其他資料夾",
+        vscode.l10n.t("MoonClicker: The scripts folder for \"{0}\" is {1}. Open it in this window?", device.name, saved),
+        open,
+        other,
       );
-      if (choice === "開啟") {
+      if (choice === open) {
         await openFolder(saved);
         return undefined;
       }
-      if (choice !== "選擇其他資料夾") return undefined;
+      if (choice !== other) return undefined;
     }
 
     const picked = await pickFolder(device);
@@ -214,12 +235,12 @@ export class FolderSyncController implements vscode.Disposable {
     const lines = [
       ...report.pulled.map((k) => `← ${k}`),
       ...report.pushed.map((k) => `→ ${k}`),
-      ...report.deletedLocal.map((k) => `✕ 本機 ${k}`),
-      ...report.deletedRemote.map((k) => `✕ 裝置 ${k}`),
-      ...report.conflicts.map((k) => `! 衝突 ${k}（裝置版本存為 ${k}${CONFLICT_SUFFIX}）`),
-      ...report.restored.map((k) => `↺ 保留修改過的版本 ${k}`),
-      ...report.skipped.map((s) => `- 略過 ${s.scriptId}：${s.reason}`),
-      ...report.errors.map((e) => `✗ ${e.key}：${e.message}`),
+      ...report.deletedLocal.map((k) => "✕ " + vscode.l10n.t("local {0}", k)),
+      ...report.deletedRemote.map((k) => "✕ " + vscode.l10n.t("device {0}", k)),
+      ...report.conflicts.map((k) => "! " + vscode.l10n.t("conflict {0} (device version saved as {1})", k, k + CONFLICT_SUFFIX)),
+      ...report.restored.map((k) => "↺ " + vscode.l10n.t("kept the modified version of {0}", k)),
+      ...report.skipped.map((s) => "- " + vscode.l10n.t("skipped {0}: {1}", s.scriptId, localize(s.reason))),
+      ...report.errors.map((e) => `✗ ${e.key}: ${localize(e.message)}`),
     ];
     if (lines.length > 0) {
       this.output.appendLine(`[${new Date().toLocaleTimeString()}]`);
@@ -231,36 +252,41 @@ export class FolderSyncController implements vscode.Disposable {
     };
     if (report.errors.length > 0) {
       vscode.window
-        .showErrorMessage(`MoonClicker: ${report.errors.length} 個項目同步失敗`, "顯示詳細")
+        .showErrorMessage(vscode.l10n.t("MoonClicker: {0} item(s) failed to sync", report.errors.length), vscode.l10n.t("Show details"))
         .then(show);
     }
     if (report.conflicts.length > 0) {
       vscode.window
         .showWarningMessage(
-          `MoonClicker: ${report.conflicts.length} 個檔案兩邊都改過。已保留本機版本，裝置版本另存為 ${CONFLICT_SUFFIX} 檔；下次存檔會以本機版本覆蓋裝置。`,
-          "顯示詳細",
+          vscode.l10n.t(
+            "MoonClicker: {0} file(s) changed on both sides. Kept the local version and saved the device version as a {1} file; the next save overwrites the device with the local version.",
+            report.conflicts.length,
+            CONFLICT_SUFFIX,
+          ),
+          vscode.l10n.t("Show details"),
         )
         .then(show);
     }
     if (report.skipped.length > 0) {
       vscode.window
-        .showWarningMessage(`MoonClicker: 略過 ${report.skipped.length} 支腳本`, "顯示詳細")
+        .showWarningMessage(vscode.l10n.t("MoonClicker: Skipped {0} script(s)", report.skipped.length), vscode.l10n.t("Show details"))
         .then(show);
     }
     if (isFullSync && report.errors.length === 0) {
       const moved = report.pulled.length + report.pushed.length + report.deletedLocal.length + report.deletedRemote.length;
-      vscode.window.setStatusBarMessage(`MoonClicker: 同步完成（${moved} 個檔案有變動）`, 5000);
+      vscode.window.setStatusBarMessage(vscode.l10n.t("MoonClicker: Sync complete ({0} file(s) changed)", moved), 5000);
     }
   }
 }
 
 async function confirmDeleteScripts(scriptIds: string[]): Promise<boolean> {
+  const remove = vscode.l10n.t("Delete on device");
   const choice = await vscode.window.showWarningMessage(
-    `本機已刪除 ${scriptIds.join("、")}。要一併刪除裝置上的這些腳本嗎？`,
-    { modal: true, detail: "選擇保留時，這些腳本下次同步會重新下載到本機。" },
-    "刪除裝置上的腳本",
+    vscode.l10n.t("{0} was deleted locally. Delete these scripts on the device too?", scriptIds.join(", ")),
+    { modal: true, detail: vscode.l10n.t("If you keep them, they are downloaded again on the next sync.") },
+    remove,
   );
-  return choice === "刪除裝置上的腳本";
+  return choice === remove;
 }
 
 async function pickFolder(device: DeviceInfo): Promise<string | undefined> {
@@ -268,28 +294,30 @@ async function pickFolder(device: DeviceInfo): Promise<string | undefined> {
     canSelectFolders: true,
     canSelectFiles: false,
     canSelectMany: false,
-    openLabel: "選擇資料夾",
-    title: `選擇存放「${device.name}」腳本的本機資料夾`,
+    openLabel: vscode.l10n.t("Choose folder"),
+    title: vscode.l10n.t("Choose a local folder for the scripts on \"{0}\"", device.name),
   });
   const dir = uris?.[0]?.fsPath;
   if (!dir) return undefined;
   const state = readSyncState(dir);
   if (state && state.deviceId !== device.id) {
-    vscode.window.showErrorMessage("MoonClicker: 這個資料夾已經和另一台裝置同步，請選擇其他資料夾");
+    vscode.window.showErrorMessage(`MoonClicker: ${localize(FOLDER_OWNED_BY_OTHER_DEVICE)}`);
     return undefined;
   }
   const nonEmpty = !state && fs.readdirSync(dir).some((name) => !name.startsWith("."));
   if (nonEmpty) {
+    const merge = vscode.l10n.t("Merge");
     const choice = await vscode.window.showWarningMessage(
-      "這個資料夾不是空的，要和裝置上的腳本合併嗎？",
+      vscode.l10n.t("This folder is not empty. Merge it with the scripts on the device?"),
       {
         modal: true,
-        detail:
-          "含 main.lua 的子資料夾會在裝置上建立成新腳本；與裝置同名的腳本逐檔比對，兩邊內容不同的檔案保留本機版本，裝置版本另存為 .device 檔。",
+        detail: vscode.l10n.t(
+          "Subfolders containing main.lua are created as new scripts on the device. Scripts with the same name are compared file by file; where they differ, the local version is kept and the device version is saved as a .device file.",
+        ),
       },
-      "合併",
+      merge,
     );
-    if (choice !== "合併") return undefined;
+    if (choice !== merge) return undefined;
   }
   return dir;
 }

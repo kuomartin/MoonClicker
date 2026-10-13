@@ -2,7 +2,7 @@ package com.xaxaxax.moonclicker.engine.state
 
 /** Run-state of the native script engine, as observed from Kotlin. */
 sealed interface EngineRunState {
-    /** No script has run yet, or the engine was reset before the native RUNNING event arrived. */
+    /** No script has run yet. */
     data object Idle : EngineRunState
 
     /** [com.xaxaxax.moonclicker.engine.ScriptEngine.start] was called; native init is in flight. */
@@ -41,7 +41,7 @@ data class VisionResult(
 
 data class EngineState(
     val runState: EngineRunState = EngineRunState.Idle,
-    /** 目前（或最後一次）執行的腳本識別，讓 UI 不必自己對照。 */
+    /** 這次執行的腳本識別，讓 UI 不必自己對照。 */
     val runningScriptId: String? = null,
     val lastVisionResult: List<VisionResult> = emptyList(),
 )
