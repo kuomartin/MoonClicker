@@ -23,6 +23,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -238,7 +239,7 @@ private fun OcrThreadsSettingItem(state: OcrSettingsUiState, onChange: (Int) -> 
 
 @Composable
 private fun OcrCalibration(state: OcrSettingsUiState, onRecalibrate: () -> Unit) {
-    val context = LocalContext.current
+    val resources = LocalResources.current
     val running = state.calibration == OcrCalibrationState.Running
     Column(modifier = Modifier.padding(vertical = 8.dp)) {
         OutlinedButton(onClick = onRecalibrate, enabled = !running && !state.isScriptRunning) {
@@ -247,7 +248,7 @@ private fun OcrCalibration(state: OcrSettingsUiState, onRecalibrate: () -> Unit)
         val note = when (val calibration = state.calibration) {
             OcrCalibrationState.Running -> stringResource(R.string.settings_ocr_calibrating)
             is OcrCalibrationState.Done -> calibration.results.joinToString("\n") {
-                context.getString(R.string.settings_ocr_calibration_result, it.threads, it.millis.toInt())
+                resources.getString(R.string.settings_ocr_calibration_result, it.threads, it.millis.toInt())
             }
             is OcrCalibrationState.Failed -> stringResource(R.string.settings_ocr_calibration_failed, calibration.reason)
             OcrCalibrationState.Idle -> if (state.isScriptRunning) stringResource(R.string.settings_ocr_calibration_script_running) else null
