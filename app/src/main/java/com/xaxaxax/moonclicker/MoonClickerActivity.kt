@@ -49,10 +49,11 @@ class MoonClickerActivity : ComponentActivity() {
         reconcileWorkbenchState()
         consumeNavTarget(intent)
         enableEdgeToEdge()
+        val startDestination = appSettings.defaultStartPage.value.route
         setContent {
             MoonClickerTheme {
                 MoonClickerNavGraph(
-                    startDestination = appSettings.defaultStartPage.value.route,
+                    startDestination = startDestination,
                     openScriptsPage = openScriptsPage.value,
                     onScriptsPageOpened = { openScriptsPage.value = false },
                 )
