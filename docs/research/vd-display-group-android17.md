@@ -101,7 +101,7 @@ VirtualDevice 的 `goToSleep()`、`wakeUp()` 只作用在不屬於 group 0 的 t
 | 剪貼簿 | `POLICY_TYPE_CLIPBOARD` 為 `DEVICE_POLICY_DEFAULT`：每個 VirtualDevice 有自己的剪貼簿，不與主裝置共用；改為共用需要 `CUSTOM`、`ADD_TRUSTED_DISPLAY` 且所有顯示器 trusted（`VirtualDeviceParams.java#279`、`VirtualDeviceImpl.java#577`、`#1587`） | `dumpsys clipboard` 的 `mAllowVirtualDeviceSilos: true`；在 VD 上複製的文字只出現在 `User 0 Device <id>`，`Device 0` 不變。MoonClicker 只在 App UI（主螢幕）使用剪貼簿，不受影響 |
 | 感測器 | `POLICY_TYPE_SENSORS` 為 `DEVICE_POLICY_DEFAULT`：回傳主裝置的感測器（`VirtualDeviceParams.java#216`） | 未實測 |
 | Recents | `POLICY_TYPE_RECENTS` 為 `DEVICE_POLICY_DEFAULT`：trusted 顯示器上的 activity 會出現在主裝置的最近使用畫面（`VirtualDeviceParams.java#248`） | 未實測 |
-| 「已連結的裝置」 | — | association 存在、VirtualDevice 運作中時，設定的「已連結的裝置」頁沒有出現它；通知列也沒有對應的通知 |
+| 系統設定 | Settings 的 `VirtualDeviceUpdater` 以 `companion:<associationId>` 為 key 列出，名稱取 `AssociationInfo.getDisplayName()`（packages/apps/Settings `connecteddevice/virtual/VirtualDeviceWrapper`） | 「連線偏好設定」下出現一列，一個 association 一列（同一 association 的兩個 VirtualDevice 仍只一列），點進去是「裝置詳細資料」，有「清除」按鈕；通知列沒有對應的通知 |
 | 移除 association | `VirtualDeviceManagerService.onCdmAssociationsChanged` 追蹤 association 變更（`VirtualDeviceManagerService.java#450`） | `disassociate` 後 VirtualDevice 立即關閉、顯示器移除、上面的 task 被銷毀（只留在 recents），建立它的 process 沒有收到錯誤 |
 
 ---

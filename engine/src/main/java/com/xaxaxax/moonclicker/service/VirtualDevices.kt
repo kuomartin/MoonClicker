@@ -14,15 +14,18 @@ import android.os.ServiceManager
 import android.view.Surface
 import androidx.annotation.RequiresApi
 import timber.log.Timber
+import java.nio.ByteBuffer
+import java.util.Base64
 
 /**
  * 經 VirtualDevice 建立虛擬顯示（issue #124），讓 VD 有自己的 display group 與鎖定狀態。
  *
- * 建立 VirtualDevice 要一個 companion association。shell 沒有配對流程，所以用
- * `cmd companiondevice associate` 替 shell 套件建一個假 MAC 的 association（[MAC_PREFIX]），
- * profile 是 APP_STREAMING：API 35 起 VirtualDeviceManagerService 只接受這類 profile 的
- * association，13/14 不檢查、也會忽略這個參數。association 由 App 的實驗性開關決定存廢，
- * 不隨 VD 增減，見 docs/virtual-display-pitfalls.md。
+ * 建立 VirtualDevice 要一個 companion association。shell 沒有配對流程，`ICompanionDeviceManager`
+ * 的建立方法又要求呼叫端 manifest 宣告 `companion_device_setup`，所以經 `cmd companiondevice`
+ * 替 shell 套件建一個假 MAC 的 association（[MAC_PREFIX]），profile 是 APP_STREAMING：API 35 起
+ * VirtualDeviceManagerService 只接受這類 profile 的 association。API 35 起用 `apply-restored-payload`，
+ * 才能讓系統設定顯示 [DISPLAY_NAME]；33/34 只有 `associate`，名稱是 profile 字串。
+ * association 由 App 的實驗性開關決定存廢，不隨 VD 增減，見 docs/virtual-display-pitfalls.md。
  */
 @RequiresApi(Build.VERSION_CODES.TIRAMISU)
 internal class VirtualDevices(context: Context, private val callerPackage: String) {
@@ -53,7 +56,13 @@ internal class VirtualDevices(context: Context, private val callerPackage: Strin
     /** 移除所有 [MAC_PREFIX] 的 association。呼叫端要先銷毀經這裡建立的 VD。 */
     @Synchronized
     fun removeAssociations() {
-        associations().forEach { (_, mac) -> runCmd("disassociate", userId.toString(), callerPackage, mac) }
+        associations().keys.forEach { id ->
+            try {
+                companionDeviceManager?.disassociate(id)
+            } catch (t: Throwable) {
+                Timber.w(t, "could not remove companion association %d", id)
+            }
+        }
         busyAssociations.clear()
     }
 
@@ -117,13 +126,39 @@ internal class VirtualDevices(context: Context, private val callerPackage: Strin
      */
     private fun associate(index: Int): Int? {
         val mac = MAC_PREFIX + "%02x".format(index)
-        runCmd("associate", userId.toString(), callerPackage, mac, APP_STREAMING_PROFILE)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+            val payload = Base64.getEncoder().encodeToString(restorePayload(mac))
+            runCmd("apply-restored-payload", userId.toString(), payload)
+        } else {
+            runCmd("associate", userId.toString(), callerPackage, mac, APP_STREAMING_PROFILE)
+        }
         repeat(ASSOCIATE_POLL_ATTEMPTS) {
             associations().entries.firstOrNull { it.value == mac }?.let { return it.key }
             Thread.sleep(ASSOCIATE_POLL_INTERVAL_MS)
         }
         Timber.w("association for $mac was not created")
         return null
+    }
+
+    /**
+     * CDM 備份資料，只含一筆 association（`BackupRestoreProcessor.getBackupPayload` 的格式）：
+     * 版本、association XML、system data transfer request XML，各段前置長度。XML 是
+     * `AssociationDiskStore`／`SystemDataTransferRequestStore` 的持久化格式，parser 文字與
+     * binary XML 都接受。request 段要是有 `<requests>` 根標籤的文件，空的會讓系統記一筆錯誤。
+     */
+    private fun restorePayload(mac: String): ByteArray {
+        val associations = ("<state persistence-version=\"1\"><associations max-id=\"1\">" +
+            "<association id=\"1\" profile=\"$APP_STREAMING_PROFILE\" package=\"$callerPackage\" " +
+            "mac_address=\"$mac\" display_name=\"$DISPLAY_NAME\" self_managed=\"false\" " +
+            "notify_device_nearby=\"false\" /></associations></state>").toByteArray()
+        val requests = "<requests />".toByteArray()
+        return ByteBuffer.allocate(Int.SIZE_BYTES * 3 + associations.size + requests.size)
+            .putInt(RESTORE_PAYLOAD_VERSION)
+            .putInt(associations.size)
+            .put(associations)
+            .putInt(requests.size)
+            .put(requests)
+            .array()
     }
 
     private fun runCmd(vararg args: String) = try {
@@ -153,6 +188,12 @@ internal class VirtualDevices(context: Context, private val callerPackage: Strin
 
         /** `AssociationRequest.DEVICE_PROFILE_APP_STREAMING`。 */
         const val APP_STREAMING_PROFILE = "android.app.role.COMPANION_DEVICE_APP_STREAMING"
+
+        /** 系統設定「連線偏好設定」顯示的 association 名稱，API 35+ 才設得了。 */
+        const val DISPLAY_NAME = "MoonClicker"
+
+        /** `BackupRestoreProcessor.BACKUP_AND_RESTORE_VERSION`。 */
+        const val RESTORE_PAYLOAD_VERSION = 0
 
         /** 本地管理位元設起的假 MAC，末段是編號；"6d:63" 是 "mc"。 */
         const val MAC_PREFIX = "02:6d:63:00:00:"
