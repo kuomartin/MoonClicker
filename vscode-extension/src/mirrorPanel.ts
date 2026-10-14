@@ -22,10 +22,16 @@ let connection: MirrorConnection | undefined;
 const mirrorOutputChannel = vscode.window.createOutputChannel("MoonClicker Mirror");
 
 /**
- * 面板自己啟動、還在跑的測試迴圈（模板或 OCR）的腳本 id。停止時只停它：裝置上同時可能有
- * 使用者自己啟動的腳本，不能一起停掉。
+ * 面板自己啟動、還在跑的測試迴圈（模板或 OCR），連同啟動時的裝置。停止時只停它：裝置上同時
+ * 可能有使用者自己啟動的腳本，不能一起停掉。
  */
-let activeTestScriptId: string | undefined;
+let activeTest: { address: string; token?: string; scriptId: string } | undefined;
+
+/**
+ * 面板目前連的裝置與 display。訊息處理器只在建立面板時註冊一次，一律從這裡讀，不能用閉包裡
+ * 建立面板當下的值：之後換裝置、重新配對或切換 display 都只會更新這裡。
+ */
+let target: { address: string; token?: string; displayId: number } | undefined;
 
 /**
  * `moonclicker.openWorkbench` 的面板邏輯（見 #77、#78）。跟 `extension.ts` 的 [WorkbenchConnection] 是完全
@@ -47,14 +53,12 @@ export function openMirrorPanel(
   displayOpenedListener?: (displayId: number) => void,
 ): void {
   if (displayOpenedListener) onDisplayOpened = displayOpenedListener;
-  onDisplayOpened?.(displayId);
-  connection?.stop();
-  connection = undefined;
+  target = { address, token, displayId };
 
   if (panel) {
     try {
-      panel.title = mirrorTitle(displayId);
-      panel.reveal(vscode.ViewColumn.Beside);
+      // 留在面板原本的 group；Beside 是「active editor 旁邊」，面板自己是 active 時會被搬到新的 group。
+      panel.reveal(panel.viewColumn);
     } catch {
       panel = undefined;
     }
@@ -81,10 +85,10 @@ export function openMirrorPanel(
       // webview 一旦 dispose，裡面所有 JS（含 stopTestIfRunningOnModeExit 那套）都停了，
       // 沒有人會再送 stopRun——面板關閉前若我們自己啟動的 vision-test 還在跑，這裡補送
       // 最後一次，不留孤兒迴圈在裝置端背景繼續耗電、佔著執行槽。
-      if (activeTestScriptId) {
-        const testScriptId = activeTestScriptId;
-        activeTestScriptId = undefined;
-        stopRun(address, token, testScriptId).catch((err) => {
+      if (activeTest) {
+        const test = activeTest;
+        activeTest = undefined;
+        stopRun(test.address, test.token, test.scriptId).catch((err) => {
           mirrorOutputChannel.appendLine(`[MoonClicker Stop Run On Dispose Error] ${(err as Error).message}`);
         });
       }
@@ -105,6 +109,8 @@ export function openMirrorPanel(
       text?: string;
       exact?: boolean;
     }) => {
+      if (!target) return;
+      const { address, token } = target;
       if (message?.type === "stop") {
         connection?.stop();
       } else if (message?.type === "requestScripts") {
@@ -188,7 +194,8 @@ export function openMirrorPanel(
           return;
         }
         try {
-          activeTestScriptId = await startVisionTest(address, scriptId, displayId, image, roi, threshold, intervalMs, token);
+          const testScriptId = await startVisionTest(address, scriptId, displayId, image, roi, threshold, intervalMs, token);
+          activeTest = { address, token, scriptId: testScriptId };
           safePostMessage({ type: "visionTestResult", success: true });
         } catch (err) {
           const errMsg = errorText(err);
@@ -203,11 +210,12 @@ export function openMirrorPanel(
           return;
         }
         try {
-          activeTestScriptId = await startOcrTest(
+          const testScriptId = await startOcrTest(
             address,
             { displayId, mode: mode as OcrTestMode, roi, text, exact, threshold, intervalMs },
             token,
           );
+          activeTest = { address, token, scriptId: testScriptId };
           // 與模板測試共用同一組 start/stop 狀態機，所以回同一種訊息。
           safePostMessage({ type: "visionTestResult", success: true });
         } catch (err) {
@@ -218,8 +226,8 @@ export function openMirrorPanel(
         }
       } else if (message?.type === "stopRun") {
         try {
-          if (activeTestScriptId) await stopRun(address, token, activeTestScriptId);
-          activeTestScriptId = undefined;
+          if (activeTest) await stopRun(activeTest.address, activeTest.token, activeTest.scriptId);
+          activeTest = undefined;
           safePostMessage({ type: "runStopResult", success: true });
         } catch (err) {
           const errMsg = errorText(err);
@@ -229,7 +237,8 @@ export function openMirrorPanel(
         }
       } else if (message?.type === "switchDisplay") {
         if (typeof message.displayId === "number") {
-          openMirrorPanel(extensionUri, address, message.displayId, token);
+          target.displayId = message.displayId;
+          connectMirror();
         }
       } else if (message?.type === "refreshDisplays") {
         refreshDisplays();
@@ -249,7 +258,9 @@ export function openMirrorPanel(
                   ? vscode.l10n.t("MoonClicker: Mirroring turned on for display {0}", targetDisplayId)
                   : vscode.l10n.t("MoonClicker: Mirroring turned off for display {0}", targetDisplayId),
               );
-              openMirrorPanel(extensionUri, address, targetDisplayId, token);
+              if (!target) return;
+              target.displayId = targetDisplayId;
+              connectMirror();
             })
             .catch((err) => {
               vscode.window.showErrorMessage(`MoonClicker: ${errorText(err)}`);
@@ -259,15 +270,21 @@ export function openMirrorPanel(
     });
   }
 
+  connectMirror();
+}
+
+/** 依 [target] 重新連鏡像串流；切換 display 只走這裡，不動面板的位置。 */
+function connectMirror(): void {
+  if (!target) return;
+  const { address, token, displayId } = target;
+  onDisplayOpened?.(displayId);
+  connection?.stop();
+  if (panel) panel.title = mirrorTitle(displayId);
+
   const mirror = new MirrorConnection();
   connection = mirror;
   const staleness = new FrameStalenessTracker(STALE_AFTER_MS, postStaleness);
 
-  const refreshDisplays = () => {
-    listDisplays(address, token)
-      .then((displays) => safePostMessage({ type: "displays", displays, currentDisplayId: displayId }))
-      .catch(() => {});
-  };
   refreshDisplays();
 
   mirror.onDidChangeState((state) => {
@@ -294,6 +311,14 @@ export function openMirrorPanel(
     postFrame(frame);
   });
   mirror.start(address, displayId, token);
+}
+
+function refreshDisplays(): void {
+  if (!target) return;
+  const { address, token, displayId } = target;
+  listDisplays(address, token)
+    .then((displays) => safePostMessage({ type: "displays", displays, currentDisplayId: displayId }))
+    .catch(() => {});
 }
 
 /** extension 停用時的收尾——面板還開著也要確實停止串流，不留給 VS Code 自己處理。 */

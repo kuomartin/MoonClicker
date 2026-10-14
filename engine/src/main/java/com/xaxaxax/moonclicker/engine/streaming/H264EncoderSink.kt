@@ -78,6 +78,7 @@ class H264EncoderSink(
             inputSurface.release()
 
             val bufferInfo = MediaCodec.BufferInfo()
+            val prepender = ParameterSetPrepender()
             // dequeueOutputBuffer is blocking, runs on IO dispatcher
             while (isActive) {
                 val outputBufferId = codec.dequeueOutputBuffer(bufferInfo, 10000L)
@@ -88,26 +89,26 @@ class H264EncoderSink(
                         outputBuffer.limit(bufferInfo.offset + bufferInfo.size)
                         val bytes = ByteArray(bufferInfo.size)
                         outputBuffer.get(bytes)
-                        trySend(bytes)
+                        // 參數集照常送出一次，之後每個關鍵影格再帶著。
+                        if ((bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0) {
+                            prepender.onCodecConfig(bytes)
+                            trySend(bytes)
+                        } else {
+                            val isKeyFrame = (bufferInfo.flags and MediaCodec.BUFFER_FLAG_KEY_FRAME) != 0
+                            trySend(prepender.frame(bytes, isKeyFrame))
+                        }
                     }
                     codec.releaseOutputBuffer(outputBufferId, false)
                 } else if (outputBufferId == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
                     val newFormat = codec.outputFormat
                     Timber.d("H264EncoderSink: output format changed to $newFormat")
-                    
-                    // JMuxer (and most H.264 decoders) needs SPS/PPS before the first IDR frame.
-                    // Some encoders don't emit them as separate buffers, so we extract them from the format.
-                    val csd0 = newFormat.getByteBuffer("csd-0")
-                    if (csd0 != null) {
-                        val bytes0 = ByteArray(csd0.remaining())
-                        csd0.get(bytes0)
-                        trySend(bytes0)
-                    }
-                    val csd1 = newFormat.getByteBuffer("csd-1")
-                    if (csd1 != null) {
-                        val bytes1 = ByteArray(csd1.remaining())
-                        csd1.get(bytes1)
-                        trySend(bytes1)
+                    // 有些 encoder 不把 SPS/PPS 當成獨立的輸出 buffer，只放在 format 裡。
+                    val csd = listOfNotNull(newFormat.getByteBuffer("csd-0"), newFormat.getByteBuffer("csd-1"))
+                        .map { buffer -> ByteArray(buffer.remaining()).also { buffer.get(it) } }
+                    if (csd.isNotEmpty()) {
+                        val config = csd.reduce { acc, bytes -> acc + bytes }
+                        prepender.onCodecConfig(config)
+                        trySend(config)
                     }
                 }
             }

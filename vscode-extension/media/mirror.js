@@ -203,6 +203,8 @@
         showOverlay(tr("Stream stopped"));
         break;
       case "connecting":
+        // 每條連線都是新的 H.264 串流：JMuxer 只採用第一組 SPS，沿用舊的解碼設定會在尺寸不同時解碼失敗。
+        jmuxer?.reset();
         statusEl.textContent = tr("Connecting to display {0}…", state.displayId);
         showOverlay(tr("Connecting…"));
         break;
