@@ -7,7 +7,6 @@ import android.view.Display
 import android.view.DisplayHidden
 import android.view.IWindowManager
 import com.xaxaxax.moonclicker.MoonClickerDisplayInfo
-import com.xaxaxax.moonclicker.script.DisplayGeometry
 import dev.rikka.tools.refine.Refine
 import timber.log.Timber
 import java.util.concurrent.ConcurrentHashMap
@@ -25,22 +24,21 @@ internal class DisplayControl(
 ) {
     fun getDisplaySize(displayId: Int): IntArray {
         val display = displayManager.getDisplay(displayId) ?: return intArrayOf(0, 0)
-        val outSize = android.graphics.Point()
-        @Suppress("DEPRECATION")
-        display.getRealSize(outSize)
-        return intArrayOf(outSize.x, outSize.y)
+        val (width, height) = display.logicalSize()
+        return intArrayOf(width, height)
     }
 
     /**
-     * consumer 目前該用的影格尺寸（見 CONTEXT.md「Surface 空間 / 邏輯空間」，ADR-0017）。
+     * consumer 收到的影格尺寸（ADR-0017）。所有 consumer 都在這裡拿，不自己推。
      *
-     * - 自己建立的虛擬顯示：distributor 已經把 v 轉正，這裡回的是轉正後的自然尺寸——
-     *   建立尺寸依該 VD**目前**的 rotation 決定要不要互換長寬，rotation 跟建立尺寸同一次
-     *   呼叫、同進程讀取，沒有時間差。呼叫端若在腳本執行期間再問一次，拿到的會是新值；
-     *   但既有 consumer（AImageReader、TextureView）都只在啟動當下讀一次，不會跟著重開，
-     *   這是已知限制，見 ADR-0017 的 Consequences。
-     * - 實體螢幕：只能由邏輯尺寸與 rotation 推得，兩者同進程讀取，沒有時間差。
-     * - 其他 id：回 [0, 0]，讓呼叫端當場失敗，好過帶著可能錯的尺寸跑完整個腳本。
+     * - 有 distributor 的 VD（自己建的，或 [DisplayMirroring] 的 VD 版鏡像）：distributor 依 VD
+     *   **目前**的 rotation 把影格轉正，所以是建立尺寸在 90/270 時互換長寬。兩個值同進程讀取。
+     * - 其他存在的顯示器（display 0 未開鏡像、legacy 鏡像）：邏輯尺寸，也就是
+     *   [DisplayMirroring] 建鏡像 distributor 時用的尺寸。
+     * - 不存在：[0, 0]，讓呼叫端當場失敗。
+     *
+     * 會隨旋轉改變；consumer 只在啟動、連線當下讀一次，見 ADR-0017 的 Consequences。
+     * 不隨旋轉改變的建立尺寸在 [MoonClickerDisplayInfo.surfaceWidth]。
      */
     fun getDisplaySurfaceSize(displayId: Int): IntArray {
         val actualId = displayMirroring.resolveDistributorId(displayId)
@@ -57,10 +55,7 @@ internal class DisplayControl(
             Timber.w("getDisplaySurfaceSize($displayId): display not found")
             return intArrayOf(0, 0)
         }
-        val outSize = android.graphics.Point()
-        @Suppress("DEPRECATION")
-        display.getRealSize(outSize)
-        val (width, height) = DisplayGeometry.surfaceSize(outSize.x, outSize.y, display.rotation)
+        val (width, height) = display.logicalSize()
         return intArrayOf(width, height)
     }
 
@@ -83,6 +78,10 @@ internal class DisplayControl(
             this.isMirrorActive = isMirrorActive
             this.isManaged = virtualDisplayLifecycle.isKnownVirtualDisplay(displayId)
             this.canSleep = virtualDisplayLifecycle.canSleep(displayId)
+            virtualDisplayLifecycle.surfaceSize(displayId)?.let { (w, h) ->
+                this.surfaceWidth = w
+                this.surfaceHeight = h
+            }
         }
     }
 
@@ -177,6 +176,14 @@ internal class DisplayControl(
             runCatching { Refine.unsafeCast<DisplayHidden>(this).type == DISPLAY_TYPE_VIRTUAL }
                 .getOrNull()
     }
+}
+
+/** WindowManager 套用旋轉後的尺寸（`getRealSize`）。 */
+internal fun Display.logicalSize(): Pair<Int, Int> {
+    val outSize = android.graphics.Point()
+    @Suppress("DEPRECATION")
+    getRealSize(outSize)
+    return outSize.x to outSize.y
 }
 
 /** `WindowManager.DISPLAY_IME_POLICY_HIDE`（@hide）。 */

@@ -5,7 +5,6 @@ import android.hardware.display.DisplayManager
 import android.hardware.display.DisplayManagerHidden
 import android.os.Build
 import android.os.IBinder
-import android.util.DisplayMetrics
 import android.view.Display
 import android.view.DisplayHidden
 import android.view.Surface
@@ -90,11 +89,8 @@ internal class DisplayMirroring(
             Timber.e("createMirrorInternal: source display $displayId not found")
             return false
         }
-        val metrics = DisplayMetrics()
-        @Suppress("DEPRECATION")
-        sourceDisplay.getRealMetrics(metrics)
-        val width = metrics.widthPixels
-        val height = metrics.heightPixels
+        // 跟 DisplayControl.getDisplaySurfaceSize 對未開鏡像的顯示器回報的尺寸一致。
+        val (width, height) = sourceDisplay.logicalSize()
 
         val nativePtr = glesDistributor.createDistributor(width, height)
         if (nativePtr == 0L) return false
