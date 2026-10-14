@@ -9,7 +9,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -164,19 +163,6 @@ internal class TouchPointers(
                 }
             }
             delay(DELAY_MS.milliseconds)
-        }
-    }
-
-    fun get(displayId: Int): IntArray = runBlocking {
-        mutex.withLock {
-            val pointers = activePointersByDisplay[displayId] ?: return@withLock intArrayOf()
-            val result = IntArray(pointers.size * 3)
-            for (i in pointers.indices) {
-                result[i * 3] = pointers[i].logicalId
-                result[i * 3 + 1] = pointers[i].x.toInt()
-                result[i * 3 + 2] = pointers[i].y.toInt()
-            }
-            result
         }
     }
 }

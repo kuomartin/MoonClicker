@@ -108,11 +108,6 @@ interface IMoonClickerService {
      */
     oneway void multiTouchSwipe(int pointerId, int displayId, in int[] points, long duration, boolean keep) = 201;
 
-    /**
-     * returns flattened [id, x, y, id, x, y, ...]
-     */
-    int[] getPointers(int displayId) = 202;
-
     boolean injectMotionEvent(in MotionEvent event, int displayId) = 298;
     boolean injectKeyEvent(in KeyEvent event, int displayId) = 299;
 

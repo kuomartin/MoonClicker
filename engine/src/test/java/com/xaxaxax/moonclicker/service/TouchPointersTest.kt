@@ -6,7 +6,6 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
-import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -38,8 +37,6 @@ class TouchPointersTest {
         assertEquals(MotionEvent.ACTION_UP, actionsOn(1).last())
         assertEquals(List(10) { MotionEvent.ACTION_MOVE }, actionsOn(1).drop(1).dropLast(1))
         assertEquals(listOf(MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE, MotionEvent.ACTION_UP), actionsOn(2))
-        assertArrayEquals(intArrayOf(), touch.get(1))
-        assertArrayEquals(intArrayOf(), touch.get(2))
     }
 
     @Test
@@ -56,7 +53,6 @@ class TouchPointersTest {
         assertEquals(1, actions.count { it == MotionEvent.ACTION_DOWN })
         assertEquals(1, actions.count { it == MotionEvent.ACTION_UP })
         assertEquals(MotionEvent.ACTION_UP, actions.last())
-        assertArrayEquals(intArrayOf(), touch.get(1))
     }
 
     @Test
@@ -69,7 +65,7 @@ class TouchPointersTest {
         assertEquals(MotionEvent.ACTION_DOWN, sent[0].action)
         assertEquals(MotionEvent.ACTION_POINTER_DOWN or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT), sent[2].action)
         assertEquals(listOf(0, 1), sent[2].pointers)
-        assertArrayEquals(intArrayOf(1, 0, 0, 2, 5, 5), touch.get(1))
-        assertArrayEquals(intArrayOf(1, 7, 7), touch.get(2))
+        // 另一個 display 的手指從自己的 physical id 0 開始，是 ACTION_DOWN。
+        assertEquals(Sent(2, MotionEvent.ACTION_DOWN, listOf(0)), sent[4])
     }
 }
