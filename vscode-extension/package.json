@@ -2,7 +2,7 @@
   "name": "moonclicker-script-workbench",
   "displayName": "%displayName%",
   "description": "%description%",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "publisher": "kuomartin",
   "icon": "media/icon.png",
   "repository": {
