@@ -13,14 +13,16 @@ MoonClicker 是一款專為 Android 設計的遠端 Lua 控制與背景自動化
 * **Lua 腳本引擎**：
   * 內嵌原生 C++ Lua 5.5 執行環境，採線性執行模型。
   * 支援直覺的中斷與停止機制（`sleep`、`vision.wait` 會在使用者停止時即刻釋放）。
+  * 同時執行多支腳本：每個顯示器各跑一支，不同顯示器之間並行；每支腳本有各自的通知、日誌與資料，可分別從 App、通知或 VS Code 停止。
 
-* **本機端 OpenCV 影像辨識**：
+* **本機端影像與文字辨識**：
   * 原生 C++ 整合 OpenCV 模板比對。
   * 支援多目標與局部比對。
+  * 本機端離線 OCR（PP-OCR + ONNX Runtime）。
 
 * **VS Code 腳本工作台遠端開發**：
   * 低延遲 H.264 即時螢幕鏡射預覽。
-  * F5 一鍵 Push & Run，直接在裝置上執行並即時查看日誌。
+  * F5 一鍵 Push & Run，直接在裝置上執行並依腳本即時查看日誌。
   * PIN 碼配對的安全連線認證。
   * 自動產生 LuaLS 型別補全提示，撰寫腳本時有語法提示與檢查。
 
@@ -29,12 +31,12 @@ MoonClicker 是一款專為 Android 設計的遠端 Lua 控制與背景自動化
 * **Android 版本**：
   * **推薦使用：Android 10 (API 29) 以上**
   * 最低支援：Android 8.0 (API 27)，功能受限。
-  * Android 17：虛擬顯示器與主螢幕一起休眠，主螢幕關閉時腳本會暫停。
+  * Android 17：虛擬顯示器與主螢幕一起休眠，主螢幕關閉時腳本會暫停。開啟「設定 → 實驗性功能 → 以 VirtualDevice 建立虛擬顯示」（Android 13 以上）後，新建立的虛擬顯示器不隨主螢幕休眠。
 * **Shizuku**：
   * 裝置需安裝並啟動 [Shizuku](https://shizuku.rikka.app/)。
 * **電腦端（可選，用於腳本開發）**：
-  * VS Code 1.90.0+
-  * `moonclicker-script-workbench` 擴充套件
+  * VS Code 1.90.0+，或 VSCodium、Cursor 等使用 Open VSX 的編輯器
+  * [Open VSX](https://open-vsx.org/extension/kuomartin/moonclicker-script-workbench) 上的 MoonClicker 腳本工作台擴充套件，與 App 的版本號前兩碼（x.y）需相同
 
 ## 🚀 快速開始
 
@@ -48,9 +50,9 @@ MoonClicker 是一款專為 Android 設計的遠端 Lua 控制與背景自動化
 2. 確保 Shizuku 已在裝置上啟動。
 3. 開啟 MoonClicker，授予 Shizuku 權限。
 
-### 背景執行APP
+### 背景執行 App
 
-切換至`顯示器`頁面，建立並進入一個虛擬顯示器。APP 啟動後退出虛擬顯示器操作介面，APP 將在背景持續執行。
+切換至`顯示器`頁面，建立並進入一個虛擬顯示器。App 啟動後退出虛擬顯示器操作介面，App 將在背景持續執行。
 
 ### 撰寫第一份 Lua 腳本
 
@@ -89,6 +91,10 @@ data.set("status", "執行完成")
 - [x] **低延遲畫面鏡射**：Webview H.264 即時螢幕預覽
 - [x] **Workbench 認證授權**：Token / Handshake 安全連線機制
 - [x] **視覺輔助標註工具**：在鏡像畫面框選 ROI 存成模板，並即時測試命中位置與信心度
+- [x] **擴充套件英文化與上架 Open VSX**
+- [ ] **REPL**：獨立於腳本的持久 session，VS Code 與 MCP 共用
+- [ ] **MCP server**：內建在 Workbench，讓 AI agent 操控與觀察裝置
+- [ ] **VS Code 鏡像畫面注入點擊**：點擊轉 tap、拖曳轉 swipe
 
 ### 2. 核心引擎與視覺比對
 
@@ -97,6 +103,9 @@ data.set("status", "執行完成")
 - [x] **Shizuku / Root 權限橋接**：多 Android 版本系統能力存取
 - [x] **GLES / H.264 串流管線優化**：硬體編碼與低延遲零拷貝傳輸
 - [x] **OCR 文字識別**：本機端離線文字辨識（PP-OCRv6 + ONNX Runtime，首次使用時下載）
+- [x] **同時執行多支腳本**：每個顯示器各跑一支，各自的 Lua state、通知、日誌與資料
+- [x] **以 VirtualDevice 建立虛擬顯示（實驗性）**：Android 13 以上，虛擬顯示器不隨主螢幕休眠
+- [ ] **View tree**：在虛擬顯示器上取得 UI 階層，供 Lua 與 MCP 取用
 - [ ] **物件偵測（YOLO）**：補足模板比對無法處理的變形、旋轉與光影變化
 - [ ] **多視窗焦點管理**：多個虛擬顯示同時運作時的視窗焦點與輸入路由
 
