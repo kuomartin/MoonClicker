@@ -120,17 +120,18 @@ interface IMoonClickerService {
     int[] getDisplaySize(int displayId) = 301;
 
     /**
-     * Returns [width, height] in **surface** space — the size the display's buffers are
-     * actually allocated at, which does NOT swap when the display rotates.
+     * Returns [width, height] of the frames the display's distributor currently outputs —
+     * the size every frame consumer (AImageReader, mirror, H.264) must open its buffer at.
      *
-     * For a virtual display this is the size it was created with, remembered here rather
-     * than reconstructed from (logical size, rotation): those are two separate reads and a
-     * rotation landing between them yields a confidently wrong answer. For display 0 there
-     * is no creation size, so the service derives it from its own DisplayManager — one
-     * process, no cross-process tear. Any other display id returns [0, 0]: we have no
-     * warrant to guess at geometry for a display we did not create.
+     * For a virtual display this service created, the distributor cancels the display's own
+     * rotation (ADR-0017), so this is the creation size with width and height swapped while
+     * the display is at 90/270. Both values are read here in one process, never reconstructed
+     * by the caller from two reads. It therefore changes when the display rotates; callers
+     * read it once when they start. For display 0 without a mirror it is the panel's natural
+     * size. Any other display id returns [0, 0].
      *
-     * Callers wanting the rotated, on-screen size want getDisplaySize instead.
+     * The rotation-invariant creation size is MoonClickerDisplayInfo.surfaceWidth/Height;
+     * the WindowManager (logical) size is getDisplaySize.
      */
     int[] getDisplaySurfaceSize(int displayId) = 302;
 
