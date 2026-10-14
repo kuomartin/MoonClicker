@@ -51,8 +51,6 @@ internal class InputInjector(
         keep: Boolean,
     ) = touchPointers.swipe(pointerId, displayId, points, duration, keep)
 
-    fun getPointers(displayId: Int): IntArray = touchPointers.get(displayId)
-
     private fun sendMultiTouchMotionEvent(
         action: Int,
         eventTime: Long,
