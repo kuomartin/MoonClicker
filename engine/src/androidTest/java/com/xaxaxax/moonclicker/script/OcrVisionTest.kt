@@ -187,6 +187,23 @@ class OcrVisionTest {
         assertEquals("exact compares the whole line, which also holds OK, 12345 and SCORE", true, outcome.data["partial_exact"])
     }
 
+    /** 回報給 UI 的比對結果是手拼的 JSON：目標文字含控制字元或引號時，結果仍要原樣送達，不能被丟掉。 */
+    @Test
+    fun vision_result_keeps_text_with_control_characters() {
+        val displayId = stage(LINE)
+        val outcome = env.runScript(
+            displayId,
+            """
+            vision.wait({ text = "START" }, 20000)
+            vision.find({ text = "A\nB\t\"C\"\\" })
+            """.trimIndent(),
+            ocr = ocr,
+        )
+
+        assertEquals(EngineRunState.Finished, outcome.runState)
+        assertEquals(listOf("text:A\nB\t\"C\"\\"), outcome.lastVisionResult.map { it.name })
+    }
+
     @Test
     fun a_text_request_without_the_ocr_pack_fails_with_a_pointer_to_settings() {
         val displayId = stage(LINE)

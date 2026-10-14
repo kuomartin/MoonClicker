@@ -51,7 +51,7 @@ function screen.stop_mirror() end
 --- `image` 與 `text` 擇一。
 ---@class moonclicker.VisionRequest
 ---@field image string? 相對腳本資料夾的圖片路徑（也接受絕對路徑）
----@field text string? 要找的文字；需要先在設定頁下載 OCR 元件
+---@field text string? 要找的文字，不可為空字串；需要先在設定頁下載 OCR 元件
 ---@field threshold number? 選填，預設 0.8；模板是 `TM_CCOEFF_NORMED` 分數，文字是 Levenshtein 相似度
 ---@field scale number? 選填，只用於 image，`0 < scale <= 1`，比對前把影格與模板一起縮小；`0.5` 約快 4 倍，小模板可能比不到。不是拿來配不同大小的目標
 ---@field gray boolean? 選填，只用於 image，轉灰階後比對，預設 false；比彩色快 3–4 倍，模板不靠顏色區分時建議開
