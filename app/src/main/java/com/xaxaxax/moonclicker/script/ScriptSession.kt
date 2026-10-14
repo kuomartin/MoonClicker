@@ -326,11 +326,18 @@ class ScriptSession @Inject constructor(
             }
         }
 
-    /** 現有虛擬顯示的尺寸（rotation-invariant 的建立尺寸）與 densityDpi 是否跟腳本要求的一致。 */
+    /**
+     * 現有虛擬顯示的建立尺寸與 densityDpi 是否跟腳本要求的一致。
+     *
+     * 比建立尺寸（[com.xaxaxax.moonclicker.MoonClickerDisplayInfo.surfaceWidth]），不比
+     * `getDisplaySurfaceSize`：後者是影格尺寸，VD 上的 app 宣告橫向時會互換長寬。
+     * 精確比對，不接受長寬互換：接受的話，以 2400x1080 建立的顯示器會被拿去滿足 1080x2400
+     * 的請求，腳本就跑在 surface 幾何相反的顯示器上（見 ADR-0012）。
+     */
     private fun matchesConfig(service: IMoonClickerService, displayId: Int, config: DisplayConfig): Boolean {
-        val size = runCatching { service.getDisplaySurfaceSize(displayId) }.getOrNull()
-        val densityDpi = runCatching { service.getDisplayInfo(displayId)?.densityDpi }.getOrNull()
-        return matchesSize(size, config.width, config.height) && densityDpi == config.densityDpi
+        val info = runCatching { service.getDisplayInfo(displayId) }.getOrNull() ?: return false
+        return info.surfaceWidth == config.width && info.surfaceHeight == config.height &&
+            info.densityDpi == config.densityDpi
     }
 
     private fun openFullscreen(displayId: Int) {
@@ -351,13 +358,3 @@ class ScriptSession @Inject constructor(
         }
     }
 }
-
-/**
- * [ScriptSession.resolveDisplay] 沿用現有虛擬顯示時，判斷某個顯示器的建立尺寸
- * （[IMoonClickerService.getDisplaySurfaceSize]，不隨旋轉改變）符不符合請求。
- *
- * 精確比對，不接受長寬互換：接受的話，一個以 2400x1080 建立的顯示器會被拿去滿足
- * 1080x2400 的請求，腳本就跑在 surface 幾何相反的顯示器上（見 ADR-0012）。
- */
-internal fun matchesSize(size: IntArray?, width: Int, height: Int): Boolean =
-    size != null && size.size >= 2 && size[0] == width && size[1] == height
