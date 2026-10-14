@@ -131,6 +131,7 @@ dependencies {
     implementation(libs.hiddenapibypass)
 
     testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
 
     // Lua API 的 instrumentation 測試（engine/src/androidTest）。它們必須跑在裝置上——
     // 受測的是 moonclicker_native.so 裡的 C++ 綁定，不是 Kotlin。
