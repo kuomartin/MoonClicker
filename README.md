@@ -15,7 +15,7 @@ MoonClicker is an Android automation tool driven by Lua scripts. Through [Shizuk
 ## Requirements
 
 * Android 8.0 (API 27) or later; Android 10 (API 29) or later is recommended, as some features are limited on older versions.
-* On Android 17, virtual displays sleep with the main screen, so scripts pause while the screen is off. Turning on **Settings → Experimental → Create virtual displays through VirtualDevice** (Android 13 or later) keeps new virtual displays awake.
+* On Android 17, virtual displays sleep with the main screen. While the screen is off, apps on them stop and ignore input, so a running script keeps going but can't get anything done. Turning on **Settings → Experimental → Create virtual displays through VirtualDevice** (Android 13 or later) keeps new virtual displays awake.
 * [Shizuku](https://shizuku.rikka.app/) installed and running.
 * For writing scripts: VS Code 1.90.0 or later, or an editor using Open VSX such as VSCodium or Cursor, with the MoonClicker Script Workbench extension.
 

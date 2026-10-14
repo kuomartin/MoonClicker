@@ -31,7 +31,7 @@ MoonClicker 是一款專為 Android 設計的遠端 Lua 控制與背景自動化
 * **Android 版本**：
   * **推薦使用：Android 10 (API 29) 以上**
   * 最低支援：Android 8.0 (API 27)，功能受限。
-  * Android 17：虛擬顯示器與主螢幕一起休眠，主螢幕關閉時腳本會暫停。開啟「設定 → 實驗性功能 → 以 VirtualDevice 建立虛擬顯示」（Android 13 以上）後，新建立的虛擬顯示器不隨主螢幕休眠。
+  * Android 17：虛擬顯示器與主螢幕一起休眠。主螢幕關閉期間，上面的 App 會停止、不回應輸入，腳本仍在執行但做不了事。開啟「設定 → 實驗性功能 → 以 VirtualDevice 建立虛擬顯示」（Android 13 以上）後，新建立的虛擬顯示器不隨主螢幕休眠。
 * **Shizuku**：
   * 裝置需安裝並啟動 [Shizuku](https://shizuku.rikka.app/)。
 * **電腦端（可選，用於腳本開發）**：
