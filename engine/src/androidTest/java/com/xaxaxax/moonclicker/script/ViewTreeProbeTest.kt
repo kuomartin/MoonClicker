@@ -49,6 +49,11 @@ class ViewTreeProbeTest {
 
     @Test
     fun settings_on_a_virtual_display() {
+        // aosp-atd 映像沒裝 Settings。
+        assumeTrue(
+            "$SETTINGS is not installed",
+            env.context.packageManager.getLaunchIntentForPackage(SETTINGS) != null,
+        )
         val displayId = env.createDisplay()
         assertTrue(env.service.launchInDisplay(SETTINGS, displayId))
 
@@ -64,7 +69,8 @@ class ViewTreeProbeTest {
             windows.isNotEmpty(),
         )
 
-        val app = windows.first { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }
+        // 顯示上可能還有別的 app 視窗（例如系統的跨裝置服務），要挑目標 package 的那個。
+        val app = windows.first { it.isApp(expectPackage) }
         val samples = (1..RUNS).map {
             val start = SystemClock.elapsedRealtimeNanos()
             val root = checkNotNull(app.root) { "window ${describe(app)} has no root" }
@@ -86,15 +92,15 @@ class ViewTreeProbeTest {
         var windows: List<AccessibilityWindowInfo> = emptyList()
         while (SystemClock.uptimeMillis() < deadline) {
             windows = ui.windowsOnAllDisplays.get(displayId).orEmpty()
-            val ready = windows.any { window ->
-                window.type == AccessibilityWindowInfo.TYPE_APPLICATION &&
-                        (expectPackage == null || window.root?.packageName == expectPackage)
-            }
-            if (ready) return windows
+            if (windows.any { it.isApp(expectPackage) }) return windows
             SystemClock.sleep(200)
         }
         return windows
     }
+
+    private fun AccessibilityWindowInfo.isApp(expectPackage: String?): Boolean =
+        type == AccessibilityWindowInfo.TYPE_APPLICATION &&
+                (expectPackage == null || root?.packageName == expectPackage)
 
     private fun countNodes(node: AccessibilityNodeInfo): Int =
         1 + (0 until node.childCount).sumOf { i -> node.getChild(i)?.let(::countNodes) ?: 0 }
