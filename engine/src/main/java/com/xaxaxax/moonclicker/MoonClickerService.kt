@@ -188,8 +188,6 @@ class MoonClickerService @JvmOverloads constructor(
     override fun multiTouchSwipe(pointerId: Int, displayId: Int, points: IntArray, duration: Long, keep: Boolean) =
         inputInjector.multiTouchSwipe(pointerId, displayId, points, duration, keep)
 
-    override fun getPointers(displayId: Int): IntArray = inputInjector.getPointers(displayId)
-
     override fun injectMotionEvent(event: MotionEvent, displayId: Int): Boolean =
         inputInjector.injectMotionEvent(event, displayId)
 
