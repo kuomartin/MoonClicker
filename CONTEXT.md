@@ -33,7 +33,7 @@ The two coordinate systems of a virtual display: Surface Space represents the fi
 _Avoid_: Frame coordinates, screen coordinates (when unspecified).
 
 **Frame Size (影格尺寸)**:
-The size of the frames a display's distributor hands to consumers (`AImageReader`, mirror, H.264). Because the distributor cancels `v`, it is the surface size with width and height swapped at 90/270, so it changes when the display rotates. The service is its only source (`getDisplaySurfaceSize`); deciding whether an existing VD matches a requested config compares the surface size (`MoonClickerDisplayInfo.surfaceWidth/Height`) instead.
+The size of the frames a display's distributor hands to consumers (`AImageReader`, mirror, H.264). Because the distributor cancels `v`, it is the surface size with width and height swapped at 90/270, so it changes when the display rotates. The service is the source consumers open their buffers from (`getDisplaySurfaceSize`); the app's own mirror applies the same rule in-process (creation size from `Display.getMode()`, swapped by the display's rotation) rather than asking across processes, where its display-change callback and the service's are unordered. Deciding whether an existing VD matches a requested config compares the surface size (`MoonClickerDisplayInfo.surfaceWidth/Height`) instead.
 _Avoid_: Using it as the creation size.
 
 **Panel Rotation (d) / Display Rotation (v)**:
