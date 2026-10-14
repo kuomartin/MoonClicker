@@ -1,4 +1,5 @@
 #include "LuaBindings.h"
+#include "JsonString.h"
 #include "ScriptRuntime.h"
 
 #include <android/keycodes.h>
@@ -31,16 +32,6 @@ long nowMs() {
 [[noreturn]] void raiseStopped(lua_State *L) {
     luaL_error(L, "script stopped");
     std::abort();  // luaL_error 不會回來，這行只是讓編譯器知道
-}
-
-std::string jsonEscape(const std::string &s) {
-    std::string out;
-    out.reserve(s.size());
-    for (char c: s) {
-        if (c == '"' || c == '\\') out += '\\';
-        out += c;
-    }
-    return out;
 }
 
 // --- Lua 值 → C++ ---------------------------------------------------------
@@ -173,8 +164,8 @@ void reportHits(ScriptRuntime *runtime, const std::vector<VisionRequest> &reques
         const VisionHit &hit = hits[i];
         if (i > 0) out << ',';
         const std::string &name = requests[i].isText() ? "text:" + requests[i].text : requests[i].imagePath;
-        out << "{\"name\":\"" << jsonEscape(name)
-            << "\",\"found\":" << (hit.found ? "true" : "false")
+        out << "{\"name\":" << jsonString(name)
+            << ",\"found\":" << (hit.found ? "true" : "false")
             << ",\"x\":" << hit.x << ",\"y\":" << hit.y
             << ",\"width\":" << hit.w << ",\"height\":" << hit.h
             << ",\"cx\":" << hit.cx << ",\"cy\":" << hit.cy

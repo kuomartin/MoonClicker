@@ -2,11 +2,11 @@
 #include <android/native_window_jni.h>
 #include <opencv2/imgcodecs.hpp>
 
-#include <cstdio>
 #include <sstream>
 #include <string>
 
 #include "GlesDistributor.h"
+#include "JsonString.h"
 #include "Ocr.h"
 #include "ScriptRuntime.h"
 #include "TextMatch.h"
@@ -20,23 +20,6 @@ static std::string toString(JNIEnv *env, jstring value) {
 
 static void throwIllegalState(JNIEnv *env, const std::string &message) {
     env->ThrowNew(env->FindClass("java/lang/IllegalStateException"), message.c_str());
-}
-
-static std::string jsonString(const std::string &s) {
-    std::string out = "\"";
-    for (unsigned char c: s) {
-        if (c == '"' || c == '\\') {
-            out += '\\';
-            out += static_cast<char>(c);
-        } else if (c < 0x20) {
-            char escaped[8];
-            snprintf(escaped, sizeof(escaped), "\\u%04x", c);
-            out += escaped;
-        } else {
-            out += static_cast<char>(c);
-        }
-    }
-    return out + '"';
 }
 
 extern "C" {
