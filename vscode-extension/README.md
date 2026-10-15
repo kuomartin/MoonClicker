@@ -7,6 +7,7 @@ Write, sync and debug [MoonClicker](https://github.com/kuomartin/MoonClicker) Lu
 - **Folder sync**: each script on the device is a subfolder of a local folder you choose. Changes on either side sync while connected; conflicting edits keep the local version and save the device version as a `.device` file.
 - **Run and stop**: press F5 in a script's `main.lua` to save, sync and run it on the device, and Shift+F5 to stop. Several scripts can run at once on different displays.
 - **Workbench panel**: live low-latency mirror of any display that you can click and drag to tap and swipe on the device, with script logs and `data.set` values per script, template capture and cropping, and live template and OCR tests that generate Lua snippets.
+- **REPL**: press Shift+Enter in a Lua editor to run the selection (or the current line) in a REPL on the device, or run **Open REPL** to type into it. Globals persist until you reset or close it; Ctrl+C interrupts only the running code, and Ctrl+D on an empty line closes the REPL. Up to four REPLs can be open on the device; **Open REPL** can also attach to one that is already open, such as one an AI agent is using, and shows what it runs.
 - **Lua type hints**: the scripts folder gets a `.luarc.json` that loads the MoonClicker API definitions for the Lua language server.
 
 ## Getting started

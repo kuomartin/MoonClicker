@@ -75,6 +75,27 @@
         "command": "moonclicker.refresh",
         "title": "%command.refresh%",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "moonclicker.repl.open",
+        "title": "%command.repl.open%",
+        "icon": "$(terminal)"
+      },
+      {
+        "command": "moonclicker.repl.runSelection",
+        "title": "%command.repl.runSelection%"
+      },
+      {
+        "command": "moonclicker.repl.interrupt",
+        "title": "%command.repl.interrupt%"
+      },
+      {
+        "command": "moonclicker.repl.reset",
+        "title": "%command.repl.reset%"
+      },
+      {
+        "command": "moonclicker.repl.close",
+        "title": "%command.repl.close%"
       }
     ],
     "menus": {
@@ -136,6 +157,11 @@
         "command": "moonclicker.stop",
         "key": "shift+F5",
         "when": "editorFocus && resourceLangId == lua && resourceFilename == main.lua"
+      },
+      {
+        "command": "moonclicker.repl.runSelection",
+        "key": "shift+enter",
+        "when": "editorTextFocus && editorLangId == lua && moonclicker.connected"
       }
     ],
     "viewsContainers": {
