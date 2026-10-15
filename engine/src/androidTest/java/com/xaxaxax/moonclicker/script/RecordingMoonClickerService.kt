@@ -122,6 +122,17 @@ internal class RecordingMoonClickerService(
         }.toTypedArray()
     }
 
+    /** `ui.*` 的來源，格式同 `MoonClickerService.getViewTree`。 */
+    var viewTree: String = "[]"
+
+    val viewTreeDisplays = CopyOnWriteArrayList<Int>()
+
+    override fun getViewTree(displayId: Int): String {
+        viewTreeDisplays += displayId
+        failIfAsked()
+        return viewTree
+    }
+
     override fun getDisplaySurfaceSize(displayId: Int): IntArray = size
 
     override fun getDisplaySize(displayId: Int): IntArray = size

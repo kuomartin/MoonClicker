@@ -7,9 +7,9 @@
 ## 執行模型
 
 * **線性執行**：腳本由 `main.lua` 第一行循序執行至末行結束（狀態為 `Finished`）。
-* **同步阻塞**：阻塞呼叫（`sleep`、`vision.wait`、`input.*`）於腳本執行緒中等待；使用者停止時立即中斷並展開調用棧（狀態為 `Stopped`）。
+* **同步阻塞**：阻塞呼叫（`sleep`、`vision.wait`、`ui.wait`、`input.*`）於腳本執行緒中等待；使用者停止時立即中斷並展開調用棧（狀態為 `Stopped`）。
 * **模組載入**：`package.path` 預設包含腳本目錄，支援 `require("module")` 載入同目錄下其他 `.lua` 檔案。
-* **邏輯座標系統**：所有輸入座標（`input.*`）與影像搜尋範圍（`roi`）、命中結果（`cx`, `cy`）皆採用**邏輯空間座標**（旋轉 90°/270° 時長寬自動對調）。
+* **邏輯座標系統**：所有輸入座標（`input.*`）與影像搜尋範圍（`roi`）、命中結果與元件外框（`cx`, `cy`）皆採用**邏輯空間座標**（旋轉 90°/270° 時長寬自動對調）。
 * **模板像素**：模板圖片方向自動對齊邏輯畫面；模板尺寸需與目標在螢幕上的邏輯像素大小一致。
 * **目標綁定**：腳本作用於啟動時指定的目標顯示器（虛擬顯示器或本機實體螢幕）。
 * **同時執行**：不同顯示器上的腳本可以同時執行，各自有獨立的 Lua state、`log` 與 `data`，彼此不能溝通。一個顯示器同時只跑一支腳本（實體螢幕也算一個），同一支腳本同時也只跑一份。
@@ -238,6 +238,71 @@ end
 ```lua
 app.mute("com.example.game", true)
 app.launch("com.example.game")
+```
+
+---
+
+## `ui` 畫面元件樹
+
+讀目標顯示器上的視窗與元件（文字、resource id、外框），不用模板或 OCR 就能找到按鈕。需要 Android 11（API 30）以上，較舊的版本呼叫時拋錯。
+
+* 只看得到以 Android view（或有提供 semantics 的 Compose）建成的畫面；遊戲等自己繪製的畫面只有一個空的根節點，仍要用 `vision`。
+* `RecyclerView` 等清單只有畫面上的項目，畫面外的要先捲動。
+* 取樹時才連線，閒置約 30 秒後釋放。系統同時只允許一個 UiAutomation：`adb shell uiautomator` 或 instrumentation 測試正在用時呼叫會拋錯。連線不會停用使用者開著的無障礙服務。
+* 第一次取樹約數百毫秒，之後畫面沒變時只要幾毫秒；需要時取一次，不要在迴圈裡不停輪詢。
+
+### 節點（`UiNode`）
+
+```lua
+{
+    class = "android.widget.Button",
+    text = "確定",                  -- 沒有就是 nil，下同
+    id = "com.example:id/ok",       -- resource id
+    desc = "確定",                  -- contentDescription
+    package = "com.example",        -- 所在視窗的套件名稱
+    x = 100, y = 200, w = 80, h = 40,
+    cx = 140, cy = 220,             -- 中心點邏輯座標（直接用於 input.tap）
+    clickable = true, long_clickable = false, checkable = false, checked = false,
+    enabled = true, focusable = true, focused = false, selected = false,
+    scrollable = false, editable = false,
+    visible = true,                 -- 畫面外或被裁掉的為 false
+    children = { ... },             -- 子節點陣列
+}
+```
+
+### 選擇器（`UiSelector`）
+
+所有寫出的欄位都要符合。字串 `"確定"` 是 `{ text = "確定" }` 的簡寫。
+
+| 欄位 | 比對方式 |
+|---|---|
+| `text`、`desc` | 完全相同 |
+| `text_contains`、`desc_contains` | 包含該字串（不是 pattern） |
+| `id` | 完全相同，或只寫 `:id/` 之後的部分（`"ok"` 符合 `com.example:id/ok`） |
+| `class` | 完全相同，或只寫最後一段（`"Button"` 符合 `android.widget.Button`） |
+| `package` | 視窗的套件名稱 |
+| `clickable`、`long_clickable`、`checkable`、`checked`、`enabled`、`focusable`、`focused`、`selected`、`scrollable`、`editable`、`visible` | 布林值相同 |
+
+沒寫 `visible` 時只找 `visible = true` 的節點，免得點到畫面外的座標。欄位名稱打錯或型別不對時拋錯。
+
+### 函式
+
+* **`ui.dump()` -> `UiWindow[]`**
+  目標顯示器上的視窗，最上層的在前。每個視窗為 `{ type, title, package, root }`：`type` 是 `"application"`、`"input_method"`、`"system"` 等，`root` 是根節點，視窗還沒有內容時為 `nil`。
+
+* **`ui.find(selector)` -> `UiNode?`**
+  取一次樹，回傳第一個符合的節點：視窗由上而下，視窗內先父後子、依子節點順序。找不到回傳 `nil`。
+
+* **`ui.find_all(selector)` -> `UiNode[]`**
+  取一次樹，依同樣順序回傳所有符合的節點；沒有時為空陣列。
+
+* **`ui.wait(selector [, timeout_ms [, step_ms]])` -> `UiNode?`**
+  每 `step_ms`（預設 `200`）取一次樹，直到找到或逾時（預設 `10000` ms），逾時回傳 `nil`。逾時前一定會再找最後一次。
+
+```lua
+app.launch("com.example.app")
+local ok = ui.wait({ id = "ok", enabled = true })
+if ok then input.tap(ok.cx, ok.cy) end
 ```
 
 ---
