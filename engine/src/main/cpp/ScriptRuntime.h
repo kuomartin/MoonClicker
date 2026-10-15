@@ -43,6 +43,7 @@ struct HostMethods {
     jmethodID acquireMirror = nullptr;  // ()Z
     jmethodID releaseMirror = nullptr;  // ()Z
     jmethodID isMirrorActive = nullptr; // ()Z
+    jmethodID viewTree = nullptr;       // ()[B   UTF-8 JSON
 };
 
 /**

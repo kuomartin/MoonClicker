@@ -41,4 +41,5 @@ internal val ALL_STUB_CONTRACTS: List<StubContracts> = listOf(
     MOTION_EVENT_HIDDEN,
     SURFACE_CONTROL_HIDDEN,
     WINDOW_MANAGER_GLOBAL,
+    UI_AUTOMATION_HIDDEN, // IUiAutomationConnection has no members
 )

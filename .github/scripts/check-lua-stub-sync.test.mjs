@@ -12,6 +12,11 @@ test("fails when LuaBindings.h changed but the stub did not", () => {
   assert.equal(result.ok, false);
 });
 
+test("fails when UiModule.h changed but the stub did not", () => {
+  const result = checkLuaStubSync(["engine/src/main/cpp/UiModule.h"]);
+  assert.equal(result.ok, false);
+});
+
 test("passes when both the bindings and the stub changed", () => {
   const result = checkLuaStubSync([
     "engine/src/main/cpp/LuaBindings.cpp",
