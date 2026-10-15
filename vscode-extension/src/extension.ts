@@ -12,7 +12,7 @@ import { pairWithPin } from "./authSync";
 import { stopRun } from "./visionTest";
 import { ScriptDataStore } from "./scriptStreamState";
 import { errorText, localize } from "./l10n";
-import { closeRepl, getReplStatus, openRepl, resetRepl } from "./repl";
+import { closeRepl, listRepls, openRepl, resetRepl, type ReplStatus } from "./repl";
 import { ReplTerminal } from "./replTerminal";
 
 let connection: WorkbenchConnection | undefined;
@@ -167,17 +167,19 @@ export function activate(context: vscode.ExtensionContext): void {
 
 function handleReplEvent(event: ReplEvent, dataChannel: vscode.OutputChannel): void {
   switch (event.event.case) {
-    case "state":
-      repl?.pty.onState(event.event.value);
+    case "list":
+      repl?.pty.onList(event.event.value.repls);
       break;
     case "log":
-      repl?.pty.printLog(event.event.value);
+      if (event.replId === repl?.pty.replId) repl.pty.printLog(event.event.value);
       break;
     case "chunk":
-      if (repl && event.event.value.client !== repl.pty.client) repl.pty.printForeign(event.event.value);
+      if (event.replId === repl?.pty.replId && event.event.value.client !== repl.pty.client) {
+        repl.pty.printForeign(event.event.value);
+      }
       break;
     case "data":
-      scriptData.apply({ ...event.event.value, scriptId: REPL_DATA_KEY });
+      scriptData.apply({ ...event.event.value, scriptId: replDataKey(event.replId) });
       dataChannel.clear();
       dataChannel.appendLine(JSON.stringify(scriptData.all(), null, 2));
       break;
@@ -185,9 +187,14 @@ function handleReplEvent(event: ReplEvent, dataChannel: vscode.OutputChannel): v
 }
 
 /** REPL 的 `data` 在資料面板上的名字。腳本 id 是資料夾名稱，不會有空白與括號。 */
-const REPL_DATA_KEY = "(REPL)";
+function replDataKey(replId: string): string {
+  return `(REPL ${replId})`;
+}
 
-/** 裝置上已經開著 REPL 就接上去（MCP 可能正在用），沒有才選顯示器開一個新的。 */
+/**
+ * 這個視窗只有一個 REPL 終端機，已經有就叫出來。沒有時：裝置上有開著的 REPL（例如 MCP 開的）
+ * 就讓使用者選接上哪一個或開新的，沒有就直接選顯示器開新的。
+ */
 async function openReplCommand(): Promise<ReplTerminal | undefined> {
   if (repl) {
     repl.terminal.show();
@@ -196,14 +203,8 @@ async function openReplCommand(): Promise<ReplTerminal | undefined> {
   const address = connectedAddress();
   if (!address) return undefined;
   try {
-    let status = await getReplStatus(address, activeToken);
-    if (!status.open) {
-      const displayId = await pickDisplay(address);
-      if (displayId === undefined) return undefined;
-      const editor = vscode.window.activeTextEditor;
-      const scriptId = editor ? folderSync.scriptIdFor(editor.document.uri.fsPath) : undefined;
-      status = await openRepl(address, displayId, scriptId, activeToken);
-    }
+    const status = await chooseRepl(address);
+    if (!status) return undefined;
     const endpoint = () => {
       const state = connection?.state;
       return state?.status === "connected" ? { address: state.address, token: activeToken } : undefined;
@@ -216,7 +217,7 @@ async function openReplCommand(): Promise<ReplTerminal | undefined> {
       },
       () => void closeReplCommand(),
     );
-    const terminal = vscode.window.createTerminal({ name: "MoonClicker REPL", pty });
+    const terminal = vscode.window.createTerminal({ name: vscode.l10n.t("MoonClicker REPL {0}", status.id), pty });
     repl = { terminal, pty };
     terminal.show();
     return pty;
@@ -224,6 +225,30 @@ async function openReplCommand(): Promise<ReplTerminal | undefined> {
     vscode.window.showErrorMessage(`MoonClicker: ${errorText(err)}`);
     return undefined;
   }
+}
+
+async function chooseRepl(address: string): Promise<ReplStatus | undefined> {
+  const existing = await listRepls(address, activeToken);
+  if (existing.length > 0) {
+    const items: (vscode.QuickPickItem & { repl?: ReplStatus })[] = [
+      { label: vscode.l10n.t("New REPL") },
+      ...existing.map((r) => ({
+        label: vscode.l10n.t("Attach to REPL {0}", r.id),
+        description: vscode.l10n.t("display {0}", r.displayId),
+        repl: r,
+      })),
+    ];
+    const picked = await vscode.window.showQuickPick(items, {
+      placeHolder: vscode.l10n.t("Open a new REPL or attach to one already on the device"),
+    });
+    if (!picked) return undefined;
+    if (picked.repl) return picked.repl;
+  }
+  const displayId = await pickDisplay(address);
+  if (displayId === undefined) return undefined;
+  const editor = vscode.window.activeTextEditor;
+  const scriptId = editor ? folderSync.scriptIdFor(editor.document.uri.fsPath) : undefined;
+  return openRepl(address, displayId, scriptId, activeToken);
 }
 
 async function pickDisplay(address: string): Promise<number | undefined> {
@@ -251,7 +276,8 @@ async function resetReplCommand(): Promise<void> {
   const address = connectedAddress();
   if (!address) return;
   try {
-    await resetRepl(address, activeToken);
+    if (!repl) return;
+    await resetRepl(address, repl.pty.replId, activeToken);
     repl?.pty.print(vscode.l10n.t("The REPL was reset; globals are cleared."));
   } catch (err) {
     vscode.window.showErrorMessage(`MoonClicker: ${errorText(err)}`);
@@ -262,7 +288,8 @@ async function closeReplCommand(): Promise<void> {
   const address = connectedAddress();
   if (!address) return;
   try {
-    await closeRepl(address, activeToken);
+    if (!repl) return;
+    await closeRepl(address, repl.pty.replId, activeToken);
     repl?.terminal.dispose();
     repl = undefined;
   } catch (err) {

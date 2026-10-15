@@ -1,10 +1,10 @@
 import { authHeaders } from "./authSync";
 import { MessageError, msg } from "./message";
 
-/** `GET /repl` 與 open/reset 的回應。 */
+/** 一個 REPL 的狀態：`GET /repl` 的每一筆，也是 open/reset 的回應。 */
 export interface ReplStatus {
-  open: boolean;
-  displayId?: number;
+  id: string;
+  displayId: number;
   /** `require` 與模板路徑的根；省略表示整個 scripts 資料夾。 */
   scriptId?: string;
   busy: boolean;
@@ -31,32 +31,37 @@ async function post(address: string, path: string, token?: string, body?: unknow
   return response;
 }
 
-export async function getReplStatus(address: string, token?: string): Promise<ReplStatus> {
+/** 裝置上所有開著的 REPL，依開啟順序。 */
+export async function listRepls(address: string, token?: string): Promise<ReplStatus[]> {
   const response = await fetch(`http://${address}/repl`, { headers: authHeaders(token) });
   if (!response.ok) throw new MessageError(msg("REPL request failed (HTTP {0}): {1}", response.status, await response.text()));
-  return (await response.json()) as ReplStatus;
+  return (await response.json()) as ReplStatus[];
 }
 
-/** 開一個新的 REPL；裝置上已經開著的會被關掉，state 不保留。 */
+/** 開一個新的 REPL，不影響裝置上已經開著的。 */
 export async function openRepl(address: string, displayId: number, scriptId: string | undefined, token?: string): Promise<ReplStatus> {
   return (await (await post(address, "/repl/open", token, { displayId, scriptId })).json()) as ReplStatus;
 }
 
-export async function resetRepl(address: string, token?: string): Promise<ReplStatus> {
-  return (await (await post(address, "/repl/reset", token)).json()) as ReplStatus;
+function replPath(id: string, action: string): string {
+  return `/repl/${encodeURIComponent(id)}/${action}`;
 }
 
-export async function closeRepl(address: string, token?: string): Promise<void> {
-  await post(address, "/repl/close", token);
+export async function resetRepl(address: string, id: string, token?: string): Promise<ReplStatus> {
+  return (await (await post(address, replPath(id, "reset"), token)).json()) as ReplStatus;
 }
 
-export async function interruptRepl(address: string, token?: string): Promise<void> {
-  await post(address, "/repl/interrupt", token);
+export async function closeRepl(address: string, id: string, token?: string): Promise<void> {
+  await post(address, replPath(id, "close"), token);
+}
+
+export async function interruptRepl(address: string, id: string, token?: string): Promise<void> {
+  await post(address, replPath(id, "interrupt"), token);
 }
 
 /** 等這段跑完才回來。[client] 隨串流的 chunk 事件帶回來，用來分辨自己送的。 */
-export async function evalRepl(address: string, code: string, client: string, token?: string): Promise<ReplResult> {
-  return (await (await post(address, "/repl/eval", token, { code, client })).json()) as ReplResult;
+export async function evalRepl(address: string, id: string, code: string, client: string, token?: string): Promise<ReplResult> {
+  return (await (await post(address, replPath(id, "eval"), token, { code, client })).json()) as ReplResult;
 }
 
 /** 終端機的換行：Pseudoterminal 要 CRLF。 */

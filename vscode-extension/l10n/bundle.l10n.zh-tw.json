@@ -217,5 +217,9 @@
   "skipped {0}: {1}": "略過 {0}：{1}",
   "this script": "此腳本",
   "{0} template(s) · modified {1}": "{0} 個模板 · 上次修改 {1}",
-  "{0} was deleted locally. Delete these scripts on the device too?": "本機已刪除 {0}。要一併刪除裝置上的這些腳本嗎？"
+  "{0} was deleted locally. Delete these scripts on the device too?": "本機已刪除 {0}。要一併刪除裝置上的這些腳本嗎？",
+  "MoonClicker REPL {0}": "MoonClicker REPL {0}",
+  "New REPL": "新的 REPL",
+  "Attach to REPL {0}": "接上 REPL {0}",
+  "Open a new REPL or attach to one already on the device": "開新的 REPL，或接上裝置上已經開著的"
 }

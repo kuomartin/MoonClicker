@@ -2,6 +2,7 @@ package com.xaxaxax.moonclicker.workbench
 
 import com.xaxaxax.moonclicker.engine.ReplStatus
 import com.xaxaxax.moonclicker.script.ReplChunk
+import com.xaxaxax.moonclicker.script.ReplLogLine
 import com.xaxaxax.moonclicker.script.ReplState
 import io.ktor.websocket.Frame
 import java.io.File
@@ -10,6 +11,7 @@ import moonclicker.workbench.FileChangeEvent
 import moonclicker.workbench.LogEvent
 import moonclicker.workbench.ReplChunkEvent
 import moonclicker.workbench.ReplEvent
+import moonclicker.workbench.ReplListEvent
 import moonclicker.workbench.ReplStateEvent
 import moonclicker.workbench.RunStateEvent
 import moonclicker.workbench.StreamEvent
@@ -33,9 +35,9 @@ internal fun logFrame(scriptId: String, line: String): Frame =
 internal fun dataFrame(scriptId: String, previous: Map<String, Any>?, current: Map<String, Any>): Frame? =
     dataEvent(scriptId, previous, current)?.let { Frame.Binary(true, StreamEvent.ADAPTER.encode(StreamEvent(data_ = it))) }
 
-/** 同 [dataFrame]，給 REPL 包進 [ReplEvent]。 */
-internal fun replDataFrame(previous: Map<String, Any>?, current: Map<String, Any>): Frame? =
-    dataEvent("", previous, current)?.let { replFrame(ReplEvent(data_ = it)) }
+/** 同 [dataFrame]，給 REPL 包進 [ReplEvent]；`DataEvent.script_id` 也填 REPL id。 */
+internal fun replDataFrame(replId: String, previous: Map<String, Any>?, current: Map<String, Any>): Frame? =
+    dataEvent(replId, previous, current)?.let { replFrame(ReplEvent(repl_id = replId, data_ = it)) }
 
 private fun dataEvent(scriptId: String, previous: Map<String, Any>?, current: Map<String, Any>): DataEvent? =
     if (previous == null) {
@@ -80,23 +82,28 @@ internal fun fileChangeFrame(change: ScriptFileChange): Frame =
 internal fun runStateFrame(runningScriptIds: List<String>): Frame =
     Frame.Binary(true, StreamEvent.ADAPTER.encode(StreamEvent(run_state = RunStateEvent(running_script_ids = runningScriptIds))))
 
-internal fun replStateFrame(state: ReplState): Frame =
+internal fun replListFrame(states: List<ReplState>): Frame =
     replFrame(
         ReplEvent(
-            state = ReplStateEvent(
-                open_ = state.info != null,
-                display_id = state.info?.displayId ?: 0,
-                script_id = state.info?.scriptId.orEmpty(),
-                busy = state.busy,
+            list = ReplListEvent(
+                repls = states.map {
+                    ReplStateEvent(
+                        id = it.info.id,
+                        display_id = it.info.displayId,
+                        script_id = it.info.scriptId.orEmpty(),
+                        busy = it.busy,
+                    )
+                },
             )
         )
     )
 
-internal fun replLogFrame(line: String): Frame = replFrame(ReplEvent(log = line))
+internal fun replLogFrame(line: ReplLogLine): Frame = replFrame(ReplEvent(repl_id = line.replId, log = line.line))
 
 internal fun replChunkFrame(chunk: ReplChunk): Frame =
     replFrame(
         ReplEvent(
+            repl_id = chunk.replId,
             chunk = ReplChunkEvent(
                 client = chunk.client,
                 code = chunk.code,

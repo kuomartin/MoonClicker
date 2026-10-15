@@ -139,10 +139,10 @@ class WorkbenchServer @Inject constructor(
         override val chunks get() = replManager.chunks
         override val sharedData get() = replManager.sharedData
         override suspend fun open(displayId: Int, scriptId: String?) = replManager.open(displayId, scriptId)
-        override suspend fun reset() = replManager.reset()
-        override suspend fun close() = replManager.close()
-        override suspend fun eval(code: String, client: String) = replManager.eval(code, client)
-        override fun interrupt() = replManager.interrupt()
+        override suspend fun reset(id: String) = replManager.reset(id)
+        override suspend fun close(id: String) = replManager.close(id)
+        override suspend fun eval(id: String, code: String, client: String) = replManager.eval(id, code, client)
+        override fun interrupt(id: String) = replManager.interrupt(id)
     }
 
     private val scriptRunner = object : ScriptRunner {
@@ -470,13 +470,13 @@ fun Application.workbenchModule(
                 emptyList()
             } else {
                 listOf(
-                    launch { repl.state.collect { send(replStateFrame(it)) } },
+                    launch { repl.state.collect { send(replListFrame(it)) } },
                     launch { repl.logLines.collect { send(replLogFrame(it)) } },
                     launch { repl.chunks.collect { send(replChunkFrame(it)) } },
                     launch {
-                        var sent: Map<String, Any>? = null
+                        var sent: Map<String, Map<String, Any>> = emptyMap()
                         repl.sharedData.collect { data ->
-                            replDataFrame(sent, data)?.let { send(it) }
+                            for ((id, values) in data) replDataFrame(id, sent[id], values)?.let { send(it) }
                             sent = data
                         }
                     },
