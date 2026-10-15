@@ -1,36 +1,50 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { checkLuaStubSync } from "./check-lua-stub-sync.mjs";
+import { bindingNames, compareNames, stubNames } from "./check-lua-stub-sync.mjs";
 
-test("fails when LuaBindings.cpp changed but the stub did not", () => {
-  const result = checkLuaStubSync(["engine/src/main/cpp/LuaBindings.cpp"]);
+const BINDINGS = `
+const luaL_Reg kInput[] = {
+        {"tap",   lua_input_tap},
+        {"swipe", lua_input_swipe},
+        {nullptr, nullptr},
+};
+void registerApi(lua_State *L, ScriptRuntime *runtime) {
+    lua_pushlightuserdata(L, runtime);
+    lua_pushcclosure(L, lua_log, 1);
+    lua_setglobal(L, "log");
+    lua_newtable(L);
+    lua_pushlightuserdata(L, runtime);
+    lua_pushcclosure(L, lua_screen_start_mirror, 1);
+    lua_setfield(L, -2, "start_mirror");
+    lua_newtable(L);
+    lua_pushlightuserdata(L, runtime);
+    lua_pushcclosure(L, lua_screen_index, 1);
+    lua_setfield(L, -2, "__index");
+    registerModule(L, runtime, "input", kInput);
+}
+static const char *kUi = R"lua(
+local function helper() end
+function ui.find(selector)
+end
+)lua";
+`;
+
+test("collects module, table and global function names", () => {
+  assert.deepEqual([...bindingNames(BINDINGS)].sort(), ["input.swipe", "input.tap", "log", "screen.start_mirror", "ui.find"]);
+});
+
+test("stub names skip script callbacks", () => {
+  const stub = "function log(...) end\nfunction on_stop() end\nfunction input.tap(x, y) end\n---@field x\n";
+  assert.deepEqual([...stubNames(stub)].sort(), ["input.tap", "log"]);
+});
+
+test("passes when the names match", () => {
+  assert.equal(compareNames(new Set(["a.b", "log"]), new Set(["log", "a.b"])).ok, true);
+});
+
+test("lists missing and extra names", () => {
+  const result = compareNames(new Set(["input.tap", "input.key"]), new Set(["input.tap", "input.old"]));
   assert.equal(result.ok, false);
-});
-
-test("fails when LuaBindings.h changed but the stub did not", () => {
-  const result = checkLuaStubSync(["engine/src/main/cpp/LuaBindings.h"]);
-  assert.equal(result.ok, false);
-});
-
-test("fails when UiModule.h changed but the stub did not", () => {
-  const result = checkLuaStubSync(["engine/src/main/cpp/UiModule.h"]);
-  assert.equal(result.ok, false);
-});
-
-test("passes when both the bindings and the stub changed", () => {
-  const result = checkLuaStubSync([
-    "engine/src/main/cpp/LuaBindings.cpp",
-    "vscode-extension/lua-meta/moonclicker.lua",
-  ]);
-  assert.equal(result.ok, true);
-});
-
-test("passes when neither changed", () => {
-  const result = checkLuaStubSync(["app/src/main/java/com/xaxaxax/moonclicker/MoonClickerActivity.kt"]);
-  assert.equal(result.ok, true);
-});
-
-test("passes when only the stub changed", () => {
-  const result = checkLuaStubSync(["vscode-extension/lua-meta/moonclicker.lua"]);
-  assert.equal(result.ok, true);
+  assert.match(result.message, /缺少：input\.key/);
+  assert.match(result.message, /多出.*input\.old/);
 });
