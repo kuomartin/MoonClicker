@@ -86,6 +86,13 @@ private class FakeDisplaySource : DisplaySource {
         lastToggle = displayId to enable
         return toggleResult
     }
+
+    var lastInput: Pair<Int, MirrorGesture>? = null
+
+    override suspend fun inject(displayId: Int, gesture: MirrorGesture): Boolean {
+        lastInput = displayId to gesture
+        return true
+    }
 }
 
 /** 收一筆二進位 frame，解碼成 [StreamEvent]——跟 WorkbenchServer.kt 產生它用的是同一份 schema。 */
@@ -154,6 +161,38 @@ class WorkbenchServerTest {
 
             assertEquals(HttpStatusCode.ServiceUnavailable, response.status)
         }
+    }
+
+    @Test
+    fun `input route injects the gesture`() = runTest {
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+
+            val response = client.post("/displays/2/input") {
+                setBody("""{"points":[[0.5,0.25],[0.5,0.75]],"durationMs":300}""")
+            }
+
+            assertEquals(HttpStatusCode.OK, response.status)
+            assertEquals(2 to MirrorGesture(listOf(listOf(0.5, 0.25), listOf(0.5, 0.75)), 300), fakeDisplays.lastInput)
+        }
+    }
+
+    @Test
+    fun `input route rejects points outside the frame`() = runTest {
+        testApplication {
+            application { workbenchModule(temp.root, fakeRunner, fakeStream, fakeDisplays) }
+
+            val response = client.post("/displays/2/input") { setBody("""{"points":[[1.5,0.2]],"durationMs":50}""") }
+
+            assertEquals(HttpStatusCode.BadRequest, response.status)
+        }
+    }
+
+    @Test
+    fun `a tap maps to logical pixels as a single-point swipe`() {
+        val tap = MirrorGesture(listOf(listOf(0.5, 1.0)), 50)
+
+        assertEquals(listOf(540, 1919, 540, 1919), tap.toLogical(1080, 1920).toList())
     }
 
     @Test

@@ -64,6 +64,7 @@
   "Failed to rename (HTTP {0})": "改名失敗（HTTP {0}）",
   "Failed to run (HTTP {0}): {1}": "執行失敗（HTTP {0}）：{1}",
   "Failed to save template (HTTP {0}): {1}": "儲存模板失敗（HTTP {0}）：{1}",
+  "Failed to send input (HTTP {0}): {1}": "送出觸控失敗（HTTP {0}）：{1}",
   "Failed to start the OCR test (HTTP {0}): {1}": "啟動 OCR 測試失敗（HTTP {0}）：{1}",
   "Failed to start the match test (HTTP {0}): {1}": "啟動測試比對失敗（HTTP {0}）：{1}",
   "Failed to start the test": "啟動測試比對失敗",

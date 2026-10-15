@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { createServer, Server } from "node:http";
 import { after, before, test } from "node:test";
-import { listDisplays, toggleDisplayMirror } from "../displaySync";
+import { injectInput, listDisplays, toggleDisplayMirror } from "../displaySync";
 
 let server: Server;
 let address: string;
 let mirrorToggles: { id: string; enable: string | null }[] = [];
+let inputs: { id: string; body: unknown }[] = [];
 
 before(async () => {
   server = createServer((req, res) => {
@@ -32,6 +33,17 @@ before(async () => {
       }
       res.writeHead(200);
       res.end("OK");
+      return;
+    }
+    const inputMatch = url.pathname.match(/^\/displays\/(\d+)\/input$/);
+    if (inputMatch && req.method === "POST") {
+      const chunks: Buffer[] = [];
+      req.on("data", (c) => chunks.push(c));
+      req.on("end", () => {
+        inputs.push({ id: inputMatch[1], body: JSON.parse(Buffer.concat(chunks).toString()) });
+        res.writeHead(inputMatch[1] === "999" ? 503 : 200);
+        res.end(inputMatch[1] === "999" ? "Failed to inject input" : "OK");
+      });
       return;
     }
     res.writeHead(404);
@@ -77,4 +89,14 @@ test("toggleDisplayMirror throws on server error", async () => {
     () => toggleDisplayMirror(address, 999, true),
     /Failed to toggle mirroring \(HTTP 500\)/
   );
+});
+
+test("injectInput posts the gesture in frame proportions", async () => {
+  inputs = [];
+  await injectInput(address, 8, [[0.1, 0.2], [0.9, 0.2]], 300);
+  assert.deepEqual(inputs, [{ id: "8", body: { points: [[0.1, 0.2], [0.9, 0.2]], durationMs: 300 } }]);
+});
+
+test("injectInput surfaces the device's reason", async () => {
+  await assert.rejects(() => injectInput(address, 999, [[0.5, 0.5]], 50), /Failed to inject input/);
 });
