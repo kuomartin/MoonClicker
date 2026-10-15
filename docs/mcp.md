@@ -27,7 +27,7 @@ App 的腳本工作台內建 [MCP](https://modelcontextprotocol.io) server，讓
 
 ## 工具
 
-座標一律是顯示器邏輯空間的像素，與 Lua 的 `input.tap`、`ui` 節點的 `cx`/`cy` 相同。顯示器 id 從 `list_displays` 取得，0 是實體螢幕。
+座標一律是顯示器邏輯空間的像素，與 Lua 的 `input.tap`、`ui` 節點的 `cx`/`cy` 相同；超出顯示器範圍時回錯誤。顯示器 id 從 `list_displays` 取得，0 是實體螢幕。
 
 | 工具 | 說明 |
 | --- | --- |
@@ -36,7 +36,7 @@ App 的腳本工作台內建 [MCP](https://modelcontextprotocol.io) server，讓
 | `view_tree` | 視窗與節點樹（Android 11 以上），一行一個節點：類別、文字、描述、id、`@cx,cy`、狀態。看不到的節點省略，沒有內容也不能操作的節點只留子節點。`raw: true` 回完整 JSON，格式同 [lua-api.md](lua-api.md) 的 `ui.dump()`。 |
 | `tap` | 點擊一點，`durationMs` 預設 50；600 以上是長按。 |
 | `swipe` | 兩點之間直線滑動，`durationMs` 預設 300。 |
-| `repl_eval` | 在 REPL 執行 Lua，API 與腳本相同。回傳 `log()` 輸出與回傳值；錯誤以 `isError` 回報。超過 `timeoutMs`（預設 30 秒）就中斷。 |
+| `repl_eval` | 在 REPL 執行 Lua，API 與腳本相同。`log()` 輸出與回傳值分成兩段文字（`log:`、`result:`）；錯誤以 `isError` 回報。超過 `timeoutMs`（預設 30 秒）就中斷。 |
 | `repl_reset` | 清空 REPL 的全域變數。 |
 | `list_scripts` | 裝置上的腳本與是否執行中。 |
 | `start_script` / `stop_script` | 啟動腳本；停止一支，或省略 `scriptId` 時全部停止。 |

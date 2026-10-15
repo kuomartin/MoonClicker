@@ -308,6 +308,7 @@ private class McpTools(
             },
         ) { args ->
             val scriptId = args.requireString("scriptId")
+            if (ScriptStore.scan(scriptsRoot).none { it.id == scriptId }) throw ToolError("Unknown script: $scriptId")
             val limit = (args.int("limit") ?: 100).coerceIn(1, MAX_LOG_LINES)
             val lines = synchronized(logs) { logs[scriptId]?.takeLast(limit).orEmpty() }
             text(lines.joinToString("\n").ifEmpty { "No log lines from $scriptId" })
@@ -349,17 +350,20 @@ private class McpTools(
         // log 與結果走不同的 flow，給還在路上的 log 一點時間。
         delay(LOG_GRACE_MS)
         logJob.cancel()
-        val output = buildString {
-            synchronized(logLines) { logLines.forEach { append(it).append('\n') } }
-            when (result.status) {
-                ReplStatus.OK -> append(result.output)
-                ReplStatus.ERROR -> append(result.output)
-                ReplStatus.INCOMPLETE -> append("Incomplete code: ").append(result.output)
-                ReplStatus.INTERRUPTED -> append("Interrupted (timeout ${timeoutMs}ms)")
-                ReplStatus.CLOSED -> append("REPL was closed")
-            }
-        }.trimEnd().ifEmpty { "(no output)" }
-        if (result.status == ReplStatus.OK) text(output) else errorResult(output)
+        val logs = synchronized(logLines) { logLines.joinToString("\n") }
+        val outcome = when (result.status) {
+            ReplStatus.OK -> result.output.ifEmpty { "(no return value)" }
+            ReplStatus.ERROR -> result.output
+            ReplStatus.INCOMPLETE -> "Incomplete code: ${result.output}"
+            ReplStatus.INTERRUPTED -> "Interrupted (timeout ${timeoutMs}ms)"
+            ReplStatus.CLOSED -> "REPL was closed"
+        }
+        // log 與結果分成兩段，agent 才分得出哪些是回傳值。
+        val items = listOfNotNull(
+            logs.takeIf { it.isNotEmpty() }?.let { textItem("log:\n$it") },
+            textItem(if (result.status == ReplStatus.OK) "result: $outcome" else outcome),
+        )
+        content(*items.toTypedArray(), isError = result.status != ReplStatus.OK)
     }
 
     private fun tool(
