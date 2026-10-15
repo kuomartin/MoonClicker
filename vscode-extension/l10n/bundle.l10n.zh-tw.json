@@ -222,5 +222,6 @@
   "MoonClicker REPL {0}": "MoonClicker REPL {0}",
   "New REPL": "新的 REPL",
   "Attach to REPL {0}": "接上 REPL {0}",
-  "Open a new REPL or attach to one already on the device": "開新的 REPL，或接上裝置上已經開著的"
+  "Open a new REPL or attach to one already on the device": "開新的 REPL，或接上裝置上已經開著的",
+  "MoonClicker: MCP server config copied. It contains the Workbench token; keep it private.": "MoonClicker：已複製 MCP server 設定。內含 Workbench token，請勿外流。"
 }

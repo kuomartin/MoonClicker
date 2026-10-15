@@ -11,6 +11,7 @@ MoonClicker is an Android automation tool driven by Lua scripts. Through [Shizuk
 * **Concurrent scripts**: each display runs its own script, so scripts on different displays run side by side; each one has its own notification, logs, and data, and can be stopped from the app, its notification, or VS Code.
 * **On-device vision**: OpenCV template matching and OCR (ONNX Runtime + PP-OCR), both running locally.
 * **View tree**: find buttons by text, resource id, or class from the on-screen view hierarchy (Android 11 or later).
+* **MCP server**: AI agents can tap, swipe, take screenshots, read the view tree, run Lua in a REPL, and start or stop scripts over the Workbench connection ([docs/mcp.md](docs/mcp.md)).
 * **VS Code Script Workbench**: low-latency H.264 screen mirroring, F5 to run on the device with live logs per script, PIN pairing, and LuaLS type stubs for completion and checking.
 
 ## Requirements
