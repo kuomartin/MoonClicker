@@ -5,8 +5,8 @@ package moonclicker.workbench;
 import "google/protobuf/struct.proto";
 
 // Script Workbench 的 WebSocket 串流事件唯一 schema。app 端 WorkbenchServer.kt
-// （Wire）與 vscode-extension 端 workbenchConnection.ts（@bufbuild/protobuf）
-// 都從這一份 .proto 產生型別。
+// （Wire）與 VS Code 擴充套件 workbenchConnection.ts（@bufbuild/protobuf）都從這一份 .proto
+// 產生型別。擴充套件在 kuomartin/moonclicker-vscode，改這份檔案後要複製一份過去。
 
 // Workbench 協定版本。改動 HTTP 路由或串流事件而舊的另一端無法正確運作時加一。
 // App 在 `GET /device` 回報自己的版本；擴充套件連串流時以 `?protocol=` 帶上自己的版本，

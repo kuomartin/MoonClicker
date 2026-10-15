@@ -14,7 +14,7 @@ graph TD
     Engine[:engine - Lua Runtime / OpenCV / Native C++]
     HiddenStub[:hidden-api - AOSP @hide Stubs & Reflection]
     HiddenContract[:hidden-api-contract - Multi-API Matrix Tests]
-    VSCode[vscode-extension - TypeScript / Webview Mirror]
+    VSCode[moonclicker-vscode - TypeScript / Webview Mirror]
     Proto[proto/ - Wire & Protobuf Schemas]
 
     App --> Engine
@@ -50,7 +50,8 @@ graph TD
 - **`:hidden-api`**：提供 AOSP 隱藏 API 的編譯期 Stub（配合 `rikka.refine` 與 `hiddenapibypass` 使用），由 `:app` 與 `:engine` 以 `compileOnly` 引入。
 - **`:hidden-api-contract`**：**純契約測試宿主模組**（見 [ADR 0009](file:///home/martin/StudioProjects/MoonClicker/docs/adr/0009-hidden-api-contract-as-its-own-module.md)）。沒有 `main` source set，僅包含 `androidTest`，用於在 Gradle Managed Devices (API 27 ~ API 36 矩陣) 上驗證 `:hidden-api` Stub 對各 Android 版本底層反射的假設是否吻合。生產模組（`:app`、`:engine`）**絕不依賴**此模組。
 
-### 1.4 `vscode-extension` (開發者遠端工具)
+### 1.4 VS Code 擴充套件 (開發者遠端工具)
+- **位置**：獨立 repo [kuomartin/moonclicker-vscode](https://github.com/kuomartin/moonclicker-vscode)，與 App 共用 `proto/` 的 schema（複製一份過去）。
 - **職責**：TypeScript 開發之 VS Code 擴充套件，提供腳本建立、Push/Pull、F5 遠端執行、Webview H.264 即時鏡射與 LuaLS Stubs 自動配置。
 
 ---

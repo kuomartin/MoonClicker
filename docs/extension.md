@@ -5,7 +5,7 @@
 擴充套件發布在 [Open VSX](https://open-vsx.org/extension/kuomartin/moonclicker-script-workbench)，沒有上 Visual Studio Marketplace。
 
 * **VSCodium、Cursor 等預設使用 Open VSX 的編輯器**：在擴充套件面板搜尋 `MoonClicker` 安裝，之後會自動更新。
-* **VS Code**：內建的擴充套件面板只連 Visual Studio Marketplace，搜尋不到。從 Open VSX 頁面的 **Download** 或 [Releases](https://github.com/kuomartin/MoonClicker/releases) 下載 `.vsix`，再執行 **Extensions: Install from VSIX...** 安裝；不會自動更新，新版要重新安裝。
+* **VS Code**：內建的擴充套件面板只連 Visual Studio Marketplace，搜尋不到。從 Open VSX 頁面的 **Download** 或 [Releases](https://github.com/kuomartin/moonclicker-vscode/releases) 下載 `.vsix`，再執行 **Extensions: Install from VSIX...** 安裝；不會自動更新，新版要重新安裝。
 
 擴充套件與 App 的 Workbench 協定版本要一致，版本號的前兩碼（x.y）相同即可。
 

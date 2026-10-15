@@ -81,6 +81,7 @@ data.set("status", "執行完成")
 閱讀文檔以了解更多
 * [Lua API 參考手冊](docs/lua-api.md)
 * [VS Code Extension](docs/extension.md)
+* [VS Code 擴充套件原始碼](https://github.com/kuomartin/moonclicker-vscode)
 
 ## 🗺️ Roadmap
 

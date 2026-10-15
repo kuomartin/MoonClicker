@@ -167,8 +167,8 @@ kotlin {
     }
 }
 
-// Workbench 的串流事件 schema 是唯一來源，Kotlin（這裡）與 vscode-extension（@bufbuild/protobuf）
-// 都從同一份 .proto 產生型別，見 proto/workbench_stream_event.proto。
+// Workbench 的串流事件 schema 是唯一來源，Kotlin（這裡）與 VS Code 擴充套件（kuomartin/moonclicker-vscode，
+// @bufbuild/protobuf）都從同一份 .proto 產生型別，見 proto/workbench_stream_event.proto。
 wire {
     sourcePath {
         srcDir("../proto")
