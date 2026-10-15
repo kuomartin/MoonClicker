@@ -89,12 +89,16 @@ A persistent Lua session independent of scripts (`ReplSession` in `:engine`, `Re
 _Avoid_: Console, interactive script, shell.
 
 **ScriptHost**:
-The Engine Module's single JNI upcall target implementing non-native Lua APIs (`input.*`, `app.*`, `device.*`, `data.set`, and the mirror control of `screen`) on top of `IMoonClickerService`. It holds the mirror reference a script acquired with `screen.start_mirror()` and returns it when the script ends. Infrastructure failures pass through it as exceptions, which the native side raises as Lua errors ([ADR-0021](docs/adr/0021-infra-failures-raise-in-lua.md)).
+The Engine Module's single JNI upcall target implementing non-native Lua APIs (`input.*`, `app.*`, `ui.*`, `device.*`, `data.set`, and the mirror control of `screen`) on top of `IMoonClickerService`. It holds the mirror reference a script acquired with `screen.start_mirror()` and returns it when the script ends. Infrastructure failures pass through it as exceptions, which the native side raises as Lua errors ([ADR-0021](docs/adr/0021-infra-failures-raise-in-lua.md)).
 _Avoid_: JNI callbacks, native bridge.
 
 **VisionMatcher**:
 The native OpenCV-backed component that performs on-demand template matching on virtual display frames in logical coordinates ([ADR-0003](docs/adr/0003-opencv-for-vision-matching.md), [ADR-0013](docs/adr/0013-templates-are-logical-space.md)).
 _Avoid_: VisionEngine, image recognizer, matcher.
+
+**View Tree**:
+The windows and accessibility nodes on a display, read by `MoonClickerService` through a UiAutomation it registers as shell on demand and releases when idle, and exposed to Lua as `ui.*` (API 30+). Complements [[VisionMatcher]] for screens built from views; games and other SurfaceView screens still need vision ([research](docs/research/view-tree-on-virtual-display.md)).
+_Avoid_: UI dump, hierarchy, accessibility tree.
 
 **OCR Pack**:
 The per-ABI download (`libonnxruntime.so`, PP-OCRv6 small detection and recognition models, dictionary) published by `kuomartin/MoonClicker-ocr-pack` and installed on first use into `filesDir/ocr/v<version>/`, where the engine `dlopen`s ONNX Runtime; each file is verified against SHA-256 hashes pinned in `OcrPack` ([ADR-0018](docs/adr/0018-onnx-runtime-ppocrv6-downloaded-on-first-use.md)).

@@ -30,6 +30,7 @@ ScriptRuntime::ScriptRuntime(JNIEnv *env, jobject host) {
     hostMethods.acquireMirror = env->GetMethodID(hostClass, "acquireMirror", "()Z");
     hostMethods.releaseMirror = env->GetMethodID(hostClass, "releaseMirror", "()Z");
     hostMethods.isMirrorActive = env->GetMethodID(hostClass, "isMirrorActive", "()Z");
+    hostMethods.viewTree = env->GetMethodID(hostClass, "viewTree", "()[B");
     hostMethods.replResult = env->GetMethodID(hostClass, "replResult", "(JI[B)V");
 
     // 在呼叫端（有 app class loader 的 Java 執行緒）解析；Lua 執行緒是 attach 進來的，FindClass 找不到 app 的類別。
