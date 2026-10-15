@@ -208,9 +208,14 @@ async function openReplCommand(): Promise<ReplTerminal | undefined> {
       const state = connection?.state;
       return state?.status === "connected" ? { address: state.address, token: activeToken } : undefined;
     };
-    const pty = new ReplTerminal(endpoint, status, () => {
-      repl = undefined;
-    });
+    const pty = new ReplTerminal(
+      endpoint,
+      status,
+      () => {
+        repl = undefined;
+      },
+      () => void closeReplCommand(),
+    );
     const terminal = vscode.window.createTerminal({ name: "MoonClicker REPL", pty });
     repl = { terminal, pty };
     terminal.show();

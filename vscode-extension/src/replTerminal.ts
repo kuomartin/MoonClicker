@@ -45,6 +45,8 @@ export class ReplTerminal implements vscode.Pseudoterminal {
     private readonly endpoint: () => ReplEndpoint | undefined,
     private readonly status: ReplStatus,
     private readonly onClosed: () => void,
+    /** Ctrl+D 在空行上：關閉裝置上的 REPL。 */
+    private readonly onEof: () => void,
   ) {}
 
   open(): void {
@@ -53,7 +55,7 @@ export class ReplTerminal implements vscode.Pseudoterminal {
       : vscode.l10n.t("MoonClicker REPL on display {0}", this.status.displayId ?? 0);
     this.writeEmitter.fire(
       `${DIM}${where}\r\n` +
-        vscode.l10n.t("Globals persist until reset; Ctrl+C interrupts the running code.") +
+        vscode.l10n.t("Globals persist until reset; Ctrl+C interrupts the running code; Ctrl+D closes the REPL.") +
         `${RESET}\r\n${this.editor.render()}`,
     );
   }
@@ -72,14 +74,27 @@ export class ReplTerminal implements vscode.Pseudoterminal {
     for (const action of actions) {
       if (action.kind === "submit") {
         this.submitLine(action.line);
+      } else if (action.kind === "eof") {
+        // 續行中只丟掉沒寫完的那段，有程式碼在跑時不理：誤按的代價是整個 REPL 被關掉。
+        if (this.inFlight > 0 || this.deviceBusy) continue;
+        if (this.pending !== undefined) {
+          this.discardPending();
+        } else {
+          this.writeEmitter.fire("\r\n");
+          this.onEof();
+        }
       } else if (this.inFlight > 0 || this.deviceBusy) {
         this.interrupt();
       } else {
-        this.pending = undefined;
-        this.editor.prompt = PROMPT;
-        this.writeEmitter.fire(this.editor.discard() + this.editor.render());
+        this.discardPending();
       }
     }
+  }
+
+  private discardPending(): void {
+    this.pending = undefined;
+    this.editor.prompt = PROMPT;
+    this.writeEmitter.fire(this.editor.discard() + this.editor.render());
   }
 
   /** 從編輯器送來的程式碼：整段送出，不走續行。 */
