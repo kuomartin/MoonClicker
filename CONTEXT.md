@@ -84,6 +84,10 @@ _Avoid_: Engine status, native state holder.
 The public Kotlin facade over native `LuaNative` bindings in `:engine`. Each instance is one run with its own Lua state, thread, state, log and shared data; instances on different displays run concurrently, and a display runs at most one at a time (the physical screen counts as one).
 _Avoid_: LuaEngineControl, JNI bridge, LuaNative (when referencing public caller API).
 
+**MCP Server**:
+The Model Context Protocol endpoint of [[Script Workbench]] (`POST /mcp`, `mcpRoutes`), stateless Streamable HTTP authenticated with the [[Workbench Auth Token]]. Its tools wrap existing paths: input and screenshots go through `IMoonClickerService`, Lua runs in a [[REPL Session]] it opens per display, and scripts start through `ScriptSession`.
+_Avoid_: Agent API, AI bridge.
+
 **REPL Session**:
 A persistent Lua session independent of scripts (`ReplSession` in `:engine`, `ReplManager` in `:app`): its own Lua state and thread with the same API as a script, opened on one display. Globals persist until reset or close; each chunk's `local`s do not. Interrupting stops only the running chunk. Up to four can be open at once, each with its own id and state; a Workbench client (VS Code, MCP) opens its own or attaches to an existing one by id, and every client sees each REPL's chunks. It does not occupy its display.
 _Avoid_: Console, interactive script, shell.
