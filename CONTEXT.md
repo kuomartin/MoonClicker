@@ -84,6 +84,10 @@ _Avoid_: Engine status, native state holder.
 The public Kotlin facade over native `LuaNative` bindings in `:engine`. Each instance is one run with its own Lua state, thread, state, log and shared data; instances on different displays run concurrently, and a display runs at most one at a time (the physical screen counts as one).
 _Avoid_: LuaEngineControl, JNI bridge, LuaNative (when referencing public caller API).
 
+**REPL Session**:
+A persistent Lua session independent of scripts (`ReplSession` in `:engine`, `ReplManager` in `:app`): its own Lua state and thread with the same API as a script, opened on one display. Globals persist until reset or close; each chunk's `local`s do not. Interrupting stops only the running chunk. The app has exactly one, shared by every Workbench client (VS Code, MCP). It does not occupy its display.
+_Avoid_: Console, interactive script, shell.
+
 **ScriptHost**:
 The Engine Module's single JNI upcall target implementing non-native Lua APIs (`input.*`, `app.*`, `device.*`, `data.set`, and the mirror control of `screen`) on top of `IMoonClickerService`. It holds the mirror reference a script acquired with `screen.start_mirror()` and returns it when the script ends. Infrastructure failures pass through it as exceptions, which the native side raises as Lua errors ([ADR-0021](docs/adr/0021-infra-failures-raise-in-lua.md)).
 _Avoid_: JNI callbacks, native bridge.

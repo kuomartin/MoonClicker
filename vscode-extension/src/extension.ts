@@ -1,6 +1,7 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { ConnectionState, WorkbenchConnection } from "./workbenchConnection";
+import type { ReplEvent } from "./generated/workbench_stream_event_pb";
 import { listDisplays } from "./displaySync";
 import { listScripts, runScript } from "./scriptSync";
 import { FolderSyncController } from "./folderSyncController";
@@ -11,6 +12,8 @@ import { pairWithPin } from "./authSync";
 import { stopRun } from "./visionTest";
 import { ScriptDataStore } from "./scriptStreamState";
 import { errorText, localize } from "./l10n";
+import { closeRepl, getReplStatus, openRepl, resetRepl } from "./repl";
+import { ReplTerminal } from "./replTerminal";
 
 let connection: WorkbenchConnection | undefined;
 let statusBarItem: vscode.StatusBarItem | undefined;
@@ -22,6 +25,8 @@ let activeToken: string | undefined;
 let folderSync: FolderSyncController;
 let scriptData = new ScriptDataStore();
 let runningScriptIds: string[] = [];
+/** 開著的 REPL 終端機；關掉終端機不會關掉裝置上的 REPL。 */
+let repl: { terminal: vscode.Terminal; pty: ReplTerminal } | undefined;
 /** 使用者按下 Connect 之後的第一次連上才算互動式：可以跳出選擇資料夾。自動重連不跳。 */
 let interactiveConnect = false;
 /** 每個 address 各自的 token：自動重連時從 secrets 撈回來。 */
@@ -120,6 +125,8 @@ export function activate(context: vscode.ExtensionContext): void {
       const runningScriptIds = event.event.value.runningScriptIds;
       setRunningScripts(runningScriptIds);
       postStreamEventToMirror({ case: "runState", value: { runningScriptIds } });
+    } else if (event.event.case === "repl") {
+      handleReplEvent(event.event.value, dataChannel);
     } else if (event.event.case === "fileChange") {
       folderSync.handleRemoteChange(event.event.value);
       // 整支腳本新增、刪除，或名稱可能改了，側邊欄的清單要跟著更新。
@@ -146,11 +153,116 @@ export function activate(context: vscode.ExtensionContext): void {
       if (address) folderSync.newScript(address, activeToken);
     }),
     vscode.commands.registerCommand("moonclicker.openWorkbench", openWorkbenchCommand),
+    vscode.commands.registerCommand("moonclicker.repl.open", () => openReplCommand()),
+    vscode.commands.registerCommand("moonclicker.repl.runSelection", runSelectionInReplCommand),
+    vscode.commands.registerCommand("moonclicker.repl.interrupt", () => repl?.pty.interrupt()),
+    vscode.commands.registerCommand("moonclicker.repl.reset", resetReplCommand),
+    vscode.commands.registerCommand("moonclicker.repl.close", closeReplCommand),
     vscode.commands.registerCommand("moonclicker.refresh", () => {
       workspaceProvider.refresh();
       folderSync.resync();
     }),
   );
+}
+
+function handleReplEvent(event: ReplEvent, dataChannel: vscode.OutputChannel): void {
+  switch (event.event.case) {
+    case "state":
+      repl?.pty.onState(event.event.value);
+      break;
+    case "log":
+      repl?.pty.printLog(event.event.value);
+      break;
+    case "chunk":
+      if (repl && event.event.value.client !== repl.pty.client) repl.pty.printForeign(event.event.value);
+      break;
+    case "data":
+      scriptData.apply({ ...event.event.value, scriptId: REPL_DATA_KEY });
+      dataChannel.clear();
+      dataChannel.appendLine(JSON.stringify(scriptData.all(), null, 2));
+      break;
+  }
+}
+
+/** REPL 的 `data` 在資料面板上的名字。腳本 id 是資料夾名稱，不會有空白與括號。 */
+const REPL_DATA_KEY = "(REPL)";
+
+/** 裝置上已經開著 REPL 就接上去（MCP 可能正在用），沒有才選顯示器開一個新的。 */
+async function openReplCommand(): Promise<ReplTerminal | undefined> {
+  if (repl) {
+    repl.terminal.show();
+    return repl.pty;
+  }
+  const address = connectedAddress();
+  if (!address) return undefined;
+  try {
+    let status = await getReplStatus(address, activeToken);
+    if (!status.open) {
+      const displayId = await pickDisplay(address);
+      if (displayId === undefined) return undefined;
+      const editor = vscode.window.activeTextEditor;
+      const scriptId = editor ? folderSync.scriptIdFor(editor.document.uri.fsPath) : undefined;
+      status = await openRepl(address, displayId, scriptId, activeToken);
+    }
+    const endpoint = () => {
+      const state = connection?.state;
+      return state?.status === "connected" ? { address: state.address, token: activeToken } : undefined;
+    };
+    const pty = new ReplTerminal(endpoint, status, () => {
+      repl = undefined;
+    });
+    const terminal = vscode.window.createTerminal({ name: "MoonClicker REPL", pty });
+    repl = { terminal, pty };
+    terminal.show();
+    return pty;
+  } catch (err) {
+    vscode.window.showErrorMessage(`MoonClicker: ${errorText(err)}`);
+    return undefined;
+  }
+}
+
+async function pickDisplay(address: string): Promise<number | undefined> {
+  const displays = await listDisplays(address, activeToken);
+  const picked = await vscode.window.showQuickPick(
+    displays.map((d) => ({ label: d.name, description: vscode.l10n.t("display {0}", d.id), id: d.id })),
+    { placeHolder: vscode.l10n.t("Choose the display the REPL runs on") },
+  );
+  return picked?.id;
+}
+
+/** Shift+Enter：送出選取範圍，沒有選取時送出游標所在的那一行。 */
+async function runSelectionInReplCommand(): Promise<void> {
+  const editor = vscode.window.activeTextEditor;
+  if (!editor) return;
+  const code = editor.selection.isEmpty
+    ? editor.document.lineAt(editor.selection.active.line).text
+    : editor.document.getText(editor.selection);
+  if (code.trim() === "") return;
+  const pty = await openReplCommand();
+  pty?.runCode(code);
+}
+
+async function resetReplCommand(): Promise<void> {
+  const address = connectedAddress();
+  if (!address) return;
+  try {
+    await resetRepl(address, activeToken);
+    repl?.pty.print(vscode.l10n.t("The REPL was reset; globals are cleared."));
+  } catch (err) {
+    vscode.window.showErrorMessage(`MoonClicker: ${errorText(err)}`);
+  }
+}
+
+async function closeReplCommand(): Promise<void> {
+  const address = connectedAddress();
+  if (!address) return;
+  try {
+    await closeRepl(address, activeToken);
+    repl?.terminal.dispose();
+    repl = undefined;
+  } catch (err) {
+    vscode.window.showErrorMessage(`MoonClicker: ${errorText(err)}`);
+  }
 }
 
 export function deactivate(): void {
