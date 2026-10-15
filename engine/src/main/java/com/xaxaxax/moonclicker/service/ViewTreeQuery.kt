@@ -5,6 +5,7 @@ import android.app.UiAutomation
 import android.app.UiAutomationConnection
 import android.app.UiAutomationHidden
 import android.graphics.Rect
+import android.os.Binder
 import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
@@ -58,7 +59,7 @@ internal class ViewTreeQuery {
     fun close() {
         val current = automation ?: return
         automation = null
-        runCatching { Refine.unsafeCast<UiAutomationHidden>(current).disconnect() }
+        runCatching { asSelf { Refine.unsafeCast<UiAutomationHidden>(current).disconnect() } }
             .onFailure { Timber.w(it, "UiAutomation.disconnect failed") }
     }
 
@@ -77,7 +78,7 @@ internal class ViewTreeQuery {
         }
     }
 
-    private fun connect(): UiAutomation {
+    private fun connect(): UiAutomation = asSelf {
         val hidden = UiAutomationHidden(handler.looper, UiAutomationConnection())
         hidden.connect(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES)
         val connected = Refine.unsafeCast<UiAutomation>(hidden)
@@ -89,7 +90,21 @@ internal class ViewTreeQuery {
             runCatching { hidden.disconnect() }
             throw t
         }
-        return connected
+        connected
+    }
+
+    /**
+     * 以這個行程（shell）的身分執行。`UiAutomationConnection` 記下 connect 時的呼叫者 UID，
+     * disconnect 必須同一個 UID：在 binder 呼叫裡註冊會記成 App 的 UID，之後閒置釋放
+     * 從自己的執行緒 disconnect 就被拒，系統端的註冊留著，下次 connect 一律 already registered。
+     */
+    private inline fun <T> asSelf(block: () -> T): T {
+        val identity = Binder.clearCallingIdentity()
+        try {
+            return block()
+        } finally {
+            Binder.restoreCallingIdentity(identity)
+        }
     }
 
     private fun window(window: AccessibilityWindowInfo): JSONObject {

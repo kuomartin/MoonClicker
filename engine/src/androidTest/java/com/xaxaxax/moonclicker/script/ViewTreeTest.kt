@@ -74,4 +74,18 @@ class ViewTreeTest {
         val unknown = JSONArray(env.service.getViewTree(Int.MAX_VALUE))
         assertEquals(0, unknown.length())
     }
+
+    @Test
+    fun get_view_tree_works_again_after_the_idle_release() {
+        val displayId = env.createDisplay()
+        env.launchPuppet(displayId)
+        assertTrue(JSONArray(env.service.getViewTree(displayId)).length() > 0)
+
+        // 閒置釋放跑在 ViewTreeQuery 自己的執行緒上。
+        val release = Thread { env.service.viewTreeQuery.close() }
+        release.start()
+        release.join()
+
+        assertTrue(JSONArray(env.service.getViewTree(displayId)).length() > 0)
+    }
 }
