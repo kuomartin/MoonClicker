@@ -211,7 +211,7 @@ class WorkbenchServerTest {
                 val reason = closeReason.await()
 
                 assertEquals(CloseReason.Codes.VIOLATED_POLICY.code, reason?.code)
-                assertTrue(reason?.message.orEmpty().contains("app 2"))
+                assertTrue(reason?.message.orEmpty().contains("app $WORKBENCH_PROTOCOL_VERSION"))
             }
         }
     }
