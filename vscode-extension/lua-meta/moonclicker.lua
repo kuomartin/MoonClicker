@@ -208,6 +208,84 @@ function app.list() end
 ---@return boolean ok app 未安裝或系統拒絕設定時為 false
 function app.mute(package_name, muted) end
 
+---@class moonclicker.Ui
+ui = {}
+
+---@class moonclicker.UiNode
+---@field class string? 類別名稱，例如 `android.widget.Button`
+---@field text string? 顯示的文字
+---@field id string? resource id，例如 `com.example:id/ok`
+---@field desc string? contentDescription
+-- `package` 也是 LuaLS 的可見性修飾字，不先寫 `public` 會被吃掉。
+---@field public package string? 所在視窗的套件名稱
+---@field x integer 外框左上角 x（邏輯座標）
+---@field y integer 外框左上角 y
+---@field w integer 外框寬
+---@field h integer 外框高
+---@field cx integer 中心點 x，餵給 `input.tap`
+---@field cy integer 中心點 y，餵給 `input.tap`
+---@field clickable boolean
+---@field long_clickable boolean
+---@field checkable boolean
+---@field checked boolean
+---@field enabled boolean
+---@field focusable boolean
+---@field focused boolean
+---@field selected boolean
+---@field scrollable boolean
+---@field editable boolean
+---@field visible boolean 是否在畫面上看得到；畫面外或被裁掉的為 false
+---@field children moonclicker.UiNode[]
+
+---@class moonclicker.UiWindow
+---@field type "application"|"input_method"|"system"|"accessibility_overlay"|"split_screen_divider"|"unknown"
+---@field title string?
+---@field public package string? 根節點的套件名稱
+---@field root moonclicker.UiNode? 根節點；視窗還沒有內容時為 `nil`
+
+--- 選擇器：所有欄位都要符合。沒寫 `visible` 時只找看得到的節點。
+---@class moonclicker.UiSelector
+---@field text string? 文字完全相同
+---@field text_contains string? 文字包含（不是 pattern）
+---@field desc string? contentDescription 完全相同
+---@field desc_contains string? contentDescription 包含
+---@field id string? resource id，完整的 `com.example:id/ok` 或只寫 `ok`
+---@field class string? 類別，完整的 `android.widget.Button` 或只寫 `Button`
+---@field public package string? 視窗的套件名稱
+---@field clickable boolean?
+---@field long_clickable boolean?
+---@field checkable boolean?
+---@field checked boolean?
+---@field enabled boolean?
+---@field focusable boolean?
+---@field focused boolean?
+---@field selected boolean?
+---@field scrollable boolean?
+---@field editable boolean?
+---@field visible boolean? 預設 true
+
+--- 目標顯示器上的視窗，最上層的在前。需要 Android 11（API 30）以上；系統同時只允許一個
+--- UiAutomation，已有 `uiautomator` 或測試在用時拋錯。第一次約數百毫秒，之後畫面沒變時很快。
+---@return moonclicker.UiWindow[] windows
+function ui.dump() end
+
+--- 取一次樹，回傳第一個符合的節點（視窗由上而下、樹內先序）。找不到回傳 `nil`。
+---@param selector moonclicker.UiSelector|string 選擇器，字串是 `{ text = ... }` 的簡寫
+---@return moonclicker.UiNode? node
+function ui.find(selector) end
+
+--- 取一次樹，回傳所有符合的節點；沒有時為空陣列。
+---@param selector moonclicker.UiSelector|string 選擇器，字串是 `{ text = ... }` 的簡寫
+---@return moonclicker.UiNode[] nodes
+function ui.find_all(selector) end
+
+--- 等到出現為止，逾時回傳 `nil`。
+---@param selector moonclicker.UiSelector|string 選擇器，字串是 `{ text = ... }` 的簡寫
+---@param timeout_ms integer? 逾時毫秒數，選填，預設 10000
+---@param step_ms integer? 兩次取樹開始的最小間隔（毫秒），選填，預設 200
+---@return moonclicker.UiNode? node
+function ui.wait(selector, timeout_ms, step_ms) end
+
 ---@class moonclicker.Device
 device = {}
 

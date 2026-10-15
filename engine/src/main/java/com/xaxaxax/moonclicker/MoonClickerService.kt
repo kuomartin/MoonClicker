@@ -17,6 +17,7 @@ import com.xaxaxax.moonclicker.service.LauncherAppsCache
 import com.xaxaxax.moonclicker.service.PermissionGrants
 import com.xaxaxax.moonclicker.service.PlatformHandles
 import com.xaxaxax.moonclicker.service.TaskQuery
+import com.xaxaxax.moonclicker.service.ViewTreeQuery
 import com.xaxaxax.moonclicker.service.VirtualDisplayLifecycle
 import org.lsposed.hiddenapibypass.LSPass
 import timber.log.Timber
@@ -92,6 +93,9 @@ class MoonClickerService @JvmOverloads constructor(
     ) { platformHandles.windowManagerService }
     private val taskQuery = TaskQuery()
 
+    /** internal 給 Tier 1 測試收尾：系統同時只允許一個 UiAutomation，測試之間要釋放。 */
+    internal val viewTreeQuery = ViewTreeQuery()
+
     // launcherAppsCache 的建構本身有副作用（重掃套件、API 35+ 註冊套件變動回呼），得排在
     // LSPass exemption 生效之後，所以放進 init 區塊，不跟上面幾個模組一起在宣告時建構。
     private val launcherAppsCache: LauncherAppsCache
@@ -109,6 +113,7 @@ class MoonClickerService @JvmOverloads constructor(
                 "Landroid/app/ActivityOptions",         // ActivityLauncher
                 "Landroid/app/ActivityTaskManager",     // ActivityLauncher
                 "Landroid/app/AppOpsManager",            // AppMuting, PermissionGrants
+                "Landroid/app/UiAutomation",             // ViewTreeQuery
                 "Landroid/companion/",                   // VirtualDevices
                 "Landroid/content/pm/PackageManager",    // LauncherAppsCache, PermissionGrants
                 "Landroid/hardware/input/InputManager",  // InputInjector
@@ -185,6 +190,8 @@ class MoonClickerService @JvmOverloads constructor(
     override fun setAppMuted(packageName: String, muted: Boolean): Boolean =
         appMuting.setMuted(packageName, muted)
 
+    override fun getViewTree(displayId: Int): String = viewTreeQuery.dump(displayId)
+
     override fun multiTouchSwipe(pointerId: Int, displayId: Int, points: IntArray, duration: Long, keep: Boolean) =
         inputInjector.multiTouchSwipe(pointerId, displayId, points, duration, keep)
 
@@ -209,6 +216,7 @@ class MoonClickerService @JvmOverloads constructor(
 
     override fun destroy() {
         appMuting.restoreAll()
+        viewTreeQuery.close()
         virtualDisplayLifecycle.releaseAll()
         exitProcess(0)
     }

@@ -1,6 +1,7 @@
 #include "LuaBindings.h"
 #include "JsonString.h"
 #include "ScriptRuntime.h"
+#include "UiModule.h"
 
 #include <android/keycodes.h>
 
@@ -702,6 +703,45 @@ int lua_data_set(lua_State *L) {
     return 0;
 }
 
+// --- ui --------------------------------------------------------------------
+
+/** `ui` 模組取樹用，不公開給腳本。[1] 是寫進錯誤訊息的函式名，回傳 JSON 字串。 */
+int lua_ui_tree_json(lua_State *L) {
+    ScriptRuntime *runtime = self(L);
+    const char *function = luaL_checkstring(L, 1);
+    JNIEnv *env = runtime->env();
+    LocalRef<jbyteArray> bytes(env, (jbyteArray) runtime->hostObject(L, function, runtime->host().viewTree));
+    jsize length = env->GetArrayLength(bytes.get());
+    std::string json(static_cast<size_t>(length), '\0');
+    env->GetByteArrayRegion(bytes.get(), 0, length, reinterpret_cast<jbyte *>(json.data()));
+    lua_pushlstring(L, json.data(), json.size());
+    return 1;
+}
+
+int lua_ui_now_ms(lua_State *L) {
+    lua_pushinteger(L, nowMs());
+    return 1;
+}
+
+/** 執行 [kUiModuleSource]，把它回傳的表設成全域 `ui`。 */
+void registerUi(lua_State *L, ScriptRuntime *runtime) {
+    if (luaL_loadbuffer(L, kUiModuleSource, strlen(kUiModuleSource), "=ui") != LUA_OK) {
+        lua_error(L);
+    }
+    lua_pushlightuserdata(L, runtime);
+    lua_pushcclosure(L, lua_ui_tree_json, 1);
+    lua_pushcfunction(L, lua_ui_now_ms);
+    lua_getfield(L, LUA_REGISTRYINDEX, LUA_LOADED_TABLE);
+    lua_getfield(L, -1, "cjson");
+    lua_getfield(L, -1, "decode");
+    lua_replace(L, -3);  // decode 取代 package.loaded
+    lua_pop(L, 1);       // cjson 表
+    lua_pushlightuserdata(L, runtime);
+    lua_pushcclosure(L, lua_sleep, 1);
+    lua_call(L, 4, 1);
+    lua_setglobal(L, "ui");
+}
+
 // --- 註冊 ------------------------------------------------------------------
 
 /** 把 [functions] 註冊成一個全域表，每個函式都帶 runtime 當 upvalue。 */
@@ -794,6 +834,7 @@ void registerApi(lua_State *L, ScriptRuntime *runtime) {
     registerModule(L, runtime, "app", kApp);
     registerModule(L, runtime, "device", kDevice);
     registerModule(L, runtime, "data", kData);
+    registerUi(L, runtime);
 }
 
 }  // namespace moonclicker
