@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createServer, Server } from "node:http";
 import { after, before, test } from "node:test";
-import { evalRepl, getReplStatus, LineEditor, openRepl, resetRepl, toTerminal } from "../repl";
+import { evalRepl, LineEditor, listRepls, openRepl, resetRepl, toTerminal } from "../repl";
 
 let server: Server;
 let address: string;
@@ -15,16 +15,16 @@ before(async () => {
       lastBody = chunks.length ? JSON.parse(Buffer.concat(chunks).toString()) : undefined;
       if (req.url === "/repl" && req.method === "GET") {
         res.writeHead(200, { "content-type": "application/json" });
-        res.end(JSON.stringify({ open: false, busy: false }));
+        res.end(JSON.stringify([{ id: "1", displayId: 0, busy: true }]));
       } else if (req.url === "/repl/open" && req.method === "POST") {
         res.writeHead(200, { "content-type": "application/json" });
-        res.end(JSON.stringify({ open: true, displayId: 3, busy: false }));
-      } else if (req.url === "/repl/eval" && req.method === "POST") {
+        res.end(JSON.stringify({ id: "2", displayId: 3, busy: false }));
+      } else if (req.url === "/repl/2/eval" && req.method === "POST") {
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify({ status: "ok", output: "2" }));
       } else {
-        res.writeHead(409);
-        res.end("REPL is not open");
+        res.writeHead(404);
+        res.end("REPL 9 is not open");
       }
     });
   });
@@ -35,18 +35,19 @@ before(async () => {
 
 after(() => server.close());
 
-test("status, open and eval talk to the REPL routes", async () => {
-  assert.deepEqual(await getReplStatus(address), { open: false, busy: false });
+test("list, open and eval talk to the REPL routes", async () => {
+  assert.deepEqual(await listRepls(address), [{ id: "1", displayId: 0, busy: true }]);
 
-  assert.equal((await openRepl(address, 3, "demo")).displayId, 3);
+  const opened = await openRepl(address, 3, "demo");
+  assert.equal(opened.id, "2");
   assert.deepEqual(lastBody, { displayId: 3, scriptId: "demo" });
 
-  assert.deepEqual(await evalRepl(address, "1 + 1", "vscode-1"), { status: "ok", output: "2" });
+  assert.deepEqual(await evalRepl(address, opened.id, "1 + 1", "vscode-1"), { status: "ok", output: "2" });
   assert.deepEqual(lastBody, { code: "1 + 1", client: "vscode-1" });
 });
 
 test("a failed request carries the device's reason", async () => {
-  await assert.rejects(() => resetRepl(address), /REPL is not open/);
+  await assert.rejects(() => resetRepl(address, "9"), /REPL 9 is not open/);
 });
 
 test("typing and enter submit the line", () => {

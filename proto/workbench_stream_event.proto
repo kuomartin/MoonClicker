@@ -65,22 +65,28 @@ message FileChangeEvent {
   Kind kind = 3;
 }
 
-// REPL 的活動。所有連線看到的是同一個 REPL（VS Code 與 MCP 共用），所以每一段的程式碼與結果
-// 都推播出去，不只回給送出的那一端。
+// REPL 的活動。每個 REPL 的每一段程式碼與結果都推播給所有連線，不只回給送出的那一端：
+// 接上別人開的 REPL（例如 MCP 的）時才看得到對方做了什麼。
 message ReplEvent {
+  // log、chunk、data 屬於哪個 REPL；list 時為空字串。
+  string repl_id = 5;
   oneof event {
-    ReplStateEvent state = 1;
+    ReplListEvent list = 1;
     // REPL 以 `log(...)` 送出的一行。
     string log = 2;
     ReplChunkEvent chunk = 3;
-    // REPL 的 `data` 變動；script_id 一律是空字串，規則同腳本的 DataEvent。
+    // REPL 的 `data` 變動；script_id 是 REPL id，規則同腳本的 DataEvent。
     DataEvent data = 4;
   }
 }
 
-// REPL 開關、目標或忙碌狀態變動時推播；連線當下一律先送一筆。
+// 所有開著的 REPL，依開啟順序。開、關、重設或忙碌狀態變動時推播完整清單；連線當下一律先送一筆。
+message ReplListEvent {
+  repeated ReplStateEvent repls = 1;
+}
+
 message ReplStateEvent {
-  bool open = 1;
+  string id = 1;
   int32 display_id = 2;
   // `require` 與模板路徑的根；空字串表示整個 scripts 資料夾。
   string script_id = 3;

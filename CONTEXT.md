@@ -85,7 +85,7 @@ The public Kotlin facade over native `LuaNative` bindings in `:engine`. Each ins
 _Avoid_: LuaEngineControl, JNI bridge, LuaNative (when referencing public caller API).
 
 **REPL Session**:
-A persistent Lua session independent of scripts (`ReplSession` in `:engine`, `ReplManager` in `:app`): its own Lua state and thread with the same API as a script, opened on one display. Globals persist until reset or close; each chunk's `local`s do not. Interrupting stops only the running chunk. The app has exactly one, shared by every Workbench client (VS Code, MCP). It does not occupy its display.
+A persistent Lua session independent of scripts (`ReplSession` in `:engine`, `ReplManager` in `:app`): its own Lua state and thread with the same API as a script, opened on one display. Globals persist until reset or close; each chunk's `local`s do not. Interrupting stops only the running chunk. Up to four can be open at once, each with its own id and state; a Workbench client (VS Code, MCP) opens its own or attaches to an existing one by id, and every client sees each REPL's chunks. It does not occupy its display.
 _Avoid_: Console, interactive script, shell.
 
 **ScriptHost**:

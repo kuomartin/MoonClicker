@@ -4,6 +4,8 @@ import com.xaxaxax.moonclicker.engine.ReplResult
 import com.xaxaxax.moonclicker.engine.ReplStatus
 import com.xaxaxax.moonclicker.script.ReplChunk
 import com.xaxaxax.moonclicker.script.ReplInfo
+import com.xaxaxax.moonclicker.script.ReplLimitException
+import com.xaxaxax.moonclicker.script.ReplLogLine
 import com.xaxaxax.moonclicker.script.ReplState
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
@@ -23,15 +25,16 @@ import kotlinx.serialization.json.Json
 
 /** REPL 需要的最小介面，理由同 [ScriptRunner]。真正實作轉呼叫 [com.xaxaxax.moonclicker.script.ReplManager]。 */
 interface ReplRunner {
-    val state: StateFlow<ReplState>
-    val logLines: Flow<String>
+    val state: StateFlow<List<ReplState>>
+    val logLines: Flow<ReplLogLine>
     val chunks: Flow<ReplChunk>
-    val sharedData: Flow<Map<String, Any>>
+    val sharedData: Flow<Map<String, Map<String, Any>>>
     suspend fun open(displayId: Int, scriptId: String?): Result<ReplInfo>
-    suspend fun reset(): Result<ReplInfo>
-    suspend fun close()
-    suspend fun eval(code: String, client: String): ReplResult
-    fun interrupt()
+    /** 沒有這個 REPL 時回 null。 */
+    suspend fun reset(id: String): Result<ReplInfo>?
+    suspend fun close(id: String): Boolean
+    suspend fun eval(id: String, code: String, client: String): ReplResult
+    fun interrupt(id: String): Boolean
 }
 
 /** `POST /repl/open` 的 body。[scriptId] 是 `require` 與模板路徑的根，省略時是整個 scripts 資料夾。 */
@@ -55,17 +58,17 @@ enum class ReplResultStatus {
 @Serializable
 data class ReplEvalResponse(val status: ReplResultStatus, val output: String)
 
-/** `GET /repl` 與 open/reset 的回應。[displayId]、[scriptId] 只在 [open] 時有意義。 */
+/** 一個 REPL 的狀態：`GET /repl` 的每一筆，也是 open/reset 的回應。 */
 @Serializable
 data class ReplStatusResponse(
-    val open: Boolean,
-    val displayId: Int? = null,
+    val id: String,
+    val displayId: Int,
     val scriptId: String? = null,
     val busy: Boolean,
 )
 
 internal fun ReplState.toResponse() =
-    ReplStatusResponse(open = info != null, displayId = info?.displayId, scriptId = info?.scriptId, busy = busy)
+    ReplStatusResponse(id = info.id, displayId = info.displayId, scriptId = info.scriptId, busy = busy)
 
 internal fun ReplStatus.toResponse(): ReplResultStatus = when (this) {
     ReplStatus.OK -> ReplResultStatus.OK
@@ -75,10 +78,13 @@ internal fun ReplStatus.toResponse(): ReplResultStatus = when (this) {
     ReplStatus.CLOSED -> ReplResultStatus.CLOSED
 }
 
-/** REPL 的開關與執行。整個 App 只有一個 REPL，所有連線共用。 */
+/**
+ * REPL 的開關與執行。每個 REPL 以 open 時配發的 id 指定；誰都可以對任何一個 REPL 送程式碼，
+ * 這樣 VS Code 才能接上 MCP 開的那個。
+ */
 fun Route.replRoutes(repl: ReplRunner) {
     get("/repl") {
-        call.respondJson(Json.encodeToString(repl.state.value.toResponse()))
+        call.respondJson(Json.encodeToString(repl.state.value.map { it.toResponse() }))
     }
 
     post("/repl/open") {
@@ -90,47 +96,56 @@ fun Route.replRoutes(repl: ReplRunner) {
         call.respondOpened(repl.open(body.displayId, body.scriptId), repl)
     }
 
-    post("/repl/reset") {
-        if (repl.state.value.info == null) {
-            call.respondText("REPL is not open", status = HttpStatusCode.Conflict)
-            return@post
-        }
-        call.respondOpened(repl.reset(), repl)
+    get("/repl/{id}") {
+        val state = repl.state.value.find { it.info.id == call.parameters["id"] }
+        if (state == null) call.respondNotOpen() else call.respondJson(Json.encodeToString(state.toResponse()))
     }
 
-    post("/repl/close") {
-        repl.close()
-        call.respondText("Closed")
+    post("/repl/{id}/reset") {
+        val result = repl.reset(call.parameters["id"]!!)
+        if (result == null) call.respondNotOpen() else call.respondOpened(result, repl)
     }
 
-    // 回應等到這段跑完才送出；要中斷就另外送 /repl/interrupt。
-    post("/repl/eval") {
+    post("/repl/{id}/close") {
+        if (repl.close(call.parameters["id"]!!)) call.respondText("Closed") else call.respondNotOpen()
+    }
+
+    // 回應等到這段跑完才送出；要中斷就另外送 /repl/{id}/interrupt。
+    post("/repl/{id}/eval") {
         val body = runCatching { Json.decodeFromString<ReplEvalRequest>(call.receiveText()) }.getOrNull()
         if (body == null) {
             call.respondText("Invalid request body", status = HttpStatusCode.BadRequest)
             return@post
         }
-        if (repl.state.value.info == null) {
-            call.respondText("REPL is not open", status = HttpStatusCode.Conflict)
+        val id = call.parameters["id"]!!
+        if (repl.state.value.none { it.info.id == id }) {
+            call.respondNotOpen()
             return@post
         }
-        val result = repl.eval(body.code, body.client)
+        val result = repl.eval(id, body.code, body.client)
         call.respondJson(Json.encodeToString(ReplEvalResponse(result.status.toResponse(), result.output)))
     }
 
-    post("/repl/interrupt") {
-        repl.interrupt()
-        call.respondText("Interrupted")
+    post("/repl/{id}/interrupt") {
+        if (repl.interrupt(call.parameters["id"]!!)) call.respondText("Interrupted") else call.respondNotOpen()
     }
 }
+
+private suspend fun ApplicationCall.respondNotOpen() =
+    respondText("REPL ${parameters["id"]} is not open", status = HttpStatusCode.NotFound)
 
 private suspend fun ApplicationCall.respondOpened(result: Result<ReplInfo>, repl: ReplRunner) {
     result.fold(
         onSuccess = { info ->
-            respondJson(Json.encodeToString(ReplStatusResponse(true, info.displayId, info.scriptId, repl.state.value.busy)))
+            val busy = repl.state.value.find { it.info.id == info.id }?.busy ?: false
+            respondJson(Json.encodeToString(ReplStatusResponse(info.id, info.displayId, info.scriptId, busy)))
         },
         onFailure = { error ->
-            val status = if (error is IllegalArgumentException) HttpStatusCode.NotFound else HttpStatusCode.InternalServerError
+            val status = when (error) {
+                is IllegalArgumentException -> HttpStatusCode.NotFound
+                is ReplLimitException -> HttpStatusCode.Conflict
+                else -> HttpStatusCode.InternalServerError
+            }
             respondText(error.message ?: "Failed to open the REPL", status = status)
         },
     )

@@ -20,11 +20,13 @@ export interface ReplEndpoint {
  * 裝置上 REPL 的終端機。輸入一行就送出；語法沒寫完時以 `>>` 接著輸入，與官方 `lua` 相同。
  * Ctrl+C 在有程式碼跑著時中斷那一段，否則放棄目前這一行。
  *
- * 同一個 REPL 也可能被別的連線（MCP）使用：它們跑的程式碼與結果從串流進來，也印在這裡。
+ * 接上別的連線（MCP）開的 REPL 時，對方跑的程式碼與結果從串流進來，也印在這裡。
  */
 export class ReplTerminal implements vscode.Pseudoterminal {
   /** 隨每段程式碼送出，串流回來時用來分辨是不是自己送的。 */
   readonly client = `vscode-${randomUUID()}`;
+  /** 這個終端機接著的 REPL。 */
+  readonly replId: string;
 
   private readonly writeEmitter = new vscode.EventEmitter<string>();
   private readonly closeEmitter = new vscode.EventEmitter<void>();
@@ -47,12 +49,14 @@ export class ReplTerminal implements vscode.Pseudoterminal {
     private readonly onClosed: () => void,
     /** Ctrl+D 在空行上：關閉裝置上的 REPL。 */
     private readonly onEof: () => void,
-  ) {}
+  ) {
+    this.replId = status.id;
+  }
 
   open(): void {
     const where = this.status.scriptId
-      ? vscode.l10n.t("MoonClicker REPL on display {0}, scripts root \"{1}\"", this.status.displayId ?? 0, this.status.scriptId)
-      : vscode.l10n.t("MoonClicker REPL on display {0}", this.status.displayId ?? 0);
+      ? vscode.l10n.t("MoonClicker REPL on display {0}, scripts root \"{1}\"", this.status.displayId, this.status.scriptId)
+      : vscode.l10n.t("MoonClicker REPL on display {0}", this.status.displayId);
     this.writeEmitter.fire(
       `${DIM}${where}\r\n` +
         vscode.l10n.t("Globals persist until reset; Ctrl+C interrupts the running code; Ctrl+D closes the REPL.") +
@@ -107,7 +111,7 @@ export class ReplTerminal implements vscode.Pseudoterminal {
   interrupt(): void {
     const endpoint = this.endpoint();
     if (!endpoint) return;
-    interruptRepl(endpoint.address, endpoint.token).catch((err) => this.printError(errorText(err)));
+    interruptRepl(endpoint.address, this.replId, endpoint.token).catch((err) => this.printError(errorText(err)));
   }
 
   printLog(line: string): void {
@@ -122,13 +126,12 @@ export class ReplTerminal implements vscode.Pseudoterminal {
     this.printResult({ status: statusName(chunk.status), output: chunk.output });
   }
 
-  onState(state: ReplStateEvent): void {
-    this.deviceBusy = state.busy;
-    if (!state.open && this.open_) this.print(`${YELLOW}${vscode.l10n.t("The REPL on the device was closed.")}${RESET}`);
-    if (state.open && !this.open_) {
-      this.print(`${DIM}${vscode.l10n.t("MoonClicker REPL on display {0}", state.displayId)}${RESET}`);
-    }
-    this.open_ = state.open;
+  /** 裝置上開著的 REPL 清單；自己這個不在裡面就是被關掉了（例如被別的連線關掉）。 */
+  onList(repls: ReplStateEvent[]): void {
+    const mine = repls.find((repl) => repl.id === this.replId);
+    this.deviceBusy = mine?.busy ?? false;
+    if (!mine && this.open_) this.print(`${YELLOW}${vscode.l10n.t("The REPL on the device was closed.")}${RESET}`);
+    this.open_ = mine !== undefined;
   }
 
   /** 在提示字元上方印一段文字，再把正在輸入的那一行畫回來。 */
@@ -173,7 +176,7 @@ export class ReplTerminal implements vscode.Pseudoterminal {
       const endpoint = this.endpoint();
       try {
         if (!endpoint) throw new Error(vscode.l10n.t("MoonClicker: Not connected to a device"));
-        const result = await evalRepl(endpoint.address, code, this.client, endpoint.token);
+        const result = await evalRepl(endpoint.address, this.replId, code, this.client, endpoint.token);
         if (typed && result.status === "incomplete") {
           this.pending = code;
           this.editor.prompt = CONTINUATION;

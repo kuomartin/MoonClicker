@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -32,18 +33,23 @@ import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** REPL 開在哪裡。[scriptId] 為 null 時以整個 scripts 資料夾為根。 */
-data class ReplInfo(val displayId: Int, val scriptId: String?)
+/** 一個 REPL 開在哪裡。[id] 由 [ReplManager] 配發，reset 後不變。[scriptId] 為 null 時以整個 scripts 資料夾為根。 */
+data class ReplInfo(val id: String, val displayId: Int, val scriptId: String?)
 
-/** [info] 為 null 表示沒有開著的 REPL。[busy] 表示有程式碼正在跑或排隊。 */
-data class ReplState(val info: ReplInfo? = null, val busy: Boolean = false)
+/** [busy] 表示有程式碼正在跑或排隊。 */
+data class ReplState(val info: ReplInfo, val busy: Boolean = false)
+
+/** [replId] 的 REPL 以 `log(...)` 送出的一行。 */
+data class ReplLogLine(val replId: String, val line: String)
 
 /** 跑完的一段。[client] 是送出端自己帶的識別。 */
-data class ReplChunk(val client: String, val code: String, val result: ReplResult)
+data class ReplChunk(val replId: String, val client: String, val code: String, val result: ReplResult)
+
+class ReplLimitException : IllegalStateException("At most ${ReplManager.MAX_REPLS} REPLs can be open at once")
 
 /**
- * App 裡唯一的 REPL：VS Code 與 MCP 共用同一個 [ReplSession]，誰開、誰重設都是同一個。
- * 開著時持有 UserService 的租約。
+ * App 裡所有開著的 REPL，各自一個 [ReplSession]、互不影響。VS Code 與 MCP 預設各開各的，
+ * 也可以接上別人開的那個（以 id 指定）。每個開著的 REPL 持有一份 UserService 租約。
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @Singleton
@@ -54,63 +60,81 @@ class ReplManager @Inject constructor(
     private val notifier: ScriptStatusNotifier,
     private val ocrManager: OcrManager,
 ) {
+    private class Entry(val info: ReplInfo, val session: ReplSession, val logJob: Job)
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     /** 序列化開、重設、關。 */
     private val lifecycle = Mutex()
+    private var nextId = 1
 
-    private val session = MutableStateFlow<Pair<ReplInfo, ReplSession>?>(null)
-    private var logJob: Job? = null
-    private val running = MutableStateFlow(0)
+    private val entries = MutableStateFlow<Map<String, Entry>>(emptyMap())
+    private val running = MutableStateFlow<Map<String, Int>>(emptyMap())
 
-    val state: StateFlow<ReplState> =
-        combine(session, running) { current, count -> ReplState(current?.first, count > 0) }
-            .stateIn(scope, SharingStarted.Eagerly, ReplState())
+    /** 所有開著的 REPL，依開啟順序。 */
+    val state: StateFlow<List<ReplState>> =
+        combine(entries, running) { current, counts ->
+            current.values.map { ReplState(it.info, (counts[it.info.id] ?: 0) > 0) }
+        }.stateIn(scope, SharingStarted.Eagerly, emptyList())
 
-    private val _logLines = MutableSharedFlow<String>(extraBufferCapacity = 256)
-
-    /** 目前 REPL 以 `log(...)` 送出的每一行。 */
-    val logLines: SharedFlow<String> = _logLines.asSharedFlow()
+    private val _logLines = MutableSharedFlow<ReplLogLine>(extraBufferCapacity = 256)
+    val logLines: SharedFlow<ReplLogLine> = _logLines.asSharedFlow()
 
     private val _chunks = MutableSharedFlow<ReplChunk>(extraBufferCapacity = 64)
 
-    /** 每一段跑完的結果，不論是誰送的。 */
+    /** 每一段跑完的結果，不論是哪個 REPL、誰送的。 */
     val chunks: SharedFlow<ReplChunk> = _chunks.asSharedFlow()
 
-    /** 目前 REPL 以 `data.set` 發佈的鍵值；換一個 REPL 時從空的開始。 */
-    val sharedData: Flow<Map<String, Any>> =
-        session.flatMapLatest { it?.second?.sharedData ?: flowOf(emptyMap()) }
+    /** 每個 REPL 以 `data.set` 發佈的鍵值，key 是 REPL id；reset 後從空的開始。 */
+    val sharedData: Flow<Map<String, Map<String, Any>>> =
+        entries.flatMapLatest { current ->
+            if (current.isEmpty()) {
+                flowOf(emptyMap())
+            } else {
+                combine(current.values.map { entry -> entry.session.sharedData.map { entry.info.id to it } }) { it.toMap() }
+            }
+        }
 
-    /** 開一個新的 REPL；已經開著的（不論目標）先關掉，state 不保留。 */
+    /**
+     * 開一個新的 REPL，不影響已經開著的。已經開了 [MAX_REPLS] 個時以 [ReplLimitException] 失敗：
+     * 每個 REPL 是一條 Lua 執行緒，有影格來源時還各掛一個 sink。
+     */
     suspend fun open(displayId: Int, scriptId: String?): Result<ReplInfo> = lifecycle.withLock {
-        closeLocked()
-        openLocked(ReplInfo(displayId, scriptId))
+        if (entries.value.size >= MAX_REPLS) return@withLock Result.failure(ReplLimitException())
+        openLocked(ReplInfo((nextId++).toString(), displayId, scriptId))
     }
 
-    /** 以同樣的目標重開，清空 state。沒有開著的 REPL 時失敗。 */
-    suspend fun reset(): Result<ReplInfo> = lifecycle.withLock {
-        val info = session.value?.first ?: return@withLock Result.failure(IllegalStateException("REPL is not open"))
-        closeLocked()
+    /** 以同樣的 id 與目標重開，清空 state。沒有這個 REPL 時回 null。 */
+    suspend fun reset(id: String): Result<ReplInfo>? = lifecycle.withLock {
+        val info = entries.value[id]?.info ?: return@withLock null
+        closeLocked(id)
         openLocked(info)
     }
 
-    suspend fun close() = lifecycle.withLock { closeLocked() }
+    /** 沒有這個 REPL 時回 false。 */
+    suspend fun close(id: String): Boolean = lifecycle.withLock { closeLocked(id) }
 
-    /** 跑一段程式碼並等結果。沒有開著的 REPL 時回 [ReplStatus.CLOSED]。 */
-    suspend fun eval(code: String, client: String): ReplResult {
-        val current = session.value?.second ?: return ReplResult(ReplStatus.CLOSED, "REPL is not open")
-        running.update { it + 1 }
+    /** 跑一段程式碼並等結果。沒有這個 REPL 時回 [ReplStatus.CLOSED]。 */
+    suspend fun eval(id: String, code: String, client: String): ReplResult {
+        val entry = entries.value[id] ?: return ReplResult(ReplStatus.CLOSED, "REPL $id is not open")
+        running.update { it + (id to (it[id] ?: 0) + 1) }
         val result = try {
-            current.eval(code)
+            entry.session.eval(code)
         } finally {
-            running.update { it - 1 }
+            running.update { counts ->
+                val left = (counts[id] ?: 1) - 1
+                if (left > 0) counts + (id to left) else counts - id
+            }
         }
-        _chunks.emit(ReplChunk(client, code, result))
+        _chunks.emit(ReplChunk(id, client, code, result))
         return result
     }
 
-    fun interrupt() {
-        session.value?.second?.interrupt()
+    /** 沒有這個 REPL 時回 false。 */
+    fun interrupt(id: String): Boolean {
+        val entry = entries.value[id] ?: return false
+        entry.session.interrupt()
+        return true
     }
 
     private suspend fun openLocked(info: ReplInfo): Result<ReplInfo> {
@@ -134,18 +158,22 @@ class ReplManager @Inject constructor(
         }.getOrElse { Result.failure(IllegalStateException("Shizuku service unavailable")) }
 
         return opened.map { repl ->
-            logJob = scope.launch { repl.logLines.collect { _logLines.emit(it) } }
-            session.value = info to repl
+            val logJob = scope.launch { repl.logLines.collect { _logLines.emit(ReplLogLine(info.id, it)) } }
+            entries.update { it + (info.id to Entry(info, repl, logJob)) }
             info
         }
     }
 
-    private fun closeLocked() {
-        val (_, repl) = session.value ?: return
-        session.value = null
-        repl.close()
-        logJob?.cancel()
-        logJob = null
+    companion object {
+        const val MAX_REPLS = 4
+    }
+
+    private fun closeLocked(id: String): Boolean {
+        val entry = entries.value[id] ?: return false
+        entries.update { it - id }
+        entry.session.close()
+        entry.logJob.cancel()
         shizukuManager.leases.release()
+        return true
     }
 }
