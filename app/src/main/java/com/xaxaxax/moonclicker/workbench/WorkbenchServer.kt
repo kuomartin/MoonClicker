@@ -1,6 +1,7 @@
 package com.xaxaxax.moonclicker.workbench
 
 import android.os.Build
+import com.xaxaxax.moonclicker.BuildConfig
 import com.xaxaxax.moonclicker.IMoonClickerService
 import com.xaxaxax.moonclicker.core.AppSettings
 import com.xaxaxax.moonclicker.core.OcrManager
@@ -123,6 +124,13 @@ interface DisplaySource {
 
     /** 在 [displayId] 上注入一次觸控；回 false 表示服務不在或座標無效。 */
     suspend fun inject(displayId: Int, gesture: MirrorGesture): Boolean = false
+    /** [points] 是邏輯座標 `[x1, y1, x2, y2, ...]`，至少兩個點；見 `multiTouchSwipe`。 */
+    suspend fun touch(displayId: Int, points: IntArray, durationMs: Long): Result<Unit> =
+        Result.failure(UnsupportedOperationException("touch"))
+    suspend fun screenshot(displayId: Int, maxEdge: Int): Result<DisplayScreenshot> =
+        Result.failure(UnsupportedOperationException("screenshot"))
+    /** 服務端 `getViewTree` 的 JSON。 */
+    suspend fun viewTree(displayId: Int): Result<String> = Result.failure(UnsupportedOperationException("view tree"))
 }
 
 @Singleton
@@ -194,6 +202,24 @@ class WorkbenchServer @Inject constructor(
                 service.multiTouchSwipe(-1, displayId, gesture.toLogical(size[0], size[1]), gesture.durationMs, false)
                 true
             }.getOrDefault(false)
+
+        override suspend fun touch(displayId: Int, points: IntArray, durationMs: Long): Result<Unit> =
+            shizukuManager.withService { service ->
+                val size = service.getDisplaySize(displayId)
+                require(size != null && size.size >= 2 && size[0] > 0) { "Display $displayId not found" }
+                for (i in points.indices step 2) {
+                    require(points[i] in 0 until size[0] && points[i + 1] in 0 until size[1]) {
+                        "Point (${points[i]}, ${points[i + 1]}) is outside display $displayId (${size[0]}x${size[1]})"
+                    }
+                }
+                service.multiTouchSwipe(-1, displayId, points, durationMs, false)
+            }
+
+        override suspend fun screenshot(displayId: Int, maxEdge: Int): Result<DisplayScreenshot> =
+            shizukuManager.withService { service -> captureScreenshot(service, displayId, maxEdge) }.mapCatching { it.getOrThrow() }
+
+        override suspend fun viewTree(displayId: Int): Result<String> =
+            shizukuManager.withService { service -> service.getViewTree(displayId) }
     }
 
     private var server: EmbeddedServer<*, *>? = null
@@ -228,6 +254,7 @@ class WorkbenchServer @Inject constructor(
                         deviceInfo = {
                             WorkbenchDeviceInfo(authStore.instanceId, Build.MODEL, WORKBENCH_PROTOCOL_VERSION)
                         },
+                        appVersion = BuildConfig.VERSION_NAME,
                     )
                 },
             ).start(wait = false)
@@ -374,6 +401,7 @@ fun Application.workbenchModule(
     deviceInfo: () -> WorkbenchDeviceInfo = {
         WorkbenchDeviceInfo("test-device", "Test Device", WORKBENCH_PROTOCOL_VERSION)
     },
+    appVersion: String = "test",
 ) {
     install(WebSockets)
     // 誰透過 HTTP 單檔案 API 寫入，都要推給每個開著的 WebSocket——一個 VS Code client
@@ -515,5 +543,6 @@ fun Application.workbenchModule(
         scriptRoutes(scriptsRoot, scriptRunner, fileChanges)
         visionRoutes(scriptsRoot, scriptRunner, fileChanges, ocrAvailable)
         if (repl != null) replRoutes(repl)
+        mcpRoutes(this@workbenchModule, scriptsRoot, scriptRunner, scriptStream, displaySource, repl, appVersion)
     }
 }

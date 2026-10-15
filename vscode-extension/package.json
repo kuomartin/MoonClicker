@@ -96,6 +96,10 @@
       {
         "command": "moonclicker.repl.close",
         "title": "%command.repl.close%"
+      },
+      {
+        "command": "moonclicker.copyMcpConfig",
+        "title": "%command.copyMcpConfig%"
       }
     ],
     "menus": {

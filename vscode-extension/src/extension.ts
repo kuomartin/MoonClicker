@@ -13,6 +13,7 @@ import { stopRun } from "./visionTest";
 import { ScriptDataStore } from "./scriptStreamState";
 import { errorText, localize } from "./l10n";
 import { closeRepl, listRepls, openRepl, resetRepl, type ReplStatus } from "./repl";
+import { mcpServerConfig } from "./mcp";
 import { ReplTerminal } from "./replTerminal";
 
 let connection: WorkbenchConnection | undefined;
@@ -158,6 +159,14 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("moonclicker.repl.interrupt", () => repl?.pty.interrupt()),
     vscode.commands.registerCommand("moonclicker.repl.reset", resetReplCommand),
     vscode.commands.registerCommand("moonclicker.repl.close", closeReplCommand),
+    vscode.commands.registerCommand("moonclicker.copyMcpConfig", async () => {
+      const address = connectedAddress();
+      if (!address) return;
+      await vscode.env.clipboard.writeText(mcpServerConfig(address, activeToken));
+      vscode.window.showInformationMessage(
+        vscode.l10n.t("MoonClicker: MCP server config copied. It contains the Workbench token; keep it private."),
+      );
+    }),
     vscode.commands.registerCommand("moonclicker.refresh", () => {
       workspaceProvider.refresh();
       folderSync.resync();
