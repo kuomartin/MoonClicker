@@ -1,10 +1,18 @@
 package com.xaxaxax.moonclicker.workbench
 
+import com.xaxaxax.moonclicker.engine.ReplStatus
+import com.xaxaxax.moonclicker.script.ReplChunk
+import com.xaxaxax.moonclicker.script.ReplLogLine
+import com.xaxaxax.moonclicker.script.ReplState
 import io.ktor.websocket.Frame
 import java.io.File
 import moonclicker.workbench.DataEvent
 import moonclicker.workbench.FileChangeEvent
 import moonclicker.workbench.LogEvent
+import moonclicker.workbench.ReplChunkEvent
+import moonclicker.workbench.ReplEvent
+import moonclicker.workbench.ReplListEvent
+import moonclicker.workbench.ReplStateEvent
 import moonclicker.workbench.RunStateEvent
 import moonclicker.workbench.StreamEvent
 
@@ -24,21 +32,29 @@ internal fun logFrame(scriptId: String, line: String): Frame =
  * `IllegalArgumentException`，未知型別因此在送出前先轉成字串，不讓一個不符預期的值
  * 讓整個 WebSocket session 崩潰。
  */
-internal fun dataFrame(scriptId: String, previous: Map<String, Any>?, current: Map<String, Any>): Frame? {
-    val event = if (previous == null) {
+internal fun dataFrame(scriptId: String, previous: Map<String, Any>?, current: Map<String, Any>): Frame? =
+    dataEvent(scriptId, previous, current)?.let { Frame.Binary(true, StreamEvent.ADAPTER.encode(StreamEvent(data_ = it))) }
+
+/** 同 [dataFrame]，給 REPL 包進 [ReplEvent]；`DataEvent.script_id` 也填 REPL id。 */
+internal fun replDataFrame(replId: String, previous: Map<String, Any>?, current: Map<String, Any>): Frame? =
+    dataEvent(replId, previous, current)?.let { replFrame(ReplEvent(repl_id = replId, data_ = it)) }
+
+private fun dataEvent(scriptId: String, previous: Map<String, Any>?, current: Map<String, Any>): DataEvent? =
+    if (previous == null) {
         DataEvent(script_id = scriptId, reset = true, values = current.mapValues { (_, value) -> value.toStructValue() })
     } else {
         val changed = current.filter { (key, value) -> previous[key] != value }
         val removed = previous.keys - current.keys
-        if (changed.isEmpty() && removed.isEmpty()) return null
-        DataEvent(
-            script_id = scriptId,
-            values = changed.mapValues { (_, value) -> value.toStructValue() },
-            removed = removed.toList(),
-        )
+        if (changed.isEmpty() && removed.isEmpty()) {
+            null
+        } else {
+            DataEvent(
+                script_id = scriptId,
+                values = changed.mapValues { (_, value) -> value.toStructValue() },
+                removed = removed.toList(),
+            )
+        }
     }
-    return Frame.Binary(true, StreamEvent.ADAPTER.encode(StreamEvent(data_ = event)))
-}
 
 private fun Any.toStructValue(): Any = when (this) {
     is Double, is Boolean, is String -> this
@@ -65,6 +81,45 @@ internal fun fileChangeFrame(change: ScriptFileChange): Frame =
 
 internal fun runStateFrame(runningScriptIds: List<String>): Frame =
     Frame.Binary(true, StreamEvent.ADAPTER.encode(StreamEvent(run_state = RunStateEvent(running_script_ids = runningScriptIds))))
+
+internal fun replListFrame(states: List<ReplState>): Frame =
+    replFrame(
+        ReplEvent(
+            list = ReplListEvent(
+                repls = states.map {
+                    ReplStateEvent(
+                        id = it.info.id,
+                        display_id = it.info.displayId,
+                        script_id = it.info.scriptId.orEmpty(),
+                        busy = it.busy,
+                    )
+                },
+            )
+        )
+    )
+
+internal fun replLogFrame(line: ReplLogLine): Frame = replFrame(ReplEvent(repl_id = line.replId, log = line.line))
+
+internal fun replChunkFrame(chunk: ReplChunk): Frame =
+    replFrame(
+        ReplEvent(
+            repl_id = chunk.replId,
+            chunk = ReplChunkEvent(
+                client = chunk.client,
+                code = chunk.code,
+                status = when (chunk.result.status) {
+                    ReplStatus.OK -> ReplChunkEvent.Status.OK
+                    ReplStatus.ERROR -> ReplChunkEvent.Status.ERROR
+                    ReplStatus.INCOMPLETE -> ReplChunkEvent.Status.INCOMPLETE
+                    ReplStatus.INTERRUPTED -> ReplChunkEvent.Status.INTERRUPTED
+                    ReplStatus.CLOSED -> ReplChunkEvent.Status.CLOSED
+                },
+                output = chunk.result.output,
+            )
+        )
+    )
+
+private fun replFrame(event: ReplEvent): Frame = Frame.Binary(true, StreamEvent.ADAPTER.encode(StreamEvent(repl = event)))
 
 internal fun File.sha256Hex(): String {
     val digest = java.security.MessageDigest.getInstance("SHA-256")
