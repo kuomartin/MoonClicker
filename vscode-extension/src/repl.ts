@@ -67,7 +67,8 @@ export function toTerminal(text: string): string {
 /** [LineEditor.feed] 要呼叫端做的事。 */
 export type LineAction =
   | { kind: "submit"; line: string }
-  | { kind: "interrupt" };
+  | { kind: "interrupt" }
+  | { kind: "eof" };
 
 /**
  * REPL 終端機的單行編輯：游標移動、退格、歷史。不依賴 vscode，餵進終端機收到的原始輸入，
@@ -126,6 +127,10 @@ export class LineEditor {
         actions.push({ kind: "submit", line });
       } else if (ch === "\x03") {
         actions.push({ kind: "interrupt" });
+      } else if (ch === "\x04") {
+        // 與 readline 相同：空行是 EOF，否則刪掉游標上的字。
+        if (this.buffer === "") actions.push({ kind: "eof" });
+        else output += this.handleEscape("3~");
       } else if (ch === "\x7f" || ch === "\b") {
         if (this.cursor > 0) {
           this.buffer = this.buffer.slice(0, this.cursor - 1) + this.buffer.slice(this.cursor);

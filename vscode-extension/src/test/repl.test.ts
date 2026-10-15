@@ -92,6 +92,14 @@ test("ctrl+c asks to interrupt", () => {
   assert.deepEqual(editor.feed("\x03").actions, [{ kind: "interrupt" }]);
 });
 
+test("ctrl+d closes on an empty line and deletes forward otherwise", () => {
+  const editor = new LineEditor();
+  assert.deepEqual(editor.feed("\x04").actions, [{ kind: "eof" }]);
+  editor.feed("abc\x1b[D\x1b[D");
+  assert.deepEqual(editor.feed("\x04").actions, []);
+  assert.equal(editor.line, "ac");
+});
+
 test("terminal output uses CRLF", () => {
   assert.equal(toTerminal("a\nb\r\nc"), "a\r\nb\r\nc");
 });

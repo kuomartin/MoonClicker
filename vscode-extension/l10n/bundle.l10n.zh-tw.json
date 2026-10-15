@@ -74,7 +74,7 @@
   "Failed to write file (HTTP {0}): {1}": "寫入檔案失敗（HTTP {0}）：{1}",
   "Filter by script": "依腳本篩選",
   "Format must be ip:port": "格式需要是 ip:port",
-  "Globals persist until reset; Ctrl+C interrupts the running code.": "全域變數保留到重設；Ctrl+C 中斷正在執行的程式碼。",
+  "Globals persist until reset; Ctrl+C interrupts the running code; Ctrl+D closes the REPL.": "全域變數保留到重設；Ctrl+C 中斷正在執行的程式碼；Ctrl+D 關閉 REPL。",
   "If you keep them, they are downloaded again on the next sync.": "選擇保留時，這些腳本下次同步會重新下載到本機。",
   "Interrupted": "已中斷",
   "Interval": "間隔",
