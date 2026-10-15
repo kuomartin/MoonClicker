@@ -43,6 +43,29 @@ internal object LuaNative {
         ocrThreads: Int,
     ): Long
 
+    /**
+     * 以 REPL 模式啟動：執行緒不跑 `main.lua`，等 [nativeReplEval] 送來的程式碼。參數同 [nativeStart]，
+     * [scriptDir] 是 `require` 與模板路徑的根。結果以 [ScriptHost.replResult] 回報。
+     */
+    external fun nativeStartRepl(
+        host: ScriptHost,
+        displayId: Int,
+        isPhysical: Boolean,
+        withVision: Boolean,
+        surfaceWidth: Int,
+        surfaceHeight: Int,
+        initialRotation: Int,
+        scriptDir: String,
+        ocrPackDir: String,
+        ocrThreads: Int,
+    ): Long
+
+    /** 排入一段 UTF-8 程式碼，依序執行。 */
+    external fun nativeReplEval(handle: Long, id: Long, code: ByteArray)
+
+    /** 中斷正在執行的那一段；沒有在跑時不做事。 */
+    external fun nativeReplInterrupt(handle: Long)
+
     /** 停止並等 Lua 執行緒結束，然後釋放 [handle]。每個 handle 只能呼叫一次。 */
     external fun nativeStop(handle: Long)
 }

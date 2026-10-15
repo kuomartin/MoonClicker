@@ -102,7 +102,7 @@ private suspend fun DefaultClientWebSocketSession.receiveStreamEvent(predicate: 
     }
 }
 
-private const val STREAM = "/?protocol=2"
+private const val STREAM = "/?protocol=3"
 
 class WorkbenchServerTest {
     @get:Rule
@@ -211,7 +211,7 @@ class WorkbenchServerTest {
                 val reason = closeReason.await()
 
                 assertEquals(CloseReason.Codes.VIOLATED_POLICY.code, reason?.code)
-                assertTrue(reason?.message.orEmpty().contains("app 2"))
+                assertTrue(reason?.message.orEmpty().contains("app $WORKBENCH_PROTOCOL_VERSION"))
             }
         }
     }
@@ -643,7 +643,7 @@ class WorkbenchServerTest {
 
             assertTrue(body.contains("\"id\":\"abc\""))
             assertTrue(body.contains("\"name\":\"Pixel\""))
-            assertTrue(body.contains("\"protocolVersion\":2"))
+            assertTrue(body.contains("\"protocolVersion\":3"))
         }
     }
 

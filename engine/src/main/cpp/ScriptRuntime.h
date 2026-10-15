@@ -11,6 +11,7 @@
 
 #include <atomic>
 #include <condition_variable>
+#include <deque>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -43,7 +44,17 @@ struct HostMethods {
     jmethodID acquireMirror = nullptr;  // ()Z
     jmethodID releaseMirror = nullptr;  // ()Z
     jmethodID isMirrorActive = nullptr; // ()Z
+    jmethodID replResult = nullptr;     // (JI[B)V   id, status, UTF-8 output
 };
+
+/** 必須與 com.xaxaxax.moonclicker.engine.ReplStatus 的 code 一致。 */
+namespace ReplStatus {
+    constexpr int OK = 0;
+    constexpr int ERROR = 1;
+    /** 語法上還沒寫完（像官方 `lua` 的 `>>` 續行）。 */
+    constexpr int INCOMPLETE = 2;
+    constexpr int INTERRUPTED = 3;
+}
 
 /**
  * JNI local ref 的擁有者，解構時 DeleteLocalRef。Lua 執行緒是 native attach 的，local ref 要等
@@ -85,6 +96,9 @@ struct AppTaskFields {
  *
  * 對 Kotlin 的呼叫一律經由 ScriptHost，不直接碰 IMoonClickerService；鏡像引用也由 ScriptHost
  * 持有，腳本結束時由它歸還。
+ *
+ * REPL 模式（[startRepl]）用同一套 API 與停止機制，差別只在執行緒不跑 `main.lua`，而是等
+ * [evalChunk] 送來的程式碼。全域變數留在同一個 Lua state 裡；[interrupt] 只打斷當下這一段。
  */
 class ScriptRuntime {
 public:
@@ -105,10 +119,25 @@ public:
                int initialRotation, const std::string &scriptDir, const std::string &ocrPackDir,
                int ocrThreads);
 
+    /**
+     * 以 REPL 模式啟動：同一個 Lua state 一直留著，執行緒等 [evalChunk] 送來的程式碼，一段一段跑。
+     * 參數同 [start]；[scriptDir] 是 `require` 與模板路徑的根。
+     */
+    bool startRepl(int displayId, bool isPhysical, bool withVision, int surfaceWidth, int surfaceHeight,
+                   int initialRotation, const std::string &scriptDir, const std::string &ocrPackDir,
+                   int ocrThreads);
+
+    /** REPL：排入一段程式碼，跑完以 ScriptHost.replResult 回報 [id] 的結果。 */
+    void evalChunk(int64_t id, std::string code);
+
+    /** REPL：中斷正在跑的那一段；Lua state 保留，佇列中的下一段照跑。沒有在跑時不做事。 */
+    void interrupt();
+
     /** 要求停止並等執行緒結束。可重入。 */
     void stop();
 
-    bool isRunning() const { return running.load(); }
+    /** 腳本（或 REPL 當下這一段）還該不該繼續跑；會阻塞的 binding 以它判斷是否被叫停。 */
+    bool isRunning() const { return running.load() && !interrupted.load(); }
 
     // --- 以下給 LuaBindings 使用，全部只在 Lua 執行緒上呼叫 -----------------
 
@@ -168,9 +197,23 @@ public:
     jobject boxLuaValue(lua_State *L, int index);
 
 private:
+    /** start 與 startRepl 共用：記下參數、掛 reader、開 Lua state。 */
+    bool prepare(int displayId, bool isPhysical, bool withVision, int surfaceWidth, int surfaceHeight,
+                 int initialRotation, const std::string &scriptDir, const std::string &ocrPackDir,
+                 int ocrThreads);
+
     void threadMain();
 
+    /** 註冊 API、設定 require 路徑。 */
+    void setUpState(lua_State *L);
+
     void runScript();
+
+    void runRepl();
+
+    void evalReplChunk(lua_State *L, int64_t id, const std::string &code);
+
+    void reportReplResult(int64_t id, int status, const std::string &output);
     static constexpr long kFirstFrameTimeoutMs = 2000;
     /** 下一次 vision.* 呼叫前要等 [firstFrameAfter] 之後的影格。只在腳本執行緒上讀寫。 */
     bool firstFramePending = false;
@@ -227,6 +270,19 @@ private:
 
     std::thread luaThread;
     std::atomic<bool> running{false};
+    /** REPL 當下這一段被中斷。只在 [replExecuting] 時設起，每段開始與結束時清掉。 */
+    std::atomic<bool> interrupted{false};
+
+    bool replMode = false;
+    struct ReplChunk {
+        int64_t id;
+        std::string code;
+    };
+    /** 以下三個由 [replMutex] 保護。 */
+    std::deque<ReplChunk> replQueue;
+    bool replExecuting = false;
+    std::mutex replMutex;
+    std::condition_variable replCv;
     /** on_stop 收尾期間為 true——此時 sleep 立刻返回，避免收尾把停止流程拖住。 */
     std::atomic<bool> cleaningUp{false};
 
