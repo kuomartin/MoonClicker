@@ -176,6 +176,7 @@ class WorkbenchMcpRoutesTest {
                 displays.touches,
             )
             assertTrue(callTool("tap", """{"displayId":2}""").isError())
+            assertTrue(callTool("script_logs", """{"scriptId":"nope"}""").isError())
         }
     }
 
@@ -184,7 +185,8 @@ class WorkbenchMcpRoutesTest {
         testApplication {
             setUp()
             val first = callTool("repl_eval", """{"code":"1 + 1"}""")
-            assertEquals("hello\n2", first.text())
+            val texts = first["content"]!!.jsonArray.map { it.jsonObject["text"]!!.jsonPrimitive.content }
+            assertEquals(listOf("log:\nhello", "result: 2"), texts)
             callTool("repl_eval", """{"code":"x = 1"}""")
             assertEquals(listOf(0), repl.opened)
             assertEquals(listOf("1" to "mcp", "1" to "mcp"), repl.evaluated)

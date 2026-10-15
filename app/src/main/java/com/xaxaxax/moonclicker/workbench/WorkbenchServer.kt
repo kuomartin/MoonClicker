@@ -205,8 +205,12 @@ class WorkbenchServer @Inject constructor(
 
         override suspend fun touch(displayId: Int, points: IntArray, durationMs: Long): Result<Unit> =
             shizukuManager.withService { service ->
-                require(service.getDisplaySize(displayId)?.firstOrNull()?.let { it > 0 } == true) {
-                    "Display $displayId not found"
+                val size = service.getDisplaySize(displayId)
+                require(size != null && size.size >= 2 && size[0] > 0) { "Display $displayId not found" }
+                for (i in points.indices step 2) {
+                    require(points[i] in 0 until size[0] && points[i + 1] in 0 until size[1]) {
+                        "Point (${points[i]}, ${points[i + 1]}) is outside display $displayId (${size[0]}x${size[1]})"
+                    }
                 }
                 service.multiTouchSwipe(-1, displayId, points, durationMs, false)
             }
