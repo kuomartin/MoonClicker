@@ -84,7 +84,7 @@ internal fun replStateFrame(state: ReplState): Frame =
     replFrame(
         ReplEvent(
             state = ReplStateEvent(
-                open = state.info != null,
+                open_ = state.info != null,
                 display_id = state.info?.displayId ?: 0,
                 script_id = state.info?.scriptId.orEmpty(),
                 busy = state.busy,
