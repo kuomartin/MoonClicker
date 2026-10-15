@@ -4,6 +4,7 @@ import android.os.Build
 import com.xaxaxax.moonclicker.IMoonClickerService
 import com.xaxaxax.moonclicker.core.AppSettings
 import com.xaxaxax.moonclicker.core.OcrManager
+import com.xaxaxax.moonclicker.script.ReplManager
 import com.xaxaxax.moonclicker.script.Script
 import com.xaxaxax.moonclicker.script.ScriptLogLine
 import com.xaxaxax.moonclicker.script.ScriptSession
@@ -132,8 +133,21 @@ class WorkbenchServer @Inject constructor(
     private val thumbnailCache: DisplayThumbnailCache,
     private val appSettings: AppSettings,
     private val ocrManager: OcrManager,
+    private val replManager: ReplManager,
     val authStore: WorkbenchAuthStore,
 ) {
+    private val replRunner = object : ReplRunner {
+        override val state get() = replManager.state
+        override val logLines get() = replManager.logLines
+        override val chunks get() = replManager.chunks
+        override val sharedData get() = replManager.sharedData
+        override suspend fun open(displayId: Int, scriptId: String?) = replManager.open(displayId, scriptId)
+        override suspend fun reset(id: String) = replManager.reset(id)
+        override suspend fun close(id: String) = replManager.close(id)
+        override suspend fun eval(id: String, code: String, client: String) = replManager.eval(id, code, client)
+        override fun interrupt(id: String) = replManager.interrupt(id)
+    }
+
     private val scriptRunner = object : ScriptRunner {
         override fun isRunning(scriptId: String) = scriptSession.isRunning(scriptId)
         override suspend fun start(script: Script) = scriptSession.run(script)
@@ -206,6 +220,7 @@ class WorkbenchServer @Inject constructor(
                 module = {
                     workbenchModule(
                         scriptsRoot, scriptRunner, scriptStream, displaySource, shizukuManager, authStore,
+                        repl = replRunner,
                         ocrAvailable = { ocrManager.runtime() != null },
                         deviceInfo = {
                             WorkbenchDeviceInfo(authStore.instanceId, Build.MODEL, WORKBENCH_PROTOCOL_VERSION)
@@ -350,6 +365,7 @@ fun Application.workbenchModule(
     },
     shizukuManager: ShizukuManager? = null,
     authStore: WorkbenchAuthStore? = null,
+    repl: ReplRunner? = null,
     /** OCR 套件是否已安裝；未安裝時 `/ocr-test` 回 412。 */
     ocrAvailable: () -> Boolean = { false },
     deviceInfo: () -> WorkbenchDeviceInfo = {
@@ -461,6 +477,22 @@ fun Application.workbenchModule(
                     .distinctUntilChanged()
                     .collect { send(runStateFrame(it)) }
             }
+            val replJobs = if (repl == null) {
+                emptyList()
+            } else {
+                listOf(
+                    launch { repl.state.collect { send(replListFrame(it)) } },
+                    launch { repl.logLines.collect { send(replLogFrame(it)) } },
+                    launch { repl.chunks.collect { send(replChunkFrame(it)) } },
+                    launch {
+                        var sent: Map<String, Map<String, Any>> = emptyMap()
+                        repl.sharedData.collect { data ->
+                            for ((id, values) in data) replDataFrame(id, sent[id], values)?.let { send(it) }
+                            sent = data
+                        }
+                    },
+                )
+            }
             try {
                 for (frame in incoming) {
                     if (frame is Frame.Text) {
@@ -472,11 +504,13 @@ fun Application.workbenchModule(
                 logJob.cancel()
                 fileChangeJob.cancel()
                 runStateJob.cancel()
+                replJobs.forEach { it.cancel() }
             }
         }
 
         displayRoutes(displaySource, shizukuManager)
         scriptRoutes(scriptsRoot, scriptRunner, fileChanges)
         visionRoutes(scriptsRoot, scriptRunner, fileChanges, ocrAvailable)
+        if (repl != null) replRoutes(repl)
     }
 }

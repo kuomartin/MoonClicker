@@ -348,13 +348,16 @@ class ScriptSession @Inject constructor(
         )
     }
 
-    private fun openUri(uri: String) {
-        try {
-            val intent = Intent.parseUri(uri, Intent.URI_INTENT_SCHEME)
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            context.startActivity(intent)
-        } catch (e: Exception) {
-            Timber.e(e, "device.open_uri failed for $uri")
-        }
+    private fun openUri(uri: String) = context.openIntentUri(uri)
+}
+
+/** Lua `device.open_uri` 的實作。 */
+internal fun Context.openIntentUri(uri: String) {
+    try {
+        val intent = Intent.parseUri(uri, Intent.URI_INTENT_SCHEME)
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        startActivity(intent)
+    } catch (e: Exception) {
+        Timber.e(e, "device.open_uri failed for $uri")
     }
 }
