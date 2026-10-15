@@ -1661,6 +1661,77 @@
   });
 
   // ==================================================================
+  // 運行除錯畫面上直接操作：點擊轉 tap、拖曳轉 swipe。座標以畫面比例送出，由 App 換算到
+  // 顯示器目前的邏輯空間。手勢放開才送，按住多久、拖曳多久就照樣重播多久。
+  // ==================================================================
+  const TAP_SLOP_PX = 6;
+  const MIN_GESTURE_MS = 50;
+  const MAX_GESTURE_MS = 10000;
+  const MAX_GESTURE_POINTS = 64;
+  let gesture = null;
+
+  /** 視窗座標 → 影格內的比例座標（object-fit: contain 的黑邊不算）。沒有影格時回 null。 */
+  function framePoint(e) {
+    const rect = frameEl.getBoundingClientRect();
+    const vw = frameEl.videoWidth;
+    const vh = frameEl.videoHeight;
+    if (!vw || !vh || rect.width <= 0 || rect.height <= 0) return null;
+    const scale = Math.min(rect.width / vw, rect.height / vh);
+    const w = vw * scale;
+    const h = vh * scale;
+    const left = rect.left + (rect.width - w) / 2;
+    const top = rect.top + (rect.height - h) / 2;
+    return { x: (e.clientX - left) / w, y: (e.clientY - top) / h, clientX: e.clientX, clientY: e.clientY };
+  }
+
+  /** 均勻抽樣到最多 [max] 點，保留頭尾。 */
+  function downsample(points, max) {
+    if (points.length <= max) return points;
+    const out = [];
+    for (let i = 0; i < max; i++) out.push(points[Math.round((i * (points.length - 1)) / (max - 1))]);
+    return out;
+  }
+
+  const clamp01 = (v) => Math.min(1, Math.max(0, v));
+
+  runStage.addEventListener("pointerdown", (e) => {
+    // 只接畫面本身：overlay 上的按鈕照常可以按。
+    if (e.target !== runStage || e.button !== 0 || !hasReceivedFrame || currentDisplayId === null) return;
+    const p = framePoint(e);
+    if (!p || p.x < 0 || p.x > 1 || p.y < 0 || p.y > 1) return;
+    runStage.setPointerCapture(e.pointerId);
+    gesture = { start: performance.now(), points: [p], moved: false };
+    e.preventDefault();
+  });
+
+  runStage.addEventListener("pointermove", (e) => {
+    if (!gesture) return;
+    const p = framePoint(e);
+    if (!p) return;
+    const first = gesture.points[0];
+    if (Math.hypot(p.clientX - first.clientX, p.clientY - first.clientY) > TAP_SLOP_PX) gesture.moved = true;
+    gesture.points.push(p);
+  });
+
+  runStage.addEventListener("pointerup", () => {
+    if (!gesture) return;
+    const { start, points, moved } = gesture;
+    gesture = null;
+    const durationMs = Math.round(Math.min(MAX_GESTURE_MS, Math.max(MIN_GESTURE_MS, performance.now() - start)));
+    const path = moved ? downsample(points, MAX_GESTURE_POINTS) : [points[0]];
+    vscode?.postMessage({
+      type: "inject",
+      displayId: currentDisplayId,
+      points: path.map((p) => [clamp01(p.x), clamp01(p.y)]),
+      durationMs,
+    });
+  });
+
+  runStage.addEventListener("pointercancel", () => {
+    gesture = null;
+  });
+
+  // ==================================================================
   // 4 · 編寫 —— 全部是真的：清單（含裝置回報的模板數、上次修改）、「在編輯器開啟」
   // （既有的 moonclicker.openScript 指令，整份 pull 進本機鏡像資料夾、掛成 workspace
   // folder，跟 Explorer 樹狀圖點腳本同一條路）、「新增腳本」（POST /scripts/{id}）。

@@ -36,3 +36,24 @@ export async function toggleDisplayMirror(address: string, displayId: number, en
     throw new MessageError(msg("Failed to toggle mirroring (HTTP {0}): {1}", response.status, reason));
   }
 }
+
+/**
+ * 在顯示器上注入一次手勢：一個點是 tap（按住 [durationMs]），多個點是沿路徑的 swipe。
+ * [points] 是鏡像畫面的比例座標（0..1），App 換算到邏輯空間。
+ */
+export async function injectInput(
+  address: string,
+  displayId: number,
+  points: [number, number][],
+  durationMs: number,
+  token?: string,
+): Promise<void> {
+  const response = await fetch(`http://${address}/displays/${displayId}/input`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ points, durationMs }),
+  });
+  if (!response.ok) {
+    throw new MessageError(msg("Failed to send input (HTTP {0}): {1}", response.status, await response.text()));
+  }
+}
