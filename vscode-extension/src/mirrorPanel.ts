@@ -7,7 +7,7 @@ import { saveTemplate, listTemplates, deleteTemplate, type TemplateRoi } from ".
 import { startOcrTest, startVisionTest, stopRun } from "./visionTest";
 import type { OcrTestMode } from "./visionTest";
 import { listScripts, createScript, type ScriptSummary } from "./scriptSync";
-import { listDisplays, toggleDisplayMirror } from "./displaySync";
+import { injectInput, listDisplays, toggleDisplayMirror } from "./displaySync";
 import { errorText } from "./l10n";
 
 /**
@@ -108,11 +108,21 @@ export function openMirrorPanel(
       mode?: string;
       text?: string;
       exact?: boolean;
+      points?: [number, number][];
+      durationMs?: number;
     }) => {
       if (!target) return;
       const { address, token } = target;
       if (message?.type === "stop") {
         connection?.stop();
+      } else if (message?.type === "inject") {
+        const { displayId, points, durationMs } = message;
+        if (typeof displayId !== "number" || !points?.length || typeof durationMs !== "number") return;
+        try {
+          await injectInput(address, displayId, points, durationMs, token);
+        } catch (err) {
+          mirrorOutputChannel.appendLine(`[MoonClicker Input Error] ${errorText(err)}`);
+        }
       } else if (message?.type === "requestScripts") {
         try {
           const scripts = await listScripts(address, token);
