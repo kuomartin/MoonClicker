@@ -102,27 +102,8 @@ class ScriptEngine private constructor(val run: ScriptRun) {
     }
 
     private fun launch(context: Context, service: IMoonClickerService, onNotify: (String, String) -> Unit, onOpenUri: (String) -> Unit): String? {
-        // AImageReader 開成 distributor 目前輸出的影格尺寸（ADR-0017：轉正後的自然尺寸，
-        // 已經隨 v 互換長寬）——問服務要這個值，不自己從（邏輯尺寸, rotation）回推。
-        // 緩衝區一開就是整場執行，中途 VD 再旋轉不會跟著變，見 ADR-0017 的 Consequences。
-        val surface = try {
-            service.getDisplaySurfaceSize(run.displayId)
-        } catch (t: Throwable) {
-            Timber.e(t, "getDisplaySurfaceSize(${run.displayId}) failed")
-            null
-        }
-        if (surface == null || surface.size < 2 || surface[0] <= 0 || surface[1] <= 0) {
-            // [0, 0] 也代表「這個 id 不是服務建的顯示器」。與其用推出來的幾何硬跑，
-            // 不如當場停下來講清楚。
-            return "Could not read the surface size of display ${run.displayId}"
-        }
-        val (surfaceWidth, surfaceHeight) = surface[0] to surface[1]
-
-        val rotation = context.getSystemService(android.hardware.display.DisplayManager::class.java)
-            ?.getDisplay(run.displayId)?.rotation ?: 0
-
-        val displayInfo = runCatching { service.getDisplayInfo(run.displayId) }.getOrNull()
-        val isPhysical = displayInfo?.isPhysical ?: (run.displayId == 0)
+        val geometry = DisplayLaunchGeometry.read(context, service, run.displayId)
+            ?: return "Could not read the surface size of display ${run.displayId}"
 
         val scriptHost = ScriptHost(
             service = service,
@@ -144,12 +125,11 @@ class ScriptEngine private constructor(val run: ScriptRun) {
             val started = LuaNative.nativeStart(
                 scriptHost,
                 run.displayId,
-                isPhysical,
+                geometry.isPhysical,
                 run.hasVision,
-                surfaceWidth,
-                surfaceHeight,
-                // 純粹給 Lua screen.rotation 讀的中繼資料，不影響任何座標換算，見 nativeStart 的文件。
-                rotation,
+                geometry.surfaceWidth,
+                geometry.surfaceHeight,
+                geometry.rotation,
                 run.scriptDir.absolutePath,
                 run.ocr?.packDir?.absolutePath.orEmpty(),
                 run.ocr?.threads ?: 0,

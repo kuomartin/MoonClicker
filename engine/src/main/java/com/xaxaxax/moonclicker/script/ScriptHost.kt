@@ -29,6 +29,8 @@ internal class ScriptHost(
     private val onData: (key: String, value: Any?) -> Unit,
     private val onLog: (line: String) -> Unit,
     private val onEvent: (type: Int, payload: String) -> Unit,
+    /** REPL 模式下一段程式碼的結果；腳本模式不會被呼叫。 */
+    private val onReplResult: (id: Long, status: Int, output: String) -> Unit = { _, _, _ -> },
 ) : AutoCloseable {
     /** 記住每個 pointer 最後的位置，這樣 [pointerUp] 才知道要在哪裡放開。 */
     private val lastPoint = HashMap<Int, Pair<Int, Int>>()
@@ -139,6 +141,12 @@ internal class ScriptHost(
     @Keep
     fun onEngineEvent(type: Int, payload: String) {
         onEvent(type, payload)
+    }
+
+    /** [output] 是 UTF-8 bytes，見 native 的 reportReplResult。 */
+    @Keep
+    fun replResult(id: Long, status: Int, output: ByteArray) {
+        onReplResult(id, status, output.decodeToString())
     }
 
     /**

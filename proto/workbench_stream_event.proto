@@ -13,7 +13,7 @@ import "google/protobuf/struct.proto";
 // 不一致時 App 以 1008 關閉串流，擴充套件提示更新較舊的一方。
 enum ProtocolVersion {
   PROTOCOL_VERSION_UNSPECIFIED = 0;
-  PROTOCOL_VERSION_CURRENT = 2;
+  PROTOCOL_VERSION_CURRENT = 3;
 }
 
 message StreamEvent {
@@ -24,6 +24,7 @@ message StreamEvent {
     LogEvent log = 5;
     DataEvent data = 6;
     RunStateEvent run_state = 7;
+    ReplEvent repl = 8;
   }
 }
 
@@ -62,4 +63,44 @@ message FileChangeEvent {
   // 相對於該 script 資料夾根目錄的路徑，用 `/` 分隔。
   string path = 2;
   Kind kind = 3;
+}
+
+// REPL 的活動。所有連線看到的是同一個 REPL（VS Code 與 MCP 共用），所以每一段的程式碼與結果
+// 都推播出去，不只回給送出的那一端。
+message ReplEvent {
+  oneof event {
+    ReplStateEvent state = 1;
+    // REPL 以 `log(...)` 送出的一行。
+    string log = 2;
+    ReplChunkEvent chunk = 3;
+    // REPL 的 `data` 變動；script_id 一律是空字串，規則同腳本的 DataEvent。
+    DataEvent data = 4;
+  }
+}
+
+// REPL 開關、目標或忙碌狀態變動時推播；連線當下一律先送一筆。
+message ReplStateEvent {
+  bool open = 1;
+  int32 display_id = 2;
+  // `require` 與模板路徑的根；空字串表示整個 scripts 資料夾。
+  string script_id = 3;
+  // 有程式碼正在跑或排隊。
+  bool busy = 4;
+}
+
+// 一段程式碼跑完。
+message ReplChunkEvent {
+  enum Status {
+    OK = 0;
+    ERROR = 1;
+    INCOMPLETE = 2;
+    INTERRUPTED = 3;
+    CLOSED = 4;
+  }
+  // 送出這段的那一端自己產生的識別，讓它分得出哪些是自己送的。
+  string client = 1;
+  string code = 2;
+  Status status = 3;
+  // OK 時是回傳值（以 tab 串起，沒有回傳值時為空字串），其餘是錯誤訊息。
+  string output = 4;
 }
