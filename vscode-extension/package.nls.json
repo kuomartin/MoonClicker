@@ -10,6 +10,11 @@
   "command.openWorkbench": "MoonClicker: Open Workbench",
   "command.runRemote": "MoonClicker: Run Remote Script",
   "command.refresh": "MoonClicker: Refresh and Sync",
+  "command.repl.open": "MoonClicker: Open REPL",
+  "command.repl.runSelection": "MoonClicker: Run Selection in REPL",
+  "command.repl.interrupt": "MoonClicker: Interrupt REPL",
+  "command.repl.reset": "MoonClicker: Reset REPL",
+  "command.repl.close": "MoonClicker: Close REPL",
   "viewsContainer.scripts": "MoonClicker Scripts",
   "view.workspace": "Workspace",
   "viewsWelcome.disconnected": "Not connected to a device.\n[Connect to Device](command:moonclicker.connect)\nTurn on Script Workbench in the app's developer options, and VS Code finds devices on the same network automatically."

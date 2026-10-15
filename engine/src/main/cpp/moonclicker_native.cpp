@@ -100,6 +100,48 @@ Java_com_xaxaxax_moonclicker_lua_LuaNative_nativeStart(
     return reinterpret_cast<jlong>(runtime);
 }
 
+/** REPL 模式的 ScriptRuntime，handle 由 Kotlin 的 ReplSession 實例持有。參數同 nativeStart。 */
+JNIEXPORT jlong JNICALL
+Java_com_xaxaxax_moonclicker_lua_LuaNative_nativeStartRepl(
+        JNIEnv *env,
+        jobject thiz,
+        jobject host,
+        jint displayId,
+        jboolean isPhysical,
+        jboolean withVision,
+        jint surfaceWidth,
+        jint surfaceHeight,
+        jint initialRotation,
+        jstring scriptDir,
+        jstring ocrPackDir,
+        jint ocrThreads) {
+    std::string dir = toString(env, scriptDir);
+    if (dir.empty() || dir.back() != '/') dir += '/';
+
+    auto *runtime = new ScriptRuntime(env, host);
+    if (!runtime->startRepl(displayId, isPhysical, withVision, surfaceWidth, surfaceHeight, initialRotation,
+                            dir, toString(env, ocrPackDir), ocrThreads)) {
+        delete runtime;
+        return 0;
+    }
+    return reinterpret_cast<jlong>(runtime);
+}
+
+/** [code] 是 UTF-8 bytes，理由同 nativeReadImage 的回傳值。 */
+JNIEXPORT void JNICALL
+Java_com_xaxaxax_moonclicker_lua_LuaNative_nativeReplEval(JNIEnv *env, jobject thiz, jlong handle, jlong id,
+                                                          jbyteArray code) {
+    jsize length = env->GetArrayLength(code);
+    std::string text(static_cast<size_t>(length), '\0');
+    env->GetByteArrayRegion(code, 0, length, reinterpret_cast<jbyte *>(text.data()));
+    reinterpret_cast<ScriptRuntime *>(handle)->evalChunk(id, std::move(text));
+}
+
+JNIEXPORT void JNICALL
+Java_com_xaxaxax_moonclicker_lua_LuaNative_nativeReplInterrupt(JNIEnv *env, jobject thiz, jlong handle) {
+    reinterpret_cast<ScriptRuntime *>(handle)->interrupt();
+}
+
 JNIEXPORT void JNICALL
 Java_com_xaxaxax_moonclicker_lua_LuaNative_nativeStop(JNIEnv *env, jobject thiz, jlong handle) {
     delete reinterpret_cast<ScriptRuntime *>(handle);  // 解構子會 stop() 並等執行緒結束

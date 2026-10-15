@@ -31,6 +31,7 @@ ScriptRuntime::ScriptRuntime(JNIEnv *env, jobject host) {
     hostMethods.releaseMirror = env->GetMethodID(hostClass, "releaseMirror", "()Z");
     hostMethods.isMirrorActive = env->GetMethodID(hostClass, "isMirrorActive", "()Z");
     hostMethods.viewTree = env->GetMethodID(hostClass, "viewTree", "()[B");
+    hostMethods.replResult = env->GetMethodID(hostClass, "replResult", "(JI[B)V");
 
     // 在呼叫端（有 app class loader 的 Java 執行緒）解析；Lua 執行緒是 attach 進來的，FindClass 找不到 app 的類別。
     jclass appTaskClass = env->FindClass("com/xaxaxax/moonclicker/MoonClickerAppTask");
@@ -82,6 +83,32 @@ ScriptRuntime::~ScriptRuntime() {
 bool ScriptRuntime::start(int displayId, bool isPhysical, bool withVision, int surfaceWidth, int surfaceHeight,
                           int initialRotation, const std::string &scriptDir, const std::string &ocrPackDir,
                           int ocrThreads) {
+    if (!prepare(displayId, isPhysical, withVision, surfaceWidth, surfaceHeight, initialRotation, scriptDir,
+                 ocrPackDir, ocrThreads)) {
+        return false;
+    }
+    replMode = false;
+    running.store(true);
+    luaThread = std::thread(&ScriptRuntime::threadMain, this);
+    return true;
+}
+
+bool ScriptRuntime::startRepl(int displayId, bool isPhysical, bool withVision, int surfaceWidth,
+                              int surfaceHeight, int initialRotation, const std::string &scriptDir,
+                              const std::string &ocrPackDir, int ocrThreads) {
+    if (!prepare(displayId, isPhysical, withVision, surfaceWidth, surfaceHeight, initialRotation, scriptDir,
+                 ocrPackDir, ocrThreads)) {
+        return false;
+    }
+    replMode = true;
+    running.store(true);
+    luaThread = std::thread(&ScriptRuntime::threadMain, this);
+    return true;
+}
+
+bool ScriptRuntime::prepare(int displayId, bool isPhysical, bool withVision, int surfaceWidth, int surfaceHeight,
+                            int initialRotation, const std::string &scriptDir, const std::string &ocrPackDir,
+                            int ocrThreads) {
     if (running.load()) {
         LOGE("start() called while a script is already running");
         return false;
@@ -115,16 +142,34 @@ bool ScriptRuntime::start(int displayId, bool isPhysical, bool withVision, int s
         detachImageReader();
         return false;
     }
-
-    running.store(true);
-    luaThread = std::thread(&ScriptRuntime::threadMain, this);
     return true;
+}
+
+void ScriptRuntime::evalChunk(int64_t id, std::string code) {
+    {
+        std::lock_guard<std::mutex> lock(replMutex);
+        replQueue.push_back({id, std::move(code)});
+    }
+    replCv.notify_all();
+}
+
+void ScriptRuntime::interrupt() {
+    {
+        std::lock_guard<std::mutex> lock(replMutex);
+        if (!replExecuting) return;
+        interrupted.store(true);
+    }
+    // 叫醒 sleep；vision.wait 每 kWaitPollMs 回來檢查一次。
+    sleepCv.notify_all();
 }
 
 void ScriptRuntime::stop() {
     if (running.exchange(false)) {
         if (visionMatcher) visionMatcher->shutdown();
         sleepCv.notify_all();
+        // 先拿鎖再通知：REPL 執行緒在鎖內檢查完 running 之後才睡，不會錯過這次通知。
+        { std::lock_guard<std::mutex> lock(replMutex); }
+        replCv.notify_all();
     }
     if (luaThread.joinable()) luaThread.join();
     ocrEngine.reset();
@@ -310,13 +355,13 @@ void ScriptRuntime::raiseIfThrown(lua_State *L, const char *function) {
 }
 
 bool ScriptRuntime::interruptibleSleep(long ms) {
-    if (!running.load() && !cleaningUp.load()) return false;
+    if (!isRunning() && !cleaningUp.load()) return false;
     if (cleaningUp.load()) return true;  // 收尾中不真的睡，但也不算被打斷
     if (ms <= 0) return true;
 
     std::unique_lock<std::mutex> lock(sleepMutex);
-    sleepCv.wait_for(lock, std::chrono::milliseconds(ms), [this] { return !running.load(); });
-    return running.load();
+    sleepCv.wait_for(lock, std::chrono::milliseconds(ms), [this] { return !isRunning(); });
+    return isRunning();
 }
 
 void ScriptRuntime::pushEvent(int type, const std::string &payload) {
@@ -382,8 +427,8 @@ void ScriptRuntime::stopHook(lua_State *L, lua_Debug *ar) {
     auto *self = static_cast<ScriptRuntime *>(lua_touserdata(L, -1));
     lua_pop(L, 1);
 
-    if (self && !self->running.load()) {
-        // 錯誤訊息不會被使用者看到：threadMain 看到 running == false 就回報 STOPPED。
+    if (self && !self->isRunning()) {
+        // 錯誤訊息不會被使用者看到：runScript 看到 running == false 就回報 STOPPED，REPL 則回報 INTERRUPTED。
         luaL_error(L, "script stopped");
     }
 }
@@ -402,15 +447,17 @@ void ScriptRuntime::threadMain() {
         return;
     }
 
-    runScript();
+    if (replMode) {
+        runRepl();
+    } else {
+        runScript();
+    }
 
     luaEnv = nullptr;
     javaVM->DetachCurrentThread();
 }
 
-void ScriptRuntime::runScript() {
-    lua_State *L = luaEngine->state();
-
+void ScriptRuntime::setUpState(lua_State *L) {
     lua_pushlightuserdata(L, this);
     lua_setfield(L, LUA_REGISTRYINDEX, moonclicker::kRuntimeRegistryKey);
 
@@ -421,6 +468,11 @@ void ScriptRuntime::runScript() {
     lua_pushstring(L, (scriptDir + "?.lua;" + scriptDir + "?/init.lua").c_str());
     lua_setfield(L, -2, "path");
     lua_pop(L, 1);
+}
+
+void ScriptRuntime::runScript() {
+    lua_State *L = luaEngine->state();
+    setUpState(L);
 
     std::string mainPath = scriptDir + "main.lua";
     if (luaL_loadfile(L, mainPath.c_str()) != LUA_OK) {
@@ -473,4 +525,109 @@ void ScriptRuntime::runScript() {
     LOGE("Script error: %s", message.c_str());
     running.store(false);
     pushEvent(EngineEventType::ERROR, message);
+}
+
+void ScriptRuntime::runRepl() {
+    lua_State *L = luaEngine->state();
+    setUpState(L);
+    lua_sethook(L, stopHook, LUA_MASKCOUNT, 1000);
+    pushEvent(EngineEventType::RUNNING, "");
+
+    while (true) {
+        ReplChunk chunk;
+        {
+            std::unique_lock<std::mutex> lock(replMutex);
+            replCv.wait(lock, [this] { return !running.load() || !replQueue.empty(); });
+            if (!running.load()) break;
+            chunk = std::move(replQueue.front());
+            replQueue.pop_front();
+            replExecuting = true;
+            interrupted.store(false);
+        }
+        evalReplChunk(L, chunk.id, chunk.code);
+        {
+            std::lock_guard<std::mutex> lock(replMutex);
+            replExecuting = false;
+            interrupted.store(false);
+        }
+    }
+
+    lua_sethook(L, nullptr, 0, 0);
+    pushEvent(EngineEventType::STOPPED, "");
+}
+
+/** 以 luaL_tolstring 把堆疊上 [first] 起的值以 tab 串起來，與官方 `lua` REPL 印回傳值的方式相同。 */
+static std::string joinValues(lua_State *L, int first) {
+    std::string out;
+    int top = lua_gettop(L);
+    for (int i = first; i <= top; i++) {
+        if (i > first) out += '\t';
+        size_t length = 0;
+        const char *text = luaL_tolstring(L, i, &length);
+        out.append(text, length);
+        lua_pop(L, 1);
+    }
+    return out;
+}
+
+void ScriptRuntime::evalReplChunk(lua_State *L, int64_t id, const std::string &code) {
+    lua_settop(L, 0);
+
+    // 與官方 `lua` 相同：先當運算式（補上 return）試，不成再當敘述。
+    std::string asExpression = "return " + code + ";";
+    int status = luaL_loadbuffer(L, asExpression.data(), asExpression.size(), "=repl");
+    if (status != LUA_OK) {
+        lua_pop(L, 1);
+        status = luaL_loadbuffer(L, code.data(), code.size(), "=repl");
+    }
+    if (status != LUA_OK) {
+        size_t length = 0;
+        const char *text = lua_tolstring(L, -1, &length);
+        std::string message = text ? std::string(text, length) : "syntax error";
+        lua_settop(L, 0);
+        // 語法錯誤停在檔尾，就是還沒寫完。
+        static const std::string eof = "<eof>";
+        bool incomplete = message.size() >= eof.size() &&
+                          message.compare(message.size() - eof.size(), eof.size(), eof) == 0;
+        reportReplResult(id, incomplete ? ReplStatus::INCOMPLETE : ReplStatus::ERROR, message);
+        return;
+    }
+
+    lua_pushcfunction(L, traceback);
+    lua_insert(L, 1);
+    status = lua_pcall(L, 0, LUA_MULTRET, 1);
+
+    if (!running.load()) {
+        lua_settop(L, 0);
+        return;  // 整個 REPL 被關掉，沒有人在等結果
+    }
+    if (interrupted.load()) {
+        lua_settop(L, 0);
+        reportReplResult(id, ReplStatus::INTERRUPTED, "interrupted");
+        return;
+    }
+
+    std::string output;
+    if (status == LUA_OK) {
+        output = joinValues(L, 2);
+    } else {
+        size_t length = 0;
+        const char *text = lua_tolstring(L, -1, &length);
+        output = text ? std::string(text, length) : "(non-string error)";
+    }
+    lua_settop(L, 0);
+    reportReplResult(id, status == LUA_OK ? ReplStatus::OK : ReplStatus::ERROR, output);
+}
+
+void ScriptRuntime::reportReplResult(int64_t id, int status, const std::string &output) {
+    // 以 UTF-8 bytes 過橋：NewStringUTF 吃的是 modified UTF-8，4 位元組的字元（emoji）會壞掉。
+    LocalRef<jbyteArray> bytes(luaEnv, luaEnv->NewByteArray(static_cast<jsize>(output.size())));
+    luaEnv->SetByteArrayRegion(bytes.get(), 0, static_cast<jsize>(output.size()),
+                               reinterpret_cast<const jbyte *>(output.data()));
+    luaEnv->CallVoidMethod(hostObj, hostMethods.replResult, static_cast<jlong>(id), status, bytes.get());
+    if (luaEnv->ExceptionCheck()) {
+        luaEnv->ExceptionDescribe();
+        luaEnv->ExceptionClear();
+        LOGE("replResult(%lld) threw", static_cast<long long>(id));
+    }
 }

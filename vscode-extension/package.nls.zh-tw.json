@@ -10,6 +10,11 @@
   "command.openWorkbench": "MoonClicker: 開啟 Workbench",
   "command.runRemote": "MoonClicker: 執行裝置上的腳本",
   "command.refresh": "MoonClicker: 重新整理並同步",
+  "command.repl.open": "MoonClicker: 開啟 REPL",
+  "command.repl.runSelection": "MoonClicker: 在 REPL 執行選取範圍",
+  "command.repl.interrupt": "MoonClicker: 中斷 REPL",
+  "command.repl.reset": "MoonClicker: 重設 REPL",
+  "command.repl.close": "MoonClicker: 關閉 REPL",
   "viewsContainer.scripts": "MoonClicker 腳本",
   "view.workspace": "工作區",
   "viewsWelcome.disconnected": "尚未連線到裝置。\n[連線到裝置](command:moonclicker.connect)\n在 App 的開發人員選項開啟腳本工作台後，VS Code 會自動搜尋同一個網路上的裝置。"
