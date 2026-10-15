@@ -13,7 +13,7 @@ import "google/protobuf/struct.proto";
 // 不一致時 App 以 1008 關閉串流，擴充套件提示更新較舊的一方。
 enum ProtocolVersion {
   PROTOCOL_VERSION_UNSPECIFIED = 0;
-  PROTOCOL_VERSION_CURRENT = 2;
+  PROTOCOL_VERSION_CURRENT = 3;
 }
 
 message StreamEvent {
@@ -24,6 +24,7 @@ message StreamEvent {
     LogEvent log = 5;
     DataEvent data = 6;
     RunStateEvent run_state = 7;
+    ReplEvent repl = 8;
   }
 }
 
@@ -62,4 +63,50 @@ message FileChangeEvent {
   // 相對於該 script 資料夾根目錄的路徑，用 `/` 分隔。
   string path = 2;
   Kind kind = 3;
+}
+
+// REPL 的活動。每個 REPL 的每一段程式碼與結果都推播給所有連線，不只回給送出的那一端：
+// 接上別人開的 REPL（例如 MCP 的）時才看得到對方做了什麼。
+message ReplEvent {
+  // log、chunk、data 屬於哪個 REPL；list 時為空字串。
+  string repl_id = 5;
+  oneof event {
+    ReplListEvent list = 1;
+    // REPL 以 `log(...)` 送出的一行。
+    string log = 2;
+    ReplChunkEvent chunk = 3;
+    // REPL 的 `data` 變動；script_id 是 REPL id，規則同腳本的 DataEvent。
+    DataEvent data = 4;
+  }
+}
+
+// 所有開著的 REPL，依開啟順序。開、關、重設或忙碌狀態變動時推播完整清單；連線當下一律先送一筆。
+message ReplListEvent {
+  repeated ReplStateEvent repls = 1;
+}
+
+message ReplStateEvent {
+  string id = 1;
+  int32 display_id = 2;
+  // `require` 與模板路徑的根；空字串表示整個 scripts 資料夾。
+  string script_id = 3;
+  // 有程式碼正在跑或排隊。
+  bool busy = 4;
+}
+
+// 一段程式碼跑完。
+message ReplChunkEvent {
+  enum Status {
+    OK = 0;
+    ERROR = 1;
+    INCOMPLETE = 2;
+    INTERRUPTED = 3;
+    CLOSED = 4;
+  }
+  // 送出這段的那一端自己產生的識別，讓它分得出哪些是自己送的。
+  string client = 1;
+  string code = 2;
+  Status status = 3;
+  // OK 時是回傳值（以 tab 串起，沒有回傳值時為空字串），其餘是錯誤訊息。
+  string output = 4;
 }
