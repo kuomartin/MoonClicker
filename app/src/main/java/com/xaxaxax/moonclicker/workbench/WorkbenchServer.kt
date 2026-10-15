@@ -217,6 +217,9 @@ class WorkbenchServer @Inject constructor(
                 CIO,
                 port = PORT,
                 host = host,
+                // 預設 watchPaths 會讓 stop() 惰性建立再關閉一個 WatchService，Android 的 finalizer 隨後再 close
+                // 一次就丟 ClosedWatchServiceException。不需要 auto-reload，直接關掉。
+                watchPaths = emptyList(),
                 module = {
                     workbenchModule(
                         scriptsRoot, scriptRunner, scriptStream, displaySource, shizukuManager, authStore,
