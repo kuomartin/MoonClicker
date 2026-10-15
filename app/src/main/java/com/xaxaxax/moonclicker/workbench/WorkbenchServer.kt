@@ -120,6 +120,9 @@ data class WorkbenchDisplaySummary(
 interface DisplaySource {
     suspend fun getDisplays(): List<WorkbenchDisplaySummary>?
     suspend fun toggleMirror(displayId: Int, enable: Boolean): Boolean = false
+
+    /** 在 [displayId] 上注入一次觸控；回 false 表示服務不在或座標無效。 */
+    suspend fun inject(displayId: Int, gesture: MirrorGesture): Boolean = false
 }
 
 @Singleton
@@ -182,6 +185,14 @@ class WorkbenchServer @Inject constructor(
             shizukuManager.withService { service ->
                 // 與 DisplaysViewModel.toggleMirror 相同：關閉鏡像後縮圖就過期了。
                 service.toggleDisplayMirror(displayId, enable).also { if (!enable) thumbnailCache.remove(displayId) }
+            }.getOrDefault(false)
+
+        override suspend fun inject(displayId: Int, gesture: MirrorGesture): Boolean =
+            shizukuManager.withService { service ->
+                val size = service.getDisplaySize(displayId)
+                if (size == null || size.size < 2 || size[0] <= 0 || size[1] <= 0) return@withService false
+                service.multiTouchSwipe(-1, displayId, gesture.toLogical(size[0], size[1]), gesture.durationMs, false)
+                true
             }.getOrDefault(false)
     }
 
