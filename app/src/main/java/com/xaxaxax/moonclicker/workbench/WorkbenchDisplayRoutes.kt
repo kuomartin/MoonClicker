@@ -5,6 +5,7 @@ import com.xaxaxax.moonclicker.shizuku.ShizukuManager
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.call
+import io.ktor.server.request.receiveText
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
@@ -13,6 +14,7 @@ import io.ktor.server.websocket.webSocket
 import io.ktor.websocket.CloseReason
 import io.ktor.websocket.Frame
 import io.ktor.websocket.close
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import timber.log.Timber
@@ -40,6 +42,22 @@ fun Route.displayRoutes(displaySource: DisplaySource, shizukuManager: ShizukuMan
             call.respondText(if (enable) "Mirror acquired" else "Mirror released")
         } else {
             call.respondText("Failed to update mirror", status = HttpStatusCode.InternalServerError)
+        }
+    }
+
+    // 鏡像畫面上的點擊與拖曳。座標以畫面比例（0..1）送來，換算到顯示器目前的邏輯空間在服務端做，
+    // 鏡像的影格尺寸與邏輯尺寸不必一致。
+    post("/displays/{id}/input") {
+        val id = call.parameters["id"]?.toIntOrNull()
+        val gesture = runCatching { Json.decodeFromString<MirrorGesture>(call.receiveText()) }.getOrNull()
+        if (id == null || gesture == null || !gesture.isValid) {
+            call.respondText("Invalid input request", status = HttpStatusCode.BadRequest)
+            return@post
+        }
+        if (displaySource.inject(id, gesture)) {
+            call.respondText("OK")
+        } else {
+            call.respondText("Failed to inject input", status = HttpStatusCode.ServiceUnavailable)
         }
     }
 
@@ -80,5 +98,29 @@ fun Route.displayRoutes(displaySource: DisplaySource, shizukuManager: ShizukuMan
                 close(CloseReason(CloseReason.Codes.INTERNAL_ERROR, "H.264 encoder failed: ${e.message ?: e.javaClass.simpleName}"))
             }
         }
+    }
+}
+
+/**
+ * `POST /displays/{id}/input` 的 body：一個點是 tap（按住 [durationMs]），多個點是沿路徑的 swipe。
+ * [points] 是 `[x, y]` 的清單，以鏡像畫面的比例表示（0..1，左上為原點）。
+ */
+@Serializable
+data class MirrorGesture(val points: List<List<Double>>, val durationMs: Long) {
+    val isValid: Boolean
+        get() = points.isNotEmpty() && points.size <= MAX_POINTS && durationMs in 1..MAX_DURATION_MS &&
+            points.all { it.size == 2 && it.all { v -> v in 0.0..1.0 } }
+
+    /** 攤平成 multiTouchSwipe 要的 [x1, y1, x2, y2, ...]；tap 補成同一點的兩次。 */
+    fun toLogical(width: Int, height: Int): IntArray {
+        val pixels = points.flatMap { (x, y) ->
+            listOf((x * width).toInt().coerceIn(0, width - 1), (y * height).toInt().coerceIn(0, height - 1))
+        }
+        return (if (points.size == 1) pixels + pixels else pixels).toIntArray()
+    }
+
+    companion object {
+        const val MAX_POINTS = 256
+        const val MAX_DURATION_MS = 10_000L
     }
 }
