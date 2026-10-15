@@ -49,10 +49,16 @@ enum class Orientation(val requested: Int?) {
  * 身分——與 Shizuku 給 MoonClicker 的身分相同，所以這不是替身，是同一份 production 程式碼換了
  * 宿主進程。換宿主要補兩件 Shizuku 進程免費拿到的事：隱藏 API 豁免與呼叫者套件名。
  */
-class Tier1Env : ExternalResource() {
+class Tier1Env(
+    /**
+     * 傳 `UiAutomation.FLAG_DONT_USE_ACCESSIBILITY`（API 33+）時，測試進程的 UiAutomation 不向無障礙
+     * 系統註冊，把系統唯一的位置留給服務自己的 view tree 查詢。shell 指令與 shell 身分照常可用。
+     */
+    uiAutomationFlags: Int = 0,
+) : ExternalResource() {
 
     val context: Context = InstrumentationRegistry.getInstrumentation().targetContext
-    private val uiAutomation = InstrumentationRegistry.getInstrumentation().uiAutomation
+    private val uiAutomation = InstrumentationRegistry.getInstrumentation().getUiAutomation(uiAutomationFlags)
 
     /** 測試 APK 自己的套件名，也就是 puppet 住的地方。 */
     val puppetPackage: String = context.packageName
@@ -100,6 +106,8 @@ class Tier1Env : ExternalResource() {
             runCatching { service.destroyVirtualDisplay(displayId) }
             displayId = -1
         }
+        // 不等閒置釋放：下一個測試的 instrumentation UiAutomation 要註冊。
+        if (::service.isInitialized) service.viewTreeQuery.close()
         runCatching { uiAutomation.dropShellPermissionIdentity() }
     }
 

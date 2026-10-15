@@ -8,7 +8,7 @@ import com.xaxaxax.moonclicker.MoonClickerAppTask
 import timber.log.Timber
 
 /**
- * 原生引擎唯一的 upcall 對象：`input.*` / `app.*` / `device.*` / `data.*` 與 `screen` 的鏡像控制
+ * 原生引擎唯一的 upcall 對象：`input.*` / `app.*` / `ui.*` / `device.*` / `data.*` 與 `screen` 的鏡像控制
  * 的實作全在這裡。本腳本 `screen.start_mirror()` 取得的鏡像引用也由它持有，[close] 時歸還。
  *
  * 這樣切的原因是觸控注入的幾何與狀態機已經在 [IMoonClickerService.multiTouchSwipe] 裡了
@@ -90,6 +90,10 @@ internal class ScriptHost(
 
     @Keep
     fun mute(packageName: String, muted: Boolean): Boolean = service.setAppMuted(packageName, muted)
+
+    /** UTF-8 位元組而不是字串：JNI 的 modified UTF-8 會弄壞 emoji 這類 BMP 以外的字。 */
+    @Keep
+    fun viewTree(): ByteArray = service.getViewTree(displayId).toByteArray()
 
     @Keep
     fun notify(title: String, text: String) = onNotify(title, text)

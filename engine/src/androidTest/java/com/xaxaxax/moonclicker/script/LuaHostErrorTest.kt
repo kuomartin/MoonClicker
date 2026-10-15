@@ -31,6 +31,10 @@ class LuaHostErrorTest {
         "app.launch" to "app.launch('com.example.game')",
         "app.list" to "app.list()",
         "app.mute" to "app.mute('com.example.game', true)",
+        "ui.dump" to "ui.dump()",
+        "ui.find" to "ui.find('OK')",
+        "ui.find_all" to "ui.find_all('OK')",
+        "ui.wait" to "ui.wait('OK')",
     )
 
     /** `DeadObjectException` 沒有 message，訊息要退而用類別名稱。 */

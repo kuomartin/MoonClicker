@@ -23,6 +23,9 @@ import android.view.WindowManager
 class PuppetActivity : Activity() {
 
     companion object {
+        /** 內容 view 的 contentDescription，view tree 測試用它找 puppet；emoji 驗 UTF-8 一路完整。 */
+        const val DESCRIPTION = "MoonClicker puppet 🎯"
+
         @Volatile
         private var instance: PuppetActivity? = null
 
@@ -96,7 +99,7 @@ class PuppetActivity : Activity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         setTurnScreenOn(true)
         setShowWhenLocked(true)
-        markerView = MarkerView(this)
+        markerView = MarkerView(this).apply { contentDescription = DESCRIPTION }
         setContentView(markerView)
     }
 

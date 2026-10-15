@@ -104,6 +104,14 @@ interface IMoonClickerService {
     boolean setAppMuted(String packageName, boolean muted) = 307;
 
     /**
+     * [displayId] 上的視窗與 accessibility 節點樹，JSON 陣列，最上層的視窗在前；欄位見
+     * docs/lua-api.md 的 `ui`。以 shell 的 UiAutomation 取得，系統同時只允許一個：已有
+     * instrumentation 或 uiautomator 在用時拋 IllegalStateException。API 30 以下拋
+     * UnsupportedOperationException。
+     */
+    String getViewTree(int displayId) = 308;
+
+    /**
      * points: flattened [x1, y1, x2, y2, ...]
      */
     oneway void multiTouchSwipe(int pointerId, int displayId, in int[] points, long duration, boolean keep) = 201;
