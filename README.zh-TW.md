@@ -93,9 +93,9 @@ data.set("status", "執行完成")
 - [x] **Workbench 認證授權**：Token / Handshake 安全連線機制
 - [x] **視覺輔助標註工具**：在鏡像畫面框選 ROI 存成模板，並即時測試命中位置與信心度
 - [x] **擴充套件英文化與上架 Open VSX**
-- [ ] **REPL**：獨立於腳本的持久 session，VS Code 與 MCP 共用
-- [ ] **MCP server**：內建在 Workbench，讓 AI agent 操控與觀察裝置
-- [ ] **VS Code 鏡像畫面注入點擊**：點擊轉 tap、拖曳轉 swipe
+- [x] **REPL**：獨立於腳本的持久 session，VS Code 與 MCP 共用
+- [x] **MCP server**：內建在 Workbench，讓 AI agent 操控與觀察裝置
+- [x] **VS Code 鏡像畫面注入點擊**：點擊轉 tap、拖曳轉 swipe
 
 ### 2. 核心引擎與視覺比對
 
@@ -106,7 +106,7 @@ data.set("status", "執行完成")
 - [x] **OCR 文字識別**：本機端離線文字辨識（PP-OCRv6 + ONNX Runtime，首次使用時下載）
 - [x] **同時執行多支腳本**：每個顯示器各跑一支，各自的 Lua state、通知、日誌與資料
 - [x] **以 VirtualDevice 建立虛擬顯示（實驗性）**：Android 13 以上，虛擬顯示器不隨主螢幕休眠
-- [ ] **View tree**：在虛擬顯示器上取得 UI 階層，供 Lua 與 MCP 取用
+- [x] **View tree**：在虛擬顯示器上取得 UI 階層，供 Lua 與 MCP 取用
 - [ ] **物件偵測（YOLO）**：補足模板比對無法處理的變形、旋轉與光影變化
 - [ ] **多視窗焦點管理**：多個虛擬顯示同時運作時的視窗焦點與輸入路由
 
