@@ -19,20 +19,20 @@ MoonClicker is an Android automation tool driven by Lua scripts. Through [Shizuk
 * Android 8.0 (API 27) or later; Android 10 (API 29) or later is recommended, as some features are limited on older versions.
 * On Android 17, virtual displays sleep with the main screen. While the screen is off, apps on them stop and ignore input, so a running script keeps going but can't get anything done. Turning on **Settings → Experimental → Create virtual displays through VirtualDevice** (Android 13 or later) keeps new virtual displays awake.
 * [Shizuku](https://shizuku.rikka.app/) installed and running.
-* For writing scripts: VS Code 1.90.0 or later, or an editor using Open VSX such as VSCodium or Cursor, with the MoonClicker Script Workbench extension.
+* For writing scripts: VS Code 1.90.0 or later, or an editor using Open VSX such as VSCodium or Cursor, with the [MoonClicker Script Workbench](https://github.com/kuomartin/moonclicker-vscode) extension.
 
 ## Installation
 
 1. Download and install the APK from [Releases](https://github.com/kuomartin/MoonClicker/releases).
 2. Make sure Shizuku is running, then open MoonClicker and grant it Shizuku permission.
-3. To write scripts, install MoonClicker Script Workbench from [Open VSX](https://open-vsx.org/extension/kuomartin/moonclicker-script-workbench) and follow [docs/extension.md](docs/extension.md) (in Traditional Chinese). VS Code can't search Open VSX, so download the `.vsix` there and run **Extensions: Install from VSIX...**. The app and the extension must share the same major and minor version (x.y).
+3. To write scripts, install MoonClicker Script Workbench from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=kuomartin.moonclicker-script-workbench) (VS Code) or [Open VSX](https://open-vsx.org/extension/kuomartin/moonclicker-script-workbench) (VSCodium, Cursor), then follow its [README](https://github.com/kuomartin/moonclicker-vscode) to connect. The app and the extension must share the same major and minor version (x.y).
 
 ## Links
 
 * [Wiki](https://github.com/kuomartin/MoonClicker/wiki): setup and first-script guides.
 * [Lua API reference](docs/lua-api.md) (in Traditional Chinese)
 * [Example script](examples/youtube-rickroll/)
-* [VS Code extension source](https://github.com/kuomartin/moonclicker-vscode)
+* [VS Code extension](https://github.com/kuomartin/moonclicker-vscode): usage and source
 * [Roadmap](https://github.com/kuomartin/MoonClicker/milestones)
 
 ## License

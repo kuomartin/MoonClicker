@@ -4,7 +4,7 @@ App 的腳本工作台內建 [MCP](https://modelcontextprotocol.io) server，讓
 
 ## 設定
 
-1. 依 [extension.md](extension.md) 開啟腳本工作台，並用 VS Code 連上裝置一次（配對取得 token）。
+1. 依[擴充套件說明](https://github.com/kuomartin/moonclicker-vscode/blob/master/README.zh-TW.md)開啟腳本工作台，並用 VS Code 連上裝置一次（配對取得 token）。
 2. 在 VS Code 執行 **MoonClicker: 複製 MCP Server 設定**，剪貼簿會是這樣的 `mcpServers` 設定：
 
    ```json
