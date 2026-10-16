@@ -46,13 +46,8 @@
 ./gradlew test
 ```
 
-### 2. VS Code 擴充套件測試
-```bash
-cd vscode-extension
-npm ci
-npm run generate
-npm test
-```
+### 2. VS Code 擴充套件
+擴充套件在 [kuomartin/moonclicker-vscode](https://github.com/kuomartin/moonclicker-vscode)，測試方式見該 repo 的 CONTRIBUTING.md。改了 `proto/` 或 Lua API 時，擴充套件那邊的 `proto/` 與 LuaLS stub 也要跟著改。
 
 ---
 
@@ -60,11 +55,11 @@ npm test
 
 1. **Fork 並建立專用分支**：從最新 `master` 切出您的分支。
 2. **實作並維持小步提交**：保持 commit 粒度清晰、意圖明確。
-3. **通過本地測試**：確保 `./gradlew test` 與 `npm test` 均為綠燈。
+3. **通過本地測試**：確保 `./gradlew test` 為綠燈。
 4. **提交 PR**：
    - 標題清楚簡潔，並在說明中描述修改動機與具體變更。
    - 若關聯特定 Issue，請在描述中加上 `Fixes #<issue_number>`。
-5. **等待 CI 驗證與 Code Review**：PR CI 會自動驗證 Android 與 VS Code 單元測試。
+5. **等待 CI 驗證與 Code Review**：PR CI 會自動驗證 Android 單元測試。
 
 ---
 

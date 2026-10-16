@@ -32,6 +32,7 @@ MoonClicker is an Android automation tool driven by Lua scripts. Through [Shizuk
 * [Wiki](https://github.com/kuomartin/MoonClicker/wiki): setup and first-script guides.
 * [Lua API reference](docs/lua-api.md) (in Traditional Chinese)
 * [Example script](examples/youtube-rickroll/)
+* [VS Code extension source](https://github.com/kuomartin/moonclicker-vscode)
 * [Roadmap](https://github.com/kuomartin/MoonClicker/milestones)
 
 ## License

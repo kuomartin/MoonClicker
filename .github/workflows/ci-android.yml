@@ -6,13 +6,11 @@ on:
       - master
     paths-ignore:
       - 'docs/**'
-      - 'vscode-extension/**'
   pull_request:
     branches:
       - master
     paths-ignore:
       - 'docs/**'
-      - 'vscode-extension/**'
 
 permissions:
   contents: read
