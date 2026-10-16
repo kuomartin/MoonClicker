@@ -15,6 +15,12 @@ MoonClicker 是一款專為 Android 設計的遠端 Lua 控制與背景自動化
   * 支援直覺的中斷與停止機制（`sleep`、`vision.wait` 會在使用者停止時即刻釋放）。
   * 同時執行多支腳本：每個顯示器各跑一支，不同顯示器之間並行；每支腳本有各自的通知、日誌與資料，可分別從 App、通知或 VS Code 停止。
 
+* **View tree**：
+  * 從畫面上的 UI 階層以文字、resource id 或 class 找到按鈕（Android 11 以上）。
+
+* **MCP server**：
+  * AI agent 透過 Workbench 連線點擊、滑動、截圖、讀 view tree、在 REPL 執行 Lua、啟動與停止腳本（[docs/mcp.md](docs/mcp.md)）。
+
 * **本機端影像與文字辨識**：
   * 原生 C++ 整合 OpenCV 模板比對。
   * 支援多目標與局部比對。
@@ -36,7 +42,7 @@ MoonClicker 是一款專為 Android 設計的遠端 Lua 控制與背景自動化
   * 裝置需安裝並啟動 [Shizuku](https://shizuku.rikka.app/)。
 * **電腦端（可選，用於腳本開發）**：
   * VS Code 1.90.0+，或 VSCodium、Cursor 等使用 Open VSX 的編輯器
-  * [Open VSX](https://open-vsx.org/extension/kuomartin/moonclicker-script-workbench) 上的 MoonClicker 腳本工作台擴充套件，與 App 的版本號前兩碼（x.y）需相同
+  * [MoonClicker 腳本工作台](https://github.com/kuomartin/moonclicker-vscode/blob/master/README.zh-TW.md)擴充套件，VS Code 從 [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=kuomartin.moonclicker-script-workbench) 安裝，VSCodium、Cursor 從 [Open VSX](https://open-vsx.org/extension/kuomartin/moonclicker-script-workbench) 安裝；與 App 的版本號前兩碼（x.y）需相同
 
 ## 🚀 快速開始
 
@@ -80,8 +86,7 @@ data.set("status", "執行完成")
 
 閱讀文檔以了解更多
 * [Lua API 參考手冊](docs/lua-api.md)
-* [VS Code Extension](docs/extension.md)
-* [VS Code 擴充套件原始碼](https://github.com/kuomartin/moonclicker-vscode)
+* [VS Code 擴充套件](https://github.com/kuomartin/moonclicker-vscode/blob/master/README.zh-TW.md)：使用說明與原始碼
 
 ## 🗺️ Roadmap
 
@@ -92,7 +97,7 @@ data.set("status", "執行完成")
 - [x] **低延遲畫面鏡射**：Webview H.264 即時螢幕預覽
 - [x] **Workbench 認證授權**：Token / Handshake 安全連線機制
 - [x] **視覺輔助標註工具**：在鏡像畫面框選 ROI 存成模板，並即時測試命中位置與信心度
-- [x] **擴充套件英文化與上架 Open VSX**
+- [x] **擴充套件英文化與上架 Open VSX、VS Code Marketplace**
 - [x] **REPL**：獨立於腳本的持久 session，VS Code 與 MCP 共用
 - [x] **MCP server**：內建在 Workbench，讓 AI agent 操控與觀察裝置
 - [x] **VS Code 鏡像畫面注入點擊**：點擊轉 tap、拖曳轉 swipe
