@@ -53,7 +53,8 @@ android {
     }
 
     // The contract only means anything when checked across API levels, so the matrix is the
-    // runner. These are slow and CI-only — the fast pure-JVM tests stay on `test`.
+    // runner. These are slow and run locally, not in CI — CI runs only `test`, the fast pure-JVM
+    // tests. Run the matrix before merging a change to a stub or contract.
     //
     //   ./gradlew :hidden-api-contract:apiMatrixGroupDebugAndroidTest   # every level
     //   ./gradlew :hidden-api-contract:api35DebugAndroidTest            # one level
