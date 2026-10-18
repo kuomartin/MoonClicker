@@ -15,8 +15,11 @@ import com.xaxaxax.moonclicker.shizuku.createVirtualDisplay
 import com.xaxaxax.moonclicker.shizuku.displayInfoList
 import com.xaxaxax.moonclicker.shizuku.toggleDisplayMirror
 import com.xaxaxax.moonclicker.ui.displaydetail.DisplayThumbnailCache
+import com.xaxaxax.moonclicker.ui.displaydetail.THUMBNAIL_MAX_LONG_EDGE
+import com.xaxaxax.moonclicker.workbench.captureFrame
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -68,6 +71,7 @@ class DisplaysViewModel @Inject constructor(
     private val displays = MutableStateFlow<List<DisplayCardInfo>>(emptyList())
     private val isLoading = MutableStateFlow(false)
     private val isRefreshing = MutableStateFlow(false)
+    private var thumbnailCaptureJob: Job? = null
 
     val defaultConfig by lazy {
         val width = Resources.getSystem().displayMetrics.widthPixels
@@ -163,6 +167,7 @@ class DisplaysViewModel @Inject constructor(
                         }
                     }
                 }
+                captureThumbnails(displays.value.filter { it.isManaged || it.isMirrorActive }.map { it.displayId })
             } catch (t: Throwable) {
                 Timber.e(t, "refreshDisplays failed")
             } finally {
@@ -175,11 +180,33 @@ class DisplaysViewModel @Inject constructor(
         }
     }
 
+    /**
+     * 每次 refresh 都從 distributor 重抓目前影格，卡片才會跟著 VD 上跑的東西更新；結果經
+     * [DisplayThumbnailCache.updates] 換進卡片。新一輪 refresh 取消上一輪還沒抓完的。
+     */
+    private fun captureThumbnails(displayIds: List<Int>) {
+        thumbnailCaptureJob?.cancel()
+        thumbnailCaptureJob = viewModelScope.launch {
+            displayIds.forEach { displayId ->
+                launch {
+                    shizukuManager.withService { service -> captureFrame(service, displayId, THUMBNAIL_MAX_LONG_EDGE) }
+                        .mapCatching { it.getOrThrow() }
+                        .onSuccess { frame -> thumbnailCache.put(displayId, frame.bitmap) }
+                        .onFailure { Timber.w(it, "Thumbnail capture failed for display $displayId") }
+                }
+            }
+        }
+    }
+
     fun toggleMirror(displayId: Int, enable: Boolean) {
         viewModelScope.launch {
             shizukuManager.withService { service -> service.toggleDisplayMirror(displayId, enable) }
             // 鏡像期間留下的縮圖在關閉後就過期了，不清掉的話下次開啟鏡像會先顯示舊畫面。
-            if (!enable) thumbnailCache.remove(displayId)
+            // 先取消還在抓的縮圖，免得它在 remove 之後才寫回來。
+            if (!enable) {
+                thumbnailCaptureJob?.cancel()
+                thumbnailCache.remove(displayId)
+            }
             refreshDisplays()
         }
     }
@@ -196,6 +223,7 @@ class DisplaysViewModel @Inject constructor(
     fun destroyDisplay(displayId: Int) {
         viewModelScope.launch {
             shizukuManager.withService { service -> service.destroyVirtualDisplay(displayId) }
+            thumbnailCaptureJob?.cancel()
             thumbnailCache.remove(displayId)
             refreshDisplays()
         }
