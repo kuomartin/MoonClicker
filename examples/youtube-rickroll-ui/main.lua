@@ -57,17 +57,16 @@ if not video then fail("搜尋結果裡找不到影片") end
 log("點進影片", video.desc)
 input.tap(video.cx, video.cy)
 
--- 播放器出現才算進到影片頁；之後點播放器叫出控制列都以它的外框為準
-local player = ui.wait({ id = "watch_player" }, 10000)
-if not player then fail("影片頁沒有出現") end
+-- 播放器出現才算進到影片頁
+local PLAYER = { id = "watch_player" }
+if not ui.wait(PLAYER, 10000) then fail("影片頁沒有出現") end
 
 -- 4. 處理廣告 -----------------------------------------------------------------
--- 廣告期間播放器上會有略過按鈕或廣告倒數，用它們判斷而不是看影片標題：
+-- 廣告期間播放器左下角一直有「贊助商廣告」標籤（ad_progress_text），用它判斷而不是看影片標題：
 -- 廣告也可能在正片播了幾秒之後才插進來，那時標題早就在了。可能連續好幾則，有的不能略過。
-local SKIP_BUTTON = { id = "skip_ad_button", clickable = true }
+-- 略過按鈕與廣告標籤用 id 找，不受介面語言影響。
 local AD_SIGNS = {
-    SKIP_BUTTON,
-    { id = "skip_ad_button" },  -- 倒數中、還不能點
+    { id = "skip_ad_button", clickable = true },
     { id = "ad_progress_text" },
 }
 
@@ -92,7 +91,9 @@ local function skip_ads(quiet)
 end
 
 -- 5. 讀出目前時間 -------------------------------------------------------------
--- 時間與進度條在控制列上，控制列隱藏時不在元件樹裡：點播放器下半部叫出來（避開正中央的暫停鍵）。
+-- 時間在控制列上，控制列隱藏時不在元件樹裡：點播放器下半部叫出來（避開正中央的暫停鍵）。
+-- 播放器的外框每次重新取：直式廣告播放時它會拉長到大半個畫面。
+-- 進度條沒有 resource id，是播放器裡唯一的 SeekBar；總長顯示為「 / 3:33」。
 -- 總長太短代表讀到的是廣告的時間。
 local function seconds(clock)
     local m, s = clock:match("(%d+):(%d+)")
@@ -100,10 +101,12 @@ local function seconds(clock)
 end
 
 local function read_time()
+    local player = ui.find(PLAYER)
+    if not player then return end
     input.tap(player.cx, player.y + player.h * 3 // 4)
     local now = ui.wait({ id = "time_bar_current_time" }, 2000)
     local total = ui.find({ id = "time_bar_total_time" })
-    local bar = ui.find({ id = "time_bar" })
+    local bar = ui.find({ class = "SeekBar" })
     if not (now and now.text and total and total.text and bar) then return end
     local now_s, total_s = seconds(now.text), seconds(total.text)
     if now_s and total_s and total_s >= 60 then return bar, now_s, total_s end
