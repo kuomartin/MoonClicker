@@ -1,0 +1,6 @@
+{
+  "uniqueId": "youtube-rickroll-ui",
+  "name": "YouTube Rickroll (ui)",
+  "description": "用 ui 元件樹找搜尋框、影片、略過按鈕與進度條，播放 Never Gonna Give You Up 並快轉到一半。不需要 OCR 元件；需要 Android 11 以上，YouTube 要先手動開過一次並完成登入。",
+  "display": { "width": 720, "height": 1280, "densityDpi": 320, "keyboard": false }
+}
