@@ -17,11 +17,14 @@ class DisplayScreenshot(val png: ByteArray, val width: Int, val height: Int, val
 
 private val screenshotHandler by lazy { Handler(HandlerThread("WorkbenchScreenshot").apply { start() }.looper) }
 
+/** [bitmap] 已轉正、縮到長邊不超過 maxEdge；[width]/[height] 是顯示器的邏輯尺寸。 */
+internal class DisplayFrame(val bitmap: Bitmap, val width: Int, val height: Int)
+
 /**
  * 掛一個 [DisplaySink] 收一張影格。新掛上的 sink 即使畫面靜止也會收到目前這張（見 GlesDistributor）。
  * 實體螢幕沒開鏡像時掛不上，回 failure。長邊超過 [maxEdge] 時等比縮小。
  */
-internal suspend fun captureScreenshot(service: IMoonClickerService, displayId: Int, maxEdge: Int): Result<DisplayScreenshot> {
+internal suspend fun captureFrame(service: IMoonClickerService, displayId: Int, maxEdge: Int): Result<DisplayFrame> {
     val surfaceSize = service.getDisplaySurfaceSize(displayId)
     if (surfaceSize == null || surfaceSize.size < 2 || surfaceSize[0] <= 0 || surfaceSize[1] <= 0) {
         return Result.failure(IllegalArgumentException("Display $displayId not found"))
@@ -54,16 +57,22 @@ internal suspend fun captureScreenshot(service: IMoonClickerService, displayId: 
         val outH = (logical[1] * scale).toInt().coerceAtLeast(1)
         val cropped = Bitmap.createBitmap(frame, 0, 0, w, h)
         val scaled = Bitmap.createScaledBitmap(cropped, outW, outH, true)
-        val png = ByteArrayOutputStream().use { out ->
-            scaled.compress(Bitmap.CompressFormat.PNG, 100, out)
-            out.toByteArray()
-        }
-        listOf(frame, cropped, scaled).distinct().forEach { it.recycle() }
-        return Result.success(DisplayScreenshot(png, logical[0], logical[1], outW, outH))
+        listOf(frame, cropped).filter { it !== scaled }.distinct().forEach { it.recycle() }
+        return Result.success(DisplayFrame(scaled, logical[0], logical[1]))
     } finally {
         sink.close()
         reader.close()
     }
 }
+
+/** 一張 PNG 截圖，見 [captureFrame]。 */
+internal suspend fun captureScreenshot(service: IMoonClickerService, displayId: Int, maxEdge: Int): Result<DisplayScreenshot> =
+    captureFrame(service, displayId, maxEdge).map { frame ->
+        val png = ByteArrayOutputStream().use { out ->
+            frame.bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+            out.toByteArray()
+        }
+        DisplayScreenshot(png, frame.width, frame.height, frame.bitmap.width, frame.bitmap.height).also { frame.bitmap.recycle() }
+    }
 
 private const val FRAME_TIMEOUT_MS = 3000L
