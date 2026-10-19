@@ -2,11 +2,9 @@
 -- 搜尋、略過廣告、拖曳進度條快轉到一半，再讀出時間確認。影片會繼續播放。
 --
 -- 與 youtube-rickroll 做的事相同，但用 ui 元件樹取代 OCR：元件用 resource id 找，
--- 不受介面語言影響，也不用從畫面比例推算進度條的位置。
+-- 不受介面語言影響。所有座標都取自元件的外框，不從畫面尺寸或比例推算。
 --
 -- 前提：Android 11 以上；YouTube 已經手動開過一次（登入、首次啟動的對話框都處理掉了）。
-
-local W, H = screen.width, screen.height
 
 local function fail(reason)
     data.set("status", reason)
@@ -43,14 +41,16 @@ input.text("rick astley never gonna give you up\n")
 -- 3. 點進影片 -----------------------------------------------------------------
 -- 搜尋結果沒有 resource id，但每一則的 contentDescription 以影片標題開頭，標題不隨介面語言翻譯。
 -- 比對「歌手 - 歌名」的格式，才會點到官方 MV 而不是現場版或翻唱；開頭的贊助廣告不會符合。
--- 清單只有畫面上的項目，找不到就往下捲。
+-- 清單只有畫面上的項目，找不到就在結果清單的範圍內往上滑一段。
 local VIDEO = { desc_contains = "Rick Astley - Never Gonna Give You Up" }
 local video
 for attempt = 1, 4 do
     video = ui.wait(VIDEO, attempt == 1 and 10000 or 3000, 500)
     if video then break end
+    local list = ui.find({ id = "results" })
+    if not list then break end
     log("往下捲")
-    input.swipe({ W // 2, H * 3 // 4, W // 2, H // 4 }, 400)
+    input.swipe({ list.cx, list.y + list.h * 3 // 4, list.cx, list.y + list.h // 4 }, 400)
     sleep(800)
 end
 if not video then fail("搜尋結果裡找不到影片") end
@@ -91,10 +91,11 @@ local function skip_ads(quiet)
 end
 
 -- 5. 讀出目前時間 -------------------------------------------------------------
--- 時間在控制列上，控制列隱藏時不在元件樹裡：點播放器下半部叫出來（避開正中央的暫停鍵）。
--- 播放器的外框每次重新取：直式廣告播放時它會拉長到大半個畫面。
--- 進度條沒有 resource id，是播放器裡唯一的 SeekBar；總長顯示為「 / 3:33」。
--- 總長太短代表讀到的是廣告的時間。
+-- 時間在控制列上，控制列隱藏時不在元件樹裡，要點播放器叫出來。進度條沒有 resource id，
+-- 是播放器裡唯一的 SeekBar，控制列隱藏時也在。點播放器中心與進度條頂端的中間：
+-- 中心是控制列出來後的暫停鍵，進度條本身會被當成跳轉。
+-- 外框每次重新取：直式廣告播放時播放器會拉長到大半個畫面。總長顯示為「 / 3:33」。
+-- 廣告標籤還在代表讀到的是廣告，不算。
 local function seconds(clock)
     local m, s = clock:match("(%d+):(%d+)")
     return m and tonumber(m) * 60 + tonumber(s)
@@ -102,14 +103,14 @@ end
 
 local function read_time()
     local player = ui.find(PLAYER)
-    if not player then return end
-    input.tap(player.cx, player.y + player.h * 3 // 4)
+    local bar = ui.find({ class = "SeekBar" })
+    if not (player and bar) then return end
+    input.tap(player.cx, (player.cy + bar.y) // 2)
     local now = ui.wait({ id = "time_bar_current_time" }, 2000)
     local total = ui.find({ id = "time_bar_total_time" })
-    local bar = ui.find({ class = "SeekBar" })
-    if not (now and now.text and total and total.text and bar) then return end
+    if not (now and now.text and total and total.text) or find_first(AD_SIGNS) then return end
     local now_s, total_s = seconds(now.text), seconds(total.text)
-    if now_s and total_s and total_s >= 60 then return bar, now_s, total_s end
+    if now_s and total_s then return bar, now_s, total_s end
 end
 
 -- 6. 拖曳進度條到一半 ---------------------------------------------------------
