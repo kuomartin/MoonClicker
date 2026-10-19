@@ -26,8 +26,10 @@ internal class ActivityLauncher(
      *   框架開機時就依這個 feature 決定能不能把 activity 放到次要顯示器，shell 權限改不了：
      *   `moveTaskToStack` 會直接拋錯，`startActivity` 則悄悄改開在主螢幕並回報成功。
      *   與「package 名打錯」不同，這不是腳本重試能解決的情況，所以拋錯而非回 false。
+     * @param excludeFromRecents 加上 [Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS]。框架只在建立 task 時
+     *   讀這個 flag：app 已經有 task（例如開在主螢幕）時沿用那個 task，最近使用畫面照舊列出它。
      */
-    fun launchInDisplay(packageName: String, displayId: Int): Boolean {
+    fun launchInDisplay(packageName: String, displayId: Int, excludeFromRecents: Boolean): Boolean {
         if (displayId != Display.DEFAULT_DISPLAY &&
             !packageManager.hasSystemFeature(PackageManager.FEATURE_ACTIVITIES_ON_SECONDARY_DISPLAYS)
         ) {
@@ -37,9 +39,9 @@ internal class ActivityLauncher(
         // IActivityManager 的 startActivity/createStackOnDisplay/moveTaskToStack 只到 API 28
         // 為止（見 hidden-api-contract），API 29 起一律走 ActivityTaskManager。
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            launchViaActivityTaskManager(packageName, displayId)
+            launchViaActivityTaskManager(packageName, displayId, launchFlags(excludeFromRecents))
         } else {
-            launchOrMoveViaActivityManager(packageName, displayId)
+            launchOrMoveViaActivityManager(packageName, displayId, launchFlags(excludeFromRecents))
         }
     }
 
@@ -50,9 +52,9 @@ internal class ActivityLauncher(
      * `START_ABORTED` 換成 `START_SUCCESS` 回給呼叫端，該場景只透過 `ITaskStackListener`
      * 非同步通知。要抓它得在啟動後查 task 實際落在哪個顯示器——見 issue #25。
      */
-    private fun launchViaActivityTaskManager(packageName: String, displayId: Int): Boolean {
+    private fun launchViaActivityTaskManager(packageName: String, displayId: Int, flags: Int): Boolean {
         val intent = packageManager.getLaunchIntentForPackage(packageName) ?: return false
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        intent.addFlags(flags)
         val options = ActivityOptions.makeBasic()
         Refine.unsafeCast<ActivityOptionsHidden>(options).setLaunchDisplayId(displayId)
         return try {
@@ -73,7 +75,7 @@ internal class ActivityLauncher(
     // 只在 Q 以下走到。除了啟動，這條路也涵蓋「app 已經跑在別的顯示器上」——
     // Workaround.startActivity 的 AM 退路不涵蓋，它一律重新啟動。
 
-    private fun launchOrMoveViaActivityManager(packageName: String, displayId: Int): Boolean = try {
+    private fun launchOrMoveViaActivityManager(packageName: String, displayId: Int, flags: Int): Boolean = try {
         val iam = ActivityManagerHidden.getService()
         val tasks = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) iam.getTasks(50) else iam.getTasks(50, 0)
         val task = tasks.find { it.baseActivity?.packageName == packageName }
@@ -87,7 +89,7 @@ internal class ActivityLauncher(
         } else {
             val intent = packageManager.getLaunchIntentForPackage(packageName)
                 ?: throw ActivityNotFoundException("no launcher intent for $packageName")
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            intent.addFlags(flags)
 
             // setLaunchDisplayId is @hide — access via Refine + LSPass
             val options = ActivityOptions.makeBasic()
@@ -116,6 +118,13 @@ internal class ActivityLauncher(
         Timber.e(t, "Failed to launch/move $packageName in display#$displayId.")
         throw t.toBinderException("launchInDisplay")
     }
+
+    private fun launchFlags(excludeFromRecents: Boolean): Int =
+        if (excludeFromRecents) {
+            Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
+        } else {
+            Intent.FLAG_ACTIVITY_NEW_TASK
+        }
 
     private fun checkStartActivityResult(result: Int, intent: Intent) {
         if (result >= 1) return  // ActivityManager.START_SUCCESS and other non-error codes

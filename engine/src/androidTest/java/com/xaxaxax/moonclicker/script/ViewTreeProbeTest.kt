@@ -55,7 +55,7 @@ class ViewTreeProbeTest {
             env.context.packageManager.getLaunchIntentForPackage(SETTINGS) != null,
         )
         val displayId = env.createDisplay()
-        assertTrue(env.service.launchInDisplay(SETTINGS, displayId))
+        assertTrue(env.service.launchInDisplay(SETTINGS, displayId, false))
 
         probe(displayId, label = "settings", expectPackage = SETTINGS)
     }

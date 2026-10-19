@@ -208,6 +208,26 @@ class LuaInputApiTest {
     }
 
     @Test
+    fun app_launch_passes_exclude_from_recents() = withRunner { runner ->
+        runner.run("app.launch(\"com.example.game\", { exclude_from_recents = true })")
+
+        assertEquals(
+            listOf(RecordingMoonClickerService.Launch("com.example.game", 0, excludeFromRecents = true)),
+            runner.recorded.launches,
+        )
+    }
+
+    @Test
+    fun app_launch_raises_on_a_non_boolean_exclude_from_recents() = withRunner { runner ->
+        val outcome = runner.run("app.launch(\"com.example.game\", { exclude_from_recents = \"yes\" })")
+
+        val error = outcome.error
+        assertTrue("expected an Error, got ${outcome.runState}", error != null)
+        assertTrue("unhelpful message: $error", error!!.contains("exclude_from_recents"))
+        assertEquals(emptyList<RecordingMoonClickerService.Launch>(), runner.recorded.launches)
+    }
+
+    @Test
     fun app_list_returns_every_display_regardless_of_the_target() = withRunner { runner ->
         runner.recorded.appTasks = listOf("com.example.game" to 7, "com.android.launcher" to 0)
         val outcome = runner.run(

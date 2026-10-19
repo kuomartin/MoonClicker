@@ -172,7 +172,7 @@ class FullscreenDisplayViewModel @Inject constructor(
     fun launchApp(packageName: String, displayId: Int) {
         viewModelScope.launch {
             shizukuManager.withService { service ->
-                service.launchInDisplay(packageName, displayId)
+                service.launchInDisplay(packageName, displayId, false)
             }.onSuccess { launched ->
                 if (!launched) _errorMessages.trySend(R.string.fullscreen_launch_failed)
             }.onFailure {

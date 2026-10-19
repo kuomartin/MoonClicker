@@ -178,8 +178,8 @@ class MoonClickerService @JvmOverloads constructor(
     override fun isDisplayMirrorActive(displayId: Int): Boolean =
         displayMirroring.isDisplayMirrorActive(displayId)
 
-    override fun launchInDisplay(packageName: String, displayId: Int): Boolean =
-        activityLauncher.launchInDisplay(packageName, displayId)
+    override fun launchInDisplay(packageName: String, displayId: Int, excludeFromRecents: Boolean): Boolean =
+        activityLauncher.launchInDisplay(packageName, displayId, excludeFromRecents)
 
     override fun getLauncherApps(): List<String> = launcherAppsCache.getLauncherApps()
 
