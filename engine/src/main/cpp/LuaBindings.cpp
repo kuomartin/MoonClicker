@@ -629,11 +629,23 @@ int lua_input_recents(lua_State *L) {
 
 // --- app / device / data ---------------------------------------------------
 
+// 型別錯誤拋錯而非忽略：打錯的值被當成 false 時，app 照樣出現在最近使用，很難察覺。
 int lua_app_launch(lua_State *L) {
     ScriptRuntime *runtime = self(L);
     const char *package = luaL_checkstring(L, 1);
+    bool excludeFromRecents = false;
+    if (!lua_isnoneornil(L, 2)) {
+        luaL_checktype(L, 2, LUA_TTABLE);
+        lua_getfield(L, 2, "exclude_from_recents");
+        if (!lua_isnil(L, -1)) {
+            if (!lua_isboolean(L, -1)) luaL_error(L, "app.launch: `exclude_from_recents` must be a boolean");
+            excludeFromRecents = lua_toboolean(L, -1);
+        }
+        lua_pop(L, 1);
+    }
     LocalRef<jstring> jPackage(runtime->env(), runtime->env()->NewStringUTF(package));
-    lua_pushboolean(L, runtime->hostBoolean(L, "app.launch", runtime->host().launch, jPackage.get()));
+    lua_pushboolean(L, runtime->hostBoolean(L, "app.launch", runtime->host().launch, jPackage.get(),
+                                            (jboolean) excludeFromRecents));
     return 1;
 }
 

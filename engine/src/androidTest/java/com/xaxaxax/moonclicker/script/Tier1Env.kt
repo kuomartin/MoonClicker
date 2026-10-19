@@ -172,7 +172,7 @@ class Tier1Env(
     }
 
     fun launchPuppet(displayId: Int) {
-        val launched = service.launchInDisplay(puppetPackage, displayId)
+        val launched = service.launchInDisplay(puppetPackage, displayId, false)
         assertTrue("launchInDisplay($puppetPackage, $displayId) returned false", launched)
         assertTrue(
             "the puppet never resumed on display $displayId (${PuppetRecorder.current})",

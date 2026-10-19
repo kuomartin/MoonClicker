@@ -209,8 +209,9 @@ end
 
 ## `app` 應用程式管理
 
-* **`app.launch(package_name)` -> `boolean`**
+* **`app.launch(package_name [, options])` -> `boolean`**
   在目標顯示器啟動指定 Package Name 之 App。成功送出啟動請求回傳 `true`；App 未安裝或沒有可啟動的畫面時回傳 `false`。
+  * `options.exclude_from_recents`（boolean，預設 `false`）：為 `true` 時 App 不出現在最近使用畫面（`FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS`）。只在這次啟動建立新的 task 時有效；App 已經有 task（例如開在主螢幕）時沿用原本的 task，最近使用畫面照舊列出它。型別不是 boolean 時拋錯。
   * 目標是虛擬顯示器、但裝置不支援在次要顯示器上執行 App（沒有宣告 `android.software.activities_on_secondary_displays`，部分 Android 8.x/9 裝置）時拋錯。這是系統開機時決定的，無法以設定或 shell 權限開啟。
 * **`app.list()` -> `table`**
   列出所有顯示器上正在執行的 App，與目標顯示器無關。回傳陣列，每筆為 `{ package = "com.example.game", display_id = 2 }`。

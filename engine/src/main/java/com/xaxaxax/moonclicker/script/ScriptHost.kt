@@ -84,7 +84,8 @@ internal class ScriptHost(
     }
 
     @Keep
-    fun launch(packageName: String): Boolean = service.launchInDisplay(packageName, displayId)
+    fun launch(packageName: String, excludeFromRecents: Boolean): Boolean =
+        service.launchInDisplay(packageName, displayId, excludeFromRecents)
 
     /** 空陣列是真的沒有 app。 */
     @Keep

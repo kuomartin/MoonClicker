@@ -83,8 +83,12 @@ interface IMoonClickerService {
     /**
      * Throws UnsupportedOperationException for a non-default display when the device lacks
      * FEATURE_ACTIVITIES_ON_SECONDARY_DISPLAYS; returns false for other launch failures.
+     *
+     * [excludeFromRecents] adds FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS. It only applies when the
+     * launch creates a new task: an app that already has a task (e.g. running on the main
+     * display) keeps it, together with its recents visibility.
      */
-    boolean launchInDisplay(String packageName, int displayId) = 106;
+    boolean launchInDisplay(String packageName, int displayId, boolean excludeFromRecents) = 106;
     /** 讀暖快取，見 [refreshLauncherApps] 與服務啟動時的初次查詢；不會即時重掃 PackageManager。 */
     List<String> getLauncherApps() = 107;
     /** 強制重新查一次 PackageManager 並更新快取，回傳結果同 [getLauncherApps]。手動刷新用。 */

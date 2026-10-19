@@ -41,7 +41,7 @@ internal class RecordingMoonClickerService(
 
     data class Key(val keyCode: Int, val action: Int, val displayId: Int, val metaState: Int) : Call
 
-    data class Launch(val packageName: String, val displayId: Int) : Call
+    data class Launch(val packageName: String, val displayId: Int, val excludeFromRecents: Boolean = false) : Call
 
     data class Mute(val packageName: String, val muted: Boolean) : Call
 
@@ -94,8 +94,8 @@ internal class RecordingMoonClickerService(
     /** `app.launch` 的回傳值；false 模擬找不到 launch intent。 */
     var launchResult: Boolean = true
 
-    override fun launchInDisplay(packageName: String, displayId: Int): Boolean {
-        calls += Launch(packageName, displayId)
+    override fun launchInDisplay(packageName: String, displayId: Int, excludeFromRecents: Boolean): Boolean {
+        calls += Launch(packageName, displayId, excludeFromRecents)
         failIfAsked()
         return launchResult
     }
