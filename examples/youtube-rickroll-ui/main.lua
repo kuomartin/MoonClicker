@@ -28,13 +28,19 @@ app.launch("com.google.android.youtube")
 local field
 for _ = 1, 5 do
     input.key(KEYCODE_SEARCH)
-    field = ui.wait({ id = "search_edit_text", focused = true }, 3000)
+    field = ui.wait({ id = "search_edit_text" }, 3000)
     if field then break end
 end
 if not field then fail("打不開搜尋") end
 
 -- 2. 輸入關鍵字 ---------------------------------------------------------------
--- 搜尋框已經取得焦點；結尾的 \n 等於按下 Enter 送出搜尋
+-- 搜尋框打開時不一定取得焦點，點一下才能確定字會打進去。
+-- 框裡還留著上次的關鍵字時有清除鈕，先清掉，否則會接在後面。
+input.tap(field.cx, field.cy)
+local clear = ui.wait({ id = "search_clear" }, 500)
+if clear then input.tap(clear.cx, clear.cy) end
+if not ui.wait({ id = "search_edit_text", focused = true }, 2000) then fail("搜尋框沒有取得焦點") end
+-- 結尾的 \n 等於按下 Enter 送出搜尋
 log("輸入關鍵字")
 input.text("rick astley never gonna give you up\n")
 
