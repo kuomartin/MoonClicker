@@ -40,6 +40,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,6 +57,7 @@ import com.xaxaxax.moonclicker.shizuku.ShizukuConnectionStatus
 import com.xaxaxax.moonclicker.ui.component.PermissionRationaleDialog
 import com.xaxaxax.moonclicker.ui.component.PermissionRow
 import com.xaxaxax.moonclicker.ui.component.Section
+import com.xaxaxax.moonclicker.ui.component.ShizukuSetupDialog
 import com.xaxaxax.moonclicker.ui.component.SingleChoiceDialog
 import com.xaxaxax.moonclicker.ui.component.ToggleSettingItem
 import com.xaxaxax.moonclicker.ui.component.shizukuStatusAppearance
@@ -67,7 +69,6 @@ import kotlin.time.Duration.Companion.milliseconds
 
 enum class RationaleDialogType {
     NOTIFICATION,
-    SHIZUKU,
     LOCAL_NETWORK,
 }
 
@@ -108,6 +109,11 @@ fun SettingsScreen(
     }
 
     var activeRationale by remember { mutableStateOf<RationaleDialogType?>(null) }
+    var showShizukuSetup by rememberSaveable { mutableStateOf(false) }
+
+    if (showShizukuSetup) {
+        ShizukuSetupDialog(onDismiss = { showShizukuSetup = false })
+    }
 
     when (activeRationale) {
         RationaleDialogType.NOTIFICATION -> {
@@ -131,23 +137,6 @@ fun SettingsScreen(
                 onDismiss = { activeRationale = null },
             )
         }
-        RationaleDialogType.SHIZUKU -> {
-            PermissionRationaleDialog(
-                title = stringResource(R.string.permission_shizuku_rationale_title),
-                description = stringResource(R.string.permission_shizuku_rationale_desc),
-                icon = painterResource(R.drawable.ic_shizuku_icon),
-                confirmText = stringResource(R.string.permission_action_proceed),
-                dismissText = stringResource(R.string.permission_action_cancel),
-                onConfirm = {
-                    if (uiState.shizukuStatus < ShizukuConnectionStatus.NEED_PERMISSION) {
-                        activityResultLauncher.launch(viewModel.getOpenShizukuIntent())
-                    } else {
-                        viewModel.requestShizukuPermission()
-                    }
-                },
-                onDismiss = { activeRationale = null },
-            )
-        }
         RationaleDialogType.LOCAL_NETWORK -> {
             PermissionRationaleDialog(
                 title = stringResource(R.string.permission_local_network_rationale_title),
@@ -166,13 +155,7 @@ fun SettingsScreen(
 
     SettingsScreenContent(
         uiState = uiState,
-        onRequestShizukuPermission = {
-            if (!uiState.shizukuStatus.isAuthorized) {
-                activeRationale = RationaleDialogType.SHIZUKU
-            } else {
-                viewModel.requestShizukuPermission()
-            }
-        },
+        onShizukuSetup = { showShizukuSetup = true },
         onRequestNotificationPermission = {
             if (uiState.hasNotificationPermission) {
                 activityResultLauncher.launch(viewModel.getNotificationSettingsIntent())
@@ -200,7 +183,7 @@ fun SettingsScreen(
 @Composable
 private fun SettingsScreenContent(
     uiState: SettingsUiState,
-    onRequestShizukuPermission: () -> Unit,
+    onShizukuSetup: () -> Unit,
     onRequestNotificationPermission: () -> Unit,
     onRequestLocalNetworkPermission: () -> Unit = {},
     onRefresh: () -> Unit,
@@ -256,13 +239,9 @@ private fun SettingsScreenContent(
                             statusText = shizukuLabel,
                             statusColor = shizukuTint,
                             isGranted = uiState.shizukuStatus.isAuthorized,
-                            actionLabel = when (uiState.shizukuStatus) {
-                                ShizukuConnectionStatus.NOT_INSTALLED,
-                                ShizukuConnectionStatus.NOT_RUNNING -> stringResource(R.string.permission_action_open_shizuku)
-                                ShizukuConnectionStatus.NEED_PERMISSION -> stringResource(R.string.permission_action_grant)
-                                else -> null
-                            },
-                            onAction = onRequestShizukuPermission,
+                            actionLabel = stringResource(R.string.shizuku_setup_title)
+                                .takeUnless { uiState.shizukuStatus.isAuthorized },
+                            onAction = onShizukuSetup,
                             warningText = if (uiState.isShizukuUidWarning) {
                                 stringResource(R.string.permission_shizuku_uid_warning)
                             } else {
@@ -492,7 +471,7 @@ private fun SettingsScreenPreview() {
 
             SettingsScreenContent(
                 uiState = uiState,
-                onRequestShizukuPermission = {
+                onShizukuSetup = {
                     when (uiState.shizukuStatus) {
                         ShizukuConnectionStatus.NOT_INSTALLED ->
                             uiState = uiState.copy(shizukuStatus = ShizukuConnectionStatus.NOT_RUNNING)

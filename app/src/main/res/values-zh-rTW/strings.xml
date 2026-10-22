@@ -199,7 +199,6 @@
     <string name="shizuku_status_disconnected">服務未連線</string>
     <string name="shizuku_status_connecting">連線中…</string>
     <string name="shizuku_status_connected">服務已連線</string>
-    <string name="shizuku_action_grant">授權</string>
 
     <!-- UserService Settings -->
     <string name="settings_user_service_restart">重新啟動</string>
@@ -248,9 +247,17 @@
 
     <string name="permission_shizuku_title">Shizuku 服務與授權</string>
     <string name="permission_shizuku_desc">用於存取系統特權以建立虛擬螢幕與模擬觸控操作。</string>
-    <string name="permission_shizuku_rationale_title">Shizuku 授權說明</string>
     <string name="permission_shizuku_rationale_desc">MoonClicker 需要透過 Shizuku 存取 Android 系統特權 API，用以建立獨立的虛擬螢幕並精準模擬觸控操作。這讓自動化腳本能夠在不干擾實體螢幕的情況下穩定運行。</string>
     <string name="permission_shizuku_uid_warning">Shizuku 目前以 root 權限執行，建議改用 adb shell（一般）權限。</string>
+    <string name="shizuku_setup_title">設定 Shizuku</string>
+    <string name="shizuku_setup_step_install">安裝 Shizuku</string>
+    <string name="shizuku_setup_step_install_desc">需要先安裝 Shizuku。</string>
+    <string name="shizuku_setup_step_start">啟動 Shizuku</string>
+    <string name="shizuku_setup_step_start_desc">Shizuku 已安裝但尚未啟動，請開啟 Shizuku 並依照其說明啟動服務。</string>
+    <string name="shizuku_setup_step_grant">授權 MoonClicker</string>
+    <string name="shizuku_setup_step_grant_desc">Shizuku 已啟動，請授權 MoonClicker 使用。</string>
+    <string name="shizuku_setup_action_install">安裝</string>
+    <string name="shizuku_setup_action_done">完成</string>
     <string name="shizuku_grant_permission_failed">透過 Shizuku 取得權限失敗，請改用系統設定。</string>
 
     <string name="permission_notification_title">通知權限</string>

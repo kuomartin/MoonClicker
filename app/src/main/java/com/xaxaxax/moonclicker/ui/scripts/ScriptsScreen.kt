@@ -49,6 +49,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -62,7 +63,7 @@ import com.xaxaxax.moonclicker.R
 import com.xaxaxax.moonclicker.engine.state.EngineRunState
 import com.xaxaxax.moonclicker.script.Script
 import com.xaxaxax.moonclicker.script.ScriptSessionState
-import com.xaxaxax.moonclicker.shizuku.ShizukuConnectionStatus
+import com.xaxaxax.moonclicker.ui.component.ShizukuSetupDialog
 import com.xaxaxax.moonclicker.ui.component.ShizukuStatusBar
 import com.xaxaxax.moonclicker.ui.theme.MoonClickerTheme
 import java.io.File
@@ -90,27 +91,15 @@ fun ScriptsScreen(
         ActivityResultContracts.OpenDocument()
     ) { uri -> uri?.let(viewModel::import) }
 
-    var showShizukuRationale by remember { mutableStateOf(false) }
+    var showShizukuSetup by rememberSaveable { mutableStateOf(false) }
 
-    if (showShizukuRationale) {
-        com.xaxaxax.moonclicker.ui.component.PermissionRationaleDialog(
-            title = androidx.compose.ui.res.stringResource(com.xaxaxax.moonclicker.R.string.permission_shizuku_rationale_title),
-            description = androidx.compose.ui.res.stringResource(com.xaxaxax.moonclicker.R.string.permission_shizuku_rationale_desc),
-            icon = androidx.compose.ui.res.painterResource(com.xaxaxax.moonclicker.R.drawable.ic_shizuku_icon),
-            onConfirm = { viewModel.onShizukuAction() },
-            onDismiss = { showShizukuRationale = false },
-        )
+    if (showShizukuSetup) {
+        ShizukuSetupDialog(onDismiss = { showShizukuSetup = false })
     }
 
     ScriptsScreenContent(
         uiState = uiState,
-        onShizukuAction = {
-            if (uiState.shizukuStatus == ShizukuConnectionStatus.NEED_PERMISSION) {
-                showShizukuRationale = true
-            } else {
-                viewModel.onShizukuAction()
-            }
-        },
+        onShizukuAction = { showShizukuSetup = true },
         onRefresh = viewModel::refresh,
         onImport = { importLauncher.launch(arrayOf("application/zip", "application/octet-stream")) },
         onPlay = { viewModel.run(it) },

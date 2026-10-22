@@ -72,6 +72,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.xaxaxax.moonclicker.R
 import com.xaxaxax.moonclicker.shizuku.ShizukuConnectionStatus
+import com.xaxaxax.moonclicker.ui.component.ShizukuSetupDialog
 import com.xaxaxax.moonclicker.ui.component.ShizukuStatusBar
 import com.xaxaxax.moonclicker.ui.theme.MoonClickerTheme
 
@@ -118,16 +119,10 @@ fun DisplaysScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    var showShizukuRationale by remember { mutableStateOf(false) }
+    var showShizukuSetup by rememberSaveable { mutableStateOf(false) }
 
-    if (showShizukuRationale) {
-        com.xaxaxax.moonclicker.ui.component.PermissionRationaleDialog(
-            title = androidx.compose.ui.res.stringResource(com.xaxaxax.moonclicker.R.string.permission_shizuku_rationale_title),
-            description = androidx.compose.ui.res.stringResource(com.xaxaxax.moonclicker.R.string.permission_shizuku_rationale_desc),
-            icon = androidx.compose.ui.res.painterResource(com.xaxaxax.moonclicker.R.drawable.ic_shizuku_icon),
-            onConfirm = { viewModel.onShizukuAction() },
-            onDismiss = { showShizukuRationale = false },
-        )
+    if (showShizukuSetup) {
+        ShizukuSetupDialog(onDismiss = { showShizukuSetup = false })
     }
 
     val shizukuRequiredMessage = stringResource(R.string.displays_shizuku_required)
@@ -139,13 +134,7 @@ fun DisplaysScreen(
         defaultDensityDpi = viewModel.defaultConfig.densityDpi,
         onNavigateToDetail = onNavigateToDetail,
         onPullRefresh = { viewModel.refreshDisplays(true) },
-        onShizukuAction = {
-            if (uiState.shizukuStatus == ShizukuConnectionStatus.NEED_PERMISSION) {
-                showShizukuRationale = true
-            } else {
-                viewModel.onShizukuAction()
-            }
-        },
+        onShizukuAction = { showShizukuSetup = true },
         onDestroyDisplay = { viewModel.destroyDisplay(it) },
         onToggleMirror = { displayId, enable -> viewModel.toggleMirror(displayId, enable) },
         onCreateDisplay = { width, height, densityDpi ->

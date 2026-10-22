@@ -199,7 +199,6 @@
     <string name="shizuku_status_disconnected">Service Disconnected</string>
     <string name="shizuku_status_connecting">Connecting…</string>
     <string name="shizuku_status_connected">Service Connected</string>
-    <string name="shizuku_action_grant">Grant</string>
 
     <!-- UserService Settings -->
     <string name="settings_user_service_restart">Restart</string>
@@ -247,9 +246,17 @@
 
     <string name="permission_shizuku_title">Shizuku Service &amp; Permission</string>
     <string name="permission_shizuku_desc">Used to access system privileged APIs to create virtual displays and inject touch events.</string>
-    <string name="permission_shizuku_rationale_title">Shizuku Permission Rationale</string>
     <string name="permission_shizuku_rationale_desc">MoonClicker requires access to Android system privileged APIs via Shizuku to create isolated virtual displays and accurately simulate touch actions. This enables automation scripts to run smoothly without occupying your physical screen.</string>
     <string name="permission_shizuku_uid_warning">Shizuku is running as root. Running it as adb shell is recommended instead.</string>
+    <string name="shizuku_setup_title">Set Up Shizuku</string>
+    <string name="shizuku_setup_step_install">Install Shizuku</string>
+    <string name="shizuku_setup_step_install_desc">Shizuku needs to be installed first.</string>
+    <string name="shizuku_setup_step_start">Start Shizuku</string>
+    <string name="shizuku_setup_step_start_desc">Shizuku is installed but not running. Open Shizuku and follow its instructions to start the service.</string>
+    <string name="shizuku_setup_step_grant">Authorize MoonClicker</string>
+    <string name="shizuku_setup_step_grant_desc">Shizuku is running. Authorize MoonClicker to use it.</string>
+    <string name="shizuku_setup_action_install">Install</string>
+    <string name="shizuku_setup_action_done">Done</string>
     <string name="shizuku_grant_permission_failed">Failed to grant permission via Shizuku, please use system settings instead.</string>
 
     <string name="permission_notification_title">Notification Permission</string>

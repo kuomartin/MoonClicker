@@ -181,15 +181,6 @@ class ShizukuManager(private val context: Context) {
         }
     }
 
-    /** 狀態列按鈕的統一入口：未授權先要授權，已授權就啟動服務。 */
-    fun requestPermissionOrConnect() {
-        when (_access.value) {
-            ShizukuAccess.NOT_INSTALLED, ShizukuAccess.NOT_RUNNING -> Timber.w("Shizuku binder is not available")
-            ShizukuAccess.NEED_PERMISSION -> requestPermission()
-            ShizukuAccess.GRANTED -> startUserService()
-        }
-    }
-
     /** 啟動 UserService（沒在跑就建立）。已經在啟動中就不重來。 */
     fun startUserService() = connect(startIfNotRunning = true)
 

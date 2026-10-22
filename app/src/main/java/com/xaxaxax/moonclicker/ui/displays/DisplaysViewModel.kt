@@ -131,8 +131,6 @@ class DisplaysViewModel @Inject constructor(
         }
     }
 
-    fun onShizukuAction() = shizukuManager.requestPermissionOrConnect()
-
     fun refreshDisplays(fromPullToRefresh: Boolean = false) {
         if (!shizukuManager.status.isConnected && !fromPullToRefresh) {
             return
@@ -142,8 +140,11 @@ class DisplaysViewModel @Inject constructor(
             try {
                 if (fromPullToRefresh) {
                     isRefreshing.value = true
-                    if (!shizukuManager.status.isConnected) {
-                        shizukuManager.requestPermissionOrConnect()
+                    // 下拉只重查與連線；授權一律走 Shizuku 設定引導，不在這裡彈授權框。
+                    if (shizukuManager.status.isAuthorized) {
+                        if (!shizukuManager.status.isConnected) shizukuManager.startUserService()
+                    } else {
+                        shizukuManager.refreshAccess()
                     }
                 }
                 shizukuManager.withService { service ->

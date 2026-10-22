@@ -35,10 +35,6 @@ fun ShizukuStatusBar(
     if (status.isAuthorized) return
 
     val (label, tint) = shizukuStatusAppearance(status)
-    val actionLabel = when (status) {
-        ShizukuConnectionStatus.NEED_PERMISSION -> stringResource(R.string.shizuku_action_grant)
-        else -> null
-    }
 
     Surface(
         modifier = modifier.fillMaxWidth(),
@@ -66,10 +62,8 @@ fun ShizukuStatusBar(
                     color = tint,
                 )
             }
-            if (actionLabel != null) {
-                TextButton(onClick = onActionClick) {
-                    Text(actionLabel)
-                }
+            TextButton(onClick = onActionClick) {
+                Text(stringResource(R.string.shizuku_setup_title))
             }
         }
     }

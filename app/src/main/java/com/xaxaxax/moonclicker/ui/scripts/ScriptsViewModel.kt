@@ -90,7 +90,6 @@ class ScriptsViewModel @Inject constructor(
         initialValue = ScriptsUiState(scriptsPath = store.root.absolutePath),
     )
 
-    fun onShizukuAction() = shizukuManager.requestPermissionOrConnect()
 
     /** 使用者可能剛從檔案管理員丟了資料夾進來，所以掃描是隨時可觸發的動作。 */
     fun refresh() = store.refresh()

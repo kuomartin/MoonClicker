@@ -283,9 +283,6 @@ class SettingsViewModel @Inject constructor(
     /** 開發人員選項用：載入重新建置的服務。 */
     fun restartUserService() = shizukuManager.restartUserService()
 
-    fun getOpenShizukuIntent() = shizukuManager.getLaunchShizukuIntent() ?: shizukuManager.getInstallShizukuIntent()
-    fun requestShizukuPermission() = shizukuManager.requestPermission()
-
     /** 通知權限說明畫面的「透過 Shizuku 取得權限」動作，失敗時提示改走系統設定。 */
     fun grantNotificationPermissionViaShizuku() {
         viewModelScope.launch {
