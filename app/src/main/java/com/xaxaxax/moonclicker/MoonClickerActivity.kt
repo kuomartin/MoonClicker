@@ -63,7 +63,11 @@ class MoonClickerActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         reconcileWorkbenchState()
-        consumeNavTarget(intent)
+        // 重建（行程被殺後從 Recents 回來）時系統會重送當初的 intent，removeExtra 改不到那份；
+        // 通知要的動作已經做過，不能再導頁或再叫出安裝畫面。
+        val relaunched = savedInstanceState != null ||
+            intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0
+        if (!relaunched) consumeNavTarget(intent)
         enableEdgeToEdge()
         val startDestination = appSettings.defaultStartPage.value.route
         setContent {
