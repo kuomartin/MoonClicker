@@ -296,9 +296,12 @@ class VisionWaitTest {
         }
     }
 
+    /**
+     * 先走完 [Tier1Env.stage]，確定啟動轉場已經結束，再藏起標記。只等 awaitSettled 的話，
+     * 轉場可能在之後才開始，腳本開跑時畫面還在動，「靜止畫面」的斷言就不成立。
+     */
     private fun stageWithHiddenMarkers(): Int {
-        val displayId = env.createDisplay()
-        env.launchPuppet(displayId)
+        val displayId = env.stage()
         PuppetActivity.setVisible(marker = false, glyph = false)
         env.awaitSettled(displayId)
         return displayId
