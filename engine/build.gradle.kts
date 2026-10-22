@@ -29,6 +29,7 @@ android {
                     "-DANDROID_STL=c++_shared",
                     "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON",
                     "-DOpenCV_DIR=$openCvSdkDir/sdk/native/jni",
+                    "-DMOONCLICKER_OPENCV_VERSION=${libs.versions.opencv.get()}",
                     "-DCMAKE_SHARED_LINKER_FLAGS=-Wl,-z,max-page-size=16384"
                 )
             }

@@ -40,7 +40,7 @@ graph TD
 - **職責**：
   - **原生層唯一出口**：專案中**唯一**包含 C++/JNI 原生代碼（`CMakeLists.txt`、`src/main/cpp/`）的模組。
   - **Lua 直譯與運行環境**：內嵌 Lua 5.5，提供腳本解析、協程排程、停止中斷旗標管理。
-  - **視覺計算與比對**：整合 OpenCV 4.10 原生加速庫，負責 Template Matching、色彩空間轉換、ROI 裁切。
+  - **視覺計算與比對**：整合 OpenCV 5.0 原生加速庫，負責 Template Matching、色彩空間轉換、ROI 裁切。
   - **底層服務提供者**：`MoonClickerService`、虛擬顯示管理、GLES 畫面捕捉與 H.264 編碼管線。
 - **限制**：
   - ❌ 禁止依賴 `:app` 或任何 UI 框架庫（Compose、Material）。
