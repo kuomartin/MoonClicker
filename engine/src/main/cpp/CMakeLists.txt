@@ -2,8 +2,9 @@ cmake_minimum_required(VERSION 3.22.1)
 
 project("moonclicker_native")
 
-# OpenCV setup (Statically link only core, imgproc, imgcodecs to minimize APK size)
-find_package(OpenCV REQUIRED core imgproc imgcodecs)
+# OpenCV setup (Statically link only core, imgproc, imgcodecs to minimize APK size).
+# EXACT keeps local builds on the SDK version the release workflow downloads; both come from gradle/libs.versions.toml.
+find_package(OpenCV ${MOONCLICKER_OPENCV_VERSION} EXACT REQUIRED core imgproc imgcodecs)
 
 include_directories(${OpenCV_INCLUDE_DIRS})
 include_directories(lua/lua-5.5.0)
