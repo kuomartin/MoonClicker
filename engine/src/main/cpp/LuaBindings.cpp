@@ -235,16 +235,15 @@ int matchOnce(lua_State *L, ScriptRuntime *runtime, const std::vector<VisionRequ
 }
 
 /**
- * wait 系列共用的核心：比對到第一個命中就停，或撐到 [timeoutMs] 為止。
- * @param stepMs 兩次比對開始的最小間隔；0 表示每張新影格都比對。
- * @return 命中的 request 索引，沒有就回傳 -1。
+ * wait 系列共用的輪詢：每張新影格呼叫一次 [attempt]，它回傳 true 就停，或撐到 [timeoutMs] 為止。
+ * @param stepMs 兩次呼叫開始的最小間隔；0 表示每張新影格都呼叫。
+ * @return attempt 是否回傳過 true。
  */
-int matchUntil(lua_State *L, ScriptRuntime *runtime, const std::vector<VisionRequest> &requests,
-               long timeoutMs, long stepMs) {
-    Ocr *ocr = ocrFor(L, runtime, requests);
+template<typename Attempt>
+bool pollFrames(lua_State *L, ScriptRuntime *runtime, long timeoutMs, long stepMs, Attempt attempt) {
     long deadline = nowMs() + std::max(0L, timeoutMs);
-    // 同一張影格比對過就不再比：畫面靜止時 distributor 不送新影格，重比只會得到同樣的結果。
-    bool matchedAny = false;
+    // 同一張影格看過就不再看：畫面靜止時 distributor 不送新影格，重比只會得到同樣的結果。
+    bool attempted = false;
     uint64_t matched = 0;
 
     while (true) {
@@ -252,21 +251,20 @@ int matchUntil(lua_State *L, ScriptRuntime *runtime, const std::vector<VisionReq
 
         long attemptStart = nowMs();
         uint64_t seen = runtime->vision().frameCounter();
-        if (!matchedAny || seen != matched) {
-            int index = matchOnce(L, runtime, requests, ocr);
-            if (index >= 0) return index;
-            matchedAny = true;
+        if (!attempted || seen != matched) {
+            if (attempt()) return true;
+            attempted = true;
             matched = seen;
         }
 
         long remaining = deadline - nowMs();
-        if (remaining <= 0) return -1;
+        if (remaining <= 0) return false;
 
         if (stepMs > 0) {
             long pause = std::min(attemptStart + stepMs - nowMs(), remaining);
             if (pause > 0 && !runtime->interruptibleSleep(pause)) raiseStopped(L);
             remaining = deadline - nowMs();
-            // 睡到 deadline 就直接回迴圈頂端做最後一次比對，與不帶 step 時逾時前的最後一次一致。
+            // 睡到 deadline 就直接回迴圈頂端做最後一次，與不帶 step 時逾時前的最後一次一致。
             if (remaining <= 0) continue;
         }
 
@@ -274,6 +272,40 @@ int matchUntil(lua_State *L, ScriptRuntime *runtime, const std::vector<VisionReq
         runtime->vision().waitForFrameAfter(seen, std::min(remaining, kWaitPollMs));
     }
 }
+
+/**
+ * 比對到第一個命中就停，或撐到 [timeoutMs] 為止。
+ * @return 命中的 request 索引，沒有就回傳 -1。
+ */
+int matchUntil(lua_State *L, ScriptRuntime *runtime, const std::vector<VisionRequest> &requests,
+               long timeoutMs, long stepMs) {
+    Ocr *ocr = ocrFor(L, runtime, requests);
+    int index = -1;
+    pollFrames(L, runtime, timeoutMs, stepMs, [&] {
+        index = matchOnce(L, runtime, requests, ocr);
+        return index >= 0;
+    });
+    return index;
+}
+
+/** wait_until 的 fn 執行期間影格是固定的，在裡面等新影格永遠等不到。 */
+void rejectInsideWaitUntil(lua_State *L, ScriptRuntime *runtime, const char *function) {
+    if (runtime->vision().isFramePinned()) {
+        luaL_error(L, "%s cannot be called inside vision.wait_until", function);
+    }
+}
+
+/** 解構時解除固定：fn 拋錯（含停止）時 Lua 的錯誤是 C++ 例外，一樣會經過這裡。 */
+class FramePin {
+public:
+    explicit FramePin(VisionMatcher &vision) : vision(vision) { vision.pinFrame(); }
+    ~FramePin() { vision.unpinFrame(); }
+    FramePin(const FramePin &) = delete;
+    FramePin &operator=(const FramePin &) = delete;
+
+private:
+    VisionMatcher &vision;
+};
 
 /** 讀出 `requests` 陣列；空陣列直接報錯，錯誤訊息帶上呼叫的函式名。 */
 std::vector<VisionRequest> readRequestList(lua_State *L, int index, ScriptRuntime *runtime,
@@ -406,9 +438,28 @@ int lua_vision_find_any(lua_State *L) {
     return pushIndexedHit(L, matchOnce(L, runtime, requests, ocrFor(L, runtime, requests)));
 }
 
+int lua_vision_find_all(lua_State *L) {
+    ScriptRuntime *runtime = self(L);
+    std::vector<VisionRequest> requests{readRequest(L, 1, runtime)};
+    requireVision(L, runtime);
+    Ocr *ocr = ocrFor(L, runtime, requests);
+
+    std::vector<VisionHit> hits;
+    guarded(L, [&] { hits = runtime->vision().findAll(requests[0], ocr); });
+    reportHits(runtime, requests, {hits.empty() ? VisionHit{} : hits[0]});
+
+    lua_createtable(L, static_cast<int>(hits.size()), 0);
+    for (size_t i = 0; i < hits.size(); i++) {
+        pushHit(L, hits[i]);
+        lua_rawseti(L, -2, static_cast<lua_Integer>(i + 1));
+    }
+    return 1;
+}
+
 int lua_vision_wait(lua_State *L) {
     ScriptRuntime *runtime = self(L);
     std::vector<VisionRequest> requests{readRequest(L, 1, runtime)};
+    rejectInsideWaitUntil(L, runtime, "vision.wait");
     requireVision(L, runtime);
     if (matchUntil(L, runtime, requests, readTimeout(L, 2), readStep(L, 3)) < 0) {
         lua_pushnil(L);
@@ -419,8 +470,33 @@ int lua_vision_wait(lua_State *L) {
 int lua_vision_wait_any(lua_State *L) {
     ScriptRuntime *runtime = self(L);
     std::vector<VisionRequest> requests = readRequestList(L, 1, runtime, "vision.wait_any");
+    rejectInsideWaitUntil(L, runtime, "vision.wait_any");
     requireVision(L, runtime);
     return pushIndexedHit(L, matchUntil(L, runtime, requests, readTimeout(L, 2), readStep(L, 3)));
+}
+
+/**
+ * 每張新影格呼叫一次 fn，fn 期間影格固定（同一區域的文字辨識只做一次）；fn 回傳 truthy 就把
+ * 那個值回傳，逾時回傳 nil。fn 拋的錯照常往外拋。
+ */
+int lua_vision_wait_until(lua_State *L) {
+    ScriptRuntime *runtime = self(L);
+    luaL_checktype(L, 1, LUA_TFUNCTION);
+    long timeoutMs = readTimeout(L, 2);
+    long stepMs = readStep(L, 3);
+    rejectInsideWaitUntil(L, runtime, "vision.wait_until");
+    requireVision(L, runtime);
+
+    bool done = pollFrames(L, runtime, timeoutMs, stepMs, [&] {
+        FramePin pin(runtime->vision());
+        lua_pushvalue(L, 1);
+        lua_call(L, 0, 1);
+        if (lua_toboolean(L, -1)) return true;
+        lua_pop(L, 1);
+        return false;
+    });
+    if (!done) lua_pushnil(L);
+    return 1;
 }
 
 /** read/read_lines 共用：讀最新影格的文字。[roiIndex] 沒給（nil/none）時是整張。 */
@@ -771,10 +847,12 @@ void registerModule(lua_State *L, ScriptRuntime *runtime, const char *name,
 const luaL_Reg kVision[] = {
         {"find",     lua_vision_find},
         {"find_any", lua_vision_find_any},
+        {"find_all", lua_vision_find_all},
         {"read",     lua_vision_read},
         {"read_lines", lua_vision_read_lines},
         {"wait",     lua_vision_wait},
         {"wait_any", lua_vision_wait_any},
+        {"wait_until", lua_vision_wait_until},
         {nullptr, nullptr},
 };
 

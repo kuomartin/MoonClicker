@@ -11,8 +11,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * `vision.wait` / `vision.wait_any` 的等待語意：畫面在腳本已經在等的時候才改變。
- * `vision.find_any` 也在這裡：它與 `wait_any` 共用多目標的 index 語意。
+ * `vision.wait` / `vision.wait_any` / `vision.wait_until` 的等待語意：畫面在腳本已經在等的時候才改變。
+ * `vision.find_any`、`vision.find_all` 也在這裡：前者與 `wait_any` 共用多目標的 index 語意，
+ * 後者與 `find` 共用最佳命中。
  */
 @RunWith(AndroidJUnit4::class)
 class VisionWaitTest {
@@ -153,6 +154,124 @@ class VisionWaitTest {
         assertEquals(true, outcome.data["miss_is_nil"])
     }
 
+    /**
+     * fn 回傳的值原樣帶出來，fn 也看得到並改得了外層的 local。鑑別力同 [vision_wait_blocks_until_the_marker_appears]：
+     * 標記在延遲前不在畫面上；`calls > 1` 擋的是只呼叫一次就回傳的實作。
+     */
+    @Test
+    fun vision_wait_until_returns_what_fn_returns_once_it_is_truthy() {
+        val displayId = stageWithHiddenMarkers()
+        PuppetActivity.showAfter(APPEAR_DELAY_MS)
+
+        val started = SystemClock.uptimeMillis()
+        val outcome = env.runScript(
+            displayId,
+            """
+            local calls = 0
+            local result = vision.wait_until(function()
+                calls = calls + 1
+                local hit = vision.find("marker.png")
+                return hit and { x = hit.x, calls = calls }
+            end, 15000)
+            data.set("found", result ~= nil)
+            data.set("calls", calls)
+            data.set("returned_calls", result and result.calls)
+            """.trimIndent(),
+        )
+        val elapsed = SystemClock.uptimeMillis() - started
+
+        assertEquals(EngineRunState.Finished, outcome.runState)
+        if (outcome.data["found"] != true) env.assumeFramesHaveContent(displayId)
+        assertEquals(true, outcome.data["found"])
+        assertEquals("wait_until must return fn's own value", outcome.data["calls"], outcome.data["returned_calls"])
+        assertTrue("fn ran only ${outcome.data["calls"]} time(s) — it did not keep polling", (outcome.data["calls"] as Double) > 1)
+        assertTrue("returned after ${elapsed}ms, before the marker was drawn at +${APPEAR_DELAY_MS}ms", elapsed >= APPEAR_DELAY_MS)
+    }
+
+    /** 逾時回傳 nil 而不是拋錯；畫面靜止時不重複呼叫 fn（每張新影格一次）。 */
+    @Test
+    fun vision_wait_until_returns_nil_on_timeout() {
+        val displayId = stageWithHiddenMarkers()
+
+        val started = SystemClock.uptimeMillis()
+        val outcome = env.runScript(
+            displayId,
+            """
+            local calls = 0
+            local result = vision.wait_until(function()
+                calls = calls + 1
+                return false
+            end, $TIMEOUT_MS)
+            data.set("is_nil", result == nil)
+            data.set("calls", calls)
+            """.trimIndent(),
+        )
+        val elapsed = SystemClock.uptimeMillis() - started
+
+        assertEquals(EngineRunState.Finished, outcome.runState)
+        assertEquals(true, outcome.data["is_nil"])
+        assertTrue("returned after only ${elapsed}ms for a ${TIMEOUT_MS}ms timeout", elapsed >= TIMEOUT_MS)
+        // 靜止畫面幾乎不送新影格；每 200 ms 輪詢一次都重呼叫的話會遠超過這個數。
+        assertTrue("fn ran ${outcome.data["calls"]} times on a still screen", (outcome.data["calls"] as Double) < 5)
+    }
+
+    /**
+     * fn 拋的錯照常往外拋；fn 裡呼叫會等新影格的函式要報錯，否則固定的影格讓它永遠等不到。
+     * 錯誤之後影格要解除固定：後面的 `vision.wait` 還能比中。
+     */
+    @Test
+    fun vision_wait_until_propagates_errors_and_rejects_nested_waits() {
+        val displayId = env.stage()
+
+        val outcome = env.runScript(
+            displayId,
+            """
+            local ok, e = pcall(vision.wait_until, function() error("boom") end, 1000)
+            data.set("error", tostring(e))
+            ok, e = pcall(vision.wait_until, function() return vision.wait("marker.png", 1000) end, 1000)
+            data.set("nested", tostring(e))
+            data.set("after", vision.wait("marker.png", 15000) ~= nil)
+            """.trimIndent(),
+        )
+
+        assertEquals(EngineRunState.Finished, outcome.runState)
+        assertTrue("got: ${outcome.data["error"]}", "boom" in outcome.data["error"] as String)
+        assertTrue(
+            "got: ${outcome.data["nested"]}",
+            "vision.wait cannot be called inside vision.wait_until" in outcome.data["nested"] as String,
+        )
+        if (outcome.data["after"] != true) env.assumeFramesHaveContent(displayId)
+        assertEquals("the frame stayed pinned after fn raised", true, outcome.data["after"])
+    }
+
+    /** puppet 只畫一個標記：find_all 回傳它一個，且與 find 相同；不在畫面上的回傳空表而不是 nil。 */
+    @Test
+    fun vision_find_all_returns_every_hit_and_an_empty_table_when_none() {
+        val displayId = env.createDisplay()
+        env.launchPuppet(displayId)
+        PuppetActivity.setVisible(marker = true, glyph = false)
+        env.awaitSettled(displayId)
+
+        val outcome = env.runScript(
+            displayId,
+            """
+            vision.wait("marker.png", 15000)
+            local all = vision.find_all("marker.png")
+            local one = vision.find("marker.png")
+            data.set("count", #all)
+            data.set("same", one ~= nil and all[1] ~= nil and all[1].x == one.x and all[1].y == one.y)
+            local none = vision.find_all("glyph.png")
+            data.set("none_is_table", type(none) == "table" and #none == 0)
+            """.trimIndent(),
+        )
+
+        assertEquals(EngineRunState.Finished, outcome.runState)
+        if (outcome.data["count"] != 1.0) env.assumeFramesHaveContent(displayId)
+        assertEquals("one marker on screen, overlapping candidates must collapse into one hit", 1.0, outcome.data["count"])
+        assertEquals("find_all's first hit must be find's hit", true, outcome.data["same"])
+        assertEquals(true, outcome.data["none_is_table"])
+    }
+
     /** 顯示器 + puppet 就緒、標記全部藏起來、畫面已經穩定。 */
     /**
      * #166：腳本第一行就 `vision.find`，比的是已經在畫面上的標記。影格管線剛接上時要
@@ -177,9 +296,12 @@ class VisionWaitTest {
         }
     }
 
+    /**
+     * 先走完 [Tier1Env.stage]，確定啟動轉場已經結束，再藏起標記。只等 awaitSettled 的話，
+     * 轉場可能在之後才開始，腳本開跑時畫面還在動，「靜止畫面」的斷言就不成立。
+     */
     private fun stageWithHiddenMarkers(): Int {
-        val displayId = env.createDisplay()
-        env.launchPuppet(displayId)
+        val displayId = env.stage()
         PuppetActivity.setVisible(marker = false, glyph = false)
         env.awaitSettled(displayId)
         return displayId

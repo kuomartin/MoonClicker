@@ -26,6 +26,8 @@ class LuaOcrApiTest {
             data.set("gray", err(vision.wait, { text = "OK", gray = true }))
             data.set("exact", err(vision.find_any, { { image = "a.png", exact = true } }))
             data.set("read", err(vision.read))
+            data.set("find_all", err(vision.find_all, { text = "OK", gray = true }))
+            data.set("wait_until", err(vision.wait_until, { text = "OK" }))
             """.trimIndent(),
         )
 
@@ -41,5 +43,7 @@ class LuaOcrApiTest {
         assertMentions("gray", "`gray` only applies to image requests")
         assertMentions("exact", "`exact` only applies to text requests")
         assertMentions("read", "roi")
+        assertMentions("find_all", "`gray` only applies to image requests")
+        assertMentions("wait_until", "function expected")
     }
 }

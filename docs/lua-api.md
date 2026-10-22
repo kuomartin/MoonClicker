@@ -154,11 +154,38 @@ end
 * **`vision.find_any(requests)` -> `(integer?, VisionHit?)`**
   對目前最新影格比對多個目標（陣列）一次，回傳依陣列順序第一個命中的 `(1-based 索引, VisionHit)`，都未命中回傳 `nil, nil`。
 
+* **`vision.find_all(request)` -> `VisionHit[]`**
+  對目前最新影格找出所有命中，依 `confidence` 由高到低，第一個就是 `vision.find` 的結果；沒有命中回傳空陣列。最多 100 個。
+  * 模板：彼此重疊超過模板一半的只留最像的那個，同一個目標不會因為偏移一兩個像素而重複出現。
+  * 文字：每一行最多一個，取該行最像的那一段；同一行裡出現兩次只會回傳一次。
+
 * **`vision.wait(request [, timeout_ms [, step_ms]])` -> `VisionHit?`**
   持續等待目標出現直到逾時（預設 `10000` ms），逾時回傳 `nil`。
 
 * **`vision.wait_any(requests [, timeout_ms [, step_ms]])` -> `(integer?, VisionHit?)`**
   同時等待多個目標（陣列），回傳第一個命中的 `(1-based 索引, VisionHit)`，逾時回傳 `nil, nil`。
+
+* **`vision.wait_until(fn [, timeout_ms [, step_ms]])` -> `any`**
+  每張新影格呼叫一次 `fn()`，直到它回傳 `nil`、`false` 以外的值，並把那個值回傳；逾時（預設 `10000` ms）回傳 `nil`。用於請求表達不了的條件：數值大小、位置、多個目標的組合。
+  * `fn` 是一般的 Lua 函式，讀寫得到外層的變數；`fn` 拋的錯照常往外拋。
+  * `fn` 執行期間影格固定：裡面呼叫幾次 `vision.find`、`find_all`、`read`、`read_lines` 都看同一張畫面，同一個 `roi` 的文字辨識只做一次。
+  * `fn` 裡不能呼叫 `vision.wait`、`wait_any`、`wait_until`（影格固定時等不到新影格），呼叫會報錯。`fn` 應該只做判斷，不要 `sleep` 或 `input.*`。
+
+```lua
+-- 等 HP 讀數到 100 以上，回傳讀到的數值
+local hp = vision.wait_until(function()
+    local line = vision.read({ 20, 40, 200, 30 })
+    local n = line and tonumber(line.text:match("%d+"))
+    return n and n >= 100 and n
+end, 30000)
+
+-- 等畫面下半部出現「領取」
+local hit = vision.wait_until(function()
+    for _, h in ipairs(vision.find_all({ text = "領取" })) do
+        if h.cy > screen.height / 2 then return h end
+    end
+end)
+```
 
 ### 讀取文字
 
@@ -183,7 +210,7 @@ end
 
 ### 輪詢間隔
 
-`step_ms` 是兩次比對開始的最小間隔（預設 `0`：每張新影格都比對一次）。目標不需要即時反應、或比對成本高（大模板、多目標、文字）時調高它可以降低 CPU 用量，代價是命中最多晚 `step_ms` 才回傳。逾時前一定會再比對最後一次。
+`step_ms` 是兩次比對（`wait_until` 是兩次呼叫 `fn`）開始的最小間隔（預設 `0`：每張新影格都比對一次）。目標不需要即時反應、或比對成本高（大模板、多目標、文字）時調高它可以降低 CPU 用量，代價是命中最多晚 `step_ms` 才回傳。逾時前一定會再比對最後一次。
 
 ---
 
