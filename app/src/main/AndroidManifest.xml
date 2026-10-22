@@ -2,6 +2,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- 檢查更新：下載完由 App 叫出安裝畫面。 -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- 檢查更新：API 29 起寫進 Download/ 不需要權限。 -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
 
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
@@ -75,6 +81,15 @@
             android:multiprocess="false"
             android:permission="android.permission.INTERACT_ACROSS_USERS_FULL"
         />
+        <!-- DownloadManager 以 setPackage 送完成通知，送件者是系統的下載程式，需 exported。 -->
+        <receiver
+            android:name=".update.UpdateDownloadReceiver"
+            android:exported="true"
+        >
+            <intent-filter>
+                <action android:name="android.intent.action.DOWNLOAD_COMPLETE" />
+            </intent-filter>
+        </receiver>
         <!-- Handles the "停止所有" action on the script status notification. -->
         <receiver
             android:name=".notification.ScriptNotificationReceiver"

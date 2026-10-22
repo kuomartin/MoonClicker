@@ -185,6 +185,51 @@
     <string name="about_developer_unlocked">您現在是開發人員了！</string>
     <string name="about_developer_already_unlocked">不需要，您已經是開發人員了。</string>
 
+    <!-- Updates -->
+    <string name="settings_auto_check_updates">自動檢查更新</string>
+    <string name="settings_auto_check_updates_note">App 回到前景時檢查，一天最多一次。</string>
+    <string name="settings_include_prereleases">包含預覽版</string>
+    <string name="settings_include_prereleases_note">GitHub 上標為 pre-release 的版本也列入。</string>
+    <string name="update_check">檢查更新</string>
+    <string name="update_never_checked">尚未檢查</string>
+    <string name="update_checking">檢查中…</string>
+    <string name="update_subtitle">%1$s・%2$s</string>
+    <string name="update_up_to_date">已是最新版本</string>
+    <string name="update_up_to_date_toast">已是最新版本</string>
+    <string name="update_available">有新版本 %1$s</string>
+    <string name="update_available_prerelease">有預覽版 %1$s</string>
+    <string name="update_today">今天 %1$s</string>
+    <string name="update_checked_auto">%1$s 自動檢查</string>
+    <string name="update_checked_manual">上次檢查 %1$s</string>
+    <string name="update_failed">檢查失敗：%1$s</string>
+    <string name="update_downloading">下載中…</string>
+    <string name="update_downloading_percent">下載中 %1$d%%</string>
+    <string name="update_verifying">驗證中…</string>
+    <string name="update_ready">%1$s 已下載，點此安裝</string>
+    <string name="update_download_failed_short">下載失敗，點此查看</string>
+    <string name="update_corrupted_short">檔案損毀，點此查看</string>
+    <string name="update_dialog_title">MoonClicker %1$s</string>
+    <string name="update_dialog_title_prerelease">MoonClicker %1$s（預覽版）</string>
+    <string name="update_release_notes">發布說明</string>
+    <string name="update_download_and_install">下載並安裝（%1$s）</string>
+    <string name="update_progress">%1$s / %2$s</string>
+    <string name="update_continue_in_background">背景下載</string>
+    <string name="update_cancel_download">取消下載</string>
+    <string name="update_install">安裝</string>
+    <string name="update_skip">略過此版本</string>
+    <string name="update_download_failed">下載失敗。</string>
+    <string name="update_corrupted">檔案損毀，請重新下載。</string>
+    <string name="update_manual_download">到 GitHub 手動下載</string>
+    <string name="update_settings_title">更新設定</string>
+    <string name="update_settings_done">完成</string>
+    <string name="update_download_title">MoonClicker %1$s</string>
+    <string name="update_channel_label">更新</string>
+    <string name="update_ready_notification_title">MoonClicker %1$s 已下載</string>
+    <string name="update_ready_notification_text">點此安裝</string>
+    <string name="update_install_permission_title">允許安裝更新</string>
+    <string name="update_install_permission_desc">Android 要求每個 App 個別取得「安裝不明應用程式」的權限，MoonClicker 才能開啟下載好的更新。接下來會開啟系統設定，請開啟「允許這個來源的應用程式」，返回後會自動繼續安裝。</string>
+    <string name="update_storage_permission_denied">需要儲存空間權限才能下載到 Download 資料夾。</string>
+
     <!-- Developer options page -->
     <string name="developer_options_title">開發人員選項</string>
     <string name="developer_options_displays">顯示器</string>
