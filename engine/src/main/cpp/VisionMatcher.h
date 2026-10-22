@@ -2,6 +2,7 @@
 #define MOONCLICKER_VISION_MATCHER_H
 
 #include <opencv2/core.hpp>
+#include <array>
 #include <condition_variable>
 #include <map>
 #include <mutex>
@@ -58,6 +59,7 @@ public:
      *   期間都固定不變——AImageReader 不會在 VD 中途旋轉時重開，見 ADR-0017 的 Consequences。
      */
     VisionMatcher(int frameWidth, int frameHeight, int rotation, std::string scriptDir);
+    ~VisionMatcher();
 
     int rotation() const { return displayRotation; }
 
@@ -84,10 +86,26 @@ public:
     std::vector<VisionHit> match(const std::vector<VisionRequest> &requests, Ocr *ocr = nullptr);
 
     /**
+     * 對最新影格找出 [request] 的所有命中，依 confidence 由高到低，至多 [kMaxHits] 個；第一個與
+     * [match] 的結果相同。文字請求每一行至多一個；模板請求彼此重疊超過模板一半的只留最像的。
+     */
+    std::vector<VisionHit> findAll(const VisionRequest &request, Ocr *ocr = nullptr);
+
+    static constexpr size_t kMaxHits = 100;
+
+    /**
      * 對最新影格的 [roi] 讀文字（邏輯空間；hasRoi 為 false 時是整張）。[detect] 為 false 時把 ROI
      * 當成單一文字行直接辨識，回傳至多一項；true 時偵測所有行後逐行辨識。沒有影格或沒有字時回傳空。
      */
     std::vector<OcrLine> readText(Ocr &ocr, bool hasRoi, const cv::Rect &roi, bool detect);
+
+    /**
+     * 固定目前最新的影格：之後的 [match]、[findAll]、[readText] 都看這一張，同一區域的文字辨識
+     * 也只做一次，直到 [unpinFrame]。只在腳本執行緒呼叫（vision.wait_until）。
+     */
+    void pinFrame();
+    void unpinFrame();
+    bool isFramePinned() const { return framePinned; }
 
     /** 喚醒所有等待者並讓後續等待立刻返回（停止腳本時呼叫）。 */
     void shutdown();
@@ -99,8 +117,19 @@ public:
     bool templateExists(const VisionRequest &request);
 
 private:
-    /** 最新影格的複本；沒有影格時為空。 */
+    /** 文字辨識結果，鍵是 {x, y, w, h, detect}。 */
+    using TextCache = std::map<std::array<int, 5>, std::vector<OcrLine>>;
+
+    /** 最新影格的複本（固定影格時是那一張）；沒有影格時為空。 */
     cv::Mat snapshot();
+
+    /** 每個 request 的所有命中，各自依 confidence 由高到低，至多 [limit] 個。 */
+    std::vector<std::vector<VisionHit>> matchEach(const std::vector<VisionRequest> &requests, Ocr *ocr,
+                                                  size_t limit);
+
+    /** [frame] 的 [area] 內的文字行（影格座標），先查 [cache]。 */
+    const std::vector<OcrLine> &linesIn(Ocr &ocr, const cv::Mat &frame, const cv::Rect &area, bool detect,
+                                        TextCache &cache);
 
     /** 影格中 [roi]（hasRoi 為 false 時整張）與影格邊界的交集。 */
     cv::Rect clampRoi(const cv::Mat &frame, bool hasRoi, const cv::Rect &roi) const;
@@ -121,6 +150,11 @@ private:
 
     std::mutex cacheMutex;
     std::unordered_map<std::string, cv::Mat> cache;
+
+    // 固定影格只在腳本執行緒讀寫，不需要鎖。
+    bool framePinned = false;
+    cv::Mat pinnedFrame;
+    TextCache pinnedText;
 };
 
 #endif // MOONCLICKER_VISION_MATCHER_H

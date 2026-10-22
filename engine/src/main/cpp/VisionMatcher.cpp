@@ -18,6 +18,9 @@ VisionMatcher::VisionMatcher(int frameWidth, int frameHeight, int rotation, std:
         : frameWidth(frameWidth), frameHeight(frameHeight), displayRotation(rotation & 3),
           scriptDir(std::move(scriptDir)) {}
 
+// 解構在這裡定義：TextCache 的 OcrLine 在標頭只有前置宣告。
+VisionMatcher::~VisionMatcher() = default;
+
 void VisionMatcher::logicalSize(int &width, int &height) const {
     width = frameWidth;
     height = frameHeight;
@@ -113,10 +116,22 @@ cv::Mat VisionMatcher::templateFor(const VisionRequest &request) {
 }
 
 cv::Mat VisionMatcher::snapshot() {
+    if (framePinned) return pinnedFrame;
     std::lock_guard<std::mutex> lock(frameMutex);
     cv::Mat frame;
     latestFrame.copyTo(frame);
     return frame;
+}
+
+void VisionMatcher::pinFrame() {
+    pinnedFrame = snapshot();
+    framePinned = true;
+}
+
+void VisionMatcher::unpinFrame() {
+    framePinned = false;
+    pinnedFrame.release();
+    pinnedText.clear();
 }
 
 cv::Rect VisionMatcher::clampRoi(const cv::Mat &frame, bool hasRoi, const cv::Rect &roi) const {
@@ -144,71 +159,86 @@ cv::Mat toBgr(const cv::Mat &rgba) {
 
 }  // namespace
 
+const std::vector<OcrLine> &VisionMatcher::linesIn(Ocr &ocr, const cv::Mat &frame, const cv::Rect &area,
+                                                   bool detect, TextCache &textCache) {
+    std::array<int, 5> key{area.x, area.y, area.width, area.height, detect ? 1 : 0};
+    auto it = textCache.find(key);
+    if (it != textCache.end()) return it->second;
+
+    std::vector<OcrLine> lines;
+    if (!area.empty()) {
+        cv::Mat bgr = toBgr(frame(area));
+        cv::Rect whole(0, 0, bgr.cols, bgr.rows);
+        if (detect) {
+            lines = ocr.detectAndRecognize(bgr, whole);
+        } else {
+            OcrLine line = ocr.recognize(bgr, whole);
+            if (!line.text.empty()) lines.push_back(std::move(line));
+        }
+        for (auto &line: lines) offsetLine(line, area.tl());
+    }
+    return textCache.emplace(key, std::move(lines)).first->second;
+}
+
 std::vector<OcrLine> VisionMatcher::readText(Ocr &ocr, bool hasRoi, const cv::Rect &roi, bool detect) {
     cv::Mat frame = snapshot();
     if (frame.empty()) return {};
-    cv::Rect area = clampRoi(frame, hasRoi, roi);
-    if (area.empty()) return {};
-
-    cv::Mat bgr = toBgr(frame(area));
-    cv::Rect whole(0, 0, bgr.cols, bgr.rows);
-    std::vector<OcrLine> lines;
-    if (detect) {
-        lines = ocr.detectAndRecognize(bgr, whole);
-    } else {
-        OcrLine line = ocr.recognize(bgr, whole);
-        if (!line.text.empty()) lines.push_back(std::move(line));
-    }
-    for (auto &line: lines) offsetLine(line, area.tl());
-    return lines;
+    TextCache local;
+    return linesIn(ocr, frame, clampRoi(frame, hasRoi, roi), detect, framePinned ? pinnedText : local);
 }
 
 std::vector<VisionHit> VisionMatcher::match(const std::vector<VisionRequest> &requests, Ocr *ocr) {
+    std::vector<std::vector<VisionHit>> all = matchEach(requests, ocr, 1);
     std::vector<VisionHit> hits(requests.size());
+    for (size_t i = 0; i < all.size(); i++) {
+        if (!all[i].empty()) hits[i] = all[i][0];
+    }
+    return hits;
+}
+
+std::vector<VisionHit> VisionMatcher::findAll(const VisionRequest &request, Ocr *ocr) {
+    return matchEach({request}, ocr, kMaxHits)[0];
+}
+
+std::vector<std::vector<VisionHit>> VisionMatcher::matchEach(const std::vector<VisionRequest> &requests,
+                                                             Ocr *ocr, size_t limit) {
+    std::vector<std::vector<VisionHit>> hits(requests.size());
 
     cv::Mat frame = snapshot();
     if (frame.empty()) return hits;
 
     // 同一個 ROI 的文字辨識在這批 request 之間共用：wait_any 等多段文字時不重複推論。
-    std::map<std::array<int, 4>, std::vector<OcrLine>> textCache;
-    auto linesFor = [&](const VisionRequest &request) -> const std::vector<OcrLine> & {
+    // 固定影格時跨呼叫共用。
+    TextCache local;
+    TextCache &textCache = framePinned ? pinnedText : local;
+
+    auto matchTextRequest = [&](const VisionRequest &request, std::vector<VisionHit> &out) {
         cv::Rect area = clampRoi(frame, request.hasRoi, request.roi);
-        std::array<int, 4> key{area.x, area.y, area.width, area.height};
-        auto it = textCache.find(key);
-        if (it != textCache.end()) return it->second;
-
-        std::vector<OcrLine> lines;
-        if (!area.empty()) {
-            cv::Mat bgr = toBgr(frame(area));
-            lines = ocr->detectAndRecognize(bgr, cv::Rect(0, 0, bgr.cols, bgr.rows));
-            for (auto &line: lines) offsetLine(line, area.tl());
-        }
-        return textCache.emplace(key, std::move(lines)).first->second;
-    };
-
-    auto matchTextRequest = [&](const VisionRequest &request, VisionHit &hit) {
-        const OcrLine *bestLine = nullptr;
-        TextMatch best;
-        for (const auto &line: linesFor(request)) {
+        std::vector<std::pair<const OcrLine *, TextMatch>> found;
+        for (const auto &line: linesIn(*ocr, frame, area, true, textCache)) {
             TextMatch candidate = matchText(request.text, line.text, request.exact);
-            // 嚴格大於：同分時留閱讀順序在前的那一行。
-            if (bestLine == nullptr || candidate.similarity > best.similarity) {
-                best = candidate;
-                bestLine = &line;
-            }
+            if (candidate.similarity >= request.threshold) found.emplace_back(&line, candidate);
         }
-        if (bestLine == nullptr || best.similarity < request.threshold) return;
+        // stable：同分時留閱讀順序在前的那一行。
+        std::stable_sort(found.begin(), found.end(), [](const auto &a, const auto &b) {
+            return a.second.similarity > b.second.similarity;
+        });
+        if (found.size() > limit) found.resize(limit);
 
-        cv::Rect box = bestLine->spanBox(best.start, best.end);
-        hit.found = true;
-        hit.x = box.x;
-        hit.y = box.y;
-        hit.w = box.width;
-        hit.h = box.height;
-        hit.cx = box.x + box.width / 2.0;
-        hit.cy = box.y + box.height / 2.0;
-        hit.confidence = best.similarity;
-        hit.text = bestLine->text;
+        for (const auto &[line, textMatch]: found) {
+            cv::Rect box = line->spanBox(textMatch.start, textMatch.end);
+            VisionHit hit;
+            hit.found = true;
+            hit.x = box.x;
+            hit.y = box.y;
+            hit.w = box.width;
+            hit.h = box.height;
+            hit.cx = box.x + box.width / 2.0;
+            hit.cy = box.y + box.height / 2.0;
+            hit.confidence = textMatch.similarity;
+            hit.text = line->text;
+            out.push_back(hit);
+        }
     };
 
     // 同一個 scale 的縮放結果在這批 request 之間共用，灰階轉換同理。
@@ -275,21 +305,30 @@ std::vector<VisionHit> VisionMatcher::match(const std::vector<VisionRequest> &re
         cv::Mat result;
         cv::matchTemplate(target, templateImage, result, cv::TM_CCOEFF_NORMED);
 
-        double minVal, maxVal;
-        cv::Point minLoc, maxLoc;
-        cv::minMaxLoc(result, &minVal, &maxVal, &minLoc, &maxLoc);
-        if (maxVal < request.threshold) continue;
+        // 每次取最高分，再把以它為中心、模板大小的範圍壓掉，下一輪就不會在同一個目標旁邊再中。
+        const cv::Rect resultBounds(0, 0, result.cols, result.rows);
+        while (hits[i].size() < limit) {
+            double minVal, maxVal;
+            cv::Point minLoc, maxLoc;
+            cv::minMaxLoc(result, &minVal, &maxVal, &minLoc, &maxLoc);
+            if (maxVal < request.threshold) break;
 
-        // 回到未縮放的影格空間——影格本身已經是邏輯空間，不需要再轉一次。
-        VisionHit &hit = hits[i];
-        hit.found = true;
-        hit.x = (maxLoc.x + offsetX) / request.scale;
-        hit.y = (maxLoc.y + offsetY) / request.scale;
-        hit.w = templateImage.cols / request.scale;
-        hit.h = templateImage.rows / request.scale;
-        hit.cx = hit.x + hit.w / 2.0;
-        hit.cy = hit.y + hit.h / 2.0;
-        hit.confidence = maxVal;
+            // 回到未縮放的影格空間——影格本身已經是邏輯空間，不需要再轉一次。
+            VisionHit hit;
+            hit.found = true;
+            hit.x = (maxLoc.x + offsetX) / request.scale;
+            hit.y = (maxLoc.y + offsetY) / request.scale;
+            hit.w = templateImage.cols / request.scale;
+            hit.h = templateImage.rows / request.scale;
+            hit.cx = hit.x + hit.w / 2.0;
+            hit.cy = hit.y + hit.h / 2.0;
+            hit.confidence = maxVal;
+            hits[i].push_back(hit);
+
+            cv::Rect suppress(maxLoc.x - templateImage.cols / 2, maxLoc.y - templateImage.rows / 2,
+                              templateImage.cols, templateImage.rows);
+            result(suppress & resultBounds).setTo(-1);
+        }
     }
 
     return hits;
