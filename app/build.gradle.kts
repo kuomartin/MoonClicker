@@ -16,6 +16,19 @@ plugins {
     alias(libs.plugins.wire)
 }
 
+// versionCode 取 commit 數，只要 master 不被改寫就單調遞增。
+// versionName 由 release workflow 以 -PversionName 傳入；本機 build 用 git describe 標出距離最近 tag 多遠。
+val appVersionCode = providers.exec {
+    commandLine("git", "rev-list", "--count", "HEAD")
+    isIgnoreExitValue = true
+}.standardOutput.asText.map { it.trim().toIntOrNull() ?: 1 }
+val appVersionName = providers.gradleProperty("versionName").orElse(
+    providers.exec {
+        commandLine("git", "describe", "--tags", "--match", "v[0-9]*", "--dirty")
+        isIgnoreExitValue = true
+    }.standardOutput.asText.map { it.trim().removePrefix("v").ifEmpty { "0.0.0-dev" } }
+)
+
 val keystorePropertiesFile = rootProject.file("keystore.properties")
 val keystoreProperties = Properties().apply {
     if (keystorePropertiesFile.exists()) {
@@ -44,8 +57,8 @@ android {
     defaultConfig {
         applicationId = "com.xaxaxax.moonclicker"
         minSdk = libs.versions.minSdk.get().toInt()
-        versionCode = 7
-        versionName = "0.5.0"
+        versionCode = appVersionCode.get()
+        versionName = appVersionName.get()
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         targetSdk = libs.versions.targetSdk.get().toInt()
