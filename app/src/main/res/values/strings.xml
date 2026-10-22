@@ -185,6 +185,51 @@
     <string name="about_developer_unlocked">You are now a developer!</string>
     <string name="about_developer_already_unlocked">No need, you are already a developer.</string>
 
+    <!-- Updates -->
+    <string name="settings_auto_check_updates">Check for updates automatically</string>
+    <string name="settings_auto_check_updates_note">At most once a day when the app comes to the foreground.</string>
+    <string name="settings_include_prereleases">Include pre-releases</string>
+    <string name="settings_include_prereleases_note">Also offer versions marked as pre-release on GitHub.</string>
+    <string name="update_check">Check for updates</string>
+    <string name="update_never_checked">Not checked yet</string>
+    <string name="update_checking">Checking…</string>
+    <string name="update_subtitle">%1$s · %2$s</string>
+    <string name="update_up_to_date">Up to date</string>
+    <string name="update_up_to_date_toast">You are on the latest version</string>
+    <string name="update_available">Version %1$s available</string>
+    <string name="update_available_prerelease">Pre-release %1$s available</string>
+    <string name="update_today">today %1$s</string>
+    <string name="update_checked_auto">checked automatically %1$s</string>
+    <string name="update_checked_manual">last checked %1$s</string>
+    <string name="update_failed">Check failed: %1$s</string>
+    <string name="update_downloading">Downloading…</string>
+    <string name="update_downloading_percent">Downloading %1$d%%</string>
+    <string name="update_verifying">Verifying…</string>
+    <string name="update_ready">%1$s downloaded. Tap to install.</string>
+    <string name="update_download_failed_short">Download failed. Tap for details.</string>
+    <string name="update_corrupted_short">Downloaded file is corrupted. Tap for details.</string>
+    <string name="update_dialog_title">MoonClicker %1$s</string>
+    <string name="update_dialog_title_prerelease">MoonClicker %1$s (pre-release)</string>
+    <string name="update_release_notes">Release notes</string>
+    <string name="update_download_and_install">Download and install (%1$s)</string>
+    <string name="update_progress">%1$s / %2$s</string>
+    <string name="update_continue_in_background">Continue in background</string>
+    <string name="update_cancel_download">Cancel download</string>
+    <string name="update_install">Install</string>
+    <string name="update_skip">Skip this version</string>
+    <string name="update_download_failed">Download failed.</string>
+    <string name="update_corrupted">The downloaded file is corrupted. Please download again.</string>
+    <string name="update_manual_download">Download manually from GitHub</string>
+    <string name="update_settings_title">Update settings</string>
+    <string name="update_settings_done">Done</string>
+    <string name="update_download_title">MoonClicker %1$s</string>
+    <string name="update_channel_label">Updates</string>
+    <string name="update_ready_notification_title">MoonClicker %1$s downloaded</string>
+    <string name="update_ready_notification_text">Tap to install</string>
+    <string name="update_install_permission_title">Allow installing updates</string>
+    <string name="update_install_permission_desc">Android asks you to allow each app separately to install unknown apps before MoonClicker can open the downloaded update. System settings will open next: turn on “Allow from this source”, then come back and installation continues.</string>
+    <string name="update_storage_permission_denied">Storage permission is needed to download into the Download folder.</string>
+
     <!-- Developer options page -->
     <string name="developer_options_title">Developer options</string>
     <string name="developer_options_displays">Displays</string>

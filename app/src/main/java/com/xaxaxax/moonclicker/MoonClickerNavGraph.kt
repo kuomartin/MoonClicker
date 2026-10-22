@@ -1,6 +1,8 @@
 package com.xaxaxax.moonclicker
 
 import android.content.Intent
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.adaptive.currentWindowAdaptiveInfo
@@ -31,8 +33,10 @@ import com.xaxaxax.moonclicker.ui.setting.SettingsScreen
 @Composable
 fun MoonClickerNavGraph(
     startDestination: Any = ScriptsRoute,
-    openScriptsPage: Boolean = false,
-    onScriptsPageOpened: () -> Unit = {},
+    navTarget: String? = null,
+    onNavTargetOpened: () -> Unit = {},
+    /** 設定頁有待處理的事（目前只有新版本）。 */
+    settingsBadge: Boolean = false,
 ) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -48,11 +52,15 @@ fun MoonClickerNavGraph(
         }
     }
 
-    // Deep link from the script status notification ("查看狀態" / tapping the notification).
-    LaunchedEffect(openScriptsPage) {
-        if (!openScriptsPage) return@LaunchedEffect
-        navigateToTopLevel(ScriptsRoute)
-        onScriptsPageOpened()
+    // Deep link from a notification: script status opens Scripts, "update downloaded" opens Settings.
+    LaunchedEffect(navTarget) {
+        val route = when (navTarget) {
+            NAV_TARGET_SCRIPTS -> ScriptsRoute
+            NAV_TARGET_SETTINGS -> SettingsRoute
+            else -> return@LaunchedEffect
+        }
+        navigateToTopLevel(route)
+        onNavTargetOpened()
     }
 
     val isDetailScreen = currentDestination?.hierarchy?.any {
@@ -75,7 +83,13 @@ fun MoonClickerNavGraph(
                     it.hasRoute(destination.route::class)
                 } == true
                 item(
-                    icon = { Icon(destination.icon, contentDescription = stringResource(destination.labelRes)) },
+                    icon = {
+                        BadgedBox(
+                            badge = { if (destination == TopLevelDestination.SETTINGS && settingsBadge) Badge() },
+                        ) {
+                            Icon(destination.icon, contentDescription = stringResource(destination.labelRes))
+                        }
+                    },
                     label = { Text(stringResource(destination.labelRes)) },
                     selected = isSelected,
                     onClick = { navigateToTopLevel(destination.route) }

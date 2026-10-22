@@ -150,6 +150,26 @@ class AppSettings @Inject constructor(
         _virtualDeviceEnabled.value = enabled
     }
 
+    private val _autoCheckUpdates = MutableStateFlow(prefs.getBoolean(KEY_AUTO_CHECK_UPDATES, true))
+
+    /** App 進前景時自動檢查新版（一天最多一次，見 [com.xaxaxax.moonclicker.update.UpdateChecker]）。 */
+    val autoCheckUpdates: StateFlow<Boolean> = _autoCheckUpdates.asStateFlow()
+
+    fun setAutoCheckUpdates(enabled: Boolean) {
+        prefs.edit { putBoolean(KEY_AUTO_CHECK_UPDATES, enabled) }
+        _autoCheckUpdates.value = enabled
+    }
+
+    private val _includePrereleases = MutableStateFlow(prefs.getBoolean(KEY_INCLUDE_PRERELEASES, false))
+
+    /** 檢查更新時也算 GitHub 上標為 prerelease 的版本。 */
+    val includePrereleases: StateFlow<Boolean> = _includePrereleases.asStateFlow()
+
+    fun setIncludePrereleases(enabled: Boolean) {
+        prefs.edit { putBoolean(KEY_INCLUDE_PRERELEASES, enabled) }
+        _includePrereleases.value = enabled
+    }
+
     companion object {
         private const val PREFS_NAME = "moonclicker_settings"
         private const val KEY_AUTO_FULLSCREEN = "auto_open_fullscreen"
@@ -162,6 +182,8 @@ class AppSettings @Inject constructor(
         private const val KEY_OCR_THREADS = "ocr_threads"
         private const val KEY_OCR_CALIBRATED_THREADS = "ocr_calibrated_threads"
         private const val KEY_VIRTUAL_DEVICE_ENABLED = "virtual_device_enabled"
+        private const val KEY_AUTO_CHECK_UPDATES = "auto_check_updates"
+        private const val KEY_INCLUDE_PRERELEASES = "include_prereleases"
 
         /**
          * [Activity.attachBaseContext] 跑在 Hilt 欄位注入完成之前，讀不到 [AppSettings] 實例，

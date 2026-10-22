@@ -108,6 +108,9 @@ fun SettingsScreen(
         viewModel.refreshPermissions()
     }
 
+    val updateViewModel: UpdateSettingsViewModel = hiltViewModel()
+    UpdateSettingsHost(updateViewModel)
+
     var activeRationale by remember { mutableStateOf<RationaleDialogType?>(null) }
     var showShizukuSetup by rememberSaveable { mutableStateOf(false) }
 
@@ -176,6 +179,7 @@ fun SettingsScreen(
         onNavigateToAbout = onNavigateToAbout,
         onNavigateToDeveloperOptions = onNavigateToDeveloperOptions,
         ocrSection = { OcrSettingsSection() },
+        updateRow = { UpdateRow(updateViewModel) },
     )
 }
 
@@ -195,6 +199,7 @@ private fun SettingsScreenContent(
     onNavigateToDeveloperOptions: () -> Unit = {},
     /** 自帶 ViewModel 的區塊以 slot 傳入，預覽不需要 Hilt。 */
     ocrSection: @Composable () -> Unit = {},
+    updateRow: @Composable () -> Unit = {},
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val pullRefreshState = rememberPullToRefreshState()
@@ -350,6 +355,8 @@ private fun SettingsScreenContent(
                         }
                     }
                 }
+
+                item { updateRow() }
 
                 item {
                     Row(
