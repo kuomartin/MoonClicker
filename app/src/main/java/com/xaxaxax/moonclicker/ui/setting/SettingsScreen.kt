@@ -139,7 +139,7 @@ fun SettingsScreen(
                 confirmText = stringResource(R.string.permission_action_proceed),
                 dismissText = stringResource(R.string.permission_action_cancel),
                 onConfirm = {
-                    if (uiState.shizukuStatus == ShizukuConnectionStatus.NOT_AVAILABLE) {
+                    if (uiState.shizukuStatus < ShizukuConnectionStatus.NEED_PERMISSION) {
                         activityResultLauncher.launch(viewModel.getOpenShizukuIntent())
                     } else {
                         viewModel.requestShizukuPermission()
@@ -167,9 +167,7 @@ fun SettingsScreen(
     SettingsScreenContent(
         uiState = uiState,
         onRequestShizukuPermission = {
-            if (uiState.shizukuStatus == ShizukuConnectionStatus.NOT_AVAILABLE ||
-                uiState.shizukuStatus == ShizukuConnectionStatus.NEED_PERMISSION
-            ) {
+            if (!uiState.shizukuStatus.isAuthorized) {
                 activeRationale = RationaleDialogType.SHIZUKU
             } else {
                 viewModel.requestShizukuPermission()
@@ -259,7 +257,8 @@ private fun SettingsScreenContent(
                             statusColor = shizukuTint,
                             isGranted = uiState.shizukuStatus.isAuthorized,
                             actionLabel = when (uiState.shizukuStatus) {
-                                ShizukuConnectionStatus.NOT_AVAILABLE -> stringResource(R.string.permission_action_open_shizuku)
+                                ShizukuConnectionStatus.NOT_INSTALLED,
+                                ShizukuConnectionStatus.NOT_RUNNING -> stringResource(R.string.permission_action_open_shizuku)
                                 ShizukuConnectionStatus.NEED_PERMISSION -> stringResource(R.string.permission_action_grant)
                                 else -> null
                             },
@@ -495,10 +494,10 @@ private fun SettingsScreenPreview() {
                 uiState = uiState,
                 onRequestShizukuPermission = {
                     when (uiState.shizukuStatus) {
-                        ShizukuConnectionStatus.NOT_AVAILABLE -> coroutineScope.launch{
-
+                        ShizukuConnectionStatus.NOT_INSTALLED ->
+                            uiState = uiState.copy(shizukuStatus = ShizukuConnectionStatus.NOT_RUNNING)
+                        ShizukuConnectionStatus.NOT_RUNNING ->
                             uiState = uiState.copy(shizukuStatus = ShizukuConnectionStatus.NEED_PERMISSION)
-                        }
                         ShizukuConnectionStatus.NEED_PERMISSION ->
                             uiState = uiState.copy(shizukuStatus = ShizukuConnectionStatus.DISCONNECTED)
                         ShizukuConnectionStatus.DISCONNECTED -> coroutineScope.launch {

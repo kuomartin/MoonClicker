@@ -45,7 +45,7 @@ private val STOP_TIMEOUT = 5.seconds
  * 合併 available 與 hasPermission 兩個布林，是因為它們從來就不獨立——binder 不在時不可能有授權。
  * 拆成兩個布林，「binder 不在卻已授權」這種不存在的狀態就會變成型別允許的。
  */
-private enum class ShizukuAccess { NOT_AVAILABLE, NEED_PERMISSION, GRANTED }
+private enum class ShizukuAccess { NOT_INSTALLED, NOT_RUNNING, NEED_PERMISSION, GRANTED }
 
 class ShizukuManager(private val context: Context) {
     private val myUid: Int get() = Process.myUid()
@@ -53,7 +53,7 @@ class ShizukuManager(private val context: Context) {
     /** 與 App 生命週期等長，不需要取消。 */
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
-    private val _access = MutableStateFlow(ShizukuAccess.NOT_AVAILABLE)
+    private val _access = MutableStateFlow(ShizukuAccess.NOT_RUNNING)
 
     private val _serviceFlow = MutableStateFlow<IMoonClickerService?>(null)
     val serviceFlow = _serviceFlow.asStateFlow()
@@ -72,7 +72,8 @@ class ShizukuManager(private val context: Context) {
         _access, serviceFlow, _isBinding
     ) { access, service, binding ->
         when {
-            access == ShizukuAccess.NOT_AVAILABLE -> ShizukuConnectionStatus.NOT_AVAILABLE
+            access == ShizukuAccess.NOT_INSTALLED -> ShizukuConnectionStatus.NOT_INSTALLED
+            access == ShizukuAccess.NOT_RUNNING -> ShizukuConnectionStatus.NOT_RUNNING
             access == ShizukuAccess.NEED_PERMISSION -> ShizukuConnectionStatus.NEED_PERMISSION
             service != null -> ShizukuConnectionStatus.CONNECTED
             binding -> ShizukuConnectionStatus.CONNECTING
@@ -81,7 +82,8 @@ class ShizukuManager(private val context: Context) {
     }.stateIn(
         scope = scope,
         started = SharingStarted.Eagerly, // App 啟動即監聽
-        initialValue = ShizukuConnectionStatus.NOT_AVAILABLE
+        // 查到之前不宣稱「未安裝」，免得啟動瞬間閃出要使用者去安裝的引導。
+        initialValue = ShizukuConnectionStatus.NOT_RUNNING
     )
 
     val status: ShizukuConnectionStatus
@@ -125,7 +127,7 @@ class ShizukuManager(private val context: Context) {
         // 非 sticky 版不會補發。
         Shizuku.addBinderReceivedListenerSticky { refreshAccess() }
         Shizuku.addBinderDeadListener {
-            _access.value = ShizukuAccess.NOT_AVAILABLE
+            _access.value = ShizukuAccess.NOT_RUNNING
             _serviceFlow.value = null
         }
         Shizuku.addRequestPermissionResultListener { requestCode, grantResult ->
@@ -165,10 +167,12 @@ class ShizukuManager(private val context: Context) {
      * 不彈窗地把 Shizuku 目前的可用程度同步進 [statusFlow]。
      *
      * [Shizuku.checkSelfPermission] 在 binder 未送達時會丟 IllegalStateException，所以先 ping 再問。
+     * binder 不在時區分沒裝與沒跑：裝了 Shizuku 不會送任何事件過來，只能靠這裡主動查。
      */
     fun refreshAccess() {
         _access.value = when {
-            !Shizuku.pingBinder() -> ShizukuAccess.NOT_AVAILABLE
+            !Shizuku.pingBinder() ->
+                if (shizukuPackageName() == null) ShizukuAccess.NOT_INSTALLED else ShizukuAccess.NOT_RUNNING
 
             runCatching { Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED }
                 .getOrDefault(false) -> ShizukuAccess.GRANTED
@@ -180,7 +184,7 @@ class ShizukuManager(private val context: Context) {
     /** 狀態列按鈕的統一入口：未授權先要授權，已授權就啟動服務。 */
     fun requestPermissionOrConnect() {
         when (_access.value) {
-            ShizukuAccess.NOT_AVAILABLE -> Timber.w("Shizuku binder is not available")
+            ShizukuAccess.NOT_INSTALLED, ShizukuAccess.NOT_RUNNING -> Timber.w("Shizuku binder is not available")
             ShizukuAccess.NEED_PERMISSION -> requestPermission()
             ShizukuAccess.GRANTED -> startUserService()
         }
@@ -293,7 +297,7 @@ class ShizukuManager(private val context: Context) {
     // -------------------------------------------------------------
 
     fun requestPermission(): Unit = when (_access.value) {
-        ShizukuAccess.NOT_AVAILABLE -> Timber.w("Shizuku binder is not available")
+        ShizukuAccess.NOT_INSTALLED, ShizukuAccess.NOT_RUNNING -> Timber.w("Shizuku binder is not available")
         ShizukuAccess.NEED_PERMISSION -> Shizuku.requestPermission(myUid)
         ShizukuAccess.GRANTED -> Timber.d("Already has permission")
     }
@@ -323,24 +327,25 @@ class ShizukuManager(private val context: Context) {
         runCatching { context.packageManager.getPermissionInfo(ShizukuProvider.PERMISSION, 0) }
             .getOrNull()?.packageName
 
-    fun getOpenShizukuIntent(): Intent {
-        val intent =
-            shizukuPackageName()?.let { context.packageManager.getLaunchIntentForPackage(it) }
-                ?: Intent(
-                    Intent.ACTION_VIEW,
-                    "market://details?id=moe.shizuku.privileged.api".toUri()
-                ).takeIf { it.resolveActivity(context.packageManager) != null }
-                ?: Intent(
-                    Intent.ACTION_VIEW,
-                    "https://shizuku.rikka.app/download/".toUri()
-                )
-        return intent.apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
-    }
+    /** 安裝 Shizuku：有 Play 商店開商店頁，沒有就開官網下載頁。 */
+    fun getInstallShizukuIntent(): Intent =
+        Intent(Intent.ACTION_VIEW, "market://details?id=moe.shizuku.privileged.api".toUri())
+            .takeIf { it.resolveActivity(context.packageManager) != null }
+            ?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            ?: Intent(Intent.ACTION_VIEW, "https://shizuku.rikka.app/download/".toUri())
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+    /** 開啟已安裝的 Shizuku manager；沒裝或找不到啟動入口時為 null。 */
+    fun getLaunchShizukuIntent(): Intent? =
+        shizukuPackageName()
+            ?.let { context.packageManager.getLaunchIntentForPackage(it) }
+            ?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 }
 
 /** 宣告順序即階梯順序，[isAuthorized] 靠它比較。 */
 enum class ShizukuConnectionStatus {
-    NOT_AVAILABLE,
+    NOT_INSTALLED,
+    NOT_RUNNING,
     NEED_PERMISSION,
     DISCONNECTED,
     CONNECTING,

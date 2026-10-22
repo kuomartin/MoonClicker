@@ -77,10 +77,10 @@ fun ShizukuStatusBar(
 
 @Preview(showBackground = true)
 @Composable
-private fun ShizukuStatusBarPreviewNotAvailable() {
+private fun ShizukuStatusBarPreviewNotRunning() {
     MoonClickerTheme {
         ShizukuStatusBar(
-            status = ShizukuConnectionStatus.NOT_AVAILABLE,
+            status = ShizukuConnectionStatus.NOT_RUNNING,
             onActionClick = {},
         )
     }

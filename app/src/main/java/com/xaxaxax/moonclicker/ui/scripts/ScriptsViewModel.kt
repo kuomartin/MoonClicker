@@ -32,7 +32,7 @@ data class ScriptsUiState(
     val scripts: List<Script> = emptyList(),
     /** 以腳本 id 為鍵；不在裡面的腳本沒執行過。 */
     val sessions: Map<String, ScriptSessionState> = emptyMap(),
-    val shizukuStatus: ShizukuConnectionStatus = ShizukuConnectionStatus.NOT_AVAILABLE,
+    val shizukuStatus: ShizukuConnectionStatus = ShizukuConnectionStatus.NOT_RUNNING,
     val scriptsPath: String = "",
     /** 匯入的 zip 撞了裝置上既有腳本的 uniqueId，等使用者選覆蓋還是取消。 */
     val importConflict: ScriptArchive.ImportResult.Conflict? = null,

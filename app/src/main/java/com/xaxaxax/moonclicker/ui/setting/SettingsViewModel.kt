@@ -38,7 +38,7 @@ import timber.log.Timber
 import kotlin.time.Duration.Companion.milliseconds
 
 data class SettingsUiState(
-    val shizukuStatus: ShizukuConnectionStatus = ShizukuConnectionStatus.NOT_AVAILABLE,
+    val shizukuStatus: ShizukuConnectionStatus = ShizukuConnectionStatus.NOT_RUNNING,
     val hasNotificationPermission: Boolean = false,
     val osAllowSecondaryDisplays: Boolean = false,
     val hasLocalNetworkPermission: Boolean = false,
@@ -283,7 +283,7 @@ class SettingsViewModel @Inject constructor(
     /** 開發人員選項用：載入重新建置的服務。 */
     fun restartUserService() = shizukuManager.restartUserService()
 
-    fun getOpenShizukuIntent() = shizukuManager.getOpenShizukuIntent()
+    fun getOpenShizukuIntent() = shizukuManager.getLaunchShizukuIntent() ?: shizukuManager.getInstallShizukuIntent()
     fun requestShizukuPermission() = shizukuManager.requestPermission()
 
     /** 通知權限說明畫面的「透過 Shizuku 取得權限」動作，失敗時提示改走系統設定。 */

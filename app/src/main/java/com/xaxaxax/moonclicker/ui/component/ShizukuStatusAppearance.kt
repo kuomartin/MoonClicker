@@ -17,8 +17,13 @@ data class ShizukuStatusAppearance(val label: String, val tint: Color)
  */
 @Composable
 fun shizukuStatusAppearance(status: ShizukuConnectionStatus): ShizukuStatusAppearance = when (status) {
-    ShizukuConnectionStatus.NOT_AVAILABLE -> ShizukuStatusAppearance(
-        stringResource(R.string.shizuku_status_not_available),
+    ShizukuConnectionStatus.NOT_INSTALLED -> ShizukuStatusAppearance(
+        stringResource(R.string.shizuku_status_not_installed),
+        MaterialTheme.colorScheme.error,
+    )
+
+    ShizukuConnectionStatus.NOT_RUNNING -> ShizukuStatusAppearance(
+        stringResource(R.string.shizuku_status_not_running),
         MaterialTheme.colorScheme.error,
     )
 

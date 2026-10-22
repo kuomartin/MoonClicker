@@ -54,7 +54,7 @@ data class DisplayCardInfo(
 
 data class DisplaysUiState(
     val displays: List<DisplayCardInfo> = emptyList(),
-    val shizukuStatus: ShizukuConnectionStatus = ShizukuConnectionStatus.NOT_AVAILABLE,
+    val shizukuStatus: ShizukuConnectionStatus = ShizukuConnectionStatus.NOT_RUNNING,
     val isLoading: Boolean = false,
     val isRefreshing: Boolean = false
 )
