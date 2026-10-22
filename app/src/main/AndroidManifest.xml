@@ -18,8 +18,11 @@
 
     <!-- Package visibility queries for Android 11+ -->
     <queries>
-        <!-- Query for Shizuku app -->
-        <package android:name="moe.shizuku.privileged.api" />
+        <!-- Shizuku manager 的 package name 不固定，
+             改用每個 manager 都有的 REQUEST_BINDER intent filter 取得 visibility。 -->
+        <intent>
+            <action android:name="rikka.shizuku.intent.action.REQUEST_BINDER" />
+        </intent>
 
         <!-- Query for Play Store market intent -->
         <intent>

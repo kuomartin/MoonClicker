@@ -28,6 +28,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import rikka.shizuku.Shizuku
+import rikka.shizuku.ShizukuProvider
 import timber.log.Timber
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
@@ -314,9 +315,17 @@ class ShizukuManager(private val context: Context) {
         return runCatching { Shizuku.getUid() }.getOrNull()?.takeIf { it >= 0 }
     }
 
+    /**
+     * 已安裝的 Shizuku manager 的 package name。fork 會改 package name，但 API permission 名稱不能改（改了既有 app 就要不到授權），
+     * 而同名 permission 只能由一個 package 定義，所以用定義者反查。
+     */
+    private fun shizukuPackageName(): String? =
+        runCatching { context.packageManager.getPermissionInfo(ShizukuProvider.PERMISSION, 0) }
+            .getOrNull()?.packageName
+
     fun getOpenShizukuIntent(): Intent {
         val intent =
-            context.packageManager.getLaunchIntentForPackage("moe.shizuku.privileged.api")
+            shizukuPackageName()?.let { context.packageManager.getLaunchIntentForPackage(it) }
                 ?: Intent(
                     Intent.ACTION_VIEW,
                     "market://details?id=moe.shizuku.privileged.api".toUri()
